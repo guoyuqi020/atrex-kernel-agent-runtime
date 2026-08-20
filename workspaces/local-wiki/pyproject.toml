@@ -1,0 +1,48 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "atrex-local-gpu-wiki"
+version = "0.1.0"
+description = "Wire-compatible local test double for the Atrex GPU Wiki service"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "anyio>=4.8,<5",
+  "pydantic>=2.12,<3",
+  "uvicorn>=0.35,<1",
+]
+
+[project.scripts]
+atrex-local-gpu-wiki = "atrex_local_wiki.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "jsonschema>=4.23,<5",
+  "mypy>=1.15,<2",
+  "pytest>=8.3,<10",
+  "ruff>=0.11,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/atrex_local_wiki"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+pythonpath = ["src", "../../src"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["atrex_local_wiki"]
+mypy_path = ["src", "../../src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]

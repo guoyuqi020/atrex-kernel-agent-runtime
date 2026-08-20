@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "creation_key": "triton-from-sealed-agent-and-kernel",
+  "dsl": "triton",
+  "seed": {
+    "source_type": "artifacts",
+    "agent_artifact_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "kernel_artifact_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "models": {
+    "optimizer": null,
+    "evolver": null
+  },
+  "challenger_count": 1,
+  "challenger_start_epoch": 1,
+  "trajectories_per_branch": 1,
+  "attempts_per_trajectory": 3
+}

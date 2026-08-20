@@ -1,0 +1,20 @@
+# Copy this file outside Git, chmod it to 0600, fill the values, and pass it
+# with --env-file. Do not commit real credentials.
+export AGATE_URL="https://atrex-gateway.example.com"
+export AGATE_AK="replace-me"
+export AGATE_SK="replace-me"
+export AGATE_GPU="L20N"
+
+# Optional when the selected backend uses an environment credential instead
+# of its normal host login directory.
+# export QODER_PERSONAL_ACCESS_TOKEN="replace-me"
+# export ANTHROPIC_AUTH_TOKEN="replace-me"
+# export ANTHROPIC_API_KEY="replace-me"
+
+# Optional remote Wiki bearer token. The first variable names the second.
+# export ATREX_WIKI_URL="https://gpu-wiki.example.com"
+# export ATREX_WIKI_TOKEN_ENV="GPU_WIKI_BEARER_TOKEN"
+# export GPU_WIKI_BEARER_TOKEN="replace-me"
+
+# Optional when a missing roofline.json must be generated analytically.
+# export ATREX_ROOFLINE_SKU="NVIDIA RTX PRO 5000 72GB Blackwell"

@@ -1,0 +1,74 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "atrex-kernel-agent-runtime"
+version = "0.1.0"
+description = "Trusted control plane for self-evolving Atrex Kernel Agents"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "Apache-2.0"
+dependencies = [
+  "atrex-gateway-client>=0.12.1,<0.13",
+  "anyio>=4.8,<5",
+  "httpx>=0.28,<1",
+  "pydantic>=2.12,<3",
+  "uvicorn>=0.35,<1",
+]
+
+[project.scripts]
+atrex-kernel-agent-runtime = "atrex_runtime.cli:main"
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2,<2",
+  "mypy>=1.15,<2",
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.11,<1",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/atrex_runtime"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/CHANGELOG.md",
+  "/CHANGELOG.zh.md",
+  "/LICENSE",
+  "/README.md",
+  "/README.zh.md",
+  "/docs",
+  "/examples",
+  "/lineage-seed.example.json",
+  "/pyproject.toml",
+  "/runtime.example.json",
+  "/scripts",
+  "/src/atrex_runtime",
+  "/tests",
+  "/workspaces/local-wiki",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["atrex_runtime"]
+mypy_path = "src"
+exclude = ["^src/atrex-kernel-agent-(core|evolver)/"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+exclude = ["src/atrex-kernel-agent-core", "src/atrex-kernel-agent-evolver"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.coverage.run]
+branch = true
+source = ["atrex_runtime"]

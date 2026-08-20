@@ -1,0 +1,34 @@
+{
+  "objective": "Implement vector addition while exact evaluator cases remain private.",
+  "schema_version": "atrex.agent_problem.v1",
+  "evaluation": {
+    "exact_cases": "private",
+    "correctness_requirement": "Match elementwise floating-point addition within the configured tolerances.",
+    "performance_requirement": "Minimize authoritative Gateway latency after correctness passes.",
+    "development_cases_are_evaluation_cases": false
+  },
+  "operator_contract": {
+    "operation": "elementwise_add",
+    "inputs": ["left", "right"],
+    "output": "left + right"
+  },
+  "workload_profile": {
+    "rank": 1,
+    "dtype": "float32"
+  },
+  "distribution_profile": {},
+  "shape_domain": {
+    "length": "positive integer; exact evaluated lengths are private"
+  },
+  "invariants": [
+    "Both inputs have the same shape and dtype.",
+    "The output has the same shape and dtype as the inputs."
+  ],
+  "coverage_regimes": [
+    {
+      "name": "masked_tail",
+      "description": "Lengths may require masking the final program instance."
+    }
+  ],
+  "development_cases": []
+}

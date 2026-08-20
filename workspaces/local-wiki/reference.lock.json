@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "repository": "git@github.com:alibaba/atrex-kernel-agent.git",
+  "commit": "71b16928579474c93039053d2facfeaf7134e268",
+  "git_tree": "f83b706953a6e62d08863db0f349995f3c7f0081",
+  "vendored_path": "corpus/gpu-wiki",
+  "sparse_paths": [
+    "gpu-wiki"
+  ]
+}

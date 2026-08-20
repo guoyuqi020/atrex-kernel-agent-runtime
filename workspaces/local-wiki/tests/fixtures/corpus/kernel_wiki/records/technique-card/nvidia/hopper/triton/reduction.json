@@ -1,0 +1,15 @@
+{
+  "schema": "clean-1.3",
+  "id": "nvidia.hopper.triton.kernel-opt.reduction",
+  "type": "technique-card",
+  "retrieval": {
+    "scope": {
+      "vendor": "nvidia",
+      "arch": "hopper",
+      "dsl": "triton"
+    }
+  },
+  "payload": {
+    "goal": "Tile a Hopper Triton reduction"
+  }
+}

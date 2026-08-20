@@ -1,0 +1,33 @@
+{
+  "candidate_path": "kernel.py",
+  "schema_version": 1,
+  "reference_py": "import torch\n\nclass Model(torch.nn.Module):\n    def forward(self, left, right):\n        return left + right\n",
+  "input_py": "import torch\n\ndef _make_inputs(num_elements: int) -> dict[str, torch.Tensor]:\n    left = torch.randn((num_elements,), device='cuda', dtype=torch.float32)\n    return {'left': left, 'right': torch.randn_like(left)}\n",
+  "shapes": {
+    "0": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "num_elements": 1048576
+      }
+    }
+  },
+  "metadata": {
+    "operator": "vector_add",
+    "dtype": "float32"
+  },
+  "roofline": null,
+  "options": {
+    "num_correctness_cases": 1,
+    "bench_iters": 100,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "timeout_s": 600
+  },
+  "env_vars": {},
+  "requirements": [],
+  "deps_mode": "freeze_installed",
+  "mode": "full",
+  "lock_clocks": true,
+  "harness": "atrex_bench",
+  "runner_overrides": {}
+}

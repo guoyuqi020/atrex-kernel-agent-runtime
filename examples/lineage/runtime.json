@@ -1,0 +1,230 @@
+{
+  "schema_version": 1,
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8765
+  },
+  "administration": {
+    "bearer_token_env": "ATREX_ADMIN_BEARER_TOKEN",
+    "max_request_bytes": 65536,
+    "event_page_limit": 500,
+    "event_export_limit": 10000,
+    "event_prune_limit": 1000,
+    "task_lease_seconds": 7200,
+    "task_heartbeat_seconds": 60,
+    "task_poll_seconds": 2,
+    "max_error_bytes": 8192
+  },
+  "storage": {
+    "registry_database": "../../workspaces/lineage-example/runtime-state/registry.sqlite",
+    "gateway_database": "../../workspaces/lineage-example/runtime-state/gateway.sqlite",
+    "agate_jobs_database": "../../workspaces/lineage-example/runtime-state/agate-jobs.sqlite",
+    "artifacts_root": "../../workspaces/lineage-example/runtime-state/artifacts"
+  },
+  "gateway_proxy": {
+    "max_request_bytes": 1048576,
+    "max_candidate_files": 64,
+    "max_candidate_bytes": 524288,
+    "capability_signing_key_env": "ATREX_CAPABILITY_SIGNING_KEY",
+    "candidate_diff_allowed_paths": {
+      "cuda": ["**/*.cu", "**/*.cuh", "*.cu", "*.cuh"],
+      "triton": ["**/*.py", "*.py"],
+      "cutedsl": ["**/*.py", "*.py"]
+    },
+    "candidate_diff_require_change": true
+  },
+  "agate": {
+    "base_url": "http://127.0.0.1:9000",
+    "auth_mode": "none",
+    "http_timeout_s": 600,
+    "wait_timeout_s": 1200,
+    "health_check_interval_s": 30
+  },
+  "kernel_agent": {
+    "max_bundle_files": 1024,
+    "max_bundle_bytes": 8388608,
+    "max_entrypoint_bytes": 524288,
+    "max_agent_problem_bytes": 262144,
+    "base_source": {
+      "repository": "../../src/atrex-kernel-agent-core",
+      "git_executable": "/usr/bin/git",
+      "fetch_timeout_seconds": 120,
+      "max_archive_bytes": 67108864,
+      "allowed_submodules": {}
+    }
+  },
+  "gpu_wiki": {
+    "base_url": "http://127.0.0.1:8091",
+    "timeout_seconds": 30,
+    "max_proxy_request_bytes": 131072,
+    "max_query_bytes": 65536,
+    "max_response_bytes": 1048576,
+    "feedback": {
+      "max_request_bytes": 4194304,
+      "batch_size": 16,
+      "lease_seconds": 600,
+      "retry_initial_seconds": 5,
+      "retry_max_seconds": 300,
+      "poll_seconds": 2,
+      "max_error_bytes": 4096,
+      "completed_retention_seconds": 2592000,
+      "prune_batch_size": 1000
+    }
+  },
+  "campaign": {
+    "attempt_workspaces_root": "../../workspaces/lineage-example/runtime-state/attempt-workspaces",
+    "evolution_workspaces_root": "../../workspaces/lineage-example/runtime-state/evolution-workspaces",
+    "problem_generalization_workspaces_root": "../../workspaces/lineage-example/runtime-state/problem-generalization-workspaces",
+    "lineage_bootstrap_workspaces_root": "../../workspaces/lineage-example/runtime-state/lineage-bootstrap-workspaces",
+    "fencing_lease_seconds": 120,
+    "fencing_heartbeat_seconds": 30,
+    "gateway_proxy_url": "http://127.0.0.1:8765",
+    "gateway_operations": [
+      "evaluate",
+      "submit",
+      "profile",
+      "dev",
+      "check",
+      "sol",
+      "disassemble",
+      "poll",
+      "jobs",
+      "cancel",
+      "env",
+      "health",
+      "config"
+    ],
+    "gateway_max_calls": 64,
+    "gateway_capability_lifetime_seconds": 86400,
+    "gate_policy": {
+      "optimizer": {"correctness_cases": 1, "bench_iters": 100, "evaluate_repeats": 1},
+      "bootstrap": {"stages": [{"correctness_cases": 1, "evaluate_repeats": 1}, {"correctness_cases": 5, "evaluate_repeats": 1}], "bench_iters": 5},
+      "retention": {"correctness_cases": 1, "bench_iters": 100},
+      "production_gate": true,
+      "warmup_iters": 10,
+      "atol": 0.01,
+      "rtol": 0.05,
+      "evaluation_timeout_seconds": 600,
+      "candidate_timeout_seconds": 20,
+      "performance_timeout_seconds": 120,
+      "lock_clocks": true,
+      "evaluator": {"repository": "../../third_party/atrex-bench", "commit": "733fc26c071d6eb11645d6863adf56de098fe70a", "git_executable": "/usr/bin/git", "fetch_timeout_seconds": 120, "max_archive_bytes": 8388608, "max_bundle_files": 128, "max_bundle_bytes": 4194304}
+    },
+    "max_infrastructure_retries": 2,
+    "max_parallel_branches": 4,
+    "roofline_builder": {
+      "repository": "../../third_party/atrex-bench",
+      "commit": "733fc26c071d6eb11645d6863adf56de098fe70a",
+      "git_executable": "/usr/bin/git",
+      "python_executable": "/usr/bin/python3",
+      "fetch_timeout_seconds": 120,
+      "execution_timeout_seconds": 120,
+      "max_archive_bytes": 268435456,
+      "max_output_bytes": 8388608,
+      "sku_by_hardware_target": {
+        "L20N": "NVIDIA RTX PRO 5000 72GB Blackwell"
+      }
+    },
+    "kernel_retention_comparison": {
+      "method": "same_allocation_abba", "repeats": 2, "minimum_improvement_percent": 0.0,
+      "allocation_timeout_seconds": 600, "shape_batch_size": 4, "max_parallel_shape_batches": 4
+    },
+    "agent_promotion_comparison": {
+      "method": "same_allocation_abba", "repeats": 2, "minimum_improvement_percent": 0.0,
+      "allocation_timeout_seconds": 600, "shape_batch_size": 4, "max_parallel_shape_batches": 4
+    },
+    "evidence": {
+      "max_trace_files": 8,
+      "max_trace_bytes": 67108864,
+      "max_trace_events": 100000,
+      "max_projection_text_bytes": 1048576,
+      "max_diff_files": 128,
+      "max_diff_bytes": 2097152,
+      "redaction_patterns": []
+    },
+    "optimizer": {
+      "agent_backend": "qodercli",
+      "reasoning_effort": "max",
+      "session_settings": "",
+      "command_prefix": [
+        "../../.venv/bin/python"
+      ],
+      "environment": {
+        "values": {},
+        "inherit": [
+          "PATH"
+        ],
+        "inherit_optional": [
+          "ANTHROPIC_AUTH_TOKEN",
+          "ANTHROPIC_API_KEY",
+          "ANTHROPIC_BASE_URL",
+          "ANTHROPIC_MODEL",
+          "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+          "ANTHROPIC_DEFAULT_OPUS_MODEL",
+          "ANTHROPIC_DEFAULT_SONNET_MODEL",
+          "CODEX_HOME",
+          "QODER_PERSONAL_ACCESS_TOKEN"
+        ]
+      },
+      "isolated_home_environment_keys": [
+        "HOME"
+      ],
+      "session_trace_relative_path": "sessions/core",
+      "token_usage_report_relative_path": "scratch/token-usage.json",
+      "max_attempt_report_bytes": 65536,
+      "timeout_seconds": 3600,
+      "bootstrap_timeout_seconds": 10800,
+      "terminate_grace_seconds": 10,
+      "max_diagnostic_bytes": 131072,
+      "max_session_tokens": 20000000,
+      "max_session_credits": 1000000
+    },
+    "evolver": {
+      "agent_backend": "qodercli",
+      "reasoning_effort": "max",
+      "session_settings": "",
+      "repository": "../../src/atrex-kernel-agent-evolver",
+      "commit": "853fbdc969c8102938bb4c3a0ebe492ba26a1a77",
+      "git_executable": "/usr/bin/git",
+      "fetch_timeout_seconds": 120,
+      "max_archive_bytes": 16777216,
+      "command_prefix": [
+        "../../.venv/bin/python"
+      ],
+      "max_bundle_files": 1024,
+      "max_bundle_bytes": 8388608,
+      "isolated_home_environment_keys": [
+        "HOME"
+      ],
+      "session_trace_relative_path": "scratch/evolver-session",
+      "token_usage_report_relative_path": "scratch/token-usage.json",
+      "environment": {
+        "values": {},
+        "inherit": [
+          "PATH"
+        ],
+        "inherit_optional": [
+          "ANTHROPIC_AUTH_TOKEN",
+          "ANTHROPIC_API_KEY",
+          "ANTHROPIC_BASE_URL",
+          "ANTHROPIC_MODEL",
+          "CODEX_HOME",
+          "QODER_PERSONAL_ACCESS_TOKEN"
+        ]
+      },
+      "timeout_seconds": 1800,
+      "terminate_grace_seconds": 10,
+      "max_diagnostic_bytes": 131072,
+      "max_output_manifest_bytes": 16384
+    },
+    "launcher": {
+      "mode": "development",
+      "env_executable": "/usr/bin/env",
+      "backend_credentials": {
+        "enabled": true,
+        "host_home": null,
+        "development_bwrap_executable": "/usr/bin/bwrap"
+      }
+    }
+  }
+}

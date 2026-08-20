@@ -1,0 +1,312 @@
+"""Versioned Worker-to-Gateway-Proxy JSON protocol."""
+
+from __future__ import annotations
+
+import base64
+from typing import Annotated, Literal
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from ..artifacts.local import JsonValue
+from ..domain.ids import AttemptId, parse_attempt_id
+
+GATEWAY_PROXY_PROTOCOL_VERSION: Literal[2] = 2
+
+
+class CandidateFileV2(BaseModel):
+    """One regular candidate file with a safe workspace-relative path."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str
+    content_base64: str
+
+    @field_validator("path")
+    @classmethod
+    def _validate_path(cls, value: str) -> str:
+        return _safe_relative_path(value, "candidate path")
+
+    def content(self) -> bytes:
+        """Decode strict Base64 at the wire boundary."""
+        try:
+            return base64.b64decode(self.content_base64, validate=True)
+        except ValueError as error:
+            raise ValueError(f"candidate file is not valid Base64: {self.path}") from error
+
+
+class CandidateBundleV2(BaseModel):
+    """Complete candidate source bundle uploaded by one Worker tool call."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    files: tuple[CandidateFileV2, ...]
+
+    @model_validator(mode="after")
+    def _validate_unique_paths(self) -> CandidateBundleV2:
+        paths = [file.path for file in self.files]
+        if not paths:
+            raise ValueError("candidate bundle cannot be empty")
+        if len(paths) != len(set(paths)):
+            raise ValueError("candidate bundle contains duplicate paths")
+        return self
+
+
+class _GatewayRequestV2(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[2] = GATEWAY_PROXY_PROTOCOL_VERSION
+    attempt_id: AttemptId
+    idempotency_key: str = Field(min_length=1, max_length=200)
+
+    @field_validator("attempt_id", mode="before")
+    @classmethod
+    def _validate_attempt_id(cls, value: object) -> AttemptId:
+        if not isinstance(value, str):
+            raise ValueError("attempt_id must be a string")
+        return parse_attempt_id(value)
+
+
+class _CandidateRequestV2(_GatewayRequestV2):
+    candidate: CandidateBundleV2
+
+
+class _DependencyRequestV2(_CandidateRequestV2):
+    env_vars: dict[str, str] = Field(default_factory=dict)
+    requirements: tuple[str, ...] = ()
+    deps_mode: Literal["freeze_installed", "no_deps"] | None = None
+
+
+class EvaluateRequestV2(_CandidateRequestV2):
+    """Seal and evaluate one candidate against the trusted Evaluation Contract."""
+
+    operation: Literal["evaluate"]
+
+
+class SubmitRequestV2(_CandidateRequestV2):
+    """Submit a complete EvalRequest document from the candidate bundle."""
+
+    operation: Literal["submit"]
+    payload_path: str
+
+    @field_validator("payload_path")
+    @classmethod
+    def _validate_payload_path(cls, value: str) -> str:
+        return _safe_relative_path(value, "payload_path")
+
+
+class ProfileRequestV2(_DependencyRequestV2):
+    """Run an Agate profiler over the current candidate."""
+
+    operation: Literal["profile"]
+    level: Literal["survey", "sol", "deep"] = "sol"
+    profiler: Literal["ncu", "rocprofv3"] | None = None
+    counters: tuple[str, ...] = ()
+    kernel_regex: str | None = Field(default=None, max_length=500)
+    kernel_name: str | None = Field(default=None, max_length=500)
+    source: bool = False
+    launch_skip: int | None = Field(default=None, ge=0)
+    launch_count: int | None = Field(default=None, gt=0)
+    top_kernels: int | None = Field(default=None, gt=0)
+    shape_id: str | None = Field(default=None, min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def _validate_kernel_selection(self) -> ProfileRequestV2:
+        if self.kernel_regex is not None and self.kernel_name is not None:
+            raise ValueError("profile kernel_regex and kernel_name are mutually exclusive")
+        if self.level == "deep" and self.kernel_regex is None and self.kernel_name is None:
+            raise ValueError("deep profile requires kernel_regex or kernel_name")
+        return self
+
+
+class DevRequestV2(_CandidateRequestV2):
+    """Run an arbitrary command with the candidate bundle in a recycled GPU pod."""
+
+    operation: Literal["dev"]
+    command: str = Field(min_length=1, max_length=16_384)
+    env_vars: dict[str, str] = Field(default_factory=dict)
+    job_timeout_s: int | None = Field(default=None, gt=0, le=10_800)
+    recycle: bool = True
+    intent: (
+        Literal[
+            "workspace",
+            "scratch_exec",
+            "inspect",
+            "compile",
+            "profile_adhoc",
+            "sanitize",
+            "custom_harness",
+            "other",
+        ]
+        | None
+    ) = None
+    note: str | None = Field(default=None, max_length=200)
+
+
+class CheckRequestV2(_DependencyRequestV2):
+    """Compile or sanitize the current candidate on the target GPU."""
+
+    operation: Literal["check"]
+    arch: str | None = Field(default=None, max_length=100)
+    sanitize: Literal["memcheck", "racecheck", "initcheck", "synccheck"] | None = None
+
+
+class SolRequestV2(_DependencyRequestV2):
+    """Evaluate a SOL-ExecBench solution document from the candidate bundle."""
+
+    operation: Literal["sol"]
+    solution_path: str
+    subset: Literal["L1", "L2", "Quant", "FlashInfer-Bench"] | None = None
+    definition_path: str | None = None
+    workload_path: str | None = None
+    job_timeout_s: int | None = Field(default=None, gt=0, le=10_800)
+    workload_timeout_s: int | None = Field(default=None, gt=0)
+    compile_timeout_s: int | None = Field(default=None, gt=0)
+    iterations: int | None = Field(default=None, gt=0)
+    warmup_runs: int | None = Field(default=None, ge=0)
+    lock_clocks: bool = True
+    benchmark_reference: bool = False
+
+    @field_validator("solution_path", "definition_path", "workload_path")
+    @classmethod
+    def _validate_source_path(cls, value: str | None) -> str | None:
+        return None if value is None else _safe_relative_path(value, "SOL source path")
+
+    @model_validator(mode="after")
+    def _validate_problem(self) -> SolRequestV2:
+        if (self.definition_path is None) is not (self.workload_path is None):
+            raise ValueError("SOL custom problem requires definition_path and workload_path")
+        if self.subset is not None and self.definition_path is not None:
+            raise ValueError("SOL subset cannot be combined with a custom problem")
+        return self
+
+
+class DisassembleRequestV2(_DependencyRequestV2):
+    """Compile and return GPU assembly for the current candidate."""
+
+    operation: Literal["disassemble"]
+    fmt: Literal["sass", "ptx", "auto"] = "auto"
+
+
+class PollRequestV2(_GatewayRequestV2):
+    """Read or long-poll a Gateway job owned by this Attempt."""
+
+    operation: Literal["poll"]
+    job_id: str = Field(min_length=1, max_length=200)
+    wait: bool = False
+    include_spec: bool = False
+
+
+class JobsRequestV2(_GatewayRequestV2):
+    """List jobs submitted by this Attempt."""
+
+    operation: Literal["jobs"]
+    kind: Literal["eval", "profile", "dev", "compile", "sol", "disassemble"] | None = None
+    status: Literal["queued", "running", "succeeded", "failed", "cancelled"] | None = None
+    limit: int = Field(default=50, gt=0, le=200)
+
+
+class CancelRequestV2(_GatewayRequestV2):
+    """Cancel a Gateway job owned by this Attempt."""
+
+    operation: Literal["cancel"]
+    job_id: str = Field(min_length=1, max_length=200)
+
+
+class EnvRequestV2(_GatewayRequestV2):
+    """Read selectable GPU environments or one environment's capabilities."""
+
+    operation: Literal["env"]
+    gpu: str | None = Field(default=None, min_length=1, max_length=200)
+    capabilities: bool = False
+    force: bool = False
+
+    @model_validator(mode="after")
+    def _validate_capabilities_target(self) -> EnvRequestV2:
+        if self.capabilities and self.gpu is None:
+            raise ValueError("env capabilities requires gpu")
+        return self
+
+
+class HealthRequestV2(_GatewayRequestV2):
+    """Read external Agate Gateway liveness."""
+
+    operation: Literal["health"]
+
+
+class ConfigRequestV2(_GatewayRequestV2):
+    """Read the Runtime-owned non-secret Agate connection configuration."""
+
+    operation: Literal["config"]
+
+
+type GatewayProxyRequestV2 = Annotated[
+    EvaluateRequestV2
+    | SubmitRequestV2
+    | ProfileRequestV2
+    | DevRequestV2
+    | CheckRequestV2
+    | SolRequestV2
+    | DisassembleRequestV2
+    | PollRequestV2
+    | JobsRequestV2
+    | CancelRequestV2
+    | EnvRequestV2
+    | HealthRequestV2
+    | ConfigRequestV2,
+    Field(discriminator="operation"),
+]
+
+
+class EvaluationV2(BaseModel):
+    """Correctness and comparable latency returned by the external Gateway."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    correct: bool
+    latency_us: float | None
+
+    @model_validator(mode="after")
+    def _validate_latency(self) -> EvaluationV2:
+        if self.correct and (self.latency_us is None or self.latency_us <= 0):
+            raise ValueError("a correct evaluation requires a positive latency")
+        if not self.correct and self.latency_us is not None:
+            raise ValueError("an incorrect evaluation cannot carry latency")
+        return self
+
+
+class GatewayProxyResponseV2(BaseModel):
+    """Canonical result returned to an Optimizer binding and recorded in its trace."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[2] = GATEWAY_PROXY_PROTOCOL_VERSION
+    operation: Literal[
+        "evaluate",
+        "submit",
+        "profile",
+        "dev",
+        "check",
+        "sol",
+        "disassemble",
+        "poll",
+        "jobs",
+        "cancel",
+        "env",
+        "health",
+        "config",
+    ]
+    status: Literal["completed", "queued", "failed", "cancelled"]
+    candidate_artifact_digest: str | None = None
+    gateway_result_digest: str
+    job_id: str | None = None
+    evaluation: EvaluationV2 | None = None
+    result: JsonValue
+
+
+def _safe_relative_path(value: str, label: str) -> str:
+    if not value or value.startswith("/") or "\\" in value or "\x00" in value:
+        raise ValueError(f"{label} must be non-empty, normalized, and relative")
+    parts = value.split("/")
+    if any(part in {"", ".", ".."} for part in parts):
+        raise ValueError(f"{label} contains an unsafe component")
+    return value

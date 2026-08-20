@@ -1,0 +1,9 @@
+[submodule "atrex-kernel-agent-core"]
+	path = src/atrex-kernel-agent-core
+	url = git@github.com:guoyuqi020/atrex-kernel-agent-core.git
+[submodule "atrex-kernel-agent-evolver"]
+	path = src/atrex-kernel-agent-evolver
+	url = git@github.com:guoyuqi020/atrex-kernel-agent-evolver.git
+[submodule "third_party/atrex-bench"]
+	path = third_party/atrex-bench
+	url = git@github.com:guoyuqi020/atrex-bench.git

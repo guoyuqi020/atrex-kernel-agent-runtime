@@ -1,0 +1,9 @@
+{
+  "schema": "clean-1.3",
+  "records": [
+    {
+      "id": "nvidia.hopper.triton.kernel-opt.reduction",
+      "path": "records/technique-card/nvidia/hopper/triton/reduction.json"
+    }
+  ]
+}
