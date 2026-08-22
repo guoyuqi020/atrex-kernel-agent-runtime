@@ -50,6 +50,26 @@ class SafeGitImporter:
             )
         return process.stdout
 
+    def fetch_commit(self, repository: Path, remote: str, commit: str) -> None:
+        """Fetch one exact commit without creating partial-clone repository state.
+
+        Every importer immediately archives the fetched tree and therefore needs all
+        referenced blobs. A blobless filter only defers those transfers, and fails
+        against some local or externally prepared repositories whose promisor and
+        ``extensions.partialClone`` configuration is inconsistent.
+        """
+        self.run(
+            (
+                "-C",
+                str(repository),
+                "fetch",
+                "--depth=1",
+                "--no-tags",
+                remote,
+                commit,
+            )
+        )
+
     @staticmethod
     def object_id(payload: bytes) -> str:
         """Decode one ASCII Git object identity."""

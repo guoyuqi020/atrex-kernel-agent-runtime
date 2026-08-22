@@ -142,17 +142,7 @@ class CommitPinnedAtrexBenchEvaluator:
             export = root / "export"
             self._importer.run(("init", "--bare", str(repository)))
             self._importer.run(("-C", str(repository), "remote", "add", "origin", self._repository))
-            self._importer.run(
-                (
-                    "-C",
-                    str(repository),
-                    "fetch",
-                    "--depth=1",
-                    "--filter=blob:none",
-                    "origin",
-                    self._commit,
-                )
-            )
+            self._importer.fetch_commit(repository, "origin", self._commit)
             resolved = self._importer.object_id(
                 self._importer.run(("-C", str(repository), "rev-parse", "FETCH_HEAD^{commit}"))
             )

@@ -102,17 +102,7 @@ class GitOptimizerBaseLoader:
             archive_path = root / "source.tar"
             self._importer.run(("init", "--bare", str(repository)))
             self._importer.run(("-C", str(repository), "remote", "add", "origin", self._repository))
-            self._importer.run(
-                (
-                    "-C",
-                    str(repository),
-                    "fetch",
-                    "--depth=1",
-                    "--filter=blob:none",
-                    "origin",
-                    commit,
-                )
-            )
+            self._importer.fetch_commit(repository, "origin", commit)
             resolved = self._importer.object_id(
                 self._importer.run(("-C", str(repository), "rev-parse", "FETCH_HEAD^{commit}"))
             )
@@ -148,16 +138,10 @@ class GitOptimizerBaseLoader:
                         approved_repository,
                     )
                 )
-                self._importer.run(
-                    (
-                        "-C",
-                        str(submodule_repository),
-                        "fetch",
-                        "--depth=1",
-                        "--filter=blob:none",
-                        "origin",
-                        submodule_commit,
-                    )
+                self._importer.fetch_commit(
+                    submodule_repository,
+                    "origin",
+                    submodule_commit,
                 )
                 resolved_submodule = self._importer.object_id(
                     self._importer.run(
