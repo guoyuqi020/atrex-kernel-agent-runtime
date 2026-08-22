@@ -152,9 +152,9 @@ Evolution Trace 与被引用的精确 Kernel Artifact。两种 View 都按 Diges
 且由 `session.json.provider_event_filters` 明确声明。`events.jsonl` 仍保留规范化的权威
 Usage/Projection Ledger。
 
-Wiki Query/Feedback Service API 为版本 1。Query Content 使用 GPU Wiki 准确的
+Wiki Query Service API 为版本 1。Query Content 使用 GPU Wiki 准确的
 `records`/`notes` 投影，稳定 Record ID 是 `records` Mapping Key，每个 Value 都是完整安全 Record。
-响应会在 Core 收到仅知识 Content 前冻结为 Interaction Artifact。Epoch 结束后的 Feedback 包含 Query Interaction、Token、
-Session Artifact 身份和有界的保留 Session 文件。交付使用幂等持久 Outbox 和严格 Ack。
+响应会在 Core 收到仅知识 Content 前冻结为 Interaction Artifact。Runtime 不向 Wiki 上传 Query
+消费记录、Agent 历史或 Session Trace。
 
 Gateway Capability 有签名、绑定 Attempt、限制 Operation/调用数/过期时间，可撤销，并由 Registry Authority 重建。Worker 编写的 Report/Annotation 和 Agent 可见探索评测是不可信 Evidence；Runtime-final Gateway Outcome 与 Registry Transition 才是权威来源。

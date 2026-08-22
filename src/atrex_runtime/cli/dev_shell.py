@@ -317,13 +317,18 @@ def open_evolver_dev_shell(
                 f"Campaign freezes Evolver commit {frozen_evolver_commit}; configured commit "
                 f"is {campaign.evolver.commit}"
             )
+        evolution_config = build_evolution_process_config(campaign, artifacts, os.environ)
         sessions = SubprocessEvolutionSessionDriver(
             build_worker_launcher(settings, os.environ),
-            build_evolution_process_config(campaign, artifacts, os.environ),
+            evolution_config,
         )
         service = EvolverDevShell(
             registry,
-            EvolutionWorkspaceAssembler(campaign.evolution_workspaces_root, artifacts),
+            EvolutionWorkspaceAssembler(
+                campaign.evolution_workspaces_root,
+                artifacts,
+                evolver_bundle_digest=evolution_config.bundle_artifact_digest,
+            ),
             sessions,
             RegistryLineageLeaseManager(
                 registry,
@@ -424,11 +429,16 @@ def open_temporary_evolver_dev_shell(
             kernel_catalog=(),
             model=lineage_spec.models.evolver,
         )
+        evolution_config = build_evolution_process_config(campaign, artifacts, os.environ)
         service = TemporaryEvolverDevShell(
-            EvolutionWorkspaceAssembler(campaign.evolution_workspaces_root, artifacts),
+            EvolutionWorkspaceAssembler(
+                campaign.evolution_workspaces_root,
+                artifacts,
+                evolver_bundle_digest=evolution_config.bundle_artifact_digest,
+            ),
             SubprocessEvolutionSessionDriver(
                 build_worker_launcher(settings, os.environ),
-                build_evolution_process_config(campaign, artifacts, os.environ),
+                evolution_config,
             ),
         )
         result = service.open(shell_name=shell_name, request=request)

@@ -8,6 +8,7 @@ import anyio
 import pytest
 
 from atrex_runtime.gateway.batched_evaluate import (
+    CANDIDATE_REJECTED_CATEGORY,
     ShapeBatch,
     ShapeBatchedEvaluateExecutor,
     ShapeBatchOutcome,
@@ -129,3 +130,47 @@ async def test_shape_batch_executor_fails_closed_when_any_batch_is_incorrect() -
     assert isinstance(result.job, dict)
     assert result.job["correct"] is False
     assert result.worker_result["all_pass"] is False  # type: ignore[index]
+
+
+@pytest.mark.anyio
+async def test_shape_batch_executor_stops_on_candidate_rejection() -> None:
+    executor = ShapeBatchedEvaluateExecutor(max_parallel_batches=1)
+    seen: list[int] = []
+    rejection = {
+        "reason": "candidate_validation_failed",
+        "details": {"forbidden_imports": ["os"]},
+    }
+
+    async def evaluate(batch: ShapeBatch) -> ShapeBatchOutcome:
+        seen.append(batch.index)
+        if batch.index == 0:
+            return ShapeBatchOutcome(
+                {"status": "rejected", "error": rejection},
+                EvaluationV2(correct=False, latency_us=None),
+            )
+        raise AssertionError("Candidate rejection must cancel pending Shape batches")
+
+    result = await executor.run(_contract(12), "candidate-rejected", evaluate)
+
+    assert seen == [0]
+    assert result.evaluation == EvaluationV2(correct=False, latency_us=None)
+    assert result.job_id is None
+    assert result.batches[0].job == {"status": "rejected", "error": rejection}
+    assert result.job == {
+        "schema_version": 1,
+        "operation": "shape_batched_evaluate",
+        "status": "rejected",
+        "error": {
+            "category": CANDIDATE_REJECTED_CATEGORY,
+            "detail": rejection,
+        },
+        "rejected_batch_index": 0,
+        "shape_batch_count": 3,
+    }
+    assert result.worker_result == {
+        "status": "rejected",
+        "error": {
+            "category": CANDIDATE_REJECTED_CATEGORY,
+            "message": "candidate request rejected before evaluation job creation",
+        },
+    }

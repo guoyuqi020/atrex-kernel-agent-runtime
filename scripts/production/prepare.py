@@ -578,17 +578,6 @@ def _runtime_config(
         "max_proxy_request_bytes": 131072,
         "max_query_bytes": 65536,
         "max_response_bytes": 1048576,
-        "feedback": {
-            "max_request_bytes": 4194304,
-            "batch_size": 16,
-            "lease_seconds": 600,
-            "retry_initial_seconds": 5,
-            "retry_max_seconds": 300,
-            "poll_seconds": 2,
-            "max_error_bytes": 4096,
-            "completed_retention_seconds": 2592000,
-            "prune_batch_size": 1000,
-        },
     }
     wiki_token_env = os.environ.get("ATREX_WIKI_TOKEN_ENV", "").strip()
     if wiki_token_env:
@@ -935,8 +924,10 @@ def main() -> None:
 
     RuntimeSettings.from_file(workspace / "runtime.json")
     for dsl in SUPPORTED_DSLS:
-        campaign = CampaignSpecV3.from_file(workspace / "dsls" / dsl / "campaign.json")
-        selected = tuple(value.value for value in campaign.selected_dsls())
+        parsed_campaign = CampaignSpecV3.from_file(
+            workspace / "dsls" / dsl / "campaign.json"
+        )
+        selected = tuple(value.value for value in parsed_campaign.selected_dsls())
         if selected != (dsl,):
             raise RuntimeError(f"{dsl} Campaign selected unexpected DSLs: {selected}")
     _write_json(manifest_path, requested_identity)

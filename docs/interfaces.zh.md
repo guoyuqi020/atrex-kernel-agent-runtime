@@ -40,9 +40,6 @@
 | `show-bootstrap-run` | `--config --attempt --generation N` | 一次物理 Bootstrap 执行。 |
 | `list-evaluations` | `--config --attempt` | 全部不可变 Kernel/Result 评测对。 |
 | `show-evaluation` | `--config --evaluation` | 元数据；`--source --result` 增加受限精确内容。 |
-| `drain-wiki-feedback` | `--config` | 投递一批 Feedback；`--watch` 持续运行。 |
-| `requeue-wiki-feedback` | `--config --item` | 重排已检查的永久失败项。 |
-| `maintain-wiki-feedback` | `--config` | 清理完成记录；可选 `--compact`。 |
 | `gc-artifacts` | `--config --minimum-age-seconds --limit` | CAS GC 预览；删除还需 `--apply --confirm-runtime-stopped`。 |
 | `gc-workspaces` | 同上 | Worker Run GC 预览及确认删除。 |
 | `digest-evolver-bundle` | `--path` | 校验并计算 Bundle Digest。 |
@@ -141,7 +138,6 @@ Challenger 以及不属于已完成 Lineage 历史的 Agent。
 
 - Agate 通过发布版 `atrex-gateway-client` SDK 调用；Runtime 持有凭据和请求构造，Worker 只看到
   安全投影。
-- GPU Wiki Query 为 `POST /v1/knowledge/query`，Feedback 为
-  `POST /v1/knowledge/epoch-feedback`；Local Wiki 实现同一 v1 Contract。
+- GPU Wiki Query 为 `POST /v1/knowledge/query`；Local Wiki 实现同一 v1 Contract。
 - 完整 Schema、Evidence Layout、版本和 Bundle 语义见[协议](protocols.zh.md)，所有部署字段见
   [配置说明](configuration.zh.md)。

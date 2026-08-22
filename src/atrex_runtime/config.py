@@ -184,7 +184,7 @@ class KernelAgentSettings(BaseModel):
 
 
 class GpuWikiSettings(BaseModel):
-    """External knowledge endpoint plus Worker proxy and Epoch feedback limits."""
+    """External knowledge endpoint plus Worker proxy limits."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -194,7 +194,6 @@ class GpuWikiSettings(BaseModel):
     max_proxy_request_bytes: int = Field(gt=0)
     max_query_bytes: int = Field(gt=0)
     max_response_bytes: int = Field(gt=0)
-    feedback: GpuWikiFeedbackSettings | None = None
 
     @model_validator(mode="after")
     def _validate_endpoint(self) -> GpuWikiSettings:
@@ -205,33 +204,6 @@ class GpuWikiSettings(BaseModel):
             and _ENVIRONMENT_KEY.fullmatch(self.bearer_token_env) is None
         ):
             raise ValueError("GPU Wiki bearer token environment name is invalid")
-        if (
-            self.feedback is not None
-            and self.feedback.lease_seconds <= self.timeout_seconds * self.feedback.batch_size
-        ):
-            raise ValueError("GPU Wiki feedback lease must exceed one full sequential HTTP batch")
-        return self
-
-
-class GpuWikiFeedbackSettings(BaseModel):
-    """Durable Epoch feedback delivery, leasing, retry, and polling limits."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    max_request_bytes: int = Field(gt=0)
-    batch_size: int = Field(gt=0)
-    lease_seconds: float = Field(gt=0)
-    retry_initial_seconds: float = Field(gt=0)
-    retry_max_seconds: float = Field(gt=0)
-    poll_seconds: float = Field(gt=0)
-    max_error_bytes: int = Field(gt=0)
-    completed_retention_seconds: float = Field(gt=0)
-    prune_batch_size: int = Field(gt=0)
-
-    @model_validator(mode="after")
-    def _validate_retry_range(self) -> GpuWikiFeedbackSettings:
-        if self.retry_max_seconds < self.retry_initial_seconds:
-            raise ValueError("GPU Wiki maximum retry must cover the initial retry")
         return self
 
 

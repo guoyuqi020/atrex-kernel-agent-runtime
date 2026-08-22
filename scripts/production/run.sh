@@ -156,7 +156,9 @@ fi
 
 echo
 echo "Production content policy gate: enabled"
-echo "Bootstrapping independent CUDA, Triton, and CuteDSL Campaign workspaces in parallel."
+echo "Running independent CUDA, Triton, and CuteDSL pipelines in parallel."
+echo "Each DSL enters its Campaign as soon as its own Bootstrap succeeds."
+echo "A failure in one DSL does not stop or delay the other DSL pipelines."
 
 dsls=(cuda triton cutedsl)
 job_pids=()
@@ -204,27 +206,6 @@ bootstrap_one() (
   echo "[${dsl}] Bootstrap completed: ${atrex_prod_bootstrap_result}"
 )
 
-for dsl in "${dsls[@]}"; do
-  bootstrap_one "${dsl}" &
-  job_pids+=("$!")
-  job_dsls+=("${dsl}")
-done
-bootstrap_failed=0
-for index in "${!job_pids[@]}"; do
-  if ! wait "${job_pids[index]}"; then
-    echo "[${job_dsls[index]}] Bootstrap process failed." >&2
-    bootstrap_failed=1
-  fi
-done
-job_pids=()
-job_dsls=()
-if (( bootstrap_failed != 0 )); then
-  echo "At least one DSL Bootstrap failed; successful DSL results were preserved." >&2
-  exit 1
-fi
-"${atrex_prod_python}" "${script_dir}/summarize.py" \
-  --workspace "${atrex_prod_workspace}" --phase bootstrap
-
 campaign_id_for() {
   local dsl="$1"
   atrex_prod_dsl_paths "${dsl}"
@@ -240,11 +221,6 @@ if len(lineages) != 1:
 print(campaign)
 ' "${atrex_prod_bootstrap_result}" "${dsl}"
 }
-
-echo
-echo "Running three independent Campaigns through Epoch ${target_epoch}."
-echo "Each Campaign has 2 serial Attempts per Branch; the three DSL Campaigns run concurrently."
-echo "Epoch 1 is Active-only. From Epoch 2, Active and one Challenger run concurrently."
 
 run_one() (
   set -o pipefail
@@ -270,28 +246,53 @@ run_one() (
   echo "[${dsl}] Campaign completed: ${atrex_prod_campaign_result}"
 )
 
+run_dsl_pipeline() (
+  local dsl="$1"
+  if ! bootstrap_one "${dsl}"; then
+    echo "[${dsl}] Pipeline stopped after Bootstrap failure; other DSLs continue." >&2
+    return 1
+  fi
+  local campaign_id
+  if ! campaign_id="$(campaign_id_for "${dsl}")"; then
+    echo "[${dsl}] Pipeline could not resolve its bootstrapped Campaign ID." >&2
+    return 1
+  fi
+  echo "[${dsl}] Bootstrap succeeded; entering Epoch execution immediately."
+  if ! run_one "${dsl}" "${campaign_id}"; then
+    echo "[${dsl}] Pipeline stopped after Campaign failure; other DSLs continue." >&2
+    return 1
+  fi
+)
+
+echo
+echo "Each Campaign has 2 serial Attempts per Branch and targets Epoch ${target_epoch}."
+echo "Epoch 1 is Active-only. From Epoch 2, Active and one Challenger run concurrently."
+
 for dsl in "${dsls[@]}"; do
-  campaign_id="$(campaign_id_for "${dsl}")"
-  run_one "${dsl}" "${campaign_id}" &
+  run_dsl_pipeline "${dsl}" &
   job_pids+=("$!")
   job_dsls+=("${dsl}")
 done
-campaign_failed=0
+pipeline_failed=0
 for index in "${!job_pids[@]}"; do
   if ! wait "${job_pids[index]}"; then
-    echo "[${job_dsls[index]}] Campaign process failed." >&2
-    campaign_failed=1
+    echo "[${job_dsls[index]}] DSL pipeline failed." >&2
+    pipeline_failed=1
   fi
 done
 job_pids=()
 job_dsls=()
-if (( campaign_failed != 0 )); then
-  echo "At least one DSL Campaign failed; other Campaigns were allowed to finish." >&2
-  exit 1
-fi
 trap - INT TERM EXIT
+
+summary_partial=()
+if (( pipeline_failed != 0 )); then
+  summary_partial+=(--allow-partial)
+fi
 "${atrex_prod_python}" "${script_dir}/summarize.py" \
-  --workspace "${atrex_prod_workspace}" --phase campaign --target-epoch "${target_epoch}"
+  --workspace "${atrex_prod_workspace}" --phase bootstrap "${summary_partial[@]}"
+"${atrex_prod_python}" "${script_dir}/summarize.py" \
+  --workspace "${atrex_prod_workspace}" --phase campaign --target-epoch "${target_epoch}" \
+  "${summary_partial[@]}"
 
 echo
 echo "Campaign summary: ${atrex_prod_campaign_summary}"
@@ -300,4 +301,8 @@ if [[ "${external_services}" == true ]]; then
 else
   echo "Services remain running; stop them with:"
   echo "  bash scripts/production/services.sh stop --workspace ${atrex_prod_workspace}"
+fi
+if (( pipeline_failed != 0 )); then
+  echo "At least one DSL pipeline failed; every successful DSL was allowed to finish." >&2
+  exit 1
 fi

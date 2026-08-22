@@ -45,7 +45,7 @@ The existing top-level directories already represent useful stable boundaries an
 | `gateway/` | Agate adapter, capability control, proxy, evaluation, and metrics |
 | `registry/` | durable state port and SQLite implementation |
 | `artifacts/` | content-addressed Artifact storage |
-| `knowledge/` | external Wiki protocol, proxy, and feedback outbox |
+| `knowledge/` | external Wiki query protocol and proxy |
 | `kernel_agents/` | Git import and immutable Agent revision construction |
 
 Shared leaf seams keep repeated mechanics out of application services:

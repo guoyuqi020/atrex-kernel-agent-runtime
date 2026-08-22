@@ -3,8 +3,7 @@
 English | [中文](README.zh.md)
 
 This workspace is a local HTTP adapter for the independent Atrex GPU Wiki. It is for Runtime
-integration tests only. The HTTP protocol is local; query, feedback-event, and ranking behavior are
-executed by the commit-pinned upstream implementation.
+integration tests only. Query behavior is executed by the commit-pinned upstream implementation.
 
 The adapter does not implement its own retrieval algorithm. For every query it executes the
 commit-pinned upstream `gpu-wiki/tools/query_nl.py`, including the upstream bridge Agent, intent
@@ -16,17 +15,12 @@ public/internal Store isolation, and served-record projection. Query `content` i
 ```
 
 Runtime continues to provide the versioned HTTP envelope, digest verification, Attempt authority,
-freezing, and post-Epoch feedback. Every `records` mapping value is already the complete safe
+and freezing. Every `records` mapping value is already the complete safe
 served Record. Consumers preserve its stable mapping key when the Record materially informs work;
 there is no separate read operation.
 
 The vendored pinned source remains immutable. Startup atomically synchronizes it into
-`state/gpu-wiki`, preserving the upstream `kernel_wiki/feedback/events.jsonl` log. Epoch feedback
-is archived verbatim for HTTP idempotency, translated into upstream `served` events for every
-public `kernel_wiki` Record returned by a frozen interaction, and folded by the same
-`tools/rebuild_importance.py` that upstream uses. Runtime feedback does not claim `applied`,
-`effective`, or `ineffective`, because its protocol contains no trustworthy per-Record adoption
-decision.
+`state/gpu-wiki`. Runtime treats the Wiki as a read-only external knowledge source.
 
 ## HTTP interface
 
@@ -36,7 +30,6 @@ decision.
 | `GET /healthz` | Process liveness. |
 | `GET /readyz` | Upstream tools, both indexes, and SQLite readiness. |
 | `POST /v1/knowledge/query` | Strict Runtime query; `content` is upstream `records/notes`. |
-| `POST /v1/knowledge/epoch-feedback` | Idempotent archival plus upstream served-event/ranking update. |
 
 ## Pinned source
 

@@ -20,6 +20,11 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--workspace", required=True, type=Path)
     parser.add_argument("--phase", required=True, choices=("bootstrap", "campaign"))
     parser.add_argument("--target-epoch", type=int)
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="record missing DSL results instead of failing the whole summary",
+    )
     arguments = parser.parse_args()
     if arguments.phase == "campaign" and (
         arguments.target_epoch is None or arguments.target_epoch < 1
@@ -69,6 +74,17 @@ def main() -> None:
         if not isinstance(lineages, dict) or tuple(lineages) != (dsl,):
             raise SystemExit(f"{dsl} workspace does not contain exactly its own Campaign")
         path = workspace / "dsls" / dsl / f"{arguments.phase}-result.json"
+        if arguments.allow_partial and not path.is_file():
+            bootstrap_path = workspace / "dsls" / dsl / "bootstrap-result.json"
+            results[dsl] = {
+                "result": None,
+                "result_path": str(path),
+                "status": "missing",
+                "bootstrap_result_path": (
+                    str(bootstrap_path) if bootstrap_path.is_file() else None
+                ),
+            }
+            continue
         value = _load(path)
         _validate(
             value,

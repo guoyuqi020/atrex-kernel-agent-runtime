@@ -9,7 +9,7 @@ Accepted and implemented.
 ## Context
 
 Every Optimizer and Evolver invocation uses a fresh process and Session. Runtime needs durable
-provenance for audit, retry attribution, Evidence, and post-Epoch Wiki feedback without carrying
+provenance for audit, retry attribution, and Evidence without carrying
 hidden conversational continuity into later Sessions. Raw provider history is too large for SQLite,
 and a single Trace field would overwrite retries.
 
@@ -22,8 +22,7 @@ subject may own multiple append-only Worker Sessions.
 
 Runtime creates the Worker Session record before launch, updates it through terminal state, and
 seals any available raw Trace without redaction. Evidence stores normalized summaries and source
-digests; Agent views materialize the original Trace Artifact explicitly. Wiki feedback may upload an
-exact bounded raw-file projection only after Epoch completion. Trace content is audit input, not an
+digests; Agent views materialize the original Trace Artifact explicitly. Trace content is audit input, not an
 authoritative success claim or automatic Agent memory.
 
 ## Consequences

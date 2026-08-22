@@ -3,9 +3,10 @@
 English | [中文](README.zh.md)
 
 These scripts create three independent, commit-pinned single-DSL Campaigns from one
-`third_party/atrex-bench/data` operator. CUDA, Triton, and CuteDSL bootstrap and advance
-concurrently. One DSL failure does not cancel its peers. Production content policy is mandatory;
-startup rejects any workspace whose `gate_policy.production_gate` is not `true`.
+`third_party/atrex-bench/data` operator. CUDA, Triton, and CuteDSL run as independent
+`Bootstrap -> Campaign` pipelines: each DSL advances into Epoch execution immediately after its own
+Bootstrap succeeds. One DSL failure does not cancel or gate its peers. Production content policy is
+mandatory; startup rejects any workspace whose `gate_policy.production_gate` is not `true`.
 
 ## Choose an entrypoint
 
@@ -66,7 +67,7 @@ locking is reliable; arbitrary remote filesystems are unsupported.
 
 ## Persistent service and managed tasks
 
-Start Runtime, Wiki, and the Wiki-feedback drainer once:
+Start Runtime and Wiki once:
 
 ```bash
 bash scripts/production/services.sh start \

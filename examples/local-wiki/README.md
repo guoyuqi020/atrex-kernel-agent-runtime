@@ -41,8 +41,7 @@ curl -fsS http://127.0.0.1:8091/healthz
 ```
 
 Startup keeps the vendored corpus unchanged and synchronizes it into the ignored writable Store at
-`workspaces/local-wiki/state/gpu-wiki`. Query uses that Store. Post-Epoch feedback is archived in
-SQLite and applied through the pinned upstream `ingest_feedback.py` and `rebuild_importance.py`.
+`workspaces/local-wiki/state/gpu-wiki`. Query uses that Store.
 
 Open [http://127.0.0.1:8091/](http://127.0.0.1:8091/) for the optional browser client. Each Query
 result displays complete safe served Records and their stable IDs.
@@ -57,7 +56,7 @@ This example's checked-in [`runtime.json`](runtime.json) contains:
 }
 ```
 
-The real configuration contains the remaining timeout, byte-limit, and Feedback Outbox fields;
+The real configuration contains the remaining timeout and byte-limit fields;
 do not replace the complete object with this abbreviated fragment.
 
 ## 3. Fast path: open a disposable Wiki Agent shell
@@ -155,7 +154,7 @@ Each mapping value is already the complete safe served Record. Preserve the exac
 `research_sources` when a Record materially informs the work; no second read operation exists.
 The Agent never receives protocol versions, snapshot identities, interaction
 Artifact Digests, content Digests, external credentials, or trusted control context. Runtime still
-freezes all of those internally for idempotent replay, audit, and post-Epoch Wiki Feedback.
+freezes all of those internally for idempotent replay and audit.
 
 ## 6. Open a real managed Agent debug session
 

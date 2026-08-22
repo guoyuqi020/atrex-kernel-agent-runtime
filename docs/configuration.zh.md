@@ -23,7 +23,7 @@ Report 都是输出协议，因此不提供容易被误认为配置的根目录 
 - `gateway_proxy`：请求/Candidate 限制、签名密钥环境变量名、各 DSL 变更路径白名单和 No-op 策略。
 - `agate`：URL、认证模式、凭据环境变量名、HTTP/等待超时。
 - `kernel_agent`：`max_bundle_files`、`max_bundle_bytes`、`max_entrypoint_bytes`、`max_agent_problem_bytes` 与可选 `base_source`。
-- `gpu_wiki`：外部 URL、可选 Bearer Token 环境变量名、Proxy/Query/Response 限制及可选 Feedback Outbox 策略。
+- `gpu_wiki`：外部 URL、可选 Bearer Token 环境变量名，以及 Proxy/Query/Response 限制。
 - `campaign`：Worker 组合与调度策略。
 - `administration`：Bearer Token 环境变量名和请求/Event 限制。
 - `maintenance`：离线 Artifact/Workspace 保留限制。
@@ -179,7 +179,7 @@ Runtime 不提供模型代理，也不维护模型 Host 白名单。Claude、Cod
 环境或只读配置。该策略允许任意出站目的地，也不隔离宿主服务或 Worker 间流量；文件系统和进程/
 资源隔离仍然生效。
 
-`evidence` 限制 Session 规范化摘要和 Kernel Diff。脱敏规则只作用于规范化摘要；原始 Session Artifact 不会被修改，可按 Digest 为 Agent 物化或进入有界 Wiki 上传。
+`evidence` 限制 Session 规范化摘要和 Kernel Diff。脱敏规则只作用于规范化摘要；原始 Session Artifact 不会被修改，可按 Digest 为 Agent 物化。
 
 ## Campaign 定义
 

@@ -15,7 +15,6 @@ from .ids import (
     KernelAgentRevisionId,
     KernelRevisionId,
     LineageId,
-    WikiFeedbackId,
     WorkerSessionId,
 )
 
@@ -88,15 +87,6 @@ class AttemptReportStatus(StrEnum):
     CANDIDATE_READY = "candidate_ready"
     PIVOT = "pivot"
     BLOCKED = "blocked"
-
-
-class WikiFeedbackStatus(StrEnum):
-    """Durable delivery states for one GPU Wiki Epoch feedback report."""
-
-    PENDING = "pending"
-    LEASED = "leased"
-    COMPLETED = "completed"
-    FAILED = "failed"
 
 
 class CampaignTaskStatus(StrEnum):
@@ -653,43 +643,6 @@ class AttemptSessionTrace:
     def token_budget_exhausted(self) -> bool:
         """Return whether actual consumption reached or exceeded the session budget."""
         return self.token_usage.consumed >= self.token_budget
-
-
-@dataclass(frozen=True, slots=True)
-class WikiFeedbackOutboxItem:
-    """One immutable feedback report with mutable durable delivery state."""
-
-    id: WikiFeedbackId
-    lineage_id: LineageId
-    epoch_number: int
-    report_artifact_digest: ArtifactDigest
-    status: WikiFeedbackStatus
-    attempt_count: int
-    available_at: str
-    lease_owner: str | None
-    lease_expires_at: str | None
-    last_error: str | None
-    created_at: str
-    completed_at: str | None
-
-    def __post_init__(self) -> None:
-        if self.epoch_number <= 0:
-            raise ValueError("a Wiki feedback item requires a positive Epoch number")
-        if self.attempt_count < 0:
-            raise ValueError("Wiki feedback delivery count cannot be negative")
-        leased = self.status is WikiFeedbackStatus.LEASED
-        if leased != (self.lease_owner is not None and self.lease_expires_at is not None):
-            raise ValueError("only leased Wiki feedback items require lease metadata")
-        terminal = self.status in {
-            WikiFeedbackStatus.COMPLETED,
-            WikiFeedbackStatus.FAILED,
-        }
-        if terminal != (self.completed_at is not None):
-            raise ValueError("only terminal Wiki feedback items require completion time")
-        if self.status is WikiFeedbackStatus.FAILED and self.last_error is None:
-            raise ValueError("failed Wiki feedback items require an error")
-        if self.status is WikiFeedbackStatus.COMPLETED and self.last_error is not None:
-            raise ValueError("completed Wiki feedback items cannot retain an error")
 
 
 @dataclass(frozen=True, slots=True)

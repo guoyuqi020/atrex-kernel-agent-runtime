@@ -165,6 +165,11 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "base_revision_id": manifest["parent_revision_id"],
     "hypothesis": "Use a more targeted optimization strategy.",
     "expected_effect": "Reach a better Kernel within the fixed attempt budget.",
+    "unimplemented_capabilities": [{
+        "capability": "Automatic profiler-guided tool synthesis.",
+        "expected_benefit": "Avoid spending attempts on irrelevant bottlenecks.",
+        "reason_unimplemented": "The Evolver has no profiler capability."
+    }],
     "changed_paths": ["""
         + json.dumps(declared_path)
         + """],
@@ -173,6 +178,27 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
         encoding="utf-8",
     )
     return script
+
+
+def _evolver_bundle(
+    artifacts: LocalArtifactStore,
+    tmp_path: Path,
+    entrypoint: Path,
+) -> ArtifactDigest:
+    source = tmp_path / "source-evolver"
+    (source / "src").mkdir(parents=True)
+    shutil.copyfile(entrypoint, source / "src/main.py")
+    (source / "atrex-evolver-bundle.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "bundle_format": "atrex-kernel-agent-evolver-bundle-v1",
+                "entrypoint": {"command": "src/main.py"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return artifacts.put_directory(source, ArtifactKind.EVOLVER_BUNDLE)
 
 
 def _reuse_agent_script(tmp_path: Path, revision_id: str) -> Path:
@@ -339,13 +365,17 @@ async def test_fixed_runner_collects_complete_repository_candidate(
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     request = _request(artifacts, tmp_path)
+    evolver_digest = _evolver_bundle(artifacts, tmp_path, _agent_script(tmp_path))
     sessions = SubprocessEvolutionSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
         EvolutionProcessConfig(
             bundle_commit="0" * 40,
             bundle_tree="1" * 40,
-            bundle_artifact_digest=digest("evolver-bundle"),
-            command_argv=(str(Path(sys.executable).resolve()), str(_agent_script(tmp_path))),
+            bundle_artifact_digest=evolver_digest,
+            command_argv=(
+                str(Path(sys.executable).resolve()),
+                "input/evolver/src/main.py",
+            ),
             agent_backend="claude",
             isolated_home_environment_keys=(),
             session_trace_relative_path="scratch/agent-home/sessions",
@@ -359,7 +389,11 @@ async def test_fixed_runner_collects_complete_repository_candidate(
     events = FakeRuntimeEventRecorder([])
     registry = SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW)
     runner = EvolverBundleRunner(
-        EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts),
+        EvolutionWorkspaceAssembler(
+            tmp_path / "evolutions",
+            artifacts,
+            evolver_bundle_digest=evolver_digest,
+        ),
         sessions,
         artifacts,
         events,
@@ -382,10 +416,17 @@ async def test_fixed_runner_collects_complete_repository_candidate(
     trace = json.loads((trace_artifact.payload_path / "value.json").read_text())
     assert trace["agent"]["bundle_commit"] == "0" * 40
     assert trace["agent"]["bundle_tree"] == "1" * 40
-    assert trace["agent"]["bundle_artifact_digest"] == digest("evolver-bundle")
+    assert trace["agent"]["bundle_artifact_digest"] == evolver_digest
     assert trace["agent"]["model"] == "evolver-model"
     assert trace["schema_version"] == 7
     assert trace["token_usage"]["consumed"] == 200
+    assert trace["output"]["unimplemented_capabilities"] == [
+        {
+            "capability": "Automatic profiler-guided tool synthesis.",
+            "expected_benefit": "Avoid spending attempts on irrelevant bottlenecks.",
+            "reason_unimplemented": "The Evolver has no profiler capability.",
+        }
+    ]
     assert [kind for kind, _aggregate, _payload in events.records] == [
         "worker.started",
         "worker.exited",
@@ -393,6 +434,9 @@ async def test_fixed_runner_collects_complete_repository_candidate(
         "evolution.proposal_sealed",
     ]
     assert all(aggregate == request.epoch_id for _kind, aggregate, _payload in events.records)
+    assert events.records[-1][2]["unimplemented_capabilities"] == trace["output"][
+        "unimplemented_capabilities"
+    ]
     assert trace["candidate"]["optimizer_digest"] == candidate.optimizer_digest
     session_trace = artifacts.verify(trace["session_trace_digest"])
     assert session_trace.kind is ArtifactKind.SESSION_LOG
@@ -402,6 +446,11 @@ async def test_fixed_runner_collects_complete_repository_candidate(
     assert worker_sessions[0].status is WorkerSessionStatus.COMPLETED
     assert worker_sessions[0].trace_digest == trace["session_trace_digest"]
     assert worker_sessions[0].process_returncode == 0
+    workspace_entrypoint = next(
+        (tmp_path / "evolutions").glob("agentrev_*/run-*/input/evolver/src/main.py")
+    )
+    assert workspace_entrypoint.is_file()
+    assert not (workspace_entrypoint.stat().st_mode & 0o200)
     registry.close()
 
 

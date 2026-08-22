@@ -328,6 +328,13 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
             hypothesis="Register pressure limits occupancy",
             expected_effect="Increase occupancy",
             changed_paths=("prompts/episode.md",),
+            unimplemented_capabilities=(
+                {
+                    "capability": "Live occupancy modeling",
+                    "expected_benefit": "Choose launch configurations with fewer attempts",
+                    "reason_unimplemented": "No live profiler is available to the Evolver",
+                },
+            ),
         ),
         candidate=candidate,
     )
@@ -411,6 +418,13 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
     ]
     assert lessons[1]["trusted"] is False
     assert lessons[1]["text"] == "Reduce register pressure"
+    assert lessons[0]["unimplemented_capabilities"] == [
+        {
+            "capability": "Live occupancy modeling",
+            "expected_benefit": "Choose launch configurations with fewer attempts",
+            "reason_unimplemented": "No live profiler is available to the Evolver",
+        }
+    ]
     assert "do not retain" not in json.dumps(lessons)
     projection = json.loads((staging / "traces/00000001/evolver-0001.json").read_text())
     assert "raw_files" not in projection

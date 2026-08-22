@@ -16,7 +16,6 @@ from conftest import NOW, digest, seed_lineage
 
 import atrex_runtime.cli as runtime_cli
 import atrex_runtime.cli.campaign as runtime_cli_campaign
-import atrex_runtime.cli.maintenance as runtime_cli_maintenance
 import atrex_runtime.cli.progress as runtime_cli_progress
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.config import RuntimeSettings
@@ -29,7 +28,6 @@ from atrex_runtime.domain.ids import (
     new_kernel_agent_revision_id,
     new_kernel_revision_id,
     new_lineage_id,
-    new_wiki_feedback_id,
     new_worker_session_id,
 )
 from atrex_runtime.domain.models import (
@@ -49,7 +47,6 @@ from atrex_runtime.domain.models import (
     Lineage,
     LineageStatus,
     TokenUsage,
-    WikiFeedbackStatus,
     WorkerSession,
     WorkerSessionRole,
     WorkerSessionStatus,
@@ -62,7 +59,6 @@ from atrex_runtime.gateway.control import (
     GatewayOperation,
     SqliteGatewayControl,
 )
-from atrex_runtime.knowledge import WikiFeedbackDrainResult
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
 
@@ -98,42 +94,6 @@ class FakeCampaignRuntime:
 
     def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
         self.closed = True
-
-
-class RecordingDrainer:
-    """Return one bounded feedback result and record invocation."""
-
-    def __init__(self) -> None:
-        self.called = False
-
-    async def drain_once(self) -> WikiFeedbackDrainResult:
-        self.called = True
-        return WikiFeedbackDrainResult(3, 2, 1, 0)
-
-
-class FakeWikiFeedbackRuntime:
-    """Minimal context-managed Drainer owner accepted by the CLI."""
-
-    def __init__(self, drainer: RecordingDrainer) -> None:
-        self.drainer = drainer
-        self.poll_seconds = 1.0
-        self.closed = False
-        self.requeued = None
-        self.compact = None
-
-    def __enter__(self) -> FakeWikiFeedbackRuntime:
-        return self
-
-    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
-        self.closed = True
-
-    def requeue(self, item_id: object) -> object:
-        self.requeued = item_id
-        return type("Item", (), {"id": item_id, "status": WikiFeedbackStatus.PENDING})()
-
-    def maintain(self, *, compact: bool) -> int:
-        self.compact = compact
-        return 7
 
 
 def _server_only_config(tmp_path: Path) -> Path:
@@ -980,80 +940,6 @@ def test_recover_epoch_cli_is_idempotent_and_reports_recovery(
     assert first["generation"] == 1
     with SqliteRegistry(settings.storage.registry_database) as registry:
         assert registry.get_attempt(attempt.id).recovery_generation == 1
-
-
-def test_drain_wiki_feedback_cli_reports_one_batch(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    drainer = RecordingDrainer()
-    runtime = FakeWikiFeedbackRuntime(drainer)
-
-    def build_fake(
-        settings: RuntimeSettings,
-        environment: object,
-    ) -> FakeWikiFeedbackRuntime:
-        del settings, environment
-        return runtime
-
-    monkeypatch.setattr(runtime_cli_maintenance, "build_wiki_feedback_runtime", build_fake)
-
-    runtime_cli.main(
-        [
-            "drain-wiki-feedback",
-            "--config",
-            str(_server_only_config(tmp_path)),
-        ]
-    )
-
-    assert drainer.called
-    assert runtime.closed
-    assert json.loads(capsys.readouterr().out) == {
-        "claimed": 3,
-        "completed": 2,
-        "retried": 1,
-        "failed": 0,
-    }
-
-
-def test_wiki_feedback_administration_commands(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    runtime = FakeWikiFeedbackRuntime(RecordingDrainer())
-
-    def build_fake(settings: RuntimeSettings, environment: object) -> FakeWikiFeedbackRuntime:
-        del settings, environment
-        return runtime
-
-    monkeypatch.setattr(runtime_cli_maintenance, "build_wiki_feedback_runtime", build_fake)
-    item_id = new_wiki_feedback_id()
-
-    runtime_cli.main(
-        [
-            "requeue-wiki-feedback",
-            "--config",
-            str(_server_only_config(tmp_path)),
-            "--item",
-            str(item_id),
-        ]
-    )
-    assert json.loads(capsys.readouterr().out) == {
-        "item_id": item_id,
-        "status": "pending",
-    }
-    runtime.closed = False
-    runtime_cli.main(
-        [
-            "maintain-wiki-feedback",
-            "--config",
-            str(_server_only_config(tmp_path)),
-            "--compact",
-        ]
-    )
-    assert json.loads(capsys.readouterr().out) == {"compacted": True, "pruned": 7}
 
 
 def test_worker_session_cli_lists_and_shows_raw_trace(

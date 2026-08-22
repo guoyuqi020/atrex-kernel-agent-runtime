@@ -11,7 +11,6 @@ from pathlib import Path
 import pytest
 
 from atrex_runtime.composition.campaign import build_campaign_runtime
-from atrex_runtime.composition.knowledge import build_wiki_feedback_runtime
 from atrex_runtime.config import RuntimeSettings, WorkerEnvironmentSettings
 from atrex_runtime.domain.models import KernelMeasurementPurpose
 from atrex_runtime.ports import KernelMeasurementRun, KernelPairMeasurementResult
@@ -612,7 +611,6 @@ def test_campaign_config_keeps_agent_framework_inside_core(tmp_path: Path) -> No
     )
     runtime.close()
 
-
 def test_campaign_config_rejects_removed_evolver_token_quota(tmp_path: Path) -> None:
     path = _write_config(tmp_path)
     value = json.loads(path.read_text(encoding="utf-8"))
@@ -781,63 +779,3 @@ def test_campaign_composition_does_not_receive_gpu_wiki_service_secret(tmp_path:
         evolution_session_driver=UnusedEvolutionSessionDriver(),
     )
     runtime.close()
-
-
-def test_gpu_wiki_feedback_composition_owns_registry_connection(tmp_path: Path) -> None:
-    path = _write_config(tmp_path)
-    value = json.loads(path.read_text(encoding="utf-8"))
-    value["gpu_wiki"] = {
-        "base_url": "https://wiki.example.test",
-        "bearer_token_env": "GPU_WIKI_TOKEN",
-        "timeout_seconds": 10,
-        "max_proxy_request_bytes": 65536,
-        "max_query_bytes": 32768,
-        "max_response_bytes": 65536,
-        "feedback": {
-            "max_request_bytes": 1048576,
-            "batch_size": 2,
-            "lease_seconds": 30,
-            "retry_initial_seconds": 1,
-            "retry_max_seconds": 60,
-            "poll_seconds": 2,
-            "max_error_bytes": 1024,
-            "completed_retention_seconds": 86400,
-            "prune_batch_size": 100,
-        },
-    }
-    path.write_text(json.dumps(value), encoding="utf-8")
-    settings = RuntimeSettings.from_file(path)
-
-    runtime = build_wiki_feedback_runtime(
-        settings,
-        _environment() | {"GPU_WIKI_TOKEN": "wiki-secret"},
-    )
-    runtime.close()
-    runtime.close()
-
-
-def test_gpu_wiki_feedback_config_rejects_lease_shorter_than_batch(tmp_path: Path) -> None:
-    path = _write_config(tmp_path)
-    value = json.loads(path.read_text(encoding="utf-8"))
-    value["gpu_wiki"] = {
-        "base_url": "https://wiki.example.test",
-        "timeout_seconds": 10,
-        "max_proxy_request_bytes": 65536,
-        "max_query_bytes": 32768,
-        "max_response_bytes": 65536,
-        "feedback": {
-            "max_request_bytes": 1048576,
-            "batch_size": 2,
-            "lease_seconds": 20,
-            "retry_initial_seconds": 1,
-            "retry_max_seconds": 60,
-            "poll_seconds": 2,
-            "max_error_bytes": 1024,
-            "completed_retention_seconds": 86400,
-            "prune_batch_size": 100,
-        },
-    }
-    path.write_text(json.dumps(value), encoding="utf-8")
-
-    with pytest.raises(ValueError, match="lease must exceed"):
-        RuntimeSettings.from_file(path)

@@ -14,7 +14,7 @@ Runtime 提供统一 Launcher Contract，并显式区分 `development` 与 Linux
 bubblewrap 和 cgroup v2 应用到完整 Core/Evolver 进程树；Runtime 绝不会把无隔离
 Development 模式作为降级路径。
 
-Evidence 只持久化规范化 Projection 和 Session 来源 Digest，不复制原始字节。Agent View 按 Digest 物化原始、未脱敏 Session Artifact。Wiki Feedback 在 Epoch 结束后独立构造准确、有界的原始 Projection。
+Evidence 只持久化规范化 Projection 和 Session 来源 Digest，不复制原始字节。Agent View 按 Digest 物化原始、未脱敏 Session Artifact。
 
 ## 结果
 

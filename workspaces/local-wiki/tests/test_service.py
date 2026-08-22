@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
-import sqlite3
 import subprocess
 import sys
 from collections.abc import Mapping
@@ -12,7 +10,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from atrex_runtime.artifacts.local import JsonValue
 from atrex_runtime.domain.ids import (
     ArtifactDigest,
     new_attempt_id,
@@ -20,30 +17,14 @@ from atrex_runtime.domain.ids import (
     new_epoch_id,
     new_kernel_agent_revision_id,
     new_lineage_id,
-    new_wiki_feedback_id,
     parse_artifact_digest,
 )
 from atrex_runtime.domain.models import BranchRole, Dsl
-from atrex_runtime.knowledge import (
-    KnowledgeInteractionV1 as RuntimeKnowledgeInteractionV1,
-)
 from atrex_runtime.knowledge import (
     KnowledgeQueryV1 as RuntimeKnowledgeQueryV1,
 )
 from atrex_runtime.knowledge import (
     KnowledgeSnapshotResponseV1 as RuntimeKnowledgeSnapshotResponseV1,
-)
-from atrex_runtime.knowledge import (
-    WikiFeedbackAckV1 as RuntimeWikiFeedbackAckV1,
-)
-from atrex_runtime.knowledge import (
-    WikiFeedbackReportV1 as RuntimeWikiFeedbackReportV1,
-)
-from atrex_runtime.knowledge.ingest_models import (
-    WikiFeedbackAttemptV1 as RuntimeWikiFeedbackAttemptV1,
-)
-from atrex_runtime.knowledge.ingest_models import (
-    WikiFeedbackInteractionV1 as RuntimeWikiFeedbackInteractionV1,
 )
 
 from atrex_local_wiki.app import LocalWikiApplication, build_application
@@ -198,163 +179,17 @@ async def test_browser_client_is_served_without_changing_versioned_api(tmp_path:
 
 
 @pytest.mark.anyio
-async def test_feedback_ack_is_runtime_compatible_and_idempotent(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    app = build_application(settings, {})
-    query = _query()
-    report = RuntimeWikiFeedbackReportV1(
-        campaign_id=query.campaign_id,
-        lineage_id=query.lineage_id,
-        epoch_id=query.epoch_id,
-        epoch_number=1,
-        operator=query.operator,
-        dsl=query.dsl,
-        hardware_target=query.hardware_target,
-        evaluation_contract_digest=query.evaluation_contract_digest,
-        evidence_checkpoint_digest=query.epoch_evidence_checkpoint_digest,
-        attempts=(),
-    )
-    feedback_id = new_wiki_feedback_id()
-    headers = {"idempotency-key": feedback_id}
-
-    first = await _request(
-        app,
-        "/v1/knowledge/epoch-feedback",
-        report.canonical_json_bytes(),
-        headers=headers,
-    )
-    second = await _request(
-        app,
-        "/v1/knowledge/epoch-feedback",
-        report.canonical_json_bytes(),
-        headers=headers,
-    )
-
-    assert first[0] == second[0] == 202
-    assert RuntimeWikiFeedbackAckV1.model_validate_json(first[1]).feedback_id == feedback_id
-    with sqlite3.connect(settings.database) as connection:
-        assert connection.execute("SELECT COUNT(*) FROM feedback").fetchone() == (1,)
-    app.close()
-
-
-@pytest.mark.anyio
-async def test_feedback_uses_upstream_served_event_and_is_idempotent(tmp_path: Path) -> None:
-    settings = _settings(tmp_path)
-    app = build_application(settings, {})
-    query = _query()
-    content: JsonValue = {
-        "records": {
-            "nvidia.hopper.triton.kernel-opt.reduction": {
-                "store": "gpu_wiki",
-                "source": "kernel_wiki",
-                "type": "technique-card",
-                "applies_to": {"arch": "hopper", "dsl": "triton"},
-                "match": {"arch": "exact"},
-                "payload": {"goal": "tile a reduction"},
-            }
-        },
-        "notes": [],
-    }
-    content_digest = parse_artifact_digest(
-        "sha256:"
-        + hashlib.sha256(
-            json.dumps(content, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
-    )
-    response = RuntimeKnowledgeSnapshotResponseV1(
-        snapshot_id="snapshot",
-        content_digest=content_digest,
-        content=content,
-    )
-    interaction = RuntimeKnowledgeInteractionV1(
-        idempotency_key="query-1",
-        query=query,
-        response=response,
-    )
-    frozen = RuntimeWikiFeedbackInteractionV1(
-        artifact_digest=_digest("interaction"),
-        interaction=interaction,
-    )
-    attempt = RuntimeWikiFeedbackAttemptV1(
-        attempt_id=query.attempt_id,
-        branch=query.branch,
-        ordinal=1,
-        kernel_agent_revision_id=query.kernel_agent_revision_id,
-        interactions=(frozen,),
-        session_traces=(),
-    )
-    report = RuntimeWikiFeedbackReportV1(
-        campaign_id=query.campaign_id,
-        lineage_id=query.lineage_id,
-        epoch_id=query.epoch_id,
-        epoch_number=1,
-        operator=query.operator,
-        dsl=query.dsl,
-        hardware_target=query.hardware_target,
-        evaluation_contract_digest=query.evaluation_contract_digest,
-        evidence_checkpoint_digest=query.epoch_evidence_checkpoint_digest,
-        attempts=(attempt,),
-    )
-    feedback_id = new_wiki_feedback_id()
-    headers = {"idempotency-key": feedback_id}
-
-    first = await _request(
-        app,
-        "/v1/knowledge/epoch-feedback",
-        report.canonical_json_bytes(),
-        headers=headers,
-    )
-    second = await _request(
-        app,
-        "/v1/knowledge/epoch-feedback",
-        report.canonical_json_bytes(),
-        headers=headers,
-    )
-
-    assert first[0] == second[0] == 202
-    events_path = settings.store_root / "kernel_wiki" / "feedback" / "events.jsonl"
-    events = [json.loads(line) for line in events_path.read_text().splitlines()]
-    assert len(events) == 1
-    assert events[0]["record_id"] == "nvidia.hopper.triton.kernel-opt.reduction"
-    assert events[0]["counts"] == {"served_count": 1}
-    app.close()
-
-
-@pytest.mark.anyio
-async def test_feedback_rejects_changed_body_for_same_identity(tmp_path: Path) -> None:
+async def test_feedback_endpoint_is_not_exposed(tmp_path: Path) -> None:
     app = build_application(_settings(tmp_path), {})
-    query = _query()
-    report = RuntimeWikiFeedbackReportV1(
-        campaign_id=query.campaign_id,
-        lineage_id=query.lineage_id,
-        epoch_id=query.epoch_id,
-        epoch_number=1,
-        operator=query.operator,
-        dsl=query.dsl,
-        hardware_target=query.hardware_target,
-        evaluation_contract_digest=query.evaluation_contract_digest,
-        evidence_checkpoint_digest=query.epoch_evidence_checkpoint_digest,
-        attempts=(),
-    )
-    feedback_id = new_wiki_feedback_id()
-    headers = {"idempotency-key": feedback_id}
-    await _request(
-        app,
-        "/v1/knowledge/epoch-feedback",
-        report.canonical_json_bytes(),
-        headers=headers,
-    )
-    changed = report.model_copy(update={"epoch_number": 2})
 
     status, body = await _request(
         app,
         "/v1/knowledge/epoch-feedback",
-        changed.canonical_json_bytes(),
-        headers=headers,
+        b"{}",
     )
 
-    assert status == 409
-    assert json.loads(body) == {"error": "idempotency_conflict"}
+    assert status == 404
+    assert json.loads(body) == {"error": "not_found"}
     app.close()
 
 

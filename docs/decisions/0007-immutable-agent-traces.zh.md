@@ -9,7 +9,7 @@
 ## 背景
 
 每次 Optimizer 和 Evolver 调用都使用全新进程与 Session。Runtime 需要持久来源用于审计、重试归属、
-Evidence 和 Epoch 后 Wiki Feedback，同时不能把隐藏对话连续性带入后续 Session。原始 Provider 历史
+Evidence，同时不能把隐藏对话连续性带入后续 Session。原始 Provider 历史
 不适合写入 SQLite，单个 Trace 字段也会覆盖重试记录。
 
 ## 决策
@@ -19,8 +19,7 @@ Worker 生命周期、角色、Model、Workspace、终止原因、Optimizer Toke
 Bucket。一个稳定 Attempt 或 Evolution Subject 可以拥有多条只追加 Worker Session。
 
 Runtime 在启动前创建 Worker Session Record，持续更新到终态，并在可用时原样封存 Trace，不做脱敏。
-Evidence 保存规范化摘要与来源 Digest；Agent View 显式物化原始 Trace Artifact。Wiki Feedback 只能在
-Epoch 完成后上传准确、有界的原始文件投影。Trace 是审计输入，不是权威成功声明，也不会自动成为
+Evidence 保存规范化摘要与来源 Digest；Agent View 显式物化原始 Trace Artifact。Trace 是审计输入，不是权威成功声明，也不会自动成为
 Agent 记忆。
 
 ## 结果

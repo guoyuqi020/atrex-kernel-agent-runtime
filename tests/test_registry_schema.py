@@ -21,8 +21,35 @@ def test_registry_initializes_current_schema(tmp_path: Path) -> None:
         pass
     with closing(sqlite3.connect(path)) as connection:
         row = connection.execute("PRAGMA user_version").fetchone()
+        feedback_table = connection.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'wiki_feedback_outbox'"
+        ).fetchone()
 
     assert row == (SCHEMA_VERSION,)
+    assert feedback_table is None
+
+
+def test_registry_migrates_schema_25_by_removing_wiki_feedback_outbox(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "registry.sqlite"
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("CREATE TABLE wiki_feedback_outbox(id TEXT PRIMARY KEY)")
+        connection.execute("PRAGMA user_version = 25")
+
+    with SqliteRegistry(path):
+        pass
+
+    with closing(sqlite3.connect(path)) as connection:
+        version = connection.execute("PRAGMA user_version").fetchone()
+        table = connection.execute(
+            "SELECT name FROM sqlite_master "
+            "WHERE type = 'table' AND name = 'wiki_feedback_outbox'"
+        ).fetchone()
+
+    assert version == (SCHEMA_VERSION,)
+    assert table is None
 
 
 def test_registry_migrates_schema_14_kernel_catalog_measurements(tmp_path: Path) -> None:

@@ -38,6 +38,7 @@ from .repeated_evaluate import (
     repeated_evaluate_result,
     repeated_evaluate_worker_result,
 )
+from .retrying_client import RetryingAgateClient
 
 AGATE_JOB_SCHEMA_VERSION = 2
 _JOB_KINDS = frozenset({"eval", "profile", "dev", "compile", "sol", "disassemble"})
@@ -193,7 +194,7 @@ def load_agate_sdk(
             config.secret_key.get_secret_value(),
         )
     client = client_type(config.base_url, auth=auth, timeout=config.http_timeout_s)
-    return client, builder
+    return cast(AgateClient, RetryingAgateClient(client)), builder
 
 
 @dataclass(frozen=True, slots=True)

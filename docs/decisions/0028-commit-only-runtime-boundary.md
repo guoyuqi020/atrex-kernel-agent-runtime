@@ -14,7 +14,7 @@ Runtime exposes one launcher contract with explicit `development` and Linux `san
 production mode applies bubblewrap and cgroup v2 to the complete
 Core/Evolver process tree; Runtime never treats the unisolated development mode as a fallback.
 
-Evidence persists normalized projections plus Session source digests, not duplicate raw bytes. Agent views materialize original unredacted Session Artifacts by digest. Wiki feedback constructs its own exact bounded raw projection after epoch completion.
+Evidence persists normalized projections plus Session source digests, not duplicate raw bytes. Agent views materialize original unredacted Session Artifacts by digest.
 
 ## Consequences
 

@@ -17,34 +17,30 @@ from .models import (
     JsonValue,
     KnowledgeQueryV1,
     KnowledgeSnapshotResponseV1,
-    WikiFeedbackAckV1,
-    WikiFeedbackReportV1,
     canonical_json_bytes,
 )
 from .retrieval import CorpusIndex, GpuWikiQueryError
 from .store import LocalWikiStore
 from .ui import BROWSER_UI
-from .upstream import UpstreamFeedbackIngestor, UpstreamGpuWikiError, synchronize_store
+from .upstream import synchronize_store
 
 AsgiReceive = Callable[[], Awaitable[dict[str, Any]]]
 AsgiSend = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class LocalWikiApplication:
-    """Own the local corpus projection and feedback observation store."""
+    """Own the local corpus projection and query observation store."""
 
     def __init__(
         self,
         index: CorpusIndex,
         store: LocalWikiStore,
-        feedback: UpstreamFeedbackIngestor,
         *,
         bearer_token: str | None,
         max_request_bytes: int,
     ) -> None:
         self._index = index
         self._store = store
-        self._feedback_ingestor = feedback
         self._bearer_token = bearer_token
         self._max_request_bytes = max_request_bytes
         self._closed = False
@@ -74,10 +70,7 @@ class LocalWikiApplication:
         if path == "/readyz":
             await self._ready(scope, send)
             return
-        if path not in {
-            "/v1/knowledge/query",
-            "/v1/knowledge/epoch-feedback",
-        }:
+        if path != "/v1/knowledge/query":
             await _json_response(send, 404, {"error": "not_found"})
             return
         if scope.get("method") != "POST":
@@ -89,11 +82,8 @@ class LocalWikiApplication:
             return
         try:
             body = await _read_body(receive, self._max_request_bytes)
-            if path == "/v1/knowledge/query":
-                await self._query(body, send)
-            else:
-                await self._feedback(body, headers, send)
-        except (GpuWikiQueryError, UpstreamGpuWikiError) as error:
+            await self._query(body, send)
+        except GpuWikiQueryError as error:
             await _json_response(send, 503, {"error": "upstream_unavailable", "detail": str(error)})
         except (json.JSONDecodeError, UnicodeDecodeError, ValidationError, ValueError) as error:
             await _json_response(send, 400, {"error": "invalid_request", "detail": str(error)})
@@ -117,36 +107,6 @@ class LocalWikiApplication:
         self._store.record_query(snapshot_id, request_digest, body, response_body)
         await _bytes_response(send, 200, response_body)
 
-    async def _feedback(
-        self,
-        body: bytes,
-        headers: Mapping[str, str],
-        send: AsgiSend,
-    ) -> None:
-        report = WikiFeedbackReportV1.model_validate_json(body)
-        feedback_id = headers.get("idempotency-key")
-        if feedback_id is None:
-            raise ValueError("idempotency-key header is required")
-        acknowledgement = WikiFeedbackAckV1(feedback_id=feedback_id, accepted=True)
-        canonical_body = canonical_json_bytes(report.model_dump(mode="json"))
-        request_digest = hashlib.sha256(canonical_body).hexdigest()
-        reservation = self._store.reserve_feedback(feedback_id, request_digest, canonical_body)
-        if reservation.status == "conflict":
-            await _json_response(send, 409, {"error": "idempotency_conflict"})
-            return
-        if reservation.status == "pending":
-            await anyio.to_thread.run_sync(
-                self._feedback_ingestor.ingest,
-                report,
-                reservation.received_at.timestamp(),
-            )
-            self._store.mark_feedback_complete(feedback_id)
-        await _bytes_response(
-            send,
-            202,
-            canonical_json_bytes(acknowledgement.model_dump(mode="json")),
-        )
-
     def _authorized(self, headers: Mapping[str, str]) -> bool:
         if self._bearer_token is None:
             return True
@@ -168,7 +128,6 @@ class LocalWikiApplication:
             return
         try:
             self._index.check_health()
-            self._feedback_ingestor.check_health()
             self._store.check_health()
         except Exception:
             await _json_response(send, 503, {"status": "unavailable"})
@@ -204,16 +163,9 @@ def build_application(
         token = environment.get(settings.bearer_token_env)
         if not token:
             raise ValueError(f"missing environment variable: {settings.bearer_token_env}")
-    sync = synchronize_store(settings.reference_root, settings.store_root)
+    synchronize_store(settings.reference_root, settings.store_root)
     lock = threading.RLock()
     store = LocalWikiStore(settings.database)
-    feedback = UpstreamFeedbackIngestor(settings.store_root, settings.python_executable, lock)
-    if sync.feedback_preserved:
-        feedback.rebuild()
-    for feedback_id, body, received_at in store.pending_feedback():
-        report = WikiFeedbackReportV1.model_validate_json(body)
-        feedback.ingest(report, received_at.timestamp())
-        store.mark_feedback_complete(feedback_id)
     index = CorpusIndex(
         settings.store_root,
         python_executable=settings.python_executable,
@@ -226,7 +178,6 @@ def build_application(
     return LocalWikiApplication(
         index,
         store,
-        feedback,
         bearer_token=token,
         max_request_bytes=settings.max_request_bytes,
     )

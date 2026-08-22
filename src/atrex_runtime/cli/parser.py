@@ -281,28 +281,6 @@ def build_parser() -> argparse.ArgumentParser:
     show_evaluation.add_argument("--evaluation", required=True)
     show_evaluation.add_argument("--source", action="store_true")
     show_evaluation.add_argument("--result", action="store_true")
-    drain_wiki = commands.add_parser(
-        "drain-wiki-feedback",
-        help="deliver durable post-Epoch GPU Wiki feedback reports",
-    )
-    drain_wiki.add_argument("--config", required=True, help="trusted Runtime JSON config")
-    drain_wiki.add_argument(
-        "--watch",
-        action="store_true",
-        help="continue polling instead of processing one ready batch",
-    )
-    requeue_wiki = commands.add_parser(
-        "requeue-wiki-feedback",
-        help="requeue one inspected permanent GPU Wiki feedback failure",
-    )
-    requeue_wiki.add_argument("--config", required=True)
-    requeue_wiki.add_argument("--item", required=True, help="Wiki feedback item ID")
-    maintain_wiki = commands.add_parser(
-        "maintain-wiki-feedback",
-        help="prune retained completed rows and optionally compact SQLite",
-    )
-    maintain_wiki.add_argument("--config", required=True)
-    maintain_wiki.add_argument("--compact", action="store_true")
     artifact_gc = commands.add_parser(
         "gc-artifacts",
         help="inspect or collect unreferenced Artifacts while the Runtime is stopped",

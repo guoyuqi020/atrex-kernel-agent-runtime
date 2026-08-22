@@ -20,7 +20,7 @@ Campaign bootstrap -> agent-v0 + Kernel v0
 Epoch: build Challengers -> run Branch trajectories -> compare Kernels -> select Agent
         |
         v
-immutable Evidence + Wiki feedback -> next Epoch
+immutable Evidence -> next Epoch
 ```
 
 - A Campaign freezes Core/Evolver commits, the Evaluation Contract, Gate Policy, hardware, and DSL
@@ -32,7 +32,7 @@ immutable Evidence + Wiki feedback -> next Epoch
 - An Evolver can create, reuse, or evolve from a historical Agent revision. Active and Challenger
   Branches then run concurrently within configured limits.
 - Optimizers may query the external GPU Wiki live. Runtime freezes the complete query interaction
-  before returning the knowledge and uploads consumption/Trace feedback only after Epoch completion.
+  before returning the knowledge; no Agent history or Session trace is uploaded to the Wiki.
 
 ## Repository layout
 

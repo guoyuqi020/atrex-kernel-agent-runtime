@@ -4,7 +4,7 @@
 
 ## 进程拓扑
 
-Agate 兼容 Gateway 与生产 GPU Wiki 作为外部服务运行。部署一个 Runtime Service、一个或多个独立 Campaign Task/Scheduler 进程和独立 Wiki Feedback Drainer。SQLite 只支持单节点部署。Runtime 数据库使用 rollback journal，因此 Runtime 与 CLI 跨进程访问 Lima `virtiofs` 工作区也是安全的；不要使用无法可靠提供 POSIX 文件锁的远端文件系统。
+Agate 兼容 Gateway 与生产 GPU Wiki 作为外部服务运行。部署一个 Runtime Service 和一个或多个独立 Campaign Task/Scheduler 进程。SQLite 只支持单节点部署。Runtime 数据库使用 rollback journal，因此 Runtime 与 CLI 跨进程访问 Lima `virtiofs` 工作区也是安全的；不要使用无法可靠提供 POSIX 文件锁的远端文件系统。
 
 Core 与 Evolver 是部署批准、按完整 Commit 固定的 Git 仓库；相邻 Submodule 只是开发 Checkout，不是 Runtime Import。`third_party/atrex-bench` Submodule 是 ABBA 与可选 Roofline 构建使用的本地可用、按 Commit 固定的可信 Evaluator Source。仓库验证前执行 `git submodule update --init --recursive` 初始化三者。
 
@@ -23,6 +23,9 @@ Core 与 Evolver 是部署批准、按完整 Commit 固定的 Git 仓库；相�
    ASGI 启动后，Runtime 会立即探测一次 Agate，之后每隔
    `agate.health_check_interval_s` 秒探测一次（默认 30 秒）；首次状态、故障与恢复均写入 Service
    日志。该观测不改变 `/healthz` 或 `/readyz` 语义，外部服务短暂故障不会停止可信控制面。
+   所有 Agate SDK 请求使用同一套有界瞬时故障策略：分别退避 1、2、4、8 秒后重试，只有第 5
+   次连续调用仍然报错时才向上抛出；一次成功会让下一次请求重新计数。编译失败、正确性失败等
+   Job 终态属于结果，不会被该策略重新提交。
 6. 执行 Campaign schema-v3 Bootstrap 时保持 Runtime、Gateway 和可选 Wiki 可用；Core Baseline
    Session 会回调 Runtime。
 7. 使用绝对目标 Epoch 调度 Campaign；Wiki Drainer 独立运行。

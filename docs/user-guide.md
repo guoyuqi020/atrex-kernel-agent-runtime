@@ -48,7 +48,7 @@ Runtime config is strict schema v1. Important choices are:
 - Optimizer/Evolver Backend, executable command, environment allowlist, and Session policy;
 - Gate policy, comparison method, Roofline builder, and Production Gate;
 - `development` or Linux `sandbox` launcher;
-- optional GPU Wiki and feedback Outbox;
+- optional GPU Wiki query service;
 - administration and maintenance limits.
 
 Create a Campaign schema-v3 file from an example. It selects operator, hardware, Evaluation
@@ -135,8 +135,8 @@ expose all physical Bootstrap generations, including failed generations.
 
 ## 8. Run production tasks
 
-The production scripts separate the persistent control plane from operator tasks. Start Runtime,
-Wiki, and the feedback drainer once:
+The production scripts separate the persistent control plane from operator tasks. Start Runtime
+and Wiki once:
 
 ```bash
 bash scripts/production/services.sh start \
@@ -207,12 +207,6 @@ atrex-kernel-agent-runtime recover-epoch --config runtime.json --epoch "$EPOCH" 
   --recovery-key incident-2026-08-20 --reason 'Agate allocation interruption'
 ```
 
-Run Wiki feedback independently:
-
-```bash
-atrex-kernel-agent-runtime drain-wiki-feedback --config runtime.json --watch
-```
-
-Artifact and workspace GC are dry-run by default. Stop all Runtime/Worker/drainer processes before
+Artifact and workspace GC are dry-run by default. Stop all Runtime/Worker processes before
 using `--apply --confirm-runtime-stopped`. Backup/restore, event export/pruning, cancellation,
 credential rotation, and Linux sandbox setup are covered in [Deployment and Operations](operations.md).

@@ -11,7 +11,6 @@ import anyio
 from ..domain.errors import InvalidTransitionError
 from ..domain.ids import ArtifactDigest, CampaignId, LineageId
 from ..domain.models import CampaignStatus, Lineage, LineageStatus
-from ..knowledge.ingest import WikiFeedbackPreparer
 from ..registry.base import Registry
 from .epoch import EpochController
 from .leases import LineageLeaseManager
@@ -53,14 +52,12 @@ class CampaignScheduler:
         epochs: EpochController,
         evidence: EvidenceAssembler,
         leases: LineageLeaseManager,
-        wiki_feedback: WikiFeedbackPreparer | None = None,
         evolver_commit: str | None = None,
     ) -> None:
         self._registry = registry
         self._epochs = epochs
         self._evidence = evidence
         self._leases = leases
-        self._wiki_feedback = wiki_feedback
         self._evolver_commit = evolver_commit
 
     async def run_lineage_through(
@@ -91,26 +88,14 @@ class CampaignScheduler:
             lineage = self._registry.get_lineage(lineage_id)
             if lineage.status is LineageStatus.AWAITING_EVIDENCE:
                 previous = lineage.evidence_checkpoint
-                through_epoch = lineage.next_epoch_number - 1
                 next_checkpoint = await anyio.to_thread.run_sync(
                     self._evidence.assemble_next,
                     lineage_id,
-                )
-                feedback_report = (
-                    None
-                    if self._wiki_feedback is None
-                    else await anyio.to_thread.run_sync(
-                        self._wiki_feedback.prepare,
-                        lineage_id,
-                        through_epoch,
-                        next_checkpoint,
-                    )
                 )
                 self._registry.advance_lineage_evidence(
                     lineage_id,
                     previous,
                     next_checkpoint,
-                    feedback_report,
                 )
                 continue
             if lineage.status is LineageStatus.FAILED:

@@ -16,6 +16,7 @@ from .protocol import EvaluationV2
 
 EVALUATE_SHAPE_BATCH_SIZE = 4
 EVALUATE_MAX_PARALLEL_BATCHES = 4
+CANDIDATE_REJECTED_CATEGORY = "candidate_rejected"
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,14 +74,27 @@ class ShapeBatchedEvaluateExecutor:
         batches = self._batches(contract, idempotency_key)
         results: list[ShapeBatchOutcome | None] = [None] * len(batches)
         limiter = anyio.Semaphore(self._max_parallel_batches)
-
-        async def run_one(batch: ShapeBatch) -> None:
-            async with limiter:
-                results[batch.index] = await evaluate(batch)
+        rejection: tuple[ShapeBatch, ShapeBatchOutcome] | None = None
 
         async with anyio.create_task_group() as tasks:
+            async def run_one(batch: ShapeBatch) -> None:
+                nonlocal rejection
+                async with limiter:
+                    outcome = await evaluate(batch)
+                    results[batch.index] = outcome
+                    if _candidate_rejection_detail(outcome) is not None:
+                        if rejection is None or batch.index < rejection[0].index:
+                            rejection = (batch, outcome)
+                        tasks.cancel_scope.cancel()
+
             for batch in batches:
                 tasks.start_soon(run_one, batch)
+        if rejection is not None:
+            return _candidate_rejected_outcome(
+                rejection[0],
+                rejection[1],
+                batch_count=len(batches),
+            )
         completed = tuple(result for result in results if result is not None)
         if len(completed) != len(batches):
             raise AssertionError("Shape-batched Evaluate produced no result")
@@ -275,7 +289,62 @@ def _worker_result(
     )
 
 
+def _candidate_rejection_detail(outcome: ShapeBatchOutcome) -> JsonValue | None:
+    job = outcome.job
+    if not isinstance(job, dict) or job.get("status") != "rejected":
+        return None
+    detail = job.get("error")
+    return detail if detail is not None else "candidate request rejected"
+
+
+def _candidate_rejected_outcome(
+    batch: ShapeBatch,
+    outcome: ShapeBatchOutcome,
+    *,
+    batch_count: int,
+) -> BatchedEvaluateOutcome:
+    detail = _candidate_rejection_detail(outcome)
+    if detail is None:
+        raise AssertionError("Candidate rejection outcome lost its rejection detail")
+    error = cast(
+        JsonValue,
+        {
+            "category": CANDIDATE_REJECTED_CATEGORY,
+            "detail": detail,
+        },
+    )
+    job = cast(
+        JsonValue,
+        {
+            "schema_version": 1,
+            "operation": "shape_batched_evaluate",
+            "status": "rejected",
+            "error": error,
+            "rejected_batch_index": batch.index,
+            "shape_batch_count": batch_count,
+        },
+    )
+    worker_result = cast(
+        JsonValue,
+        {
+            "status": "rejected",
+            "error": {
+                "category": CANDIDATE_REJECTED_CATEGORY,
+                "message": "candidate request rejected before evaluation job creation",
+            },
+        },
+    )
+    return BatchedEvaluateOutcome(
+        job,
+        EvaluationV2(correct=False, latency_us=None),
+        None,
+        worker_result,
+        (outcome,),
+    )
+
+
 __all__ = [
+    "CANDIDATE_REJECTED_CATEGORY",
     "EVALUATE_MAX_PARALLEL_BATCHES",
     "EVALUATE_SHAPE_BATCH_SIZE",
     "BatchedEvaluateOutcome",

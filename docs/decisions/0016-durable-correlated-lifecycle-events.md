@@ -12,7 +12,7 @@ Session logs and sealed traces explain Agent behavior but do not provide a small
 
 ## Decision
 
-Trusted Runtime components append events through the Registry. Every payload has `schema_version: 1` and a `correlation` object derived from authoritative relationships, containing the applicable Campaign, lineage, Epoch, Attempt, Task, Kernel Revision, or Wiki feedback identities. Payloads include bounded metadata, status, token counts, and Artifact Digests, but never secrets, prompts, model responses, or raw Session content.
+Trusted Runtime components append events through the Registry. Every payload has `schema_version: 1` and a `correlation` object derived from authoritative relationships, containing the applicable Campaign, lineage, Epoch, Attempt, Task, or Kernel Revision identities. Payloads include bounded metadata, status, token counts, and Artifact Digests, but never secrets, prompts, model responses, or raw Session content.
 
 Optimizer and Evolver runners record Worker start, exit, infrastructure failure or timeout, and cleanup after the owned process has been reaped. Evolver validation records sealed or rejected candidates. The Gateway Proxy records authorized submission, terminal result, and failures. The Wiki Proxy records live query submission, completion after interaction freezing, and failure. Registry selection transactions record Kernel and Kernel Agent promotion or rollback alongside the existing lifecycle events.
 

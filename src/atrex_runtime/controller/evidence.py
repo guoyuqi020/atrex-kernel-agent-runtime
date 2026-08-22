@@ -212,6 +212,10 @@ class LocalEvidenceAssembler:
                     "hypothesis": evolution.output.hypothesis,
                     "expected_effect": evolution.output.expected_effect,
                     "changed_paths": list(getattr(evolution.output, "changed_paths", ())),
+                    "unimplemented_capabilities": [
+                        item.model_dump(mode="json")
+                        for item in evolution.output.unimplemented_capabilities
+                    ],
                 }
             )
             if evolution.session_trace_digest is not None:

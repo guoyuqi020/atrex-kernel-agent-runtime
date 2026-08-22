@@ -25,7 +25,7 @@ protocols and intentionally have no root-level `*.example.json` configuration te
 - `gateway_proxy`: request/Candidate bounds, signing-key environment name, per-DSL changed-path allowlists, and no-op policy.
 - `agate`: URL, authentication mode and credential environment names, HTTP/wait timeouts.
 - `kernel_agent`: `max_bundle_files`, `max_bundle_bytes`, `max_entrypoint_bytes`, `max_agent_problem_bytes`, and optional `base_source`.
-- `gpu_wiki`: external URL, optional bearer-token environment name, proxy/query/response limits, and optional feedback Outbox policy.
+- `gpu_wiki`: external URL, optional bearer-token environment name, and proxy/query/response limits.
 - `campaign`: worker composition and scheduling policy.
 - `administration`: bearer-token environment name plus request/event bounds.
 - `maintenance`: offline Artifact/workspace retention limits.

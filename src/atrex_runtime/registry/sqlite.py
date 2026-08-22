@@ -24,9 +24,7 @@ from ..domain.ids import (
     KernelAgentRevisionId,
     KernelRevisionId,
     LineageId,
-    WikiFeedbackId,
     WorkerSessionId,
-    new_wiki_feedback_id,
     parse_artifact_digest,
     parse_attempt_id,
     parse_campaign_id,
@@ -35,7 +33,6 @@ from ..domain.ids import (
     parse_kernel_agent_revision_id,
     parse_kernel_revision_id,
     parse_lineage_id,
-    parse_wiki_feedback_id,
     parse_worker_session_id,
 )
 from ..domain.models import (
@@ -67,15 +64,13 @@ from ..domain.models import (
     RuntimeEvent,
     RuntimeMetrics,
     TokenUsage,
-    WikiFeedbackOutboxItem,
-    WikiFeedbackStatus,
     WorkerSession,
     WorkerSessionRole,
     WorkerSessionStatus,
 )
 from ..sqlite_support import configure_durable_sqlite
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -457,7 +452,6 @@ class SqliteRegistry:
             "SELECT attempt_report_digest AS digest FROM attempts",
             "SELECT artifact_digest AS digest FROM attempt_session_traces",
             "SELECT trace_digest AS digest FROM worker_sessions",
-            "SELECT report_artifact_digest AS digest FROM wiki_feedback_outbox",
             """SELECT value AS digest FROM runtime_events, json_tree(payload_json)
                WHERE json_tree.type = 'text' AND value GLOB 'sha256:[0-9a-f]*'
                  AND (CAST(json_tree.key AS TEXT) LIKE '%artifact_digest'
@@ -593,6 +587,17 @@ class SqliteRegistry:
                     raise
                 else:
                     self._connection.execute("COMMIT")
+            version = 25
+        if version == 25:
+            with self._lock:
+                self._connection.executescript(
+                    """
+                    BEGIN IMMEDIATE;
+                    DROP TABLE IF EXISTS wiki_feedback_outbox;
+                    PRAGMA user_version = 26;
+                    COMMIT;
+                    """
+                )
             return
         if version == 14:
             with self._lock:
@@ -1313,24 +1318,6 @@ class SqliteRegistry:
                     ON worker_sessions(campaign_id, started_at, id);
                 CREATE INDEX worker_sessions_by_epoch
                     ON worker_sessions(epoch_id, started_at, id);
-                CREATE TABLE wiki_feedback_outbox (
-                    id TEXT PRIMARY KEY,
-                    lineage_id TEXT NOT NULL REFERENCES lineages(id),
-                    epoch_number INTEGER NOT NULL CHECK (epoch_number > 0),
-                    report_artifact_digest TEXT NOT NULL,
-                    status TEXT NOT NULL
-                        CHECK (status IN ('pending', 'leased', 'completed', 'failed')),
-                    attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-                    available_at TEXT NOT NULL,
-                    lease_owner TEXT,
-                    lease_expires_at TEXT,
-                    last_error TEXT,
-                    created_at TEXT NOT NULL,
-                    completed_at TEXT,
-                    UNIQUE (lineage_id, epoch_number),
-                    CHECK ((status = 'leased') =
-                           (lease_owner IS NOT NULL AND lease_expires_at IS NOT NULL))
-                );
                 CREATE TABLE runtime_events (
                     sequence INTEGER PRIMARY KEY AUTOINCREMENT,
                     kind TEXT NOT NULL,
@@ -1344,7 +1331,7 @@ class SqliteRegistry:
                     owner TEXT NOT NULL,
                     lease_expires_at TEXT NOT NULL
                 );
-                PRAGMA user_version = 25;
+                PRAGMA user_version = 26;
                 COMMIT;
                 """
             )
@@ -1647,14 +1634,6 @@ class SqliteRegistry:
                    FROM campaign_tasks WHERE id = ?""",
                 (aggregate_id,),
             ).fetchone()
-        elif aggregate_id.startswith("wikifeedback_"):
-            row = self._connection.execute(
-                """SELECT w.id AS wiki_feedback_id, l.id AS lineage_id,
-                          l.campaign_id AS campaign_id
-                   FROM wiki_feedback_outbox w
-                   JOIN lineages l ON l.id = w.lineage_id WHERE w.id = ?""",
-                (aggregate_id,),
-            ).fetchone()
         elif aggregate_id.startswith("kernelrev_"):
             row = self._connection.execute(
                 """SELECT k.id AS kernel_revision_id, a.id AS attempt_id,
@@ -1716,7 +1695,6 @@ class SqliteRegistry:
             "attempt_id": "$.correlation.attempt_id",
             "campaign_task_id": "$.correlation.campaign_task_id",
             "kernel_revision_id": "$.correlation.kernel_revision_id",
-            "wiki_feedback_id": "$.correlation.wiki_feedback_id",
         }
         unknown = set(correlation).difference(json_paths)
         if unknown:
@@ -3025,7 +3003,6 @@ class SqliteRegistry:
         lineage_id: LineageId,
         expected: ArtifactDigest,
         next_checkpoint: ArtifactDigest,
-        wiki_feedback_report: ArtifactDigest | None = None,
     ) -> None:
         """Publish the next cumulative checkpoint after a completed epoch."""
         with self._transaction():
@@ -3035,7 +3012,6 @@ class SqliteRegistry:
             ).fetchone()
             if row is None:
                 raise KeyError(f"Lineage not found: {lineage_id}")
-            completed_epoch_number = _required_int(row, "next_epoch_number") - 1
             cursor = self._connection.execute(
                 """UPDATE lineages SET evidence_checkpoint = ?, status = 'ready'
                    WHERE id = ? AND status = 'awaiting_evidence'
@@ -3046,227 +3022,11 @@ class SqliteRegistry:
                 raise InvalidTransitionError(
                     f"Lineage {lineage_id} cannot advance its evidence checkpoint"
                 )
-            if wiki_feedback_report is not None:
-                now = self._clock()
-                item_id = new_wiki_feedback_id()
-                self._connection.execute(
-                    """INSERT INTO wiki_feedback_outbox
-                       VALUES (?, ?, ?, ?, 'pending', 0, ?, NULL, NULL, NULL, ?, NULL)""",
-                    (
-                        item_id,
-                        lineage_id,
-                        completed_epoch_number,
-                        wiki_feedback_report,
-                        now,
-                        now,
-                    ),
-                )
-                self._event(
-                    "wiki_feedback.enqueued",
-                    item_id,
-                    {
-                        "lineage_id": lineage_id,
-                        "epoch_number": completed_epoch_number,
-                        "report_artifact_digest": wiki_feedback_report,
-                    },
-                )
             self._event(
                 "lineage.evidence_advanced",
                 lineage_id,
                 {"previous": expected, "next": next_checkpoint},
             )
-
-    def claim_wiki_feedback(
-        self,
-        owner: str,
-        *,
-        now: str,
-        lease_expires_at: str,
-        limit: int,
-    ) -> list[WikiFeedbackOutboxItem]:
-        """Lease ready or expired delivery items in deterministic order."""
-        if not owner or limit <= 0 or lease_expires_at <= now:
-            raise ValueError("Wiki feedback claim parameters are invalid")
-        claimed: list[WikiFeedbackOutboxItem] = []
-        with self._transaction():
-            rows = self._connection.execute(
-                """SELECT * FROM wiki_feedback_outbox
-                   WHERE (status = 'pending' AND available_at <= ?)
-                      OR (status = 'leased' AND lease_expires_at <= ?)
-                   ORDER BY created_at, id LIMIT ?""",
-                (now, now, limit),
-            ).fetchall()
-            for row in rows:
-                item_id = parse_wiki_feedback_id(_required_text(row, "id"))
-                self._connection.execute(
-                    """UPDATE wiki_feedback_outbox
-                       SET status = 'leased', attempt_count = attempt_count + 1,
-                           lease_owner = ?, lease_expires_at = ?
-                       WHERE id = ?""",
-                    (owner, lease_expires_at, item_id),
-                )
-                updated = self._connection.execute(
-                    "SELECT * FROM wiki_feedback_outbox WHERE id = ?",
-                    (item_id,),
-                ).fetchone()
-                if updated is None:
-                    raise RuntimeError("claimed Wiki feedback item disappeared")
-                claimed.append(self._map_wiki_feedback(updated))
-                self._event(
-                    "wiki_feedback.claimed",
-                    item_id,
-                    {"attempt_count": claimed[-1].attempt_count},
-                )
-        return claimed
-
-    def complete_wiki_feedback(self, item_id: WikiFeedbackId, owner: str) -> None:
-        """Mark one owned delivery complete."""
-        self._finish_wiki_feedback(item_id, owner, WikiFeedbackStatus.COMPLETED, None)
-
-    def retry_wiki_feedback(
-        self,
-        item_id: WikiFeedbackId,
-        owner: str,
-        *,
-        available_at: str,
-        error: str,
-    ) -> None:
-        """Release one owned delivery for a future retry."""
-        if not error:
-            raise ValueError("Wiki feedback retry requires an error")
-        with self._transaction():
-            cursor = self._connection.execute(
-                """UPDATE wiki_feedback_outbox
-                   SET status = 'pending', available_at = ?, lease_owner = NULL,
-                       lease_expires_at = NULL, last_error = ?
-                   WHERE id = ? AND status = 'leased' AND lease_owner = ?""",
-                (available_at, error, item_id, owner),
-            )
-            if cursor.rowcount != 1:
-                raise InvalidTransitionError(
-                    f"Wiki feedback item {item_id} is not leased by {owner}"
-                )
-            self._event(
-                "wiki_feedback.retry_scheduled",
-                item_id,
-                {"available_at": available_at, "error": error},
-            )
-
-    def fail_wiki_feedback(
-        self,
-        item_id: WikiFeedbackId,
-        owner: str,
-        *,
-        error: str,
-    ) -> None:
-        """Mark one owned delivery permanently failed."""
-        if not error:
-            raise ValueError("Wiki feedback failure requires an error")
-        self._finish_wiki_feedback(item_id, owner, WikiFeedbackStatus.FAILED, error)
-
-    def _finish_wiki_feedback(
-        self,
-        item_id: WikiFeedbackId,
-        owner: str,
-        status: WikiFeedbackStatus,
-        error: str | None,
-    ) -> None:
-        if not owner or status not in {
-            WikiFeedbackStatus.COMPLETED,
-            WikiFeedbackStatus.FAILED,
-        }:
-            raise ValueError("Wiki feedback terminal transition is invalid")
-        with self._transaction():
-            cursor = self._connection.execute(
-                """UPDATE wiki_feedback_outbox
-                   SET status = ?, lease_owner = NULL, lease_expires_at = NULL,
-                       last_error = ?, completed_at = ?
-                   WHERE id = ? AND status = 'leased' AND lease_owner = ?""",
-                (status, error, self._clock(), item_id, owner),
-            )
-            if cursor.rowcount != 1:
-                raise InvalidTransitionError(
-                    f"Wiki feedback item {item_id} is not leased by {owner}"
-                )
-            self._event(f"wiki_feedback.{status.value}", item_id, {"error": error})
-
-    def list_wiki_feedback(self) -> list[WikiFeedbackOutboxItem]:
-        """Return all Wiki feedback items in durable creation order."""
-        with self._lock:
-            rows = self._connection.execute(
-                "SELECT * FROM wiki_feedback_outbox ORDER BY created_at, id"
-            ).fetchall()
-        return [self._map_wiki_feedback(row) for row in rows]
-
-    def requeue_wiki_feedback(
-        self,
-        item_id: WikiFeedbackId,
-        *,
-        available_at: str,
-    ) -> WikiFeedbackOutboxItem:
-        """Move one inspected permanent failure back to the pending queue."""
-        with self._transaction():
-            changed = self._connection.execute(
-                """UPDATE wiki_feedback_outbox
-                   SET status = 'pending', available_at = ?, last_error = NULL,
-                       completed_at = NULL
-                   WHERE id = ? AND status = 'failed'""",
-                (available_at, item_id),
-            ).rowcount
-            if changed != 1:
-                raise InvalidTransitionError(
-                    f"Wiki feedback item {item_id} is not permanently failed"
-                )
-            row = self._connection.execute(
-                "SELECT * FROM wiki_feedback_outbox WHERE id = ?", (item_id,)
-            ).fetchone()
-            if row is None:
-                raise RuntimeError("requeued Wiki feedback item disappeared")
-            self._event("wiki_feedback.requeued", item_id, {"available_at": available_at})
-            return self._map_wiki_feedback(row)
-
-    def prune_wiki_feedback(self, *, completed_before: str, limit: int) -> int:
-        """Delete a bounded oldest batch of completed delivery bookkeeping rows."""
-        if limit <= 0:
-            raise ValueError("Wiki feedback prune limit must be positive")
-        with self._transaction():
-            rows = self._connection.execute(
-                """SELECT id FROM wiki_feedback_outbox
-                   WHERE status = 'completed' AND completed_at < ?
-                   ORDER BY completed_at, id LIMIT ?""",
-                (completed_before, limit),
-            ).fetchall()
-            ids = [_required_text(row, "id") for row in rows]
-            for item_id in ids:
-                self._connection.execute(
-                    "DELETE FROM wiki_feedback_outbox WHERE id = ?", (item_id,)
-                )
-                self._event("wiki_feedback.pruned", item_id)
-            return len(ids)
-
-    def compact(self) -> None:
-        """Rebuild the SQLite file after an explicit quiescent maintenance request."""
-        with self._lock:
-            self._connection.execute("VACUUM")
-
-    @staticmethod
-    def _map_wiki_feedback(row: sqlite3.Row) -> WikiFeedbackOutboxItem:
-        return WikiFeedbackOutboxItem(
-            id=parse_wiki_feedback_id(_required_text(row, "id")),
-            lineage_id=parse_lineage_id(_required_text(row, "lineage_id")),
-            epoch_number=_required_int(row, "epoch_number"),
-            report_artifact_digest=parse_artifact_digest(
-                _required_text(row, "report_artifact_digest")
-            ),
-            status=WikiFeedbackStatus(_required_text(row, "status")),
-            attempt_count=_required_int(row, "attempt_count"),
-            available_at=_required_text(row, "available_at"),
-            lease_owner=_optional_text(row, "lease_owner"),
-            lease_expires_at=_optional_text(row, "lease_expires_at"),
-            last_error=_optional_text(row, "last_error"),
-            created_at=_required_text(row, "created_at"),
-            completed_at=_optional_text(row, "completed_at"),
-        )
 
     def insert_epoch(self, epoch: Epoch) -> None:
         """Atomically create an epoch and mark its lineage running."""

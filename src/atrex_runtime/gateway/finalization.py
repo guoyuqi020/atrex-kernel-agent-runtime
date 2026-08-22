@@ -75,7 +75,6 @@ class AgateAuthoritativeCandidateEvaluator:
         bootstrap_bench_iters: int = 5,
         profile_without_roofline: bool = False,
         production_policy: ProductionKernelPolicy | None = None,
-        poll_retry_delay_s: float = 1.0,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         if wait_timeout_s <= 0:
@@ -84,8 +83,6 @@ class AgateAuthoritativeCandidateEvaluator:
             raise ValueError("Bootstrap Gate requires at least one stage")
         if bootstrap_bench_iters <= 0:
             raise ValueError("Bootstrap bench iterations must be positive")
-        if poll_retry_delay_s < 0:
-            raise ValueError("Agate poll retry delay cannot be negative")
         self._client = client
         self._request_builder = request_builder
         self._contexts = contexts
@@ -97,7 +94,6 @@ class AgateAuthoritativeCandidateEvaluator:
         self._bootstrap_bench_iters = bootstrap_bench_iters
         self._profile_without_roofline = profile_without_roofline
         self._production_policy = production_policy
-        self._poll_retry_delay_s = poll_retry_delay_s
         self._clock = clock
         self._shape_batches = ShapeBatchedEvaluateExecutor()
 
@@ -408,7 +404,7 @@ class AgateAuthoritativeCandidateEvaluator:
             attempt_id,
             {**event_base, "agate_job_id": job_id},
         )
-        job = await self._wait_for_job(attempt_id, job_id, operation="evaluate")
+        job = await self._wait_for_job(job_id)
         status = job.get("status")
         if status not in _TERMINAL:
             raise InfrastructureError("authoritative Agate job did not reach a terminal state")
@@ -450,7 +446,7 @@ class AgateAuthoritativeCandidateEvaluator:
                     "recovery_generation": generation,
                 },
             )
-            job = await self._wait_for_job(attempt_id, job_id, operation="profile")
+            job = await self._wait_for_job(job_id)
             if job.get("status") not in _TERMINAL:
                 raise InfrastructureError("authoritative Agate Profile did not terminate")
             self._events.record_runtime_event(
@@ -551,62 +547,13 @@ class AgateAuthoritativeCandidateEvaluator:
             non_object_response="authoritative Agate response is not an object",
         )
 
-    async def _wait_for_job(
-        self,
-        attempt_id: AttemptId,
-        job_id: str,
-        *,
-        operation: str,
-    ) -> dict[str, JsonValue]:
-        """Long-poll one Agate job while tolerating transient transport failures."""
-        deadline = anyio.current_time() + self._wait_timeout_s
-        retry = 0
-        while True:
-            remaining = deadline - anyio.current_time()
-            if remaining <= 0:
-                raise InfrastructureError(
-                    f"authoritative Agate {operation} job polling exceeded its wait timeout"
-                )
-            request_timeout = self._wait_timeout_s if retry == 0 else remaining
-            try:
-                return await self._call(
-                    partial(
-                        self._client.get_job,
-                        job_id,
-                        wait=True,
-                        timeout=request_timeout,
-                    )
-                )
-            except InfrastructureError as error:
-                transient = self._transient_poll_error(error)
-                if transient is None:
-                    raise
-                retry += 1
-                self._events.record_runtime_event(
-                    "gateway.authoritative_poll_retry",
-                    attempt_id,
-                    {
-                        "agate_job_id": job_id,
-                        "operation": operation,
-                        "retry": retry,
-                        "error_type": transient[0],
-                        "status": transient[1],
-                    },
-                )
-                delay = min(self._poll_retry_delay_s, max(0.0, deadline - anyio.current_time()))
-                if delay > 0:
-                    await anyio.sleep(delay)
-
-    @staticmethod
-    def _transient_poll_error(error: BaseException) -> tuple[str, int | None] | None:
-        current: BaseException | None = error
-        while current is not None:
-            status = getattr(current, "status", None)
-            if isinstance(status, int):
-                if status in {408, 425, 429, 500, 502, 503, 504}:
-                    return type(current).__name__, status
-                return None
-            if isinstance(current, (TimeoutError, ConnectionError)):
-                return type(current).__name__, None
-            current = current.__cause__
-        return None
+    async def _wait_for_job(self, job_id: str) -> dict[str, JsonValue]:
+        """Long-poll once; the shared Agate client owns the five-error retry policy."""
+        return await self._call(
+            partial(
+                self._client.get_job,
+                job_id,
+                wait=True,
+                timeout=self._wait_timeout_s,
+            )
+        )

@@ -165,11 +165,10 @@ not export its Provider-managed system Prompt. The high-frequency Claude
 conversation, with the selection declared by `session.json.provider_event_filters`.
 `events.jsonl` retains the normalized authoritative usage/projection ledger.
 
-Wiki Query/Feedback service API is version 1. Query content follows GPU Wiki's exact
+Wiki Query service API is version 1. Query content follows GPU Wiki's exact
 `records`/`notes` projection; stable Record IDs are the `records` mapping keys and each value is the
 complete safe served Record. Responses are frozen as interaction Artifacts before Core receives
-knowledge-only content. After epoch completion, feedback includes Query interactions, token accounting, Session Artifact
-identities, and exact bounded retained Session files. Delivery uses an idempotent durable Outbox and
-strict acknowledgement.
+knowledge-only content. Runtime does not upload Query consumption, Agent history, or Session traces
+to the Wiki.
 
 Gateway capabilities are signed, Attempt-bound, operation-limited, call-limited, expiring, revocable, and reconstructed from Registry authority. Worker-authored reports, annotations, and Agent-visible exploratory evaluations are untrusted evidence; Runtime-final Gateway outcomes and Registry transitions are authoritative.

@@ -46,7 +46,7 @@ v1，主要需要确定：
 - Optimizer/Evolver Backend、启动命令、环境白名单和 Session Policy；
 - Gate Policy、比较方法、Roofline Builder 和 Production Gate；
 - `development` 或 Linux `sandbox` Launcher；
-- 可选 GPU Wiki 与 Feedback Outbox；
+- 可选 GPU Wiki Query 服务；
 - Administration 和 Maintenance 上限。
 
 从 Example 创建 Campaign schema-v3 文件。它选择 Operator、硬件、Evaluation Contract、精确 Core
@@ -128,7 +128,7 @@ atrex-kernel-agent-runtime list-worker-sessions --config runtime.json --campaign
 
 ## 8. 运行生产任务
 
-生产脚本推荐把常驻控制面与算子任务分开。先启动一次 Runtime、Wiki 和 Feedback Drainer：
+生产脚本推荐把常驻控制面与算子任务分开。先启动一次 Runtime 和 Wiki：
 
 ```bash
 bash scripts/production/services.sh start \
@@ -196,12 +196,6 @@ atrex-kernel-agent-runtime recover-epoch --config runtime.json --epoch "$EPOCH" 
   --recovery-key incident-2026-08-20 --reason 'Agate allocation interruption'
 ```
 
-独立运行 Wiki Feedback：
-
-```bash
-atrex-kernel-agent-runtime drain-wiki-feedback --config runtime.json --watch
-```
-
 Artifact/Workspace GC 默认仅预览。使用 `--apply --confirm-runtime-stopped` 前必须停止 Runtime、
-Worker 和 Drainer。备份恢复、Event 导出/清理、取消、凭据轮换和 Linux 沙箱见
+Worker。备份恢复、Event 导出/清理、取消、凭据轮换和 Linux 沙箱见
 [部署与运维](operations.zh.md)。

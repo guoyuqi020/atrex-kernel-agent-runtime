@@ -40,7 +40,6 @@ from ..domain.ids import (
     parse_kernel_agent_revision_id,
     parse_kernel_revision_id,
     parse_lineage_id,
-    parse_wiki_feedback_id,
     parse_worker_session_id,
 )
 from ..domain.models import (
@@ -842,7 +841,6 @@ class AdministrationAsgiApp:
             "attempt_id": parse_attempt_id,
             "campaign_task_id": parse_campaign_task_id,
             "kernel_revision_id": parse_kernel_revision_id,
-            "wiki_feedback_id": parse_wiki_feedback_id,
         }
         unknown = set(query).difference({"after", "limit", "kind", *correlation_parsers})
         if unknown:

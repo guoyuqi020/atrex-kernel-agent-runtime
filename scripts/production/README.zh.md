@@ -26,8 +26,9 @@ Contract、结果和日志。每个 Agent Attempt 仍然拥有独立挂载沙箱
 固定调度策略：
 
 - 三个单 DSL Campaign 由三个独立进程并行运行 framework bootstrap，各自生成正确的 `v0`；
-- 一个 DSL Bootstrap 或运行失败不会取消另外两个，成功结果会保留，重复执行只恢复失败或
-  未完成的 Campaign；
+- 每个 DSL 在自己的 Bootstrap 成功后立即进入 Epoch，不等待另外两个 DSL；
+- 一个 DSL Bootstrap 或运行失败不会取消或阻塞另外两个，成功结果会保留，重复执行只恢复失败
+  或未完成的 Campaign；
 - 默认运行至 Epoch 10；
 - Epoch 1 只有 Active，串行运行 2 个全新 Optimizer Session；
 - 从 Epoch 2 开始，每个 Epoch 开始前由一个 Evolver 生成一个 Challenger；
@@ -108,11 +109,11 @@ dsls/<dsl>/                  每个 DSL 各有一个 Campaign Workspace
     campaign-result.json     该 DSL 到目标 Epoch 的最终状态
     bootstrap.log            Bootstrap stderr/进度日志
     campaign.log             Epoch/Attempt 进度日志
-bootstrap-results.json       三个成功 Bootstrap 结果的统一索引
-campaign-results.json        三个成功 Campaign 结果的统一索引
+bootstrap-results.json       各 DSL Bootstrap 结果或缺失状态的统一索引
+campaign-results.json        各 DSL Campaign 结果或缺失状态的统一索引
 campaign-run/                后台任务 PID、总日志、启动参数与终态
 state/                       共用 Registry、Gateway、Artifact 与隔离 Agent Workspace
-services/                    Wiki、Runtime、feedback drainer 的 PID 与日志
+services/                    Wiki 与 Runtime 的 PID 和日志
 ```
 
 已有工作区不会随源码 HEAD 变化而更换冻结 commit。生产 Policy 的摘要也会写入 Manifest；
@@ -131,7 +132,7 @@ bash scripts/production/prepare.sh \
   --workspace /data/atrex/causal-conv1d
 ```
 
-启动、检查和关闭 Wiki、Runtime、Wiki feedback drainer：
+启动、检查和关闭 Wiki 与 Runtime：
 
 ```bash
 bash scripts/production/services.sh start  --workspace /data/atrex/causal-conv1d --env-file /secure/atrex-production.env
@@ -180,7 +181,7 @@ atrex-kernel-agent-runtime list-worker-sessions \
 ## 常驻服务与多个任务
 
 `services.sh start` 会在目标目录尚不存在时自动初始化一个不绑定算子和 Backend 的常驻
-控制面 Workspace，然后启动 Runtime、Wiki 和 feedback drainer：
+控制面 Workspace，然后启动 Runtime 和 Wiki：
 
 ```bash
 bash scripts/production/services.sh start \

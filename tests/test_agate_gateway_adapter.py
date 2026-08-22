@@ -593,15 +593,25 @@ async def test_submission_validation_rejection_is_a_candidate_outcome(tmp_path: 
     assert mapped.evaluation is not None
     assert not mapped.evaluation.correct
     assert mapped.result == {
+        "schema_version": 1,
+        "operation": "shape_batched_evaluate",
         "status": "rejected",
         "error": {
-            "reason": "candidate_validation_failed",
-            "details": {"forbidden_imports": ["subprocess"]},
+            "category": "candidate_rejected",
+            "detail": {
+                "reason": "candidate_validation_failed",
+                "details": {"forbidden_imports": ["subprocess"]},
+            },
         },
+        "rejected_batch_index": 0,
+        "shape_batch_count": 1,
     }
     assert mapped.worker_result == {
         "status": "rejected",
-        "error": "candidate request rejected; hidden-case details withheld",
+        "error": {
+            "category": "candidate_rejected",
+            "message": "candidate request rejected before evaluation job creation",
+        },
     }
     jobs.close()
 
@@ -1061,5 +1071,6 @@ def test_published_agate_sdk_loads_through_production_factory() -> None:
         )
     )
 
-    assert type(client).__module__ == "atrex_gateway_client.client"
+    assert type(client).__module__ == "atrex_runtime.gateway.retrying_client"
+    assert type(client.wrapped_client).__module__ == "atrex_gateway_client.client"  # type: ignore[attr-defined]
     assert builder.__module__ == "atrex_gateway_client.payload"

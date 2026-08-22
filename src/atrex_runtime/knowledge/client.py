@@ -8,8 +8,6 @@ from typing import Protocol
 import httpx
 from pydantic import SecretStr
 
-from ..domain.ids import WikiFeedbackId
-from .ingest_models import WikiFeedbackAckV1, WikiFeedbackReportV1
 from .models import KnowledgeQueryV1, KnowledgeSnapshotResponseV1
 
 
@@ -46,18 +44,6 @@ class GpuWikiClient(Protocol):
 
     async def query(self, request: KnowledgeQueryV1) -> KnowledgeSnapshotResponseV1:
         """Return one strict digest-verified knowledge snapshot."""
-        ...
-
-
-class GpuWikiFeedbackClient(Protocol):
-    """Deliver one immutable Epoch feedback report with durable idempotency."""
-
-    async def send(
-        self,
-        feedback_id: WikiFeedbackId,
-        report: WikiFeedbackReportV1,
-    ) -> WikiFeedbackAckV1:
-        """Return a strict acknowledgement for the same feedback identity."""
         ...
 
 
@@ -138,60 +124,3 @@ class HttpGpuWikiClient:
         if len(response.body) > self._max_response_bytes:
             raise ValueError("GPU Wiki response exceeds byte limit")
         return KnowledgeSnapshotResponseV1.model_validate_json(response.body)
-
-
-class HttpGpuWikiFeedbackClient:
-    """Strict bounded HTTP delivery client for post-Epoch feedback reports."""
-
-    def __init__(
-        self,
-        transport: GpuWikiHttpTransport,
-        *,
-        bearer_token: SecretStr | None,
-        timeout_seconds: float,
-        max_request_bytes: int,
-        max_response_bytes: int,
-    ) -> None:
-        if timeout_seconds <= 0 or max_request_bytes <= 0 or max_response_bytes <= 0:
-            raise ValueError("GPU Wiki feedback HTTP limits must be positive")
-        self._transport = transport
-        self._bearer_token = bearer_token
-        self._timeout_seconds = timeout_seconds
-        self._max_request_bytes = max_request_bytes
-        self._max_response_bytes = max_response_bytes
-
-    async def send(
-        self,
-        feedback_id: WikiFeedbackId,
-        report: WikiFeedbackReportV1,
-    ) -> WikiFeedbackAckV1:
-        """POST one report and require an identity-matched acknowledgement."""
-        body = report.canonical_json_bytes()
-        if len(body) > self._max_request_bytes:
-            raise ValueError("GPU Wiki feedback report exceeds byte limit")
-        headers = {
-            "content-type": "application/json",
-            "accept": "application/json",
-            "idempotency-key": feedback_id,
-        }
-        if self._bearer_token is not None:
-            headers["authorization"] = f"Bearer {self._bearer_token.get_secret_value()}"
-        response = await self._transport.post(
-            "/v1/knowledge/epoch-feedback",
-            body,
-            headers,
-            timeout_seconds=self._timeout_seconds,
-            max_response_bytes=self._max_response_bytes,
-        )
-        if response.status_code == 429 or response.status_code >= 500:
-            raise KnowledgeUnavailableError(
-                f"GPU Wiki feedback returned temporary status {response.status_code}"
-            )
-        if response.status_code != 202:
-            raise RuntimeError(f"GPU Wiki feedback was rejected with status {response.status_code}")
-        if len(response.body) > self._max_response_bytes:
-            raise ValueError("GPU Wiki feedback response exceeds byte limit")
-        acknowledgement = WikiFeedbackAckV1.model_validate_json(response.body)
-        if acknowledgement.feedback_id != feedback_id:
-            raise ValueError("GPU Wiki acknowledgement has the wrong feedback identity")
-        return acknowledgement

@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
 from conftest import NOW, FakeAttemptEvidence, digest
 
-from atrex_runtime.artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
+from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.controller import (
     CampaignScheduler,
     EpochController,
@@ -17,21 +16,14 @@ from atrex_runtime.controller import (
     LocalEvidenceAssembler,
     RegistryLineageLeaseManager,
 )
-from atrex_runtime.controller.projection import (
-    EvidenceArtifactProjector,
-    EvidenceProjectionLimits,
-)
 from atrex_runtime.domain.errors import LineageLeaseUnavailableError
 from atrex_runtime.domain.ids import (
-    ArtifactDigest,
-    AttemptId,
     CampaignId,
     LineageId,
     new_campaign_id,
     new_kernel_agent_revision_id,
     new_kernel_revision_id,
     new_lineage_id,
-    parse_artifact_digest,
 )
 from atrex_runtime.domain.models import (
     Campaign,
@@ -42,18 +34,7 @@ from atrex_runtime.domain.models import (
     KernelRevision,
     Lineage,
     LineageStatus,
-    WikiFeedbackStatus,
 )
-from atrex_runtime.gateway.control import GatewayOperation
-from atrex_runtime.knowledge import (
-    KnowledgeInteractionV1,
-    KnowledgeQueryV1,
-    KnowledgeSnapshotResponseV1,
-    LocalWikiFeedbackPreparer,
-    WikiFeedbackPreparer,
-    WikiFeedbackReportV1,
-)
-from atrex_runtime.knowledge.models import canonical_json_bytes
 from atrex_runtime.ports import (
     AttemptCandidateResult,
     BuildChallengerRequest,
@@ -105,65 +86,6 @@ class ImprovingOptimizer:
                 latency_us=100.0 - ordinal,
             )
         )
-
-
-@dataclass
-class SynthesizedWikiInteractionSource:
-    """Create one frozen interaction for each completed fake Optimizer Attempt."""
-
-    registry: SqliteRegistry
-    artifacts: LocalArtifactStore
-
-    def list_operation_artifacts(
-        self,
-        attempt_ids: tuple[AttemptId, ...],
-        operation: GatewayOperation,
-    ) -> tuple[tuple[AttemptId, str, ArtifactDigest], ...]:
-        assert operation is GatewayOperation.WIKI_QUERY
-        content: JsonValue = {"recommendations": ["tile by 128"]}
-        content_digest = parse_artifact_digest(
-            f"sha256:{hashlib.sha256(canonical_json_bytes(content)).hexdigest()}"
-        )
-        rows: list[tuple[AttemptId, str, ArtifactDigest]] = []
-        for attempt_id in attempt_ids:
-            attempt = self.registry.get_attempt(attempt_id)
-            epoch = self.registry.get_epoch(attempt.epoch_id)
-            lineage = self.registry.get_lineage(epoch.lineage_id)
-            campaign = self.registry.get_campaign(lineage.campaign_id)
-            query = KnowledgeQueryV1(
-                campaign_id=campaign.id,
-                lineage_id=lineage.id,
-                epoch_id=epoch.id,
-                epoch_number=epoch.number,
-                attempt_id=attempt.id,
-                branch=attempt.branch,
-                attempt_ordinal=attempt.ordinal,
-                kernel_agent_revision_id=attempt.kernel_agent_revision_id,
-                operator=campaign.operator,
-                dsl=lineage.dsl,
-                hardware_target=lineage.hardware_target,
-                evaluation_contract_digest=campaign.evaluation_contract_digest,
-                epoch_evidence_checkpoint_digest=epoch.evidence_checkpoint,
-                attempt_evidence_digest=attempt.attempt_evidence_digest,
-                query="Which tile should this Attempt try?",
-            )
-            response = KnowledgeSnapshotResponseV1(
-                snapshot_id=f"snapshot-{operation.value}-{attempt_id}",
-                content_digest=content_digest,
-                content=content,
-            )
-            idempotency_key = f"{operation.value}-{attempt_id}"
-            interaction = KnowledgeInteractionV1(
-                idempotency_key=idempotency_key,
-                query=query,
-                response=response,
-            )
-            artifact_digest = self.artifacts.put_json(
-                interaction.model_dump(mode="json"),
-                ArtifactKind.WIKI_INTERACTION,
-            )
-            rows.append((attempt_id, idempotency_key, artifact_digest))
-        return tuple(rows)
 
 
 def _seed_lineage(
@@ -227,7 +149,6 @@ def _scheduler(
     registry: SqliteRegistry,
     artifacts: LocalArtifactStore,
     lease_root: Path,
-    wiki_feedback: WikiFeedbackPreparer | None = None,
 ) -> tuple[CampaignScheduler, EpochController, AdvancingEvolver, ImprovingOptimizer]:
     evolver = AdvancingEvolver()
     optimizer = ImprovingOptimizer()
@@ -241,7 +162,6 @@ def _scheduler(
             lease_seconds=10,
             heartbeat_seconds=1,
         ),
-        wiki_feedback,
     )
     return scheduler, controller, evolver, optimizer
 
@@ -283,120 +203,6 @@ async def test_scheduler_delays_challengers_until_configured_epoch(tmp_path: Pat
         epochs = registry.list_epochs(lineage_id)
         assert [epoch.challenger_count for epoch in epochs] == [0, 1, 1]
         assert [len(registry.list_attempts(epoch.id)) for epoch in epochs] == [1, 2, 2]
-
-
-@pytest.mark.anyio
-async def test_scheduler_atomically_enqueues_sealed_wiki_feedback_report(
-    tmp_path: Path,
-) -> None:
-    artifacts = LocalArtifactStore(tmp_path / "artifacts")
-    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
-        campaign_id = new_campaign_id()
-        registry.insert_campaign(
-            Campaign(
-                campaign_id,
-                "vector_add",
-                "nvidia-h100",
-                digest("contract"),
-                digest("problem"),
-                NOW,
-            )
-        )
-        lineage_id = _seed_lineage(
-            registry,
-            artifacts,
-            tmp_path,
-            campaign_id,
-            Dsl.TRITON,
-        )
-        scheduler, _controller, _evolver, _optimizer = _scheduler(
-            registry,
-            artifacts,
-            tmp_path / "leases",
-            wiki_feedback=LocalWikiFeedbackPreparer(
-                registry,
-                artifacts,
-                SynthesizedWikiInteractionSource(registry, artifacts),
-                EvidenceArtifactProjector(
-                    artifacts,
-                    EvidenceProjectionLimits(16, 1_000_000, 1000, 100_000, 32, 1_000_000),
-                ),
-            ),
-        )
-
-        await scheduler.run_lineage_through(lineage_id, 1)
-
-        lineage = registry.get_lineage(lineage_id)
-        items = registry.list_wiki_feedback()
-        assert len(items) == 1
-        item = items[0]
-        report_artifact = artifacts.verify(item.report_artifact_digest)
-        report = WikiFeedbackReportV1.model_validate_json(
-            (report_artifact.payload_path / "value.json").read_bytes()
-        )
-        first_claim = registry.claim_wiki_feedback(
-            "worker-a",
-            now="2099-01-01T00:00:00+00:00",
-            lease_expires_at="2099-01-01T00:01:00+00:00",
-            limit=1,
-        )
-        assert first_claim[0].attempt_count == 1
-        assert (
-            registry.claim_wiki_feedback(
-                "worker-b",
-                now="2099-01-01T00:00:30+00:00",
-                lease_expires_at="2099-01-01T00:01:30+00:00",
-                limit=1,
-            )
-            == []
-        )
-        recovered = registry.claim_wiki_feedback(
-            "worker-b",
-            now="2099-01-01T00:01:00+00:00",
-            lease_expires_at="2099-01-01T00:02:00+00:00",
-            limit=1,
-        )
-        assert recovered[0].attempt_count == 2
-        registry.fail_wiki_feedback(
-            recovered[0].id,
-            "worker-b",
-            error="operator-inspected schema rejection",
-        )
-        requeued = registry.requeue_wiki_feedback(
-            recovered[0].id,
-            available_at="2099-01-01T00:02:00+00:00",
-        )
-        final_claim = registry.claim_wiki_feedback(
-            "worker-c",
-            now="2099-01-01T00:02:00+00:00",
-            lease_expires_at="2099-01-01T00:03:00+00:00",
-            limit=1,
-        )
-        registry.complete_wiki_feedback(final_claim[0].id, "worker-c")
-        completed_item = registry.list_wiki_feedback()[0]
-        pruned = registry.prune_wiki_feedback(
-            completed_before="2100-01-01T00:00:00+00:00",
-            limit=10,
-        )
-
-    assert report_artifact.kind is ArtifactKind.WIKI_FEEDBACK_REPORT
-    assert item.lineage_id == lineage_id
-    assert item.epoch_number == 1
-    assert completed_item.status is WikiFeedbackStatus.COMPLETED
-    assert requeued.status is WikiFeedbackStatus.PENDING
-    assert requeued.last_error is None
-    assert pruned == 1
-    assert report.evidence_checkpoint_digest == lineage.evidence_checkpoint
-    assert report.campaign_id == campaign_id
-    assert report.lineage_id == lineage_id
-    assert report.epoch_number == 1
-    assert len(report.attempts) == 2
-    assert all(len(attempt.interactions) == 1 for attempt in report.attempts)
-    assert all(
-        isinstance(attempt.interactions[0].interaction, KnowledgeInteractionV1)
-        and attempt.interactions[0].interaction.query.attempt_id == attempt.attempt_id
-        for attempt in report.attempts
-    )
 
 
 @pytest.mark.anyio

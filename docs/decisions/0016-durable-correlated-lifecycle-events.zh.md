@@ -12,7 +12,7 @@ Session Log 与封存 Trace 可以解释 Agent 行为，但不能为事故响应
 
 ## 决策
 
-可信 Runtime 组件通过 Registry 追加 Event。每个 Payload 都带有 `schema_version: 1` 和根据权威关系生成的 `correlation` 对象，其中包含适用的 Campaign、lineage、Epoch、Attempt、Task、Kernel Revision 或 Wiki Feedback 身份。Payload 可以包含受限元数据、状态、Token 数量和 Artifact Digest，但绝不包含 Secret、Prompt、模型响应或原始 Session 内容。
+可信 Runtime 组件通过 Registry 追加 Event。每个 Payload 都带有 `schema_version: 1` 和根据权威关系生成的 `correlation` 对象，其中包含适用的 Campaign、lineage、Epoch、Attempt、Task 或 Kernel Revision 身份。Payload 可以包含受限元数据、状态、Token 数量和 Artifact Digest，但绝不包含 Secret、Prompt、模型响应或原始 Session 内容。
 
 Optimizer 与 Evolver Runner 在其持有的进程被回收后记录 Worker 启动、退出、基础设施失败或超时，以及清理。Evolver 校验记录已封存或拒绝的 Candidate。Gateway Proxy 记录已授权提交、终态结果和失败。Wiki Proxy 记录实时 Query 提交、交互冻结后的完成和失败。Registry 选择事务在已有生命周期 Event 旁记录 Kernel 和 Kernel Agent 晋升或回滚。
 

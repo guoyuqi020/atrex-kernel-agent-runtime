@@ -11,8 +11,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 - Made Sandbox host preparation concurrency-safe and Lima-virtiofs compatible by creating Worker
   roots/probes directly as the configured non-root Worker.
 - Documented shared-host networking as the explicit Worker network boundary.
-- Removed high-frequency Claude `system/thinking_tokens` estimate telemetry at every authoritative
-  Session sealing, Agent Evidence, and Wiki feedback boundary while retaining final usage records.
+- Removed high-frequency Claude `system/thinking_tokens` estimate telemetry from authoritative
+  Session sealing and Agent Evidence while retaining final usage records.
+- Removed GPU Wiki feedback generation, persistence, delivery, and ingestion; GPU Wiki is now a
+  query-only external knowledge service.
 - Made new production Campaign preparation reject dirty Core or Evolver worktrees so commit pins
   always identify the exact Agent Bundle source.
 
@@ -23,7 +25,7 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   Epoch topology, Agent/Kernel version histories, and resumable scheduling.
 - Exploratory Gateway operations, authoritative ordinary-Evaluate or same-allocation ABBA gates,
   Production Gate, hidden Evaluation Contracts, Roofline construction, and NCU SOL fallback.
-- Live GPU Wiki query with freeze-before-return and durable post-Epoch feedback.
+- Live GPU Wiki query with freeze-before-return.
 - Claude, Codex, QoderCLI, and Pi Backend bindings with raw Session and provider-token accounting.
 - Development launcher plus Linux bubblewrap/cgroup-v2 sandbox with shared host networking.
 - Authenticated administration API, CLI inspection, recovery, Events, Tasks, and offline retention.

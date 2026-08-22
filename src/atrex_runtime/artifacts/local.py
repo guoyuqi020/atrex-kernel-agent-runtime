@@ -38,7 +38,6 @@ class ArtifactKind(StrEnum):
     EVOLUTION = "evolution"
     ATTEMPT_REPORT = "attempt_report"
     WIKI_INTERACTION = "wiki_interaction"
-    WIKI_FEEDBACK_REPORT = "wiki_feedback_report"
     EVALUATION_CONTRACT = "evaluation_contract"
     AGENT_PROBLEM = "agent_problem"
 

@@ -22,6 +22,7 @@ from .evolution import (
     PreparedEvolution,
     PreparedEvolutionLaunch,
     SubprocessEvolutionSessionDriver,
+    UnimplementedCapabilityV1,
 )
 from .evolver_bundle import (
     EVOLVER_BUNDLE_MANIFEST,
@@ -117,6 +118,7 @@ __all__ = [
     "ResolvedGitEvolverBundle",
     "SessionOptimizerRunner",
     "SubprocessEvolutionSessionDriver",
+    "UnimplementedCapabilityV1",
     "WorkerLauncher",
     "evolver_bundle_sha256",
 ]

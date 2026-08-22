@@ -19,7 +19,7 @@ flowchart LR
 
 ## 权责边界
 
-Runtime 持有 Campaign/Epoch 状态、Fencing、Capability、不可变 Artifact、Backend/Model Policy、Token Report 校验、比较、晋升、恢复、Wiki Feedback 与进程生命周期。Core 持有 Adapter 实现、Prompt、Skill、Tool Binding 和优化 Workflow。Evolver 为当前固定 DSL 的一个 Challenger 提出假设并选择来源；需要创建 Revision 时再修改完整 Core 仓库 Candidate。Agate 负责正确性和性能测量。GPU Wiki 只负责外源知识；Lineage 历史经验不属于 Wiki。
+Runtime 持有 Campaign/Epoch 状态、Fencing、Capability、不可变 Artifact、Backend/Model Policy、Token Report 校验、比较、晋升、恢复、Wiki Query 冻结与进程生命周期。Core 持有 Adapter 实现、Prompt、Skill、Tool Binding 和优化 Workflow。Evolver 为当前固定 DSL 的一个 Challenger 提出假设并选择来源；需要创建 Revision 时再修改完整 Core 仓库 Candidate。Agate 负责正确性和性能测量。对 Runtime 而言 GPU Wiki 是只读外源知识；Lineage 历史经验不属于 Wiki。
 
 ## 私有评测边界
 
@@ -53,8 +53,8 @@ Revision 图仍是树，复用与晋升构成另一条 Epoch 时间线。冻结 
 `max_parallel_branches` 的上限内并发运行 Active 和 Challenger Branch；每个获准运行的 Branch
 内部也并发启动 `Y` 条独立 Trajectory。所有 Trajectory 从相同的 Epoch Kernel 出发，每条
 Trajectory 再串行执行 `X` 个全新 Session Attempt。最后，Runtime 从所有 Trajectory 中选择
-一个保留 Kernel，最多晋升一个 Agent Revision，追加一个累计 Evidence Checkpoint，并原子入队
-可选 Wiki Feedback。因此，一个 Epoch 包含 `(1 + K) × Y × X` 个 Optimizer Session 和 `K`
+一个保留 Kernel，最多晋升一个 Agent Revision，并追加一个累计 Evidence Checkpoint。因此，一个
+Epoch 包含 `(1 + K) × Y × X` 个 Optimizer Session 和 `K`
 个 Evolver Session。
 
 Session 永远使用全新进程，不复用模型上下文。Attempt Evidence 只包含同一 Trajectory 内较早的
@@ -63,8 +63,8 @@ Active/Challenger 分支、Agent 选择结果、Attempt Outcome 与被引用的�
 Runtime 还会在每个 Evolution Workspace 中冻结版本化 Agent/Kernel Catalog、全部历史 Kernel
 Artifact，以及带受约束 Candidate Reset 的本地工具。Evidence 保存规范化摘要和 Session 来源 Digest；Agent Workspace 按 Digest 物化原始、未
 脱敏 Session Artifact。Wiki Query 暴露外部服务完整、安全的 `records`/`notes` 投影，并以稳定
-Record ID 作为 Mapping Key；Runtime 冻结每次 Query 交互，Core 只暴露知识内容。Epoch 后 Wiki
-Feedback 独立上传有界的原始 Session 文件与已冻结 Wiki Interaction。
+Record ID 作为 Mapping Key；Runtime 冻结每次 Query 交互，Core 只暴露知识内容。Runtime 不向
+Wiki 发送 Epoch 后数据。
 
 ## 安全状态
 

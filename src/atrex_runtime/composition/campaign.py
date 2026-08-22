@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from datetime import timedelta
+from pathlib import Path
 
 import anyio
 
-from ..artifacts.local import LocalArtifactStore
+from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..config import (
     CampaignRuntimeSettings,
     ComparisonSettings,
@@ -34,7 +35,6 @@ from ..gateway.control import (
 )
 from ..gateway.control_models import GatewayOperation
 from ..gateway.measurement import AgateKernelMeasurementRunner
-from ..knowledge import LocalWikiFeedbackPreparer
 from ..ports import (
     BuildChallengerRequest,
     BuildChallengerResult,
@@ -54,6 +54,7 @@ from ..workers.core import (
     CoreOptimizerSessionDriver,
 )
 from ..workers.evolution import (
+    EVOLVER_WORKSPACE_RELATIVE_PATH,
     EvolutionProcessConfig,
     EvolutionSessionDriver,
     EvolutionWorkspaceAssembler,
@@ -242,7 +243,11 @@ def build_campaign_runtime(
                 evolution_config,
             )
             return EvolverBundleRunner(
-                EvolutionWorkspaceAssembler(campaign.evolution_workspaces_root, artifacts),
+                EvolutionWorkspaceAssembler(
+                    campaign.evolution_workspaces_root,
+                    artifacts,
+                    evolver_bundle_digest=evolution_config.bundle_artifact_digest,
+                ),
                 evolution_sessions,
                 artifacts,
                 registry,
@@ -309,11 +314,6 @@ def build_campaign_runtime(
                 lease_seconds=campaign.fencing_lease_seconds,
                 heartbeat_seconds=campaign.fencing_heartbeat_seconds,
             ),
-            (
-                LocalWikiFeedbackPreparer(registry, artifacts, control, evidence_projector)
-                if settings.gpu_wiki is not None and settings.gpu_wiki.feedback is not None
-                else None
-            ),
             evolver_commit=campaign.evolver.commit,
         )
         return CampaignRuntime(scheduler, (control.close, registry.close))
@@ -341,11 +341,22 @@ def build_evolution_process_config(
         max_files=campaign.evolver.max_bundle_files,
         max_bytes=campaign.evolver.max_bundle_bytes,
     ).resolve()
+    stored_bundle = artifacts.verify(resolved.artifact_digest)
+    if stored_bundle.kind is not ArtifactKind.EVOLVER_BUNDLE:
+        raise ValueError("resolved Evolver Bundle has the wrong Artifact kind")
+    entrypoint = Path(resolved.command_argv[-1]).resolve()
+    try:
+        relative_entrypoint = entrypoint.relative_to(stored_bundle.payload_path.resolve())
+    except ValueError as error:
+        raise ValueError("resolved Evolver entrypoint escapes its sealed Bundle") from error
+    workspace_entrypoint = EVOLVER_WORKSPACE_RELATIVE_PATH.joinpath(
+        *relative_entrypoint.parts
+    ).as_posix()
     return EvolutionProcessConfig(
         bundle_commit=resolved.commit,
         bundle_tree=resolved.tree,
         bundle_artifact_digest=resolved.artifact_digest,
-        command_argv=resolved.command_argv,
+        command_argv=(*resolved.command_argv[:-1], workspace_entrypoint),
         agent_backend=campaign.evolver.agent_backend,
         reasoning_effort=campaign.evolver.reasoning_effort,
         session_settings=campaign.evolver.session_settings,

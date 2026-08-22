@@ -93,6 +93,6 @@ Lineage Agent Catalog 暴露给每次 Evolver 调用，在每个 Branch 内并�
 
 ## 稳定接口
 
-可替换边界使用 Python Protocol：Artifact Store、Registry、Measurement Runner、Comparator、Optimizer/Evolver Runner、Worker Launcher、Lineage Lease Manager、Wiki Interaction Source 与 Wiki Feedback Preparer。生产实现是 `BwrapSandboxLauncher`。`CleanEnvironmentLauncher` 只存在于显式 `launcher.mode=development` 下，不声明隔离能力。普通 Optimizer/Evolver Session、Bootstrap/Generalization 阶段和两个 dev-shell 入口全部使用同一个已配置 Launcher。
+可替换边界使用 Python Protocol：Artifact Store、Registry、Measurement Runner、Comparator、Optimizer/Evolver Runner、Worker Launcher、Lineage Lease Manager 与 Wiki Query Client。生产实现是 `BwrapSandboxLauncher`。`CleanEnvironmentLauncher` 只存在于显式 `launcher.mode=development` 下，不声明隔离能力。普通 Optimizer/Evolver Session、Bootstrap/Generalization 阶段和两个 dev-shell 入口全部使用同一个已配置 Launcher。
 
 所有持久 ID/Digest 都经过校验；Registry Transition 幂等、生命周期 Event 追加写，Scheduler 写入使用可续租 Generation Fencing。Kernel 保留与 Agent 晋升可以独立选择普通 Evaluate 或同 Allocation ABBA。后者为每个 Shape Batch 在一个受信任 Dev Job 中上传 Commit-pinned Evaluator 与两个 Kernel Snapshot，校验完整交错 Schedule，并把每轮结果写成 Kernel Measurement。

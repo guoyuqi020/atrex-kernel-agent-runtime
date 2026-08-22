@@ -3,7 +3,7 @@
 [English](README.md) | 中文
 
 这个工作区是独立 Atrex GPU Wiki 的本地 HTTP 适配器，仅用于 Runtime 集成测试。HTTP 协议由
-本地提供，查询、Feedback Event 与 Ranking 行为全部执行固定 Commit 的上游实现。
+本地提供，查询行为执行固定 Commit 的上游实现。
 
 适配器不再自行实现检索算法。每次 Query 都直接执行 Commit 固定的上游
 `gpu-wiki/tools/query_nl.py`，因此 Bridge Agent、Intent 校验、归一化、安全 Widening、
@@ -14,16 +14,12 @@
 {"records":{"stable.record.id":{"store":"gpu_wiki","source":"kernel_wiki","type":"technique-card","applies_to":{},"match":{},"payload":{}}},"notes":[]}
 ```
 
-Runtime 继续负责带版本的 HTTP Envelope、Digest 校验、Attempt Authority、结果冻结和 Epoch 后反馈。
+Runtime 继续负责带版本的 HTTP Envelope、Digest 校验、Attempt Authority 和结果冻结。
 每个 `records` Mapping Value 已经是完整的安全服务 Record；某条 Record 实际影响工作时，Consumer
 保存它的稳定 Mapping Key。不存在独立 Read 操作。
 
 仓库内 Vendored 的固定上游源码始终保持不可变。启动时会原子同步到 `state/gpu-wiki` 可写
-Store，并保留上游
-`kernel_wiki/feedback/events.jsonl`。Epoch Feedback 会原样归档以实现 HTTP 幂等，同时把每次
-冻结交互返回的公开 `kernel_wiki` Record 转为上游 `served` Event，再调用同版本
-`tools/rebuild_importance.py`。Runtime 协议没有可信的逐 Record 采用结论，因此不会虚构
-`applied`、`effective` 或 `ineffective`。
+Store。Runtime 将 Wiki 视为只读外源知识。
 
 ## HTTP 接口
 
@@ -33,7 +29,6 @@ Store，并保留上游
 | `GET /healthz` | 进程存活检查。 |
 | `GET /readyz` | 上游工具、两个 Index 与 SQLite 就绪检查。 |
 | `POST /v1/knowledge/query` | 严格 Runtime Query；`content` 为上游 `records/notes`。 |
-| `POST /v1/knowledge/epoch-feedback` | 幂等归档，并更新上游 Served Event 与 Ranking。 |
 
 ## 固定上游版本
 

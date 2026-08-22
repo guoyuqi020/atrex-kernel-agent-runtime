@@ -16,7 +16,7 @@ English | [中文](release-checklist.zh.md)
 
 - [ ] Runtime Ruff, strict mypy, and full pytest suite pass.
 - [ ] Core and Evolver Ruff, strict mypy, and pytest suites pass at the pinned commits.
-- [ ] Local Wiki suite passes against the same query/feedback wire contract.
+- [ ] Local Wiki suite passes against the same query wire contract.
 - [ ] Every JSON example parses and every Markdown relative link resolves.
 - [ ] CLI `--help`, Bootstrap, one no-Challenger Epoch, and one Evolution Epoch pass from the built
   wheel in a clean environment.
@@ -32,7 +32,7 @@ English | [中文](release-checklist.zh.md)
 - [ ] Every enabled Gateway operation works through Runtime against production Agate and target GPU.
 - [ ] Ordinary Evaluate/ABBA repeatability, clock-lock behavior, correctness tolerances, Production
   Gate, and optional Roofline/NCU SOL fallback are validated on representative operators.
-- [ ] Production GPU Wiki query and post-Epoch feedback acknowledgement are rehearsed.
+- [ ] Production GPU Wiki query is rehearsed.
 
 ## Operations
 

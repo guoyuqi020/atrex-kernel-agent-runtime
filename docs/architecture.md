@@ -19,7 +19,7 @@ flowchart LR
 
 ## Ownership boundaries
 
-Runtime owns Campaign/Epoch state, fencing, capabilities, immutable Artifacts, Backend/model policy, token-report validation, comparison, promotion, recovery, Wiki feedback, and process lifetime. Core owns its Adapter implementations, prompts, skills, tool bindings, and optimization workflow. Evolver owns the hypothesis and source choice for one same-DSL Challenger, plus repository edits when it creates a revision. Agate owns correctness and performance measurement. GPU Wiki owns external knowledge; lineage experience is not Wiki data.
+Runtime owns Campaign/Epoch state, fencing, capabilities, immutable Artifacts, Backend/model policy, token-report validation, comparison, promotion, recovery, Wiki query freezing, and process lifetime. Core owns its Adapter implementations, prompts, skills, tool bindings, and optimization workflow. Evolver owns the hypothesis and source choice for one same-DSL Challenger, plus repository edits when it creates a revision. Agate owns correctness and performance measurement. GPU Wiki is a read-only external knowledge source from Runtime's perspective; lineage experience is not Wiki data.
 
 ## Private evaluation boundary
 
@@ -61,7 +61,7 @@ policy `max_parallel_branches`. Within every admitted Branch, its `Y` independen
 run concurrently; each Trajectory starts from the same Epoch Kernel and serially runs `X`
 fresh-session Attempts. It
 then selects one retained Kernel across all Trajectories, promotes at most one Agent revision,
-appends one cumulative Evidence checkpoint, and atomically enqueues optional Wiki feedback. Thus an
+appends one cumulative Evidence checkpoint. Thus an
 Epoch contains `(1 + K) × Y × X` Optimizer Sessions and `K` Evolver Sessions.
 
 Each session is a fresh process. Model context is never reused. Attempt Evidence contains earlier
@@ -73,8 +73,7 @@ inspection client into each Evolution workspace. Evidence stores normalized
 summaries and source Session digests. Agent workspaces materialize original unredacted Session
 Artifacts from those digests. Wiki Query exposes the external service's complete safe
 `records`/`notes` projection with stable Record IDs as mapping keys. Runtime freezes each Query
-interaction but Core exposes only knowledge content. Post-Epoch Wiki feedback separately uploads exact bounded Session
-files and frozen Wiki interactions.
+interaction but Core exposes only knowledge content. Runtime sends no post-Epoch data to the Wiki.
 
 ## Security posture
 

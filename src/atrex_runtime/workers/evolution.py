@@ -60,6 +60,7 @@ EVOLUTION_TRACE_VERSION: Literal[7] = 7
 EVOLUTION_FAILURE_VERSION: Literal[3] = 3
 EVOLVER_LAUNCH_INSTRUCTION = "Run the versioned Evolver Bundle once."
 CANDIDATE_BASE_RECORD_MAX_BYTES = 4096
+EVOLVER_WORKSPACE_RELATIVE_PATH = PurePosixPath("input/evolver")
 
 
 class EvolutionPathsV1(BaseModel):
@@ -216,6 +217,16 @@ def read_candidate_base_record(path: Path) -> CandidateBaseRecordV1:
     return CandidateBaseRecordV1.model_validate_json(path.read_bytes())
 
 
+class UnimplementedCapabilityV1(BaseModel):
+    """Advisory Agent capability the Evolver could not add to this Candidate."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    capability: str = Field(min_length=1, max_length=2000)
+    expected_benefit: str = Field(min_length=1, max_length=2000)
+    reason_unimplemented: str = Field(min_length=1, max_length=2000)
+
+
 class _EvolutionOutputBaseV3(BaseModel):
     """Fields common to every Agent-authored Challenger proposal."""
 
@@ -224,6 +235,9 @@ class _EvolutionOutputBaseV3(BaseModel):
     schema_version: Literal[3] = EVOLUTION_OUTPUT_VERSION
     hypothesis: str = Field(min_length=1, max_length=4000)
     expected_effect: str = Field(min_length=1, max_length=4000)
+    unimplemented_capabilities: tuple[UnimplementedCapabilityV1, ...] = Field(
+        default=(), max_length=64
+    )
 
 
 class EvolutionCandidateOutputV3(_EvolutionOutputBaseV3):
@@ -408,9 +422,18 @@ class PreparedEvolution:
 class EvolutionWorkspaceAssembler:
     """Materialize a parent Optimizer repository and seed one writable full copy."""
 
-    def __init__(self, root: str | Path, artifacts: LocalArtifactStore) -> None:
+    def __init__(
+        self,
+        root: str | Path,
+        artifacts: LocalArtifactStore,
+        *,
+        evolver_bundle_digest: ArtifactDigest | None = None,
+    ) -> None:
         self._root = Path(root).resolve()
         self._artifacts = artifacts
+        self._evolver_bundle_digest = evolver_bundle_digest
+        if evolver_bundle_digest is not None:
+            parse_artifact_digest(evolver_bundle_digest)
         self._root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     def prepare(self, request: BuildChallengerRequest) -> PreparedEvolution:
@@ -425,6 +448,14 @@ class EvolutionWorkspaceAssembler:
         scratch_root = run_root / "scratch"
         scratch_root.mkdir(mode=0o700)
         output_path = scratch_root / "evolution-output.json"
+
+        if self._evolver_bundle_digest is not None:
+            evolver = self._artifacts.verify(self._evolver_bundle_digest)
+            if evolver.kind is not ArtifactKind.EVOLVER_BUNDLE:
+                raise ValueError("Evolution Evolver Bundle has the wrong Artifact kind")
+            evolver_root = run_root.joinpath(*EVOLVER_WORKSPACE_RELATIVE_PATH.parts)
+            self._artifacts.materialize(self._evolver_bundle_digest, evolver_root)
+            make_tree_read_only(evolver_root)
 
         revision = request.parent_revision
         self._artifacts.materialize(revision.optimizer_digest, parent_root)
@@ -1240,6 +1271,9 @@ class EvolverBundleRunner(EvolverRunner):
                 "base_revision_id": base_revision_id,
                 "evolution_trace_digest": evolution_trace_digest,
                 "changed_paths": sorted(changed_paths),
+                "unimplemented_capabilities": [
+                    item.model_dump(mode="json") for item in output.unimplemented_capabilities
+                ],
                 "session_trace_digest": session_trace_digest,
             },
         )

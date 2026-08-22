@@ -19,7 +19,7 @@ Campaign Bootstrap -> agent-v0 + Kernel v0
 Epoch：创建 Challenger -> 执行 Branch/Trajectory -> 比较 Kernel -> 选择 Agent
         |
         v
-不可变 Evidence + Wiki Feedback -> 下一 Epoch
+不可变 Evidence -> 下一 Epoch
 ```
 
 - Campaign 冻结 Core/Evolver Commit、Evaluation Contract、Gate Policy、硬件和 DSL Lineage。
@@ -29,8 +29,8 @@ Epoch：创建 Challenger -> 执行 Branch/Trajectory -> 比较 Kernel -> 选择
   Evaluate 或同 Allocation ABBA 比较。
 - Evolver 可以新建、复用或基于历史 Agent Revision 进化。Active 与 Challenger Branch 在配置的
   上限内并发执行。
-- Optimizer 可以实时查询外部 GPU Wiki。Runtime 在返回知识前冻结完整查询交互，并在 Epoch 完成后
-  才上传消费和 Trace Feedback。
+- Optimizer 可以实时查询外部 GPU Wiki。Runtime 在返回知识前冻结完整查询交互；Agent 历史与
+  Session Trace 不会上传到 Wiki。
 
 ## 仓库结构
 

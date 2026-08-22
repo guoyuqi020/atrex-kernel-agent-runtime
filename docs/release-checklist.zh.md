@@ -16,7 +16,7 @@
 
 - [ ] Runtime Ruff、Strict Mypy 和完整 Pytest 通过。
 - [ ] 固定 Commit 的 Core/Evolver Ruff、Strict Mypy 和 Pytest 通过。
-- [ ] Local Wiki 使用相同 Query/Feedback Contract 通过测试。
+- [ ] Local Wiki 使用相同 Query Contract 通过测试。
 - [ ] 所有 JSON Example 可解析，所有 Markdown 相对链接可解析。
 - [ ] 在干净环境从 Wheel 执行 CLI `--help`、Bootstrap、无 Challenger Epoch 和 Evolution Epoch。
 
@@ -30,7 +30,7 @@
 - [ ] 所有启用的 Gateway Operation 经 Runtime 连接生产 Agate/目标 GPU 成功。
 - [ ] 在代表性算子上验证普通 Evaluate/ABBA 稳定性、Clock Lock、容差、Production Gate 以及可选
   Roofline/NCU SOL Fallback。
-- [ ] 演练生产 GPU Wiki Query 和 Epoch 后 Feedback Ack。
+- [ ] 演练生产 GPU Wiki Query。
 
 ## 运维
 

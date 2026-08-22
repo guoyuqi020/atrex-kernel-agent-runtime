@@ -37,6 +37,7 @@ from atrex_runtime.gateway.finalization import (
     BootstrapEvaluationStage,
 )
 from atrex_runtime.gateway.result_metrics import gateway_result_sol_summary
+from atrex_runtime.gateway.retrying_client import RetryingAgateClient
 from atrex_runtime.ports import AttemptCandidateResult
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
@@ -349,7 +350,9 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
 
 
 @pytest.mark.anyio
-async def test_finalizer_retries_transient_agate_poll_failure(tmp_path: Path) -> None:
+async def test_finalizer_uses_shared_client_retry_for_transient_poll_failure(
+    tmp_path: Path,
+) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     control = SqliteGatewayControl(
         tmp_path / "gateway.sqlite",
@@ -382,7 +385,8 @@ async def test_finalizer_retries_transient_agate_poll_failure(tmp_path: Path) ->
         latency_us=8.0,
         agate_job_id="ev_agent",
     )
-    client = TransientPollingClient()
+    raw_client = TransientPollingClient()
+    client = RetryingAgateClient(raw_client, sleeper=lambda _: None)
     events = FakeEvents()
     finalizer = AgateAuthoritativeCandidateEvaluator(
         client,  # type: ignore[arg-type]
@@ -393,20 +397,14 @@ async def test_finalizer_retries_transient_agate_poll_failure(tmp_path: Path) ->
         events,
         wait_timeout_s=100.0,
         bootstrap_stages=(BootstrapEvaluationStage(1),),
-        poll_retry_delay_s=0.0,
         clock=lambda: NOW,
     )
 
     outcome = await finalizer.finalize(attempt_id, candidate_digest)
 
     assert outcome.correct is True
-    assert client.poll_calls == 2
-    retry_events = [value for value in events.values if value[0].endswith("poll_retry")]
-    assert len(retry_events) == 1
-    payload = retry_events[0][2]
-    assert isinstance(payload, dict)
-    assert payload["status"] == 502
-    assert payload["retry"] == 1
+    assert raw_client.poll_calls == 2
+    assert not [value for value in events.values if value[0].endswith("poll_retry")]
     control.close()
     registry.close()
 
@@ -666,8 +664,15 @@ async def test_finalizer_records_validation_rejection_as_authoritative_outcome(
     )
     assert raw["all_pass"] is False
     assert raw["completed_stages"][0]["job"] == {
+        "schema_version": 1,
+        "operation": "shape_batched_evaluate",
         "status": "rejected",
-        "error": {"message": "candidate source rejected"},
+        "error": {
+            "category": "candidate_rejected",
+            "detail": {"message": "candidate source rejected"},
+        },
+        "rejected_batch_index": 0,
+        "shape_batch_count": 1,
     }
     assert control.get_committed_outcome(attempt_id) == outcome
     control.close()

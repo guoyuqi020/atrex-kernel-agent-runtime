@@ -24,7 +24,7 @@ designs were removed from the release tree. Current behavior is defined by code,
 
 ## Agents, Wiki, and evolution
 
-- [0021](0021-live-gpu-wiki-capability.md): live Wiki query and post-Epoch feedback
+- [0021](0021-live-gpu-wiki-capability.md): live, frozen, query-only Wiki access
 - [0022](0022-local-wiki-test-double.md): wire-compatible local Wiki
 - [0027](0027-unified-epoch-evidence-view.md): Epoch-organized Evidence
 - [0028](0028-commit-only-runtime-boundary.md): commit-only Runtime/Agent boundary

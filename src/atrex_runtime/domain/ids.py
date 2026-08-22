@@ -13,7 +13,6 @@ EpochId = NewType("EpochId", str)
 AttemptId = NewType("AttemptId", str)
 KernelAgentRevisionId = NewType("KernelAgentRevisionId", str)
 KernelRevisionId = NewType("KernelRevisionId", str)
-WikiFeedbackId = NewType("WikiFeedbackId", str)
 CampaignTaskId = NewType("CampaignTaskId", str)
 WorkerSessionId = NewType("WorkerSessionId", str)
 ArtifactDigest = NewType("ArtifactDigest", str)
@@ -67,11 +66,6 @@ def new_kernel_revision_id() -> KernelRevisionId:
     return _new_id("kernelrev", KernelRevisionId)
 
 
-def new_wiki_feedback_id() -> WikiFeedbackId:
-    """Return a new GPU Wiki feedback Outbox identifier."""
-    return _new_id("wikifeedback", WikiFeedbackId)
-
-
 def new_campaign_task_id() -> CampaignTaskId:
     """Return a new Campaign task identifier."""
     return _new_id("task", CampaignTaskId)
@@ -110,11 +104,6 @@ def parse_kernel_agent_revision_id(value: str) -> KernelAgentRevisionId:
 def parse_kernel_revision_id(value: str) -> KernelRevisionId:
     """Validate a Kernel revision identifier from persistence or the wire."""
     return _parse_id(value, "kernelrev", KernelRevisionId)
-
-
-def parse_wiki_feedback_id(value: str) -> WikiFeedbackId:
-    """Validate a GPU Wiki feedback Outbox identifier."""
-    return _parse_id(value, "wikifeedback", WikiFeedbackId)
 
 
 def parse_campaign_task_id(value: str) -> CampaignTaskId:

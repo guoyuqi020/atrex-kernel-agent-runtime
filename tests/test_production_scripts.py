@@ -225,6 +225,53 @@ def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
         )
 
 
+def test_summarize_preserves_successful_dsl_results_when_one_is_missing(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "workspace"
+    for index, dsl in enumerate(("cuda", "triton", "cutedsl"), start=1):
+        dsl_workspace = workspace / "dsls" / dsl
+        dsl_workspace.mkdir(parents=True)
+        dsl_workspace.joinpath("campaign.json").write_text(
+            json.dumps({"lineages": {dsl: {}}}), encoding="utf-8"
+        )
+        if dsl == "cuda":
+            continue
+        dsl_workspace.joinpath("campaign-result.json").write_text(
+            json.dumps(
+                {
+                    "campaign_id": f"campaign_{index:032x}",
+                    "target_epoch_number": 10,
+                    "lineages": [{"dsl": dsl}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    subprocess.run(
+        (
+            sys.executable,
+            str(PRODUCTION / "summarize.py"),
+            "--workspace",
+            str(workspace),
+            "--phase",
+            "campaign",
+            "--target-epoch",
+            "10",
+            "--allow-partial",
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    summary = json.loads((workspace / "campaign-results.json").read_text(encoding="utf-8"))
+    assert summary["dsls"]["cuda"]["status"] == "missing"
+    assert summary["dsls"]["cuda"]["result"] is None
+    assert summary["dsls"]["triton"]["result"]["lineages"][0]["dsl"] == "triton"
+    assert summary["dsls"]["cutedsl"]["result"]["lineages"][0]["dsl"] == "cutedsl"
+
+
 def test_production_shell_scripts_parse() -> None:
     for script in sorted(PRODUCTION.glob("*.sh")):
         subprocess.run(("bash", "-n", str(script)), check=True)
@@ -239,6 +286,15 @@ def test_campaign_entrypoint_uses_external_services_mode() -> None:
     assert 'campaign_control="${atrex_prod_workspace}/campaign-run"' in campaign
     assert "workspace_process_pids" in campaign
     assert 'write_state "succeeded"' in campaign
+
+
+def test_production_runner_has_independent_per_dsl_pipelines() -> None:
+    runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
+
+    assert 'run_dsl_pipeline "${dsl}" &' in runner
+    assert 'if ! bootstrap_one "${dsl}"; then' in runner
+    assert 'run_one "${dsl}" "${campaign_id}"' in runner
+    assert "At least one DSL Bootstrap failed" not in runner
 
 
 def test_services_start_initializes_control_plane() -> None:

@@ -14,7 +14,6 @@ from ..domain.ids import (
     KernelAgentRevisionId,
     KernelRevisionId,
     LineageId,
-    WikiFeedbackId,
     WorkerSessionId,
 )
 from ..domain.models import (
@@ -39,7 +38,6 @@ from ..domain.models import (
     RuntimeEvent,
     RuntimeMetrics,
     TokenUsage,
-    WikiFeedbackOutboxItem,
     WorkerSession,
     WorkerSessionRole,
     WorkerSessionStatus,
@@ -194,46 +192,7 @@ class Registry(Protocol):
         lineage_id: LineageId,
         expected: ArtifactDigest,
         next_checkpoint: ArtifactDigest,
-        wiki_feedback_report: ArtifactDigest | None = None,
     ) -> None: ...
-
-    def claim_wiki_feedback(
-        self,
-        owner: str,
-        *,
-        now: str,
-        lease_expires_at: str,
-        limit: int,
-    ) -> list[WikiFeedbackOutboxItem]: ...
-
-    def complete_wiki_feedback(self, item_id: WikiFeedbackId, owner: str) -> None: ...
-
-    def retry_wiki_feedback(
-        self,
-        item_id: WikiFeedbackId,
-        owner: str,
-        *,
-        available_at: str,
-        error: str,
-    ) -> None: ...
-
-    def fail_wiki_feedback(
-        self,
-        item_id: WikiFeedbackId,
-        owner: str,
-        *,
-        error: str,
-    ) -> None: ...
-
-    def list_wiki_feedback(self) -> list[WikiFeedbackOutboxItem]: ...
-
-    def requeue_wiki_feedback(
-        self, item_id: WikiFeedbackId, *, available_at: str
-    ) -> WikiFeedbackOutboxItem: ...
-
-    def prune_wiki_feedback(self, *, completed_before: str, limit: int) -> int: ...
-
-    def compact(self) -> None: ...
 
     def insert_epoch(self, epoch: Epoch) -> None: ...
 

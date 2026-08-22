@@ -88,10 +88,8 @@ mkdir -p "${atrex_prod_services}"
 chmod 0700 "${atrex_prod_services}"
 wiki_pid_file="${atrex_prod_services}/wiki.pid"
 runtime_pid_file="${atrex_prod_services}/runtime.pid"
-drainer_pid_file="${atrex_prod_services}/wiki-drainer.pid"
 wiki_log="${atrex_prod_services}/wiki.log"
 runtime_log="${atrex_prod_services}/runtime.log"
-drainer_log="${atrex_prod_services}/wiki-drainer.log"
 runtime_host="$(atrex_prod_json_value "${atrex_prod_config}" server.host)"
 runtime_port="$(atrex_prod_json_value "${atrex_prod_config}" server.port)"
 runtime_url="http://${runtime_host}:${runtime_port}"
@@ -185,26 +183,7 @@ start_runtime() {
   echo "Runtime log: ${runtime_log}"
 }
 
-start_drainer() {
-  if atrex_prod_pid_alive "${drainer_pid_file}"; then
-    echo "Wiki feedback drainer: running (pid $(atrex_prod_read_pid "${drainer_pid_file}"))"
-    return 0
-  fi
-  nohup "${atrex_prod_cli}" drain-wiki-feedback --config "${atrex_prod_config}" --watch \
-    >"${drainer_log}" 2>&1 &
-  atrex_prod_write_pid "${drainer_pid_file}" "$!"
-  sleep 1
-  if ! atrex_prod_pid_alive "${drainer_pid_file}"; then
-    echo "Wiki feedback drainer exited during startup." >&2
-    tail -n 100 "${drainer_log}" >&2 || true
-    return 1
-  fi
-  echo "Wiki feedback drainer: started (pid $(atrex_prod_read_pid "${drainer_pid_file}"))"
-  echo "Wiki feedback drainer log: ${drainer_log}"
-}
-
 stop_services() {
-  atrex_prod_stop_pid "Wiki feedback drainer" "${drainer_pid_file}"
   atrex_prod_stop_pid "Runtime" "${runtime_pid_file}"
   atrex_prod_stop_pid "GPU Wiki" "${wiki_pid_file}"
 }
@@ -215,10 +194,6 @@ start_services() {
     return 1
   fi
   if ! start_runtime; then
-    stop_services
-    return 1
-  fi
-  if ! start_drainer; then
     stop_services
     return 1
   fi
@@ -234,11 +209,6 @@ show_status() {
     echo "Runtime: healthy (${runtime_url})"
   else
     echo "Runtime: unavailable (${runtime_url})"
-  fi
-  if atrex_prod_pid_alive "${drainer_pid_file}"; then
-    echo "Wiki feedback drainer: running (pid $(atrex_prod_read_pid "${drainer_pid_file}"))"
-  else
-    echo "Wiki feedback drainer: stopped"
   fi
 }
 

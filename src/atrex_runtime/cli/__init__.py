@@ -38,11 +38,8 @@ from .inspect import (
 )
 from .maintenance import (
     digest_evolver_bundle,
-    drain_wiki_feedback,
     gc_artifacts,
     gc_workspaces,
-    maintain_wiki_feedback,
-    requeue_wiki_feedback,
 )
 from .parser import build_parser
 
@@ -239,15 +236,6 @@ def main(argv: list[str] | None = None) -> None:
             include_source=cast(bool, args.source),
             include_result=cast(bool, args.result),
         )
-        return
-    if args.command == "drain-wiki-feedback":
-        drain_wiki_feedback(cast(str, args.config), watch=cast(bool, args.watch))
-        return
-    if args.command == "requeue-wiki-feedback":
-        requeue_wiki_feedback(cast(str, args.config), cast(str, args.item))
-        return
-    if args.command == "maintain-wiki-feedback":
-        maintain_wiki_feedback(cast(str, args.config), compact=cast(bool, args.compact))
         return
     if args.command == "gc-artifacts":
         gc_artifacts(

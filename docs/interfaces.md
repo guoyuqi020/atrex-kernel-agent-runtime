@@ -42,9 +42,6 @@ All commands use `atrex-kernel-agent-runtime`. Commands that read deployment sta
 | `show-bootstrap-run` | `--config --attempt --generation N` | One physical Bootstrap execution. |
 | `list-evaluations` | `--config --attempt` | Every immutable evaluated Kernel/result pair. |
 | `show-evaluation` | `--config --evaluation` | Metadata; `--source` and `--result` add exact bounded payloads. |
-| `drain-wiki-feedback` | `--config` | Deliver one ready feedback batch; `--watch` keeps polling. |
-| `requeue-wiki-feedback` | `--config --item` | Requeue an inspected permanent delivery failure. |
-| `maintain-wiki-feedback` | `--config` | Prune retained completed rows; optional `--compact`. |
 | `gc-artifacts` | `--config --minimum-age-seconds --limit` | Dry-run CAS GC; deletion additionally requires `--apply --confirm-runtime-stopped`. |
 | `gc-workspaces` | same | Dry-run Worker-run GC with the same apply confirmation. |
 | `digest-evolver-bundle` | `--path` | Validate and digest a Bundle; optional file/byte bounds. |
@@ -149,7 +146,6 @@ current-Epoch Challengers and any Agent outside completed Lineage history.
 
 - Agate is accessed through the published `atrex-gateway-client` SDK. Runtime owns credentials and
   request construction; Workers see only the sanitized Gateway projection.
-- GPU Wiki query is `POST /v1/knowledge/query`; feedback is
-  `POST /v1/knowledge/epoch-feedback`. The local Wiki implements the same v1 contract.
+- GPU Wiki query is `POST /v1/knowledge/query`. The local Wiki implements the same v1 contract.
 - Complete schema semantics, Evidence layouts, version labels, and Bundle protocols are in
   [Protocols](protocols.md); every deployment field is in [Configuration](configuration.md).

@@ -58,18 +58,7 @@
     "timeout_seconds": 30,
     "max_proxy_request_bytes": 131072,
     "max_query_bytes": 65536,
-    "max_response_bytes": 1048576,
-    "feedback": {
-      "max_request_bytes": 4194304,
-      "batch_size": 16,
-      "lease_seconds": 600,
-      "retry_initial_seconds": 5,
-      "retry_max_seconds": 300,
-      "poll_seconds": 2,
-      "max_error_bytes": 4096,
-      "completed_retention_seconds": 2592000,
-      "prune_batch_size": 1000
-    }
+    "max_response_bytes": 1048576
   },
   "campaign": {
     "attempt_workspaces_root": "../../workspaces/bootstrap-example/runtime-state/attempt-workspaces",

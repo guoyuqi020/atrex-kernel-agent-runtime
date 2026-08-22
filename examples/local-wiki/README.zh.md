@@ -41,8 +41,7 @@ curl -fsS http://127.0.0.1:8091/healthz
 ```
 
 启动时不会修改 Vendored 语料，而是把它同步到被 Git Ignore 的可写 Store：
-`workspaces/local-wiki/state/gpu-wiki`。Query 使用该 Store；Epoch 后 Feedback 原样归档到
-SQLite，并通过固定版本的上游 `ingest_feedback.py` 与 `rebuild_importance.py` 生效。
+`workspaces/local-wiki/state/gpu-wiki`。Query 使用该 Store。
 
 也可以打开 [http://127.0.0.1:8091/](http://127.0.0.1:8091/) 使用浏览器客户端；每次 Query
 直接显示完整的安全服务 Record 及其稳定 ID。
@@ -57,7 +56,7 @@ SQLite，并通过固定版本的上游 `ingest_feedback.py` 与 `rebuild_import
 }
 ```
 
-真实配置还包含 Timeout、字节限制和 Feedback Outbox 字段，不要用上面的缩略片段覆盖完整对象。
+真实配置还包含 Timeout 和字节限制字段，不要用上面的缩略片段覆盖完整对象。
 
 ## 3. 快速路径：打开用完即毁的 Wiki Agent Shell
 
@@ -152,8 +151,7 @@ Agent 会看到上游 GPU Wiki 的 `records/notes` Envelope：
 每个 Mapping Value 已经是完整的安全服务 Record。某条 Record 实际影响优化时，Agent 将准确的
 Mapping Key 写进 `research_sources`；不存在第二次 Read 操作。Agent 不会看到协议版本、Snapshot
 身份、Interaction Artifact Digest、Content
-Digest、外部凭据或可信控制上下文；Runtime 内部仍会冻结这些信息，用于幂等重放、审计和
-Epoch 后 Wiki Feedback。
+Digest、外部凭据或可信控制上下文；Runtime 内部仍会冻结这些信息，用于幂等重放和审计。
 
 ## 6. 打开真实托管的 Agent 调试 Session
 

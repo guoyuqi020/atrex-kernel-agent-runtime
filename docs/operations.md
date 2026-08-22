@@ -4,7 +4,7 @@ English | [中文](operations.zh.md)
 
 ## Process topology
 
-Run the Agate-compatible Gateway and production GPU Wiki as external services. Run one Runtime service process, one or more independent Campaign task/scheduler processes, and an independent Wiki-feedback drainer. SQLite deployments are single-node. Runtime databases use rollback journals so Lima `virtiofs` workspaces remain safe across the Runtime and CLI processes; do not use a remote filesystem whose POSIX file locks are not reliable.
+Run the Agate-compatible Gateway and production GPU Wiki as external services. Run one Runtime service process and one or more independent Campaign task/scheduler processes. SQLite deployments are single-node. Runtime databases use rollback journals so Lima `virtiofs` workspaces remain safe across the Runtime and CLI processes; do not use a remote filesystem whose POSIX file locks are not reliable.
 
 Core and Evolver are deployment-approved Git repositories pinned by full commit. Their adjacent submodules are development checkouts, not Runtime imports. The `third_party/atrex-bench` submodule is the locally available, commit-pinned trusted evaluator source used by ABBA and optional Roofline construction. Initialize all three with `git submodule update --init --recursive` before repository verification.
 
@@ -24,6 +24,10 @@ Core and Evolver are deployment-approved Git repositories pinned by full commit.
    `agate.health_check_interval_s` seconds (30 seconds by default). Initial state, failure, and
    recovery are written to the service log. This observation does not change `/healthz` or
    `/readyz`; a temporary external outage does not stop the trusted control plane.
+   Every Agate SDK request uses the same bounded transient-failure policy: retry after 1, 2, 4,
+   and 8 seconds, and surface the error only after the fifth consecutive failed call. A successful
+   call resets the count for the next request. Terminal job results such as compilation or
+   correctness failure are results, not transport errors, and are not resubmitted by this policy.
 6. Keep Runtime, Gateway, and optional Wiki available while running Campaign schema-v3 bootstrap;
    Core baseline sessions call back through Runtime.
 7. Schedule a Campaign by absolute target epoch. Run the Wiki drainer independently.
