@@ -27,6 +27,7 @@ from ..presentation import (
     bootstrap_run_value,
     evaluation_value,
     kernel_catalog_entry,
+    kernel_trial_value,
     kernel_value,
     lineage_attempt_values,
     lineage_epoch_values,
@@ -545,6 +546,85 @@ def evaluations(
                     value["result"] = json.loads(value_path.read_bytes())
             else:
                 raise AssertionError("evaluation CLI target is absent")
+        finally:
+            control.close()
+    print(json.dumps(value, sort_keys=True))
+
+
+def kernel_trials(
+    config_path: str,
+    *,
+    attempt_value: str | None,
+    trial_id: str | None,
+    include_source: bool = False,
+    include_results: bool = False,
+) -> None:
+    """Print immutable experimental Kernel snapshots and optional exact source files."""
+    settings = RuntimeSettings.from_file(config_path)
+    signing_key = read_capability_signing_key(
+        os.environ,
+        settings.gateway_proxy.capability_signing_key_env,
+    )
+    artifacts = LocalArtifactStore(settings.storage.artifacts_root)
+    with SqliteRegistry(settings.storage.registry_database) as registry:
+        control = SqliteGatewayControl(
+            settings.storage.gateway_database,
+            registry,
+            signing_key=signing_key,
+        )
+        try:
+            if attempt_value is not None:
+                attempt_id = parse_attempt_id(attempt_value)
+                value: dict[str, object] = {
+                    "attempt_id": attempt_id,
+                    "kernel_trials": [
+                        kernel_trial_value(item)
+                        for item in control.list_kernel_trials((attempt_id,))
+                    ],
+                }
+            elif trial_id is not None:
+                trial = control.get_kernel_trial(trial_id)
+                value = kernel_trial_value(trial)
+                if include_source:
+                    value["source_files"] = _artifact_files(
+                        artifacts,
+                        trial.candidate_artifact_digest,
+                        max_files=settings.gateway_proxy.max_candidate_files,
+                        max_bytes=settings.gateway_proxy.max_candidate_bytes,
+                    )
+                if include_results:
+                    results: list[dict[str, object]] = []
+                    for observation in trial.observations:
+                        digest = observation.result_artifact_digest
+                        if digest is None:
+                            results.append(
+                                {
+                                    "idempotency_key": observation.idempotency_key,
+                                    "operation": observation.operation.value,
+                                    "result": None,
+                                }
+                            )
+                            continue
+                        stored = artifacts.verify(digest)
+                        value_path = stored.payload_path / "value.json"
+                        if (
+                            stored.kind.value != "gateway_result"
+                            or not value_path.is_file()
+                            or value_path.stat().st_size
+                            > settings.gateway_proxy.max_candidate_bytes
+                        ):
+                            raise ValueError("Kernel Trial result Artifact is invalid")
+                        results.append(
+                            {
+                                "idempotency_key": observation.idempotency_key,
+                                "operation": observation.operation.value,
+                                "result_artifact_digest": digest,
+                                "result": json.loads(value_path.read_bytes()),
+                            }
+                        )
+                    value["results"] = results
+            else:
+                raise AssertionError("Kernel Trial CLI target is absent")
         finally:
             control.close()
     print(json.dumps(value, sort_keys=True))

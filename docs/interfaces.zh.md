@@ -40,6 +40,8 @@
 | `show-bootstrap-run` | `--config --attempt --generation N` | 一次物理 Bootstrap 执行。 |
 | `list-evaluations` | `--config --attempt` | 全部不可变 Kernel/Result 评测对。 |
 | `show-evaluation` | `--config --evaluation` | 元数据；`--source --result` 增加受限精确内容。 |
+| `list-kernel-trials` | `--config --attempt` | 查询 Attempt 内观察到的全部精确实验 Candidate。 |
+| `show-kernel-trial` | `--config --trial` | 查询 Trial Operation/决策；`--source --result` 返回精确内容。 |
 | `gc-artifacts` | `--config --minimum-age-seconds --limit` | CAS GC 预览；删除还需 `--apply --confirm-runtime-stopped`。 |
 | `gc-workspaces` | 同上 | Worker Run GC 预览及确认删除。 |
 | `digest-evolver-bundle` | `--path` | 校验并计算 Bundle Digest。 |
@@ -52,17 +54,35 @@
 - `POST /v1/operations`、`POST /v1/wiki/query` 使用 Attempt 范围 Bearer Capability。
 - 所有 `/v1/admin/*` 使用 `Authorization: Bearer <admin-token>`。
 - Gateway/Wiki：`400` 请求错误，`403` 权限无效/过期/撤销，`409` 幂等或状态冲突，`503` 依赖不可用。
+- Gateway `400` 中若包含可识别的 `operation`，响应会携带 `request_schema`：它由拒绝该请求的
+  同一个 Pydantic Model 生成，是面向 Agent 的 JSON Schema。Schema 会移除 Runtime 自管字段，
+  并把 `idempotency_key` 标为 Runtime 默认填充；缺少或无法识别 Operation 时则返回
+  `supported_operations`。
 - Administration：`400` 请求错误，`401` Token 错误，`404` ID 不存在，`409` 状态转换错误。
 
 ### Worker Route
 
 | Method 与路径 | 请求/响应 |
 | --- | --- |
-| `POST /v1/operations` | Gateway v2；支持 `evaluate`、`submit`、`profile`、`dev`、`check`、`sol`、`disassemble`、`poll`、`jobs`、`cancel`、`env`、`health`、`config`。 |
+| `POST /v1/operations` | Gateway v2；支持评测器 Operation，以及 Runtime 本地历史查询。 |
 | `POST /v1/wiki/query` | Wiki v1 `{schema_version,attempt_id,idempotency_key,query}`；返回冻结响应。 |
 
 Candidate 操作上传完整 Base64 File Bundle，Runtime 在执行前封存。相同 Key/Request 重放已提交响应；
 同 Key 不同内容返回冲突。`evaluate` 生成探索性评测记录，但不会单独保留 Kernel Revision。
+
+`measurements` 是不计配额的 Runtime 本地只读操作，不会调用 Agate。Runtime 从当前 Attempt
+Capability 自动确定 Lineage 与可见边界。Agent 可按 `kind`、`kernel_revision_id`、
+`kernel_artifact_digest`、`shape_id`、`kernel_name`、`metric` 和 `limit` 过滤，但不能自行指定
+Lineage。返回值包含规范化的 Evaluate/Profile 标量、已注册时的 Kernel 版本元数据，以及原始
+Gateway Result Artifact Digest。
+
+`kernel_trials` 查询当前 Attempt 及其可见历史中的精确实验 Candidate，可按 `decision` 和 `limit`
+过滤，返回 Trial ID、Observation 与 Agent 注解，但不直接返回源码。`kernel_trial_read` 接收 Trial
+ID 与可选 `file`：省略 `file` 时返回已验证的文件索引，指定后返回精确 UTF-8 或 Base64 内容。
+两者均不计配额、不访问 Agate，且调用方不能自行选择 Lineage 或 Attempt。
+查询历史 Trial 的规范化 Evaluate/Profile 结果时，应把返回的 `candidate_artifact_digest` 传给
+`measurements.kernel_artifact_digest`；Trial ID 和 Gateway Result Digest 都不是 Kernel Measurement
+过滤条件。当前 Attempt 的结果来自原始 Operation 响应，Attempt 完成后才成为后续 Attempt 可查询的历史。
 
 ### Administration Route
 
@@ -80,6 +100,10 @@ Candidate 操作上传完整 Base64 File Bundle，Runtime 在执行前封存。�
 | `GET /v1/admin/attempts/{id}/evaluations` | Evaluation 列表。 |
 | `GET /v1/admin/attempts/{id}/evaluations/{eval}` | Evaluation 详情。 |
 | `GET .../evaluations/{eval}/{source,result}` | 受限精确 Candidate 文件/原始结果。 |
+| `GET /v1/admin/attempts/{id}/kernel-trials` | 查询实验 Candidate，包括回退快照。 |
+| `GET /v1/admin/attempts/{id}/kernel-trials/{trial}` | 查询 Trial Observation 与决策。 |
+| `GET .../kernel-trials/{trial}/source` | 查询精确的未版本化 Candidate 文件。 |
+| `GET .../kernel-trials/{trial}/results` | 查询保留的准确 Operation Result。 |
 | `GET /v1/admin/kernels/{id}` | 含 Measurement 的 Kernel 详情。 |
 | `GET /v1/admin/kernels/{id}/{source,measurements}` | 精确文件或 Measurement。 |
 | `GET /v1/admin/agent-revisions/{id}` | Agent Revision 详情。 |
@@ -105,10 +129,10 @@ python src/runtime_tools.py <command> --request scratch/request.json
 
 | 命令 | Agent 提供的请求 |
 | --- | --- |
-| `gateway-execute` | Gateway Operation 与参数；Candidate 操作自动上传当前 Working Kernel。 |
+| `gateway-execute` | Gateway Operation 与参数；Candidate 操作上传当前 Working Kernel；`measurements`、`kernel_trials`、`kernel_trial_read` 查询 Runtime 持有的可见历史。 |
 | `wiki-query` | `query` 和可选 `idempotency_key`；stdout 只返回 Wiki `content`。 |
-| `record-experiment` | 严格 `name,hypothesis,change,evidence,result,decision`；Decision 为 `continue/revert/pivot`。 |
-| `attempt-report` | Schema-v2 终态 Report：状态、假设、瓶颈、计划、修改/Profiling/评测证据、解释、来源、经验和下一方向。 |
+| `record-experiment` | 增加 `candidate_artifact_digest`；测量结果在 `continue/revert/pivot` 前绑定准确 Gateway Candidate。 |
+| `attempt-report` | Schema-v3 终态 Report，包含源码绑定实验，以及状态、计划、证据、解释、经验和下一方向。 |
 | `lineage-bootstrap-report` | `baseline_ready` 或 `blocked`；Ready 时声明正延迟及 Candidate/Result Digest。 |
 
 `attempt-report` 要求非空连续 Experiment Journal 且只能写一次。Runtime 不信任 Agent 的成功文本，

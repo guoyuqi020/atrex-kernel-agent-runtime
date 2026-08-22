@@ -25,6 +25,10 @@ All JSON schemas reject unknown fields. IDs use typed prefixes; Artifact digests
 | `GET /v1/admin/attempts/{id}/evaluations/{evaluation_id}` | Admin bearer | One immutable evaluated Kernel/result identity pair. |
 | `GET .../evaluations/{evaluation_id}/source` | Admin bearer | Exact bounded files of the Kernel evaluated at that step. |
 | `GET .../evaluations/{evaluation_id}/result` | Admin bearer | Exact raw Gateway result for that step. |
+| `GET /v1/admin/attempts/{id}/kernel-trials` | Admin bearer | Exact unversioned Candidate snapshots observed in the Attempt. |
+| `GET /v1/admin/attempts/{id}/kernel-trials/{trial_id}` | Admin bearer | One Trial's Gateway observations and Agent decisions. |
+| `GET .../kernel-trials/{trial_id}/source` | Admin bearer | Exact files for a measured, probed, or reverted Trial. |
+| `GET .../kernel-trials/{trial_id}/results` | Admin bearer | Retained structured results for each Trial observation. |
 | `GET /v1/admin/campaigns/{id}/kernels` | Admin bearer | Every baseline and terminal Attempt Kernel across DSL lineages. |
 | `GET /v1/admin/lineages/{id}/kernels` | Admin bearer | Ordered Kernel catalog for one DSL lineage. |
 | `GET /v1/admin/campaigns/{id}/agent-revisions` | Admin bearer | Versioned Agent histories across Campaign lineages. |
@@ -43,11 +47,32 @@ Each distinct Agent evaluation seals and records the exact candidate and raw res
 commit an Attempt outcome. Runtime seals the terminal nomination and evaluates it through the
 configured authoritative retention comparator; only its `runtime_final` records are linked to the outcome. The
 `list-evaluations` and `show-evaluation [--source] [--result]` CLI commands expose the same history.
+Every candidate-bearing operation binds its sealed Candidate Artifact before external execution.
+The binding remains a durable Artifact root after operation failure, Event pruning, or source
+rollback. A schema-v3 Attempt Report can attach `continue`, `revert`, or `pivot` annotations to an
+observed digest. These unversioned `Kernel Trial` records do not consume `vN` revision numbers.
+An Optimizer can list them with `operation: "kernel_trials"` and retrieve an exact verified file
+index or source file with `operation: "kernel_trial_read"`. Runtime includes the current Attempt so
+a reverted Candidate remains recoverable within the same Session, then applies the same promoted
+and same-trajectory visibility rule to older Attempts. These Runtime-local reads are unmetered and
+do not contact Agate.
 The Worker response is deliberately different from the admin-visible raw result: private input,
 request, per-case failure, and evaluator-spec fields are withheld. `evaluate` returns aggregate
 correctness/latency and optional latency keyed by opaque `shape_id`. `profile` accepts an optional
 opaque `shape_id`, defaults to one evaluator-owned case, and returns a sanitized profiler view.
+`check` exposes no Shape selector: Runtime deterministically selects the first opaque Contract
+Shape and supplies its private `init_kwargs` to Agate Compile so parameterized `Model`
+constructors are checked correctly.
 These semantics do not depend on `launcher.mode`.
+
+Runtime normalizes successful `evaluate` and `profile` responses into append-only
+`gateway_measurements` rows. `operation: "measurements"` reads those rows through the same
+Attempt-scoped Gateway endpoint without consuming the evaluator call budget or contacting Agate.
+Visibility is derived, not caller-selected: completed Epochs expose only winning-branch Attempts to
+an Optimizer, while the current Epoch exposes only earlier completed Attempts in the same branch,
+Challenger slot, and trajectory. Filters can select a Kernel revision/artifact, operation kind,
+opaque Shape, profiler Kernel, metric name, and bounded result count. Every row retains its raw
+Gateway Result digest for audit.
 
 Attempt history is independent of Kernel history. `list-attempts [--format table]` and
 `show-attempt` retain `pivot`, `blocked`, infrastructure-failed, and other no-Candidate sessions;
@@ -149,11 +174,15 @@ authority.
 
 Attempt Evidence schema v2 is immutable and includes only earlier Attempts from the same Branch slot
 and Trajectory. Completed Epoch Evidence preserves Challenger and Trajectory identities, summaries,
-reports, diffs, normalized Session projections, lessons, and source digests. Agent view schema v1 is
+reports, diffs, normalized Session projections, normalized Evaluate/Profile measurements, lessons,
+and source digests. Agent view schema v1 is
 role-scoped: an Optimizer sees the promoted completed lineage plus bounded current same-Trajectory
 Attempts with branch-control identities removed; an Evolver sees all completed branches, explicit
 Agent selection facts, every Attempt outcome, all Challenger Evolution traces, and exact referenced
 Kernel artifacts. Both views materialize Session Artifacts by digest into derived read-only copies.
+The Optimizer projection contains only the promoted branch's completed-Epoch measurements. The
+Evolver projection freezes all completed Active/Challenger measurements and requires no live
+Gateway authority.
 Authoritative Session retention omits Claude `system/thinking_tokens` estimate telemetry, and the
 derived copies defensively apply the same rule to older Session Artifacts.
 

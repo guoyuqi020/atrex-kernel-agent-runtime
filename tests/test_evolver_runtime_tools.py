@@ -160,6 +160,25 @@ def _workspace(root: Path) -> Path:
     )
     active_attempts = epoch / "branches/active/trajectories/00000001/attempts"
     active_attempts.mkdir(parents=True)
+    trial_id = "gtrial_" + "9" * 32
+    trial_source = epoch / "kernel-trials" / trial_id / "source"
+    trial_source.mkdir(parents=True)
+    (trial_source / "kernel.py").write_text("# reverted\n")
+    _write(
+        epoch / "kernel-trials/index.json",
+        {
+            "schema_version": 1,
+            "kernel_trials": [
+                {
+                    "kernel_trial_id": trial_id,
+                    "attempt_id": "attempt_" + "f" * 32,
+                    "candidate_artifact_digest": "sha256:" + "8" * 64,
+                    "disposition": "revert",
+                    "path": f"{trial_id}/source/",
+                }
+            ],
+        },
+    )
     trace = (
         epoch / "branches/challenger-0001/trajectories/00000001/attempts/00000001/traces/run-0001"
     )
@@ -216,6 +235,18 @@ def test_evolver_runtime_tools_query_only_the_frozen_workspace(tmp_path: Path) -
         "kernel.py",
     )
     assert source["content"] == "# best\n"
+
+    trials = _run(workspace, "kernel-trials", "--decision", "revert")
+    assert trials["kernel_trials"][0]["kernel_trial_id"] == "gtrial_" + "9" * 32  # type: ignore[index]
+    trial_source = _run(
+        workspace,
+        "kernel-trial-read",
+        "--trial",
+        "gtrial_" + "9" * 32,
+        "--file",
+        "kernel.py",
+    )
+    assert trial_source["content"] == "# reverted\n"
 
     agents = _run(workspace, "agents")
     assert [item["version"] for item in agents["agents"]] == [  # type: ignore[union-attr]

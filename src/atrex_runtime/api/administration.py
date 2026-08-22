@@ -64,6 +64,7 @@ from ..presentation import (
     bootstrap_run_value,
     evaluation_value,
     kernel_catalog_entry,
+    kernel_trial_value,
     kernel_value,
     lineage_attempt_values,
     lineage_epoch_values,
@@ -571,6 +572,82 @@ class AdministrationAsgiApp:
                     ],
                 },
             )
+            return
+        if len(parts) >= 2 and parts[1] == "kernel-trials" and len(parts) <= 4:
+            if self._gateway_control is None:
+                await _json_response(send, 404, {"error": "not_found"})
+                return
+            attempt_id = parse_attempt_id(parts[0])
+            if len(parts) == 2:
+                await _json_response(
+                    send,
+                    200,
+                    {
+                        "attempt_id": attempt_id,
+                        "kernel_trials": [
+                            kernel_trial_value(trial)
+                            for trial in self._gateway_control.list_kernel_trials((attempt_id,))
+                        ],
+                    },
+                )
+                return
+            trial = self._gateway_control.get_kernel_trial(parts[2])
+            if trial.attempt_id != attempt_id:
+                raise KeyError(parts[2])
+            if len(parts) == 3:
+                await _json_response(send, 200, kernel_trial_value(trial))
+                return
+            if parts[3] == "source":
+                await _json_response(
+                    send,
+                    200,
+                    {
+                        "kernel_trial_id": trial.id,
+                        "trial_label": f"g{trial.recovery_generation}-t{trial.ordinal}",
+                        "attempt_id": attempt_id,
+                        "artifact_digest": trial.candidate_artifact_digest,
+                        "referenced_at": trial.created_at,
+                        "files": self._artifact_files(
+                            trial.candidate_artifact_digest,
+                            expected_kind=ArtifactKind.KERNEL,
+                        ),
+                    },
+                )
+                return
+            if parts[3] == "results":
+                results = []
+                for observation in trial.observations:
+                    digest = observation.result_artifact_digest
+                    value: object = None
+                    if digest is not None:
+                        stored = self._artifacts.verify(digest)
+                        value_path = stored.payload_path / "value.json"
+                        if (
+                            stored.kind is not ArtifactKind.GATEWAY_RESULT
+                            or not value_path.is_file()
+                            or value_path.stat().st_size > self._max_kernel_source_bytes
+                        ):
+                            raise ValueError("Kernel Trial result Artifact is invalid")
+                        value = json.loads(value_path.read_bytes())
+                    results.append(
+                        {
+                            "idempotency_key": observation.idempotency_key,
+                            "operation": observation.operation.value,
+                            "result_artifact_digest": digest,
+                            "result": value,
+                        }
+                    )
+                await _json_response(
+                    send,
+                    200,
+                    {
+                        "kernel_trial_id": trial.id,
+                        "attempt_id": attempt_id,
+                        "results": results,
+                    },
+                )
+                return
+            await _json_response(send, 404, {"error": "not_found"})
             return
         if len(parts) < 2 or parts[1] != "evaluations" or len(parts) > 4:
             await _json_response(send, 404, {"error": "not_found"})

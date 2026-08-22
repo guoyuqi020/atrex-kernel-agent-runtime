@@ -25,6 +25,10 @@
 | `GET /v1/admin/attempts/{id}/evaluations/{evaluation_id}` | Admin Bearer | 查询一对不可变的被评测 Kernel/Result 身份。 |
 | `GET .../evaluations/{evaluation_id}/source` | Admin Bearer | 返回该次评测对应的准确、有界 Kernel 文件。 |
 | `GET .../evaluations/{evaluation_id}/result` | Admin Bearer | 返回该次评测的完整原始 Gateway Result。 |
+| `GET /v1/admin/attempts/{id}/kernel-trials` | Admin Bearer | 查询 Attempt 内观察到的精确未版本化 Candidate。 |
+| `GET /v1/admin/attempts/{id}/kernel-trials/{trial_id}` | Admin Bearer | 查询一个 Trial 的 Gateway Observation 与 Agent 决策。 |
+| `GET .../kernel-trials/{trial_id}/source` | Admin Bearer | 返回被测量、探测或回退 Trial 的精确文件。 |
+| `GET .../kernel-trials/{trial_id}/results` | Admin Bearer | 返回每个 Trial Observation 保留的结构化结果。 |
 | `GET /v1/admin/campaigns/{id}/kernels` | Admin Bearer | 跨 DSL Lineage 查询全部 Baseline 与终止 Attempt Kernel。 |
 | `GET /v1/admin/lineages/{id}/kernels` | Admin Bearer | 查询单个 DSL Lineage 的有序 Kernel Catalog。 |
 | `GET /v1/admin/campaigns/{id}/agent-revisions` | Admin Bearer | 查询 Campaign 各 Lineage 的 Agent 版本历史。 |
@@ -42,10 +46,27 @@
 Agent 的每次不同评测都会封存准确 Candidate 与原始 Result，但不会提交 Attempt Outcome。终止
 Candidate 由 Runtime 封存，并通过配置的权威留存 Comparator 评测；只有 `runtime_final` 记录会关联权威 Outcome。CLI 的
 `list-evaluations` 与 `show-evaluation [--source] [--result]` 暴露同一份历史。
+每个 Candidate 型 Operation 都会在外部执行前绑定封存后的 Candidate Artifact；即使 Operation
+失败、Event 被裁剪或源码被回退，该绑定仍是持久 Artifact Root。Schema-v3 Attempt Report 可以
+把 `continue`、`revert`、`pivot` 注解绑定到当前 Attempt 已观察的 Digest。这些未版本化
+`Kernel Trial` 不占用 `vN` Revision 编号。
+Optimizer 可用 `operation: "kernel_trials"` 列出这些 Trial，再用
+`operation: "kernel_trial_read"` 获取已验证的精确文件索引或源码。Runtime 会包含当前 Attempt，
+因此同一 Session 内回退的 Candidate 仍可恢复；更早 Attempt 则继续遵循已晋升分支与同轨迹可见性
+规则。这两个 Runtime 本地读操作不计配额，也不会访问 Agate。
 Worker 返回与管理面可见的原始 Result 有意不同：私有输入、Request、逐 Case 失败详情和 Evaluator
 Spec 都会被隐藏。`evaluate` 只返回聚合正确性/延迟，以及可选的按不透明 `shape_id` 标识的延迟；
 `profile` 可选一个不透明 `shape_id`，省略时由评测器选择一个私有 Case，并返回脱敏后的 Profiler
-视图。该协议不依赖 `launcher.mode`。
+视图。`check` 不暴露 Shape 选择参数：Runtime 确定性选择 Contract 中排序后的第一个不透明
+Shape，并把其私有 `init_kwargs` 传给 Agate Compile，使参数化 `Model` 构造器得到正确检查。
+该协议不依赖 `launcher.mode`。
+
+Runtime 把成功的 `evaluate` 与 `profile` 响应规范化为只追加的 `gateway_measurements` 记录。
+`operation: "measurements"` 通过同一个 Attempt 范围 Gateway Endpoint 查询这些记录，不消耗
+评测调用配额，也不会访问 Agate。可见性由 Runtime 推导，而非调用方选择：对 Optimizer，已完成
+Epoch 只暴露胜出分支 Attempt；当前 Epoch 只暴露相同 Branch、Challenger Slot 与 Trajectory 中
+更早完成的 Attempt。过滤器可选择 Kernel Revision/Artifact、Operation Kind、不透明 Shape、
+Profiler Kernel、Metric 名称和有界数量。每条记录保留原始 Gateway Result Digest 以便审计。
 
 Attempt 历史独立于 Kernel 历史。`list-attempts [--format table]` 与 `show-attempt` 会保留
 `pivot`、`blocked`、基础设施失败及其他无 Candidate 的 Session；由于没有注册 Kernel
@@ -138,11 +159,14 @@ Schema v4 还绑定 `runtime-tools/`。Runtime 冻结 `catalog.json`、全部 Li
 
 Attempt Evidence schema v2 不可变，只包含相同 Branch Slot 和 Trajectory 中较早的 Attempt。
 已完成 Epoch Evidence 保留 Challenger 与 Trajectory 身份、Summary、Report、Diff、规范化
-Session Projection、Lesson 和来源 Digest。Agent View schema v1 按 Role 限制：Optimizer 只看到
+Session Projection、规范化 Evaluate/Profile Measurement、Lesson 和来源 Digest。Agent View
+schema v1 按 Role 限制：Optimizer 只看到
 已晋升的完成 Lineage 和有界的当前同 Trajectory Attempt，并移除 Branch 控制身份；
 Evolver 看到所有已完成分支、明确 Agent 选择事实、每个 Attempt Outcome、所有 Challenger
 Evolution Trace 与被引用的精确 Kernel Artifact。两种 View 都按 Digest 把 Session Artifact
-物化为派生只读副本。权威 Session 保留策略省略 Claude `system/thinking_tokens` 估算遥测，
+物化为派生只读副本。Optimizer 投影只包含已晋升分支的完成 Epoch Measurement；Evolver
+投影冻结全部已完成 Active/Challenger Measurement，不需要实时 Gateway Authority。权威 Session
+保留策略省略 Claude `system/thinking_tokens` 估算遥测，
 派生副本也会对旧 Session Artifact 防御性地应用同一规则。
 
 每个新 Session Artifact 都包含 `conversation.jsonl`：它以版本化 Schema 未脱敏记录准确 Runtime

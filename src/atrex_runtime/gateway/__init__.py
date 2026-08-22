@@ -30,6 +30,9 @@ from .control_models import (
     GatewayCapabilityPolicy,
     GatewayEvaluationRecord,
     GatewayEvaluationSource,
+    GatewayKernelTrialAnnotation,
+    GatewayKernelTrialObservation,
+    GatewayKernelTrialRecord,
     GatewayOperation,
 )
 from .diff_policy import CandidateDiffPolicy, RegistryCandidateDiffValidator
@@ -68,6 +71,9 @@ __all__ = [
     "GatewayCapabilityPolicy",
     "GatewayEvaluationRecord",
     "GatewayEvaluationSource",
+    "GatewayKernelTrialAnnotation",
+    "GatewayKernelTrialObservation",
+    "GatewayKernelTrialRecord",
     "GatewayOperation",
     "GatewayProxyAsgiApp",
     "GatewayProxyLimits",

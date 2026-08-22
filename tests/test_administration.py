@@ -940,7 +940,7 @@ async def test_administration_exposes_every_evaluation_source_and_result(
             digest("evidence"),
             datetime(2026, 8, 14, tzinfo=UTC),
         )
-        control.issue_bootstrap(
+        capability = control.issue_bootstrap(
             subject,
             GatewayCapabilityPolicy(
                 frozenset({GatewayOperation.EVALUATE}),
@@ -954,6 +954,24 @@ async def test_administration_exposes_every_evaluation_source_and_result(
         candidate = artifacts.put_directory(source, ArtifactKind.KERNEL)
         agent_result = artifacts.put_json({"stage": "agent"}, ArtifactKind.GATEWAY_RESULT)
         final_result = artifacts.put_json({"stage": "runtime"}, ArtifactKind.GATEWAY_RESULT)
+        control.authorize(
+            capability,
+            GatewayOperation.EVALUATE,
+            idempotency_key="agent-1",
+            request_digest=str(digest("agent-request")),
+        )
+        control.bind_operation_candidate(
+            attempt_id,
+            "agent-1",
+            GatewayOperation.EVALUATE,
+            candidate,
+        )
+        control.commit_operation_artifact(
+            attempt_id,
+            "agent-1",
+            GatewayOperation.EVALUATE,
+            agent_result,
+        )
         agent = control.record_evaluation(
             attempt_id,
             source=GatewayEvaluationSource.AGENT,
@@ -973,6 +991,22 @@ async def test_administration_exposes_every_evaluation_source_and_result(
             correct=True,
             latency_us=11.0,
             agate_job_id="ev_final",
+        )
+        control.record_kernel_trial_annotations(
+            attempt_id,
+            (
+                {
+                    "sequence": 1,
+                    "recorded_at": NOW,
+                    "name": "reverted experiment",
+                    "hypothesis": "test",
+                    "change": "test",
+                    "candidate_artifact_digest": str(candidate),
+                    "evidence": "agent-1",
+                    "result": "regressed",
+                    "decision": "revert",
+                },
+            ),
         )
         app = AdministrationAsgiApp(
             registry,
@@ -1015,6 +1049,30 @@ async def test_administration_exposes_every_evaluation_source_and_result(
         )
         assert status == 200
         assert result_value["result"] == {"stage": "agent"}
+
+        status, trials = await _request(
+            app,
+            "GET",
+            f"/v1/admin/attempts/{attempt_id}/kernel-trials",
+        )
+        assert status == 200
+        trial = trials["kernel_trials"][0]
+        assert trial["disposition"] == "revert"
+        status, trial_source = await _request(
+            app,
+            "GET",
+            f"/v1/admin/attempts/{attempt_id}/kernel-trials/{trial['kernel_trial_id']}/source",
+        )
+        assert status == 200
+        assert trial_source["files"][0]["content"] == "def kernel(): return 1\n"
+        status, trial_results = await _request(
+            app,
+            "GET",
+            f"/v1/admin/attempts/{attempt_id}/kernel-trials/"
+            f"{trial['kernel_trial_id']}/results",
+        )
+        assert status == 200
+        assert trial_results["results"][0]["result"] == {"stage": "agent"}
         control.close()
 
 

@@ -48,6 +48,9 @@ git -C /path/to/atrex-kernel-agent archive \
 上限。`agent_cli`、`query_timeout_seconds` 和 `max_results` 只作为可选 HTTP 部署 Override；
 Local Wiki 不保存模型凭证。
 
+`max_concurrent_queries` 限制同时运行的 `query_nl.py` 子进程数，默认值为 `16`；其余请求等待
+并发槽。这样既避免模型和子进程无界扩张，也不会再用一个全局锁串行阻塞所有只读查询。
+
 ```bash
 PYTHONPATH=workspaces/local-wiki/src \
   .venv/bin/python -m atrex_local_wiki serve \

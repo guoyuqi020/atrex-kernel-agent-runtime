@@ -14,6 +14,7 @@ from .revision import (
     KernelAgentBundleLimits,
     KernelAgentBundleManifestV1,
     KernelAgentRevisionBuilder,
+    is_ignored_kernel_agent_path,
 )
 
 __all__ = [
@@ -28,4 +29,5 @@ __all__ = [
     "KernelAgentRevisionBuilder",
     "OptimizerSourceProvenanceV1",
     "OptimizerSubmoduleProvenanceV1",
+    "is_ignored_kernel_agent_path",
 ]

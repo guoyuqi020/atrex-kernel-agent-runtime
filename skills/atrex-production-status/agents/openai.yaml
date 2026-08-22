@@ -1,0 +1,4 @@
+interface:
+  display_name: "ATREX Production Status"
+  short_description: "Inspect live ATREX production campaigns"
+  default_prompt: "Use $atrex-production-status to report the current production campaign status."

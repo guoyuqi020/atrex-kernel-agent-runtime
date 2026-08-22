@@ -154,6 +154,17 @@ class FixedKernelComparator:
         )
 
 
+class FailingKernelComparator:
+    """Fail after candidate registration to emulate interrupted Runtime finalization."""
+
+    async def compare(
+        self,
+        _incumbent: KernelRevision,
+        _candidate: KernelRevision,
+    ) -> KernelComparisonResult:
+        raise InfrastructureError("authoritative comparison unavailable")
+
+
 class ConcurrencyProbeOptimizer:
     """Require two Optimizer calls to overlap before either can complete."""
 
@@ -556,6 +567,77 @@ async def test_operator_recovery_resumes_failed_epoch_with_same_attempt_identity
         ("lineage.recovered",),
         ("campaign.reopened",),
     ]
+
+
+@pytest.mark.anyio
+async def test_operator_recovery_resumes_registered_candidate_finalization(
+    tmp_path: Path,
+) -> None:
+    registry = SqliteRegistry(tmp_path / "runtime.db")
+    seeded = seed_lineage(
+        registry,
+        challenger_count=0,
+        attempts_per_trajectory=1,
+    )
+    optimizer = ScriptedOptimizer(
+        seeded.active_revision_id,
+        active=[candidate("registered-before-comparison-failure", 80)],
+        challenger=[],
+    )
+
+    with pytest.raises(InfrastructureError, match="authoritative comparison unavailable"):
+        await EpochController(
+            registry,
+            FakeEvolver(),
+            optimizer,
+            FakeAttemptEvidence(),
+            kernel_retention_comparator=FailingKernelComparator(),
+        ).run_epoch(seeded.lineage_id, 1)
+
+    failed_epoch = registry.find_epoch(seeded.lineage_id, 1)
+    assert failed_epoch is not None
+    assert failed_epoch.status is EpochStatus.FAILED
+    failed_attempt = registry.find_attempt(
+        failed_epoch.id,
+        BranchRole.ACTIVE,
+        0,
+        1,
+        1,
+    )
+    assert failed_attempt is not None
+    assert failed_attempt.status is AttemptStatus.RUNNING
+    registered = registry.find_kernel_revision_by_attempt(failed_attempt.id)
+    assert registered is not None
+    assert failed_attempt.output_kernel_revision_id is None
+
+    recovery = registry.recover_failed_epoch(
+        failed_epoch.id,
+        recovery_key="resume-authoritative-comparison",
+        reason="comparison infrastructure recovered",
+    )
+    assert recovery.attempt_ids == (failed_attempt.id,)
+    assert registry.get_epoch(failed_epoch.id).status is EpochStatus.RUNNING
+    assert registry.get_attempt(failed_attempt.id).recovery_generation == 1
+
+    unused_optimizer = ScriptedOptimizer(
+        seeded.active_revision_id,
+        active=[],
+        challenger=[],
+    )
+    result = await EpochController(
+        registry,
+        FakeEvolver(),
+        unused_optimizer,
+        FakeAttemptEvidence(),
+        kernel_retention_comparator=FixedKernelComparator(True),
+    ).run_epoch(seeded.lineage_id, 1)
+
+    completed_attempt = registry.get_attempt(failed_attempt.id)
+    assert result.epoch.status is EpochStatus.COMPLETED
+    assert completed_attempt.output_kernel_revision_id == registered.id
+    assert completed_attempt.accepted_as_branch_best is True
+    assert unused_optimizer.calls == {}
+    registry.close()
 
 
 @pytest.mark.anyio

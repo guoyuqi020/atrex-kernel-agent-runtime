@@ -140,7 +140,7 @@
       "repeats": 2,
       "minimum_improvement_percent": 0.0,
       "allocation_timeout_seconds": 600,
-      "shape_batch_size": 4,
+      "shape_batch_size": 1,
       "max_parallel_shape_batches": 4
     },
     "agent_promotion_comparison": {
@@ -148,7 +148,7 @@
       "repeats": 2,
       "minimum_improvement_percent": 0.0,
       "allocation_timeout_seconds": 600,
-      "shape_batch_size": 4,
+      "shape_batch_size": 1,
       "max_parallel_shape_batches": 4
     },
     "evidence": {
@@ -232,7 +232,7 @@
           "QODER_PERSONAL_ACCESS_TOKEN"
         ]
       },
-      "timeout_seconds": 1800,
+      "timeout_seconds": 10800,
       "terminate_grace_seconds": 10,
       "max_diagnostic_bytes": 131072,
       "max_output_manifest_bytes": 16384

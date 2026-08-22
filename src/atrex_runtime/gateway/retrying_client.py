@@ -9,8 +9,8 @@ from typing import TypeVar, cast
 
 _T = TypeVar("_T")
 _MAX_CONSECUTIVE_ERRORS = 5
-_INITIAL_BACKOFF_SECONDS = 1.0
-_MAX_BACKOFF_SECONDS = 8.0
+_INITIAL_BACKOFF_SECONDS = 5.0
+_MAX_BACKOFF_SECONDS = 40.0
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -18,7 +18,7 @@ class RetryingAgateClient:
     """Apply one retry contract to every method used from the Agate SDK.
 
     A request is attempted at most five times. The four delays before the
-    terminal attempt are 1, 2, 4, and 8 seconds. Any successful response ends
+    terminal attempt are 5, 10, 20, and 40 seconds. Any successful response ends
     the sequence, so the next request starts with a fresh consecutive-error
     count.
     """

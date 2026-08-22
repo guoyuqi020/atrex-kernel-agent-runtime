@@ -16,6 +16,7 @@ from atrex_runtime.controller.projection import (
     EvidenceProjectionLimits,
 )
 from atrex_runtime.domain.ids import (
+    AttemptId,
     new_epoch_id,
     new_kernel_agent_revision_id,
     new_kernel_revision_id,
@@ -28,6 +29,11 @@ from atrex_runtime.domain.models import (
     EpochChallenger,
     EpochStatus,
     KernelAgentRevision,
+)
+from atrex_runtime.gateway.control_models import (
+    GatewayMeasurementPoint,
+    GatewayMeasurementRecord,
+    GatewayOperation,
 )
 from atrex_runtime.registry.base import Registry
 from atrex_runtime.workers.evolution import (
@@ -398,12 +404,53 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
         def list_attempts(_epoch_id: object) -> tuple[()]:
             return ()
 
+    class MeasurementSource:
+        @staticmethod
+        def list_evidence_measurements(
+            attempt_ids: tuple[AttemptId, ...],
+            *,
+            limit: int,
+        ) -> tuple[GatewayMeasurementRecord, ...]:
+            assert attempt_ids == ()
+            assert limit == 5_000
+            return (
+                GatewayMeasurementRecord(
+                    id="gmeasure_0123456789abcdef0123456789abcdef",
+                    attempt_id=cast(AttemptId, "attempt_history"),
+                    recovery_generation=0,
+                    ordinal=1,
+                    source_operation=GatewayOperation.PROFILE,
+                    idempotency_key="profile-1",
+                    candidate_artifact_digest=digest("candidate"),
+                    gateway_result_digest=digest("profile-result"),
+                    point=GatewayMeasurementPoint(
+                        kind=GatewayOperation.PROFILE,
+                        profile_level="sol",
+                        shape_id="opaque-shape-1",
+                        kernel_name="kernel_0",
+                        metrics={"compute_sol_pct": 72.5},
+                    ),
+                    created_at=NOW,
+                ),
+            )
+
+        @staticmethod
+        def list_kernel_trials(
+            attempt_ids: tuple[AttemptId, ...],
+            *,
+            limit: int,
+        ) -> tuple[()]:
+            assert attempt_ids == ()
+            assert limit == 5_000
+            return ()
+
     staging = tmp_path / "staging"
     staging.mkdir()
     assembler = LocalEvidenceAssembler(
         cast(Registry, EvolutionRegistry()),
         artifacts,
         _projector(artifacts),
+        MeasurementSource(),
     )
 
     derived = assembler._append_derived(staging, epoch_id, 1)
@@ -434,3 +481,6 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
     assert "raw private reasoning" in raw["provider/stdout.stream-json"]
     assert "thinking_tokens" not in raw["provider/stdout.stream-json"]
     assert raw["provider/stderr.log"] == "raw provider credential"
+    measurements = json.loads((staging / "measurements/00000001.json").read_text())
+    assert measurements["measurements"][0]["metrics"] == {"compute_sol_pct": 72.5}
+    assert derived["measurements"] == "measurements/00000001.json"

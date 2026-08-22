@@ -26,6 +26,7 @@ from .dev_shell import (
 from .inspect import (
     bootstrap_runs,
     evaluations,
+    kernel_trials,
     list_agent_revisions,
     list_attempts,
     list_epochs,
@@ -235,6 +236,22 @@ def main(argv: list[str] | None = None) -> None:
             evaluation_id=cast(str, args.evaluation),
             include_source=cast(bool, args.source),
             include_result=cast(bool, args.result),
+        )
+        return
+    if args.command == "list-kernel-trials":
+        kernel_trials(
+            cast(str, args.config),
+            attempt_value=cast(str, args.attempt),
+            trial_id=None,
+        )
+        return
+    if args.command == "show-kernel-trial":
+        kernel_trials(
+            cast(str, args.config),
+            attempt_value=None,
+            trial_id=cast(str, args.trial),
+            include_source=cast(bool, args.source),
+            include_results=cast(bool, args.result),
         )
         return
     if args.command == "gc-artifacts":

@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 import base64
-from typing import Annotated, Literal
+from copy import deepcopy
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..artifacts.local import JsonValue
-from ..domain.ids import AttemptId, parse_attempt_id
+from ..domain.ids import (
+    AttemptId,
+    KernelRevisionId,
+    parse_artifact_digest,
+    parse_attempt_id,
+    parse_kernel_revision_id,
+)
 
 GATEWAY_PROXY_PROTOCOL_VERSION: Literal[2] = 2
 
@@ -239,6 +246,54 @@ class ConfigRequestV2(_GatewayRequestV2):
     operation: Literal["config"]
 
 
+class MeasurementsRequestV2(_GatewayRequestV2):
+    """Query normalized measurements visible to this Attempt's lineage position."""
+
+    operation: Literal["measurements"]
+    kind: Literal["evaluate", "profile"] | None = None
+    kernel_revision_id: KernelRevisionId | None = None
+    kernel_artifact_digest: str | None = Field(default=None, max_length=80)
+    shape_id: str | None = Field(default=None, min_length=1, max_length=200)
+    kernel_name: str | None = Field(default=None, min_length=1, max_length=500)
+    metric: str | None = Field(default=None, min_length=1, max_length=200)
+    limit: int = Field(default=50, gt=0, le=200)
+
+    @field_validator("kernel_revision_id", mode="before")
+    @classmethod
+    def _validate_kernel_revision_id(cls, value: object) -> KernelRevisionId | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("kernel_revision_id must be a string")
+        return parse_kernel_revision_id(value)
+
+    @field_validator("kernel_artifact_digest")
+    @classmethod
+    def _validate_kernel_artifact_digest(cls, value: str | None) -> str | None:
+        return None if value is None else str(parse_artifact_digest(value))
+
+
+class KernelTrialsRequestV2(_GatewayRequestV2):
+    """List exact experimental Kernel snapshots visible to this Attempt."""
+
+    operation: Literal["kernel_trials"]
+    decision: Literal["observed", "continue", "revert", "pivot"] | None = None
+    limit: int = Field(default=50, gt=0, le=200)
+
+
+class KernelTrialReadRequestV2(_GatewayRequestV2):
+    """Read the file index or one exact source file from a visible Kernel Trial."""
+
+    operation: Literal["kernel_trial_read"]
+    kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
+    file: str | None = None
+
+    @field_validator("file")
+    @classmethod
+    def _validate_file(cls, value: str | None) -> str | None:
+        return None if value is None else _safe_relative_path(value, "Kernel Trial file")
+
+
 type GatewayProxyRequestV2 = Annotated[
     EvaluateRequestV2
     | SubmitRequestV2
@@ -252,9 +307,87 @@ type GatewayProxyRequestV2 = Annotated[
     | CancelRequestV2
     | EnvRequestV2
     | HealthRequestV2
-    | ConfigRequestV2,
+    | ConfigRequestV2
+    | MeasurementsRequestV2
+    | KernelTrialsRequestV2
+    | KernelTrialReadRequestV2,
     Field(discriminator="operation"),
 ]
+
+
+GATEWAY_AGENT_SCHEMA_VERSION: Literal[1] = 1
+_RUNTIME_OWNED_REQUEST_FIELDS = frozenset({"schema_version", "attempt_id", "candidate"})
+_RUNTIME_DEFAULTED_REQUEST_FIELDS = frozenset({"idempotency_key"})
+_GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
+    "evaluate": EvaluateRequestV2,
+    "submit": SubmitRequestV2,
+    "profile": ProfileRequestV2,
+    "dev": DevRequestV2,
+    "check": CheckRequestV2,
+    "sol": SolRequestV2,
+    "disassemble": DisassembleRequestV2,
+    "poll": PollRequestV2,
+    "jobs": JobsRequestV2,
+    "cancel": CancelRequestV2,
+    "env": EnvRequestV2,
+    "health": HealthRequestV2,
+    "config": ConfigRequestV2,
+    "measurements": MeasurementsRequestV2,
+    "kernel_trials": KernelTrialsRequestV2,
+    "kernel_trial_read": KernelTrialReadRequestV2,
+}
+
+
+def gateway_agent_request_schema(
+    operation: str | None = None,
+    *,
+    allowed_operations: frozenset[str] | None = None,
+) -> dict[str, JsonValue]:
+    """Project the live wire models into the request shape accepted from an Agent.
+
+    Runtime-owned identity and Candidate fields are attached by ``gateway-execute`` and are
+    deliberately absent. Every remaining field, default, enum, bound, and extra-field policy is
+    generated from the exact Pydantic model used by the Gateway Proxy.
+    """
+    if operation is not None and operation not in _GATEWAY_REQUEST_MODELS:
+        raise ValueError(f"unsupported Gateway operation: {operation}")
+    names = (operation,) if operation is not None else tuple(_GATEWAY_REQUEST_MODELS)
+    if allowed_operations is not None:
+        names = tuple(name for name in names if name in allowed_operations)
+        if operation is not None and not names:
+            raise PermissionError(f"Gateway operation is not allowed: {operation}")
+    operations = {name: _agent_operation_schema(_GATEWAY_REQUEST_MODELS[name]) for name in names}
+    return cast(
+        dict[str, JsonValue],
+        {
+            "schema_version": GATEWAY_AGENT_SCHEMA_VERSION,
+            "gateway_protocol_version": GATEWAY_PROXY_PROTOCOL_VERSION,
+            "request_contract": "gateway-execute",
+            "runtime_owned_fields": sorted(_RUNTIME_OWNED_REQUEST_FIELDS),
+            "runtime_defaulted_fields": sorted(_RUNTIME_DEFAULTED_REQUEST_FIELDS),
+            "operations": operations,
+        },
+    )
+
+
+def _agent_operation_schema(model: type[_GatewayRequestV2]) -> dict[str, object]:
+    schema = deepcopy(model.model_json_schema(mode="validation"))
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        raise TypeError(f"Gateway request schema has no properties: {model.__name__}")
+    for field_name in _RUNTIME_OWNED_REQUEST_FIELDS:
+        properties.pop(field_name, None)
+    required = schema.get("required")
+    if isinstance(required, list):
+        schema["required"] = [
+            field_name
+            for field_name in required
+            if field_name not in (_RUNTIME_OWNED_REQUEST_FIELDS | _RUNTIME_DEFAULTED_REQUEST_FIELDS)
+        ]
+    # CandidateBundleV2 is the only nested definition and becomes unreachable after projection.
+    schema.pop("$defs", None)
+    schema["title"] = model.__name__.removesuffix("RequestV2") + " gateway-execute request"
+    return schema
 
 
 class EvaluationV2(BaseModel):
@@ -294,6 +427,9 @@ class GatewayProxyResponseV2(BaseModel):
         "env",
         "health",
         "config",
+        "measurements",
+        "kernel_trials",
+        "kernel_trial_read",
     ]
     status: Literal["completed", "queued", "failed", "cancelled"]
     candidate_artifact_digest: str | None = None

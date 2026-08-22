@@ -8,10 +8,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from ..domain.ids import AttemptId, parse_attempt_id
+from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest, parse_attempt_id
 
 
-class AttemptExperimentV1(BaseModel):
+class AttemptExperimentV2(BaseModel):
     """One decisive within-session experiment recorded before terminal handoff."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -24,6 +24,7 @@ class AttemptExperimentV1(BaseModel):
     evidence: str = Field(min_length=1)
     result: str = Field(min_length=1)
     decision: Literal["continue", "revert", "pivot"]
+    candidate_artifact_digest: ArtifactDigest | None
 
     @field_validator(
         "recorded_at",
@@ -48,13 +49,22 @@ class AttemptExperimentV1(BaseModel):
             raise ValueError("Attempt experiment timestamp must be ISO-8601") from error
         return value
 
+    @field_validator("candidate_artifact_digest", mode="before")
+    @classmethod
+    def _validate_candidate_digest(cls, value: object) -> ArtifactDigest | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Experiment candidate Artifact Digest must be text")
+        return parse_artifact_digest(value)
 
-class AttemptReportV2(BaseModel):
+
+class AttemptReportV3(BaseModel):
     """Versioned engineering handoff reconciled with the Gateway outcome."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[2]
+    schema_version: Literal[3]
     attempt_id: AttemptId
     status: Literal["candidate_ready", "pivot", "blocked"]
     hypothesis: str = Field(min_length=1)
@@ -68,7 +78,7 @@ class AttemptReportV2(BaseModel):
     research_sources: tuple[str, ...]
     lessons: tuple[str, ...] = Field(min_length=1)
     next_directions: tuple[str, ...]
-    experiments: tuple[AttemptExperimentV1, ...] = Field(min_length=1)
+    experiments: tuple[AttemptExperimentV2, ...] = Field(min_length=1)
 
     @field_validator(
         "hypothesis",
@@ -99,7 +109,7 @@ class AttemptReportV2(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _validate_terminal_state(self) -> AttemptReportV2:
+    def _validate_terminal_state(self) -> AttemptReportV3:
         expected = {
             "candidate_ready": "keep",
             "pivot": "pivot",
@@ -120,7 +130,7 @@ class AttemptReportV2(BaseModel):
         *,
         expected_attempt_id: AttemptId,
         max_bytes: int,
-    ) -> AttemptReportV2:
+    ) -> AttemptReportV3:
         """Read one bounded regular JSON file and verify its Attempt identity."""
         if max_bytes <= 0:
             raise ValueError("Attempt report byte limit must be positive")

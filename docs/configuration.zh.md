@@ -32,7 +32,7 @@ Report 都是输出协议，因此不提供容易被误认为配置的根目录 
 
 ## Campaign 配置
 
-Campaign 运行时分别配置 Attempt、Evolution、Problem Generalization 与 Lineage Baseline Workspace Root。Fencing 必须满足 `lease_seconds > 2 * heartbeat_seconds`。部署配置不选择 DSL；该拓扑由独立的 Campaign 定义持有。Gateway Operation 必须唯一且包含 `evaluate`，Capability 调用配额和生命周期显式配置。
+Campaign 运行时分别配置 Attempt、Evolution、Problem Generalization 与 Lineage Baseline Workspace Root。Fencing 必须满足 `lease_seconds > 2 * heartbeat_seconds`。部署配置不选择 DSL；该拓扑由独立的 Campaign 定义持有。Gateway Operation 必须唯一且包含 `evaluate`，Capability 调用配额和生命周期显式配置。`dev` 与 `wiki_query` 会被完整审计但不消耗调用配额；Benchmark、编译、Profile 及其他操作仍计数。
 
 `gate_policy` 是 Correctness 与 Performance 语义的唯一可信来源。仓库内配置与 Atrex Kernel
 Agent 一致：Optimizer 探索使用 1 个 Correctness Case、1 次 Eval 和 100 ms eager 测量预算；
@@ -82,7 +82,7 @@ Runtime 会为 A、B 分别并发提交 `repeats` 次独立普通 Eval，要求�
   "repeats": 2,
   "minimum_improvement_percent": 0.0,
   "allocation_timeout_seconds": 600,
-  "shape_batch_size": 4,
+  "shape_batch_size": 1,
   "max_parallel_shape_batches": 4
 }
 ```
@@ -115,6 +115,8 @@ Provider Usage Report 路径、Report/Diagnostic 限制、超时/Grace、`max_se
 Backend 可选 `claude`、`codex`、`qodercli` 或 `pi`。该部署 Binding 作用于 Core Session，具体
 `timeout_seconds` 限制普通 Optimizer Attempt 与 Problem Generalization；
 `bootstrap_timeout_seconds` 单独限制每个 Lineage Bootstrap Session，默认 10800 秒（180 分钟）。
+`evolver.timeout_seconds` 单独限制一次 Challenger 构建 Session；仓库模板和生产策略统一设置为
+10800 秒（3 小时），终止 Grace 为 10 秒。
 Model 则由 Campaign 独立选择。Core 仍持有 Prompt、
 Tool、Workflow 与 Adapter 实现；`atrex-agent.json` 只提供独立运行时的默认值。
 

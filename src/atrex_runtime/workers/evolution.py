@@ -37,7 +37,11 @@ from ..domain.models import (
 )
 from ..filesystem import make_tree_owner_writable, make_tree_read_only
 from ..gateway.result_metrics import gateway_result_sol_percent
-from ..kernel_agents import KernelAgentBundleLimits, KernelAgentRevisionBuilder
+from ..kernel_agents import (
+    KernelAgentBundleLimits,
+    KernelAgentRevisionBuilder,
+    is_ignored_kernel_agent_path,
+)
 from ..ports import (
     BuildChallengerRequest,
     BuildChallengerResult,
@@ -59,6 +63,7 @@ EVOLUTION_OUTPUT_VERSION: Literal[3] = 3
 EVOLUTION_TRACE_VERSION: Literal[7] = 7
 EVOLUTION_FAILURE_VERSION: Literal[3] = 3
 EVOLVER_LAUNCH_INSTRUCTION = "Run the versioned Evolver Bundle once."
+EVOLVER_TIMEOUT_EXIT_STATUS = 124
 CANDIDATE_BASE_RECORD_MAX_BYTES = 4096
 EVOLVER_WORKSPACE_RELATIVE_PATH = PurePosixPath("input/evolver")
 
@@ -819,10 +824,17 @@ class SubprocessEvolutionSessionDriver:
                 cwd=prepared.root,
                 stdin=EVOLVER_LAUNCH_INSTRUCTION.encode(),
             )
+        except TimeoutError as error:
+            raise InfrastructureError("Evolver timed out") from error
         except OSError as error:
             raise InfrastructureError(f"Evolution process could not start: {error}") from error
-        except TimeoutError as error:
-            raise InfrastructureError("Evolution process exceeded its wall-time limit") from error
+        # The Evolver Bundle owns the inner Agent process and translates its
+        # wall-time expiration into the conventional timeout exit status. Check
+        # that terminal condition before validating usage: a killed Provider
+        # cannot emit its final authoritative usage event, so the resulting
+        # partial report is evidence of the timeout rather than its root cause.
+        if result.returncode == EVOLVER_TIMEOUT_EXIT_STATUS:
+            raise InfrastructureError("Evolver timed out")
         try:
             expected_unit: UsageUnit = (
                 "credits" if self._config.agent_backend == "qodercli" else "provider_tokens"
@@ -963,7 +975,11 @@ class EvolverBundleRunner(EvolverRunner):
         try:
             result = await self._sessions.run(prepared)
         except InfrastructureError as error:
-            exit_kind = "timeout" if "wall-time limit" in str(error) else "infrastructure_failed"
+            exit_kind = (
+                "timeout"
+                if str(error) == "Evolver timed out" or "wall-time limit" in str(error)
+                else "infrastructure_failed"
+            )
             failure_digest, retention_error_type = self._seal_failure_trace(
                 prepared,
                 error,
@@ -1289,11 +1305,14 @@ class EvolverBundleRunner(EvolverRunner):
             values: dict[str, str] = {}
             for path in root.rglob("*"):
                 mode = path.lstat().st_mode
+                relative_path = PurePosixPath(*path.relative_to(root).parts)
                 if stat.S_ISDIR(mode):
+                    continue
+                if is_ignored_kernel_agent_path(relative_path, directory=False):
                     continue
                 if stat.S_ISLNK(mode) or not stat.S_ISREG(mode):
                     raise ValueError("Evolution repository contains a link or special file")
-                relative = path.relative_to(root).as_posix()
+                relative = relative_path.as_posix()
                 digest = hashlib.sha256()
                 with path.open("rb") as source:
                     while chunk := source.read(1024 * 1024):

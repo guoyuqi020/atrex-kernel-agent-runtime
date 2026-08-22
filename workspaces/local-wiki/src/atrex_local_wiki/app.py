@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
-import threading
 from collections.abc import Awaitable, Callable, Mapping
 from typing import Any
 
@@ -164,16 +163,15 @@ def build_application(
         if not token:
             raise ValueError(f"missing environment variable: {settings.bearer_token_env}")
     synchronize_store(settings.reference_root, settings.store_root)
-    lock = threading.RLock()
     store = LocalWikiStore(settings.database)
     index = CorpusIndex(
         settings.store_root,
         python_executable=settings.python_executable,
         agent_cli=settings.agent_cli,
         query_timeout_seconds=settings.query_timeout_seconds,
+        max_concurrent_queries=settings.max_concurrent_queries,
         max_results=settings.max_results,
         max_response_bytes=settings.max_response_bytes,
-        lock=lock,
     )
     return LocalWikiApplication(
         index,

@@ -29,7 +29,7 @@ from atrex_runtime.ports import (
     WorkerGatewayAuthority,
 )
 from atrex_runtime.registry.sqlite import SqliteRegistry
-from atrex_runtime.workers.attempt_report import AttemptExperimentV1, AttemptReportV2
+from atrex_runtime.workers.attempt_report import AttemptExperimentV2, AttemptReportV3
 from atrex_runtime.workers.optimizer import (
     OptimizerSessionConfig,
     OptimizerSessionResult,
@@ -160,8 +160,8 @@ def _session_result(
     with_report: bool = False,
 ) -> OptimizerSessionResult:
     report = (
-        AttemptReportV2(
-            schema_version=2,
+        AttemptReportV3(
+            schema_version=3,
             attempt_id=new_attempt_id(),
             status="candidate_ready",
             hypothesis="reduce memory traffic",
@@ -176,12 +176,13 @@ def _session_result(
             lessons=("coalescing helped",),
             next_directions=(),
             experiments=(
-                AttemptExperimentV1(
+                AttemptExperimentV2(
                     sequence=1,
                     recorded_at="2026-08-16T00:00:00+00:00",
                     name="coalescing",
                     hypothesis="coalescing helps",
                     change="vectorized loads",
+                    candidate_artifact_digest=digest("candidate-experiment"),
                     evidence="SOL memory traffic",
                     result="correct and faster",
                     decision="continue",

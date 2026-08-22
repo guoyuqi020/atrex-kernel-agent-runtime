@@ -613,9 +613,7 @@ class AgateGatewayAdapter:
         if any(result.status != "completed" or result.evaluation is None for result in completed):
             raise InfrastructureError("ordinary Agate Eval repetition did not complete")
         evaluations = tuple(
-            result.evaluation
-            for result in completed
-            if result.evaluation is not None
+            result.evaluation for result in completed if result.evaluation is not None
         )
         aggregate = aggregate_evaluations(evaluations)
         return GatewayAdapterResult(
@@ -777,7 +775,13 @@ class AgateGatewayAdapter:
             raise ValueError("candidate source must be UTF-8 text") from error
 
         if request.operation is GatewayOperation.CHECK:
-            return self._build_source_job(request, context, candidate_source, "check")
+            return self._build_source_job(
+                request,
+                context,
+                candidate_source,
+                "check",
+                init_kwargs=self._private_check_init_kwargs(context.contract),
+            )
         if request.operation is GatewayOperation.DISASSEMBLE:
             return self._build_source_job(request, context, candidate_source, "disassemble")
 
@@ -944,6 +948,8 @@ class AgateGatewayAdapter:
         context: AgateEvaluationContext,
         candidate_source: str,
         job: Literal["check", "disassemble"],
+        *,
+        init_kwargs: dict[str, JsonValue] | None = None,
     ) -> dict[str, object]:
         payload: dict[str, object] = {
             "spec": {"target_hardware": [context.hardware_target]},
@@ -952,6 +958,7 @@ class AgateGatewayAdapter:
         }
         self._apply_dependencies(payload, request.parameters)
         if job == "check":
+            payload["init_kwargs"] = init_kwargs or {}
             for key in ("arch", "sanitize"):
                 value = request.parameters.get(key)
                 if value is not None:
@@ -959,6 +966,22 @@ class AgateGatewayAdapter:
         else:
             payload["fmt"] = request.parameters.get("fmt", "auto")
         return payload
+
+    @staticmethod
+    def _private_check_init_kwargs(
+        contract: AgateEvaluationContractV1,
+    ) -> dict[str, JsonValue]:
+        """Resolve the first opaque Shape's constructor arguments for Agate Compile."""
+        shape_id = sorted(contract.shapes)[0]
+        shape = contract.shapes[shape_id]
+        if not isinstance(shape, dict):
+            raise ValueError("check Shape must be an object")
+        init_kwargs = shape.get("init_kwargs")
+        if init_kwargs is None:
+            return {}
+        if not isinstance(init_kwargs, dict):
+            raise ValueError("check Shape init_kwargs must be an object or null")
+        return dict(init_kwargs)
 
     def _build_sol(
         self,

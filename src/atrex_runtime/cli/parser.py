@@ -281,6 +281,20 @@ def build_parser() -> argparse.ArgumentParser:
     show_evaluation.add_argument("--evaluation", required=True)
     show_evaluation.add_argument("--source", action="store_true")
     show_evaluation.add_argument("--result", action="store_true")
+    list_trials = commands.add_parser(
+        "list-kernel-trials",
+        help="list every exact experimental Kernel snapshot observed in one Attempt",
+    )
+    list_trials.add_argument("--config", required=True)
+    list_trials.add_argument("--attempt", required=True)
+    show_trial = commands.add_parser(
+        "show-kernel-trial",
+        help="show one Kernel Trial and optionally its exact source files",
+    )
+    show_trial.add_argument("--config", required=True)
+    show_trial.add_argument("--trial", required=True)
+    show_trial.add_argument("--source", action="store_true")
+    show_trial.add_argument("--result", action="store_true")
     artifact_gc = commands.add_parser(
         "gc-artifacts",
         help="inspect or collect unreferenced Artifacts while the Runtime is stopped",

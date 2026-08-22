@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-GATEWAY_SCHEMA_VERSION = 7
+GATEWAY_SCHEMA_VERSION = 9
 
 
 def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
@@ -55,6 +55,7 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
                 idempotency_key TEXT NOT NULL,
                 operation TEXT NOT NULL,
                 request_digest TEXT NOT NULL,
+                candidate_artifact_digest TEXT,
                 result_artifact_digest TEXT,
                 created_at TEXT NOT NULL,
                 PRIMARY KEY(attempt_id, recovery_generation, idempotency_key),
@@ -77,6 +78,8 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
             """
         )
         _create_gateway_evaluations_table(connection)
+        _create_gateway_measurements_table(connection)
+        _create_gateway_trial_annotations_table(connection)
         _create_bootstrap_runs_table(connection)
         connection.execute(
             "INSERT INTO metadata(key, value) VALUES ('schema_version', ?)",
@@ -104,6 +107,8 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
         _migrate_gateway_v5(connection)
         _migrate_gateway_v6(connection)
         _migrate_gateway_v7(connection)
+        _migrate_gateway_v8(connection)
+        _migrate_gateway_v9(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -112,6 +117,8 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
         _migrate_gateway_v5(connection)
         _migrate_gateway_v6(connection)
         _migrate_gateway_v7(connection)
+        _migrate_gateway_v8(connection)
+        _migrate_gateway_v9(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -119,12 +126,29 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
     elif row["value"] == 5:
         _migrate_gateway_v6(connection)
         _migrate_gateway_v7(connection)
+        _migrate_gateway_v8(connection)
+        _migrate_gateway_v9(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
         )
     elif row["value"] == 6:
         _migrate_gateway_v7(connection)
+        _migrate_gateway_v8(connection)
+        _migrate_gateway_v9(connection)
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
+            (GATEWAY_SCHEMA_VERSION,),
+        )
+    elif row["value"] == 7:
+        _migrate_gateway_v8(connection)
+        _migrate_gateway_v9(connection)
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
+            (GATEWAY_SCHEMA_VERSION,),
+        )
+    elif row["value"] == 8:
+        _migrate_gateway_v9(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -157,6 +181,35 @@ def _create_gateway_evaluations_table(connection: sqlite3.Connection) -> None:
     )
 
 
+def _create_gateway_measurements_table(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS gateway_measurements(
+            id TEXT PRIMARY KEY,
+            attempt_id TEXT NOT NULL,
+            recovery_generation INTEGER NOT NULL CHECK(recovery_generation >= 0),
+            ordinal INTEGER NOT NULL CHECK(ordinal > 0),
+            source_operation TEXT NOT NULL CHECK(source_operation IN ('evaluate', 'profile')),
+            idempotency_key TEXT NOT NULL,
+            candidate_artifact_digest TEXT NOT NULL,
+            gateway_result_digest TEXT NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('evaluate', 'profile')),
+            profile_level TEXT,
+            shape_id TEXT,
+            kernel_name TEXT,
+            metrics_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            UNIQUE(attempt_id, recovery_generation, idempotency_key, ordinal),
+            FOREIGN KEY(attempt_id) REFERENCES gateway_capabilities(attempt_id)
+        );
+        CREATE INDEX IF NOT EXISTS gateway_measurements_by_attempt
+            ON gateway_measurements(attempt_id, recovery_generation, created_at, ordinal);
+        CREATE INDEX IF NOT EXISTS gateway_measurements_by_candidate
+            ON gateway_measurements(candidate_artifact_digest, created_at, id);
+        """
+    )
+
+
 def _migrate_gateway_v6(connection: sqlite3.Connection) -> None:
     _create_gateway_evaluations_table(connection)
     columns = {
@@ -177,6 +230,83 @@ def _migrate_gateway_v7(connection: sqlite3.Connection) -> None:
             "ALTER TABLE bootstrap_runs ADD COLUMN credits REAL "
             "CHECK(credits IS NULL OR credits >= 0)"
         )
+
+
+def _migrate_gateway_v8(connection: sqlite3.Connection) -> None:
+    _create_gateway_measurements_table(connection)
+
+
+def _migrate_gateway_v9(connection: sqlite3.Connection) -> None:
+    """Retain every candidate-bearing operation and its terminal experiment decision."""
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(gateway_operations)").fetchall()
+    }
+    if "candidate_artifact_digest" not in columns:
+        connection.execute(
+            "ALTER TABLE gateway_operations ADD COLUMN candidate_artifact_digest TEXT"
+        )
+    connection.execute(
+        """
+        UPDATE gateway_operations
+           SET candidate_artifact_digest = (
+               SELECT evaluations.candidate_artifact_digest
+                 FROM gateway_evaluations AS evaluations
+                WHERE evaluations.attempt_id = gateway_operations.attempt_id
+                  AND evaluations.recovery_generation = gateway_operations.recovery_generation
+                  AND evaluations.idempotency_key = gateway_operations.idempotency_key
+                LIMIT 1
+           )
+         WHERE candidate_artifact_digest IS NULL
+           AND operation = 'evaluate'
+        """
+    )
+    connection.execute(
+        """
+        UPDATE gateway_operations
+           SET candidate_artifact_digest = (
+               SELECT measurements.candidate_artifact_digest
+                 FROM gateway_measurements AS measurements
+                WHERE measurements.attempt_id = gateway_operations.attempt_id
+                  AND measurements.recovery_generation = gateway_operations.recovery_generation
+                  AND measurements.idempotency_key = gateway_operations.idempotency_key
+                LIMIT 1
+           )
+         WHERE candidate_artifact_digest IS NULL
+           AND operation IN ('evaluate', 'profile')
+        """
+    )
+    connection.execute(
+        """
+        CREATE INDEX IF NOT EXISTS gateway_operations_by_candidate
+            ON gateway_operations(
+                attempt_id, recovery_generation, candidate_artifact_digest, created_at
+            )
+        """
+    )
+    _create_gateway_trial_annotations_table(connection)
+
+
+def _create_gateway_trial_annotations_table(connection: sqlite3.Connection) -> None:
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS gateway_trial_annotations(
+            attempt_id TEXT NOT NULL,
+            recovery_generation INTEGER NOT NULL CHECK(recovery_generation >= 0),
+            sequence INTEGER NOT NULL CHECK(sequence > 0),
+            candidate_artifact_digest TEXT NOT NULL,
+            decision TEXT NOT NULL CHECK(decision IN ('continue', 'revert', 'pivot')),
+            experiment_json TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
+            PRIMARY KEY(attempt_id, recovery_generation, sequence),
+            FOREIGN KEY(attempt_id) REFERENCES gateway_capabilities(attempt_id)
+        );
+        CREATE INDEX IF NOT EXISTS gateway_trial_annotations_by_candidate
+            ON gateway_trial_annotations(
+                attempt_id, recovery_generation, candidate_artifact_digest, sequence
+            );
+        """
+    )
 
 
 def _create_bootstrap_runs_table(connection: sqlite3.Connection) -> None:

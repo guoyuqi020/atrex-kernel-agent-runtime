@@ -34,7 +34,7 @@ protocols and intentionally have no root-level `*.example.json` configuration te
 
 ## Campaign group
 
-Campaign paths contain separate roots for Attempt, Evolution, problem-generalization, and lineage-baseline workspaces. Fencing requires `lease_seconds > 2 * heartbeat_seconds`. Deployment configuration does not select DSLs; the separate Campaign definition owns that topology. Gateway operations must be unique and include `evaluate`; capability call quota and lifetime are explicit.
+Campaign paths contain separate roots for Attempt, Evolution, problem-generalization, and lineage-baseline workspaces. Fencing requires `lease_seconds > 2 * heartbeat_seconds`. Deployment configuration does not select DSLs; the separate Campaign definition owns that topology. Gateway operations must be unique and include `evaluate`; capability call quota and lifetime are explicit. `dev` and `wiki_query` operations are audited but do not consume the call quota; benchmark, compile, profiling, and other operations remain metered.
 
 `gate_policy` is the single trusted source of correctness and performance semantics. The checked-in
 policy matches Atrex Kernel Agent: Optimizer exploration uses one correctness case, one Eval, and a
@@ -91,7 +91,7 @@ Or exact same-allocation ABBA:
   "repeats": 2,
   "minimum_improvement_percent": 0.0,
   "allocation_timeout_seconds": 600,
-  "shape_batch_size": 4,
+  "shape_batch_size": 1,
   "max_parallel_shape_batches": 4
 }
 ```
@@ -126,6 +126,8 @@ token buckets. Supported Backend values are `claude`, `codex`, `qodercli`, and `
 `timeout_seconds` limits normal Optimizer Attempts and Problem Generalization;
 `bootstrap_timeout_seconds` independently limits each Lineage Bootstrap Session and defaults to
 10,800 seconds (180 minutes).
+`evolver.timeout_seconds` independently limits one Challenger-building Session; checked-in and
+production templates set it to 10,800 seconds (three hours), with a 10-second termination grace.
 Runtime applies this deployment binding to Core sessions; the Campaign selects the concrete model
 separately. Core still owns prompts, tools, workflow, and Adapter
 implementation, while `atrex-agent.json` supplies standalone defaults.

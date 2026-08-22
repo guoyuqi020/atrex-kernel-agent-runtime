@@ -45,6 +45,72 @@ from atrex_runtime.registry.sqlite import SqliteRegistry
 NOW_DATETIME = datetime(2026, 8, 14, tzinfo=UTC)
 
 
+def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    attempt = _insert_attempt(registry)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"t" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    capability = control.issue(
+        attempt.id,
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.DEV}),
+            2,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+    control.authorize(
+        capability,
+        GatewayOperation.DEV,
+        idempotency_key="dev-reverted-1",
+        request_digest=str(digest("dev-request")),
+    )
+    candidate = digest("reverted-candidate")
+    control.bind_operation_candidate(
+        attempt.id,
+        "dev-reverted-1",
+        GatewayOperation.DEV,
+        candidate,
+    )
+    result = digest("dev-result")
+    control.commit_operation_artifact(
+        attempt.id,
+        "dev-reverted-1",
+        GatewayOperation.DEV,
+        result,
+    )
+    experiment = {
+        "sequence": 1,
+        "recorded_at": NOW_DATETIME.isoformat(),
+        "name": "failed tile",
+        "hypothesis": "larger tile improves reuse",
+        "change": "doubled block size",
+        "candidate_artifact_digest": str(candidate),
+        "evidence": "dev-reverted-1",
+        "result": "latency regressed",
+        "decision": "revert",
+    }
+
+    control.record_kernel_trial_annotations(attempt.id, (experiment,))
+    trial = control.list_kernel_trials((attempt.id,))[0]
+
+    assert trial.candidate_artifact_digest == candidate
+    assert trial.disposition == "revert"
+    assert trial.observations[0].result_artifact_digest == result
+    assert trial.annotations[0].experiment["change"] == "doubled block size"
+    assert candidate in control.list_referenced_artifact_digests()
+    with pytest.raises(ValueError, match="not observed"):
+        control.record_kernel_trial_annotations(
+            attempt.id,
+            ({**experiment, "candidate_artifact_digest": str(digest("foreign"))},),
+        )
+    control.close()
+    registry.close()
+
+
 def test_multiple_agent_evaluations_are_retained_before_runtime_final_outcome(
     tmp_path: Path,
 ) -> None:
@@ -426,7 +492,12 @@ def test_gateway_schema_v4_migrates_operations_and_legacy_bootstrap_run(
             "SELECT value FROM metadata WHERE key = 'schema_version'"
         ).fetchone()
         columns = {row[1] for row in connection.execute("PRAGMA table_info(gateway_operations)")}
-        assert version == (7,)
+        assert version == (9,)
+        assert "candidate_artifact_digest" in columns
+        measurement_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(gateway_measurements)")
+        }
+        assert {"candidate_artifact_digest", "kind", "metrics_json"}.issubset(measurement_columns)
     assert "recovery_generation" in columns
     migrated.close()
     registry.close()
@@ -492,7 +563,13 @@ async def test_capability_is_idempotent_scoped_and_persists_outcome(tmp_path: Pa
         clock=lambda: NOW_DATETIME,
     )
     policy = GatewayCapabilityPolicy(
-        frozenset({GatewayOperation.EVALUATE, GatewayOperation.WIKI_QUERY}),
+        frozenset(
+            {
+                GatewayOperation.DEV,
+                GatewayOperation.EVALUATE,
+                GatewayOperation.WIKI_QUERY,
+            }
+        ),
         max_calls=1,
         expires_at=NOW_DATETIME + timedelta(hours=1),
     )
@@ -548,6 +625,22 @@ async def test_capability_is_idempotent_scoped_and_persists_outcome(tmp_path: Pa
             request_digest=str(digest(f"wiki-request-{ordinal}")),
         )
 
+    for ordinal in (1, 2):
+        control.authorize(
+            capability,
+            GatewayOperation.DEV,
+            idempotency_key=f"dev-{ordinal}",
+            request_digest=str(digest(f"dev-request-{ordinal}")),
+        )
+
+    with pytest.raises(PermissionError, match="budget"):
+        control.authorize(
+            capability,
+            GatewayOperation.EVALUATE,
+            idempotency_key="candidate-after-unmetered-operations",
+            request_digest=str(digest("request-after-unmetered-operations")),
+        )
+
     forged = GatewayCapability(capability.token, new_attempt_id())
     with pytest.raises(PermissionError, match="invalid"):
         control.authorize(
@@ -557,6 +650,60 @@ async def test_capability_is_idempotent_scoped_and_persists_outcome(tmp_path: Pa
             request_digest=str(digest("forged")),
         )
     control.close()
+    registry.close()
+
+
+def test_control_reconciles_historical_dev_calls_out_of_metered_usage(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    attempt = _insert_attempt(registry)
+    database = tmp_path / "gateway.sqlite"
+    policy = GatewayCapabilityPolicy(
+        frozenset({GatewayOperation.DEV, GatewayOperation.EVALUATE}),
+        max_calls=1,
+        expires_at=NOW_DATETIME + timedelta(hours=1),
+    )
+    control = SqliteGatewayControl(
+        database,
+        registry,
+        signing_key=b"u" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    capability = control.issue(attempt.id, policy)
+    for ordinal in (1, 2):
+        control.authorize(
+            capability,
+            GatewayOperation.DEV,
+            idempotency_key=f"legacy-dev-{ordinal}",
+            request_digest=str(digest(f"legacy-dev-request-{ordinal}")),
+        )
+    control.close()
+
+    with sqlite3.connect(database) as connection:
+        connection.execute(
+            "UPDATE gateway_capabilities SET used_calls = 2 WHERE attempt_id = ?",
+            (attempt.id,),
+        )
+
+    reconciled = SqliteGatewayControl(
+        database,
+        registry,
+        signing_key=b"u" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    reconciled.authorize(
+        capability,
+        GatewayOperation.EVALUATE,
+        idempotency_key="first-metered-call",
+        request_digest=str(digest("first-metered-request")),
+    )
+    with pytest.raises(PermissionError, match="budget"):
+        reconciled.authorize(
+            capability,
+            GatewayOperation.EVALUATE,
+            idempotency_key="second-metered-call",
+            request_digest=str(digest("second-metered-request")),
+        )
+    reconciled.close()
     registry.close()
 
 
@@ -752,9 +899,7 @@ async def test_attempt_timed_authority_rotates_policy_on_infrastructure_retry(
         control,
         registry,
         "http://runtime.test",
-        operations=frozenset(
-            {GatewayOperation.EVALUATE, GatewayOperation.WIKI_QUERY}
-        ),
+        operations=frozenset({GatewayOperation.EVALUATE, GatewayOperation.WIKI_QUERY}),
         max_calls=2,
         lifetime=timedelta(hours=1),
     )

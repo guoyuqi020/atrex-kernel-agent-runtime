@@ -28,7 +28,7 @@ def test_retrying_agate_client_uses_exponential_backoff_until_success() -> None:
 
     assert client.health() is True
     assert raw.calls == 4
-    assert delays == [1.0, 2.0, 4.0]
+    assert delays == [5.0, 10.0, 20.0]
 
 
 def test_retrying_agate_client_raises_after_five_consecutive_errors() -> None:
@@ -40,7 +40,7 @@ def test_retrying_agate_client_raises_after_five_consecutive_errors() -> None:
         client.health()
 
     assert raw.calls == 5
-    assert delays == [1.0, 2.0, 4.0, 8.0]
+    assert delays == [5.0, 10.0, 20.0, 40.0]
 
 
 def test_success_starts_the_next_request_with_a_fresh_error_count() -> None:
@@ -53,4 +53,4 @@ def test_success_starts_the_next_request_with_a_fresh_error_count() -> None:
     assert client.health() is True
 
     assert raw.calls == 4
-    assert delays == [1.0, 1.0]
+    assert delays == [5.0, 5.0]

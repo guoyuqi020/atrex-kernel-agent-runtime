@@ -359,6 +359,21 @@ def test_evolution_workspace_copies_full_parent_to_writable_candidate(tmp_path: 
     }
 
 
+def test_changed_paths_ignore_generated_candidate_cache_files(tmp_path: Path) -> None:
+    parent = tmp_path / "parent"
+    candidate = tmp_path / "candidate"
+    (parent / "src").mkdir(parents=True)
+    (parent / "src/main.py").write_text("before\n", encoding="utf-8")
+    shutil.copytree(parent, candidate)
+    (candidate / "src/main.py").write_text("after\n", encoding="utf-8")
+    (candidate / "src/__pycache__").mkdir()
+    (candidate / "src/__pycache__/main.cpython-314.pyc").write_bytes(b"generated")
+    (candidate / ".ruff_cache").mkdir()
+    (candidate / ".ruff_cache/state").write_text("generated", encoding="utf-8")
+
+    assert EvolverBundleRunner._changed_paths(parent, candidate) == {"src/main.py"}
+
+
 @pytest.mark.anyio
 async def test_fixed_runner_collects_complete_repository_candidate(
     tmp_path: Path,
@@ -760,7 +775,7 @@ async def test_process_driver_times_out_and_reaps_process(tmp_path: Path) -> Non
         max_output_manifest_bytes=8192,
     )
 
-    with pytest.raises(InfrastructureError, match="wall-time limit"):
+    with pytest.raises(InfrastructureError, match=r"^Evolver timed out$"):
         await runner.build_challenger(request)
 
     assert [kind for kind, _aggregate, _payload in events.records] == [
@@ -778,6 +793,65 @@ async def test_process_driver_times_out_and_reaps_process(tmp_path: Path) -> Non
     assert failure["phase"] == "session"
     assert failure["error_type"] == "InfrastructureError"
     assert failure["process"] is None
+
+
+@pytest.mark.anyio
+async def test_evolver_timeout_exit_precedes_partial_usage_validation(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(
+        _request(artifacts, tmp_path)
+    )
+    script = tmp_path / "provider-timeout.py"
+    script.write_text(
+        """import json
+import os
+from pathlib import Path
+
+Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
+    "schema_version": 2,
+    "usage_unit": "provider_tokens",
+    "budget": None,
+    "consumed": 12,
+    "token_usage": {
+        "uncached_input_tokens": 10,
+        "output_tokens": 2,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0,
+    },
+    "credits": None,
+    "budget_exhausted": False,
+    "session_count": 1,
+    "model_request_count": 1,
+    "usage_complete": False,
+}))
+raise SystemExit(124)
+""",
+        encoding="utf-8",
+    )
+    driver = SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        EvolutionProcessConfig(
+            bundle_commit="0" * 40,
+            bundle_tree="1" * 40,
+            bundle_artifact_digest=digest("evolver-bundle"),
+            command_argv=(str(Path(sys.executable).resolve()), str(script)),
+            agent_backend="claude",
+            isolated_home_environment_keys=(),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            environment=(),
+            timeout_seconds=10,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+        ),
+    )
+
+    with pytest.raises(InfrastructureError, match=r"^Evolver timed out$"):
+        await driver.run(prepared)
+
+    usage = json.loads((prepared.root / "scratch/token-usage.json").read_text())
+    assert usage["usage_complete"] is False
+    assert usage["consumed"] == 12
 
 
 @pytest.mark.anyio

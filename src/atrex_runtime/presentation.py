@@ -179,6 +179,48 @@ def evaluation_value(evaluation: GatewayEvaluationRecord) -> dict[str, object]:
     }
 
 
+def kernel_trial_value(trial: object) -> dict[str, object]:
+    """Render one durable experimental Kernel snapshot without promoting it to vN."""
+    from .gateway.control_models import GatewayKernelTrialRecord
+
+    if not isinstance(trial, GatewayKernelTrialRecord):
+        raise TypeError("Kernel Trial presentation requires a GatewayKernelTrialRecord")
+    return {
+        "kernel_trial_id": trial.id,
+        "attempt_id": trial.attempt_id,
+        "recovery_generation": trial.recovery_generation,
+        "ordinal": trial.ordinal,
+        "trial_label": f"g{trial.recovery_generation}-t{trial.ordinal}",
+        "candidate_artifact_digest": trial.candidate_artifact_digest,
+        "candidate_artifact": {
+            "digest": trial.candidate_artifact_digest,
+            "kind": ArtifactKind.KERNEL,
+            "referenced_at": trial.created_at,
+        },
+        "disposition": trial.disposition,
+        "observations": [
+            {
+                "idempotency_key": item.idempotency_key,
+                "operation": item.operation.value,
+                "request_digest": item.request_digest,
+                "result_artifact_digest": item.result_artifact_digest,
+                "created_at": item.created_at,
+            }
+            for item in trial.observations
+        ],
+        "annotations": [
+            {
+                "sequence": item.sequence,
+                "decision": item.decision,
+                "experiment": item.experiment,
+                "recorded_at": item.recorded_at,
+            }
+            for item in trial.annotations
+        ],
+        "created_at": trial.created_at,
+    }
+
+
 def bootstrap_result_value(result: CampaignBootstrapResult) -> dict[str, object]:
     return {
         "campaign_id": result.campaign_id,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import stat
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Literal, Self
@@ -16,6 +17,24 @@ from ..ports import KernelAgentCandidate
 KERNEL_AGENT_BUNDLE_MANIFEST_VERSION: Literal[1] = 1
 KERNEL_AGENT_BUNDLE_MANIFEST = "atrex-bundle.json"
 KERNEL_AGENT_BUNDLE_FORMAT: Literal["atrex-kernel-agent-bundle-v1"] = "atrex-kernel-agent-bundle-v1"
+KERNEL_AGENT_IGNORED_DIRECTORY_NAMES = frozenset(
+    {".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__"}
+)
+KERNEL_AGENT_IGNORED_FILE_NAMES = frozenset({".coverage", ".DS_Store"})
+KERNEL_AGENT_IGNORED_FILE_SUFFIXES = frozenset({".pyc", ".pyo"})
+
+
+def is_ignored_kernel_agent_path(relative: PurePosixPath, *, directory: bool) -> bool:
+    """Return whether a generated path is excluded from Agent revisions and diffs."""
+    directory_parts = relative.parts if directory else relative.parts[:-1]
+    if any(part in KERNEL_AGENT_IGNORED_DIRECTORY_NAMES for part in directory_parts):
+        return True
+    if directory:
+        return False
+    return (
+        relative.name in KERNEL_AGENT_IGNORED_FILE_NAMES
+        or relative.suffix in KERNEL_AGENT_IGNORED_FILE_SUFFIXES
+    )
 
 
 def _safe_relative_file(value: str) -> str:
@@ -103,15 +122,20 @@ class KernelAgentRevisionBuilder:
         if (root / ".git").exists() or (root / ".git").is_symlink():
             raise ValueError("Optimizer source cannot contain Git metadata")
 
-        manifest = KernelAgentBundleManifestV1.from_file(root / KERNEL_AGENT_BUNDLE_MANIFEST)
-        self._validate_tree(root)
-        self._validate_entry_file(
-            root,
-            manifest.entrypoint.command,
-            max_bytes=self._limits.max_entrypoint_bytes,
-            label="Optimizer command",
-        )
-        digest = self._artifacts.put_directory(root, ArtifactKind.KERNEL_AGENT)
+        with tempfile.TemporaryDirectory(prefix="atrex-kernel-agent-") as temporary:
+            normalized = Path(temporary) / "repository"
+            normalized.mkdir(mode=0o700)
+            self._copy_validated_tree(root, normalized)
+            manifest = KernelAgentBundleManifestV1.from_file(
+                normalized / KERNEL_AGENT_BUNDLE_MANIFEST
+            )
+            self._validate_entry_file(
+                normalized,
+                manifest.entrypoint.command,
+                max_bytes=self._limits.max_entrypoint_bytes,
+                label="Optimizer command",
+            )
+            digest = self._artifacts.put_directory(normalized, ArtifactKind.KERNEL_AGENT)
         return KernelAgentCandidate(dsl=dsl, optimizer_digest=digest)
 
     @staticmethod
@@ -125,27 +149,39 @@ class KernelAgentRevisionBuilder:
         if candidate.optimizer_digest == parent.optimizer_digest:
             raise ValueError("Evolver produced no Optimizer repository changes")
 
-    def _validate_tree(self, root: Path) -> None:
+    def _copy_validated_tree(self, root: Path, destination_root: Path) -> None:
         files = 0
         total_bytes = 0
-        pending = [root]
+        pending = [(root, destination_root)]
         while pending:
-            directory = pending.pop()
+            directory, destination = pending.pop()
             for entry in directory.iterdir():
                 entry_stat = entry.lstat()
+                relative = PurePosixPath(*entry.relative_to(root).parts)
                 if stat.S_ISLNK(entry_stat.st_mode):
                     raise ValueError("Optimizer repository cannot contain symbolic links")
                 if stat.S_ISDIR(entry_stat.st_mode):
-                    pending.append(entry)
+                    if is_ignored_kernel_agent_path(relative, directory=True):
+                        continue
+                    child_destination = destination / entry.name
+                    child_destination.mkdir(mode=0o700)
+                    pending.append((entry, child_destination))
                     continue
                 if not stat.S_ISREG(entry_stat.st_mode):
                     raise ValueError("Optimizer repository can contain only regular files")
+                if is_ignored_kernel_agent_path(relative, directory=False):
+                    continue
                 files += 1
                 total_bytes += entry_stat.st_size
                 if files > self._limits.max_bundle_files:
                     raise ValueError("Optimizer repository exceeds file limit")
                 if total_bytes > self._limits.max_bundle_bytes:
                     raise ValueError("Optimizer repository exceeds byte limit")
+                target = destination / entry.name
+                with entry.open("rb") as source, target.open("xb") as output:
+                    while chunk := source.read(1024 * 1024):
+                        output.write(chunk)
+                target.chmod(0o600)
 
     @staticmethod
     def _validate_entry_file(

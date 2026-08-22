@@ -197,7 +197,7 @@ Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
     "usage_complete": True
 }))
 Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
-    "schema_version": 2,
+    "schema_version": 3,
     "attempt_id": attempt["attempt_id"],
     "status": "blocked",
     "hypothesis": "test hypothesis",
@@ -217,6 +217,7 @@ Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
         "name": "test experiment",
         "hypothesis": "test hypothesis",
         "change": "none",
+        "candidate_artifact_digest": None,
         "evidence": "test evidence",
         "result": "blocked",
         "decision": "pivot"
@@ -346,7 +347,7 @@ rollout.write_text(json.dumps({
     },
 }) + "\\n")
 Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
-    "schema_version": 2,
+    "schema_version": 3,
     "attempt_id": attempt["attempt_id"],
     "status": "blocked",
     "hypothesis": "integration hypothesis",
@@ -366,6 +367,7 @@ Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
         "name": "real-core-smoke",
         "hypothesis": "the current Core accepts Runtime manifest v6",
         "change": "none",
+        "candidate_artifact_digest": None,
         "evidence": "Core reached the Provider and wrote a terminal report",
         "result": "completed",
         "decision": "pivot"

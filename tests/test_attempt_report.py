@@ -8,12 +8,12 @@ from pathlib import Path
 import pytest
 
 from atrex_runtime.domain.ids import new_attempt_id
-from atrex_runtime.workers.attempt_report import AttemptReportV2
+from atrex_runtime.workers.attempt_report import AttemptReportV3
 
 
 def _value(attempt_id: str) -> dict[str, object]:
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "attempt_id": attempt_id,
         "status": "candidate_ready",
         "hypothesis": "coalesced loads reduce memory transactions",
@@ -34,6 +34,7 @@ def _value(attempt_id: str) -> dict[str, object]:
                 "name": "aligned loads",
                 "hypothesis": "coalescing helps",
                 "change": "vectorized loads",
+                "candidate_artifact_digest": "sha256:" + "a" * 64,
                 "evidence": "SOL memory traffic",
                 "result": "correct and faster",
                 "decision": "continue",
@@ -47,7 +48,7 @@ def test_attempt_report_is_bound_to_expected_attempt(tmp_path: Path) -> None:
     path = tmp_path / "report.json"
     path.write_text(json.dumps(_value(attempt_id)), encoding="utf-8")
 
-    report = AttemptReportV2.from_file(path, expected_attempt_id=attempt_id, max_bytes=4096)
+    report = AttemptReportV3.from_file(path, expected_attempt_id=attempt_id, max_bytes=4096)
 
     assert report.status == "candidate_ready"
     assert report.decision == "keep"
@@ -61,4 +62,4 @@ def test_attempt_report_rejects_inconsistent_terminal_decision(tmp_path: Path) -
     path.write_text(json.dumps(value), encoding="utf-8")
 
     with pytest.raises(ValueError, match="candidate_ready requires decision=keep"):
-        AttemptReportV2.from_file(path, expected_attempt_id=attempt_id, max_bytes=4096)
+        AttemptReportV3.from_file(path, expected_attempt_id=attempt_id, max_bytes=4096)

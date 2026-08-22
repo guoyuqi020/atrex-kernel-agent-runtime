@@ -382,6 +382,108 @@ def _kernel_read(workspace: Path, revision: str, file: str | None) -> dict[str, 
     }
 
 
+def _trial_catalog(workspace: Path) -> list[dict[str, object]]:
+    values: list[dict[str, object]] = []
+    epochs = _directory(_evidence(workspace) / "epochs", "Evidence Epochs")
+    for epoch_root in sorted(epochs.iterdir()):
+        if not epoch_root.is_dir() or not epoch_root.name.isdigit():
+            continue
+        index = epoch_root / "kernel-trials/index.json"
+        if not index.is_file():
+            continue
+        document = _json(index, "Kernel Trial index")
+        trials = document.get("kernel_trials")
+        if document.get("schema_version") != 1 or not isinstance(trials, list):
+            raise ValueError("Kernel Trial index is invalid")
+        for raw in trials:
+            if not isinstance(raw, dict) or not isinstance(raw.get("kernel_trial_id"), str):
+                raise ValueError("Kernel Trial record is invalid")
+            values.append({**raw, "epoch": int(epoch_root.name)})
+    return values
+
+
+def _trials(
+    workspace: Path,
+    epoch: int | None,
+    decision: str | None,
+    limit: int,
+) -> dict[str, object]:
+    if epoch is not None and epoch <= 0:
+        raise ValueError("epoch must be positive")
+    if decision is not None and decision not in {"observed", "continue", "revert", "pivot"}:
+        raise ValueError("decision must be observed, continue, revert, or pivot")
+    values = [
+        item
+        for item in _trial_catalog(workspace)
+        if (epoch is None or item.get("epoch") == epoch)
+        and (decision is None or item.get("disposition") == decision)
+    ]
+    return {
+        "schema_version": 1,
+        "kernel_trials": values[:limit],
+        "truncated": len(values) > limit,
+    }
+
+
+def _trial_read(workspace: Path, trial_id: str, file: str | None) -> dict[str, object]:
+    if (
+        not trial_id.startswith("gtrial_")
+        or len(trial_id.removeprefix("gtrial_")) != 32
+        or any(
+            character not in "0123456789abcdef" for character in trial_id.removeprefix("gtrial_")
+        )
+    ):
+        raise ValueError("invalid Kernel Trial ID")
+    record = next(
+        (item for item in _trial_catalog(workspace) if item.get("kernel_trial_id") == trial_id),
+        None,
+    )
+    if record is None:
+        raise ValueError("Kernel Trial is not present in frozen Evidence")
+    epoch = record.get("epoch")
+    if not isinstance(epoch, int):
+        raise ValueError("Kernel Trial epoch is invalid")
+    root = _directory(
+        workspace
+        / "input/evidence/epochs"
+        / f"{epoch:08d}"
+        / "kernel-trials"
+        / trial_id
+        / "source",
+        "Kernel Trial source",
+    )
+    files = sorted(path for path in root.rglob("*") if path.is_file() and not path.is_symlink())
+    if file is None:
+        return {
+            "schema_version": 1,
+            "kernel_trial": record,
+            "files": [
+                {
+                    "path": path.relative_to(root).as_posix(),
+                    "bytes": path.stat().st_size,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+                for path in files
+            ],
+        }
+    relative = _safe_relative(file)
+    payload = _regular(
+        root.joinpath(*relative.parts),
+        "Kernel Trial source",
+        max_bytes=MAX_SOURCE_BYTES,
+    ).read_bytes()
+    try:
+        content = payload.decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ValueError("Kernel Trial source is not UTF-8") from error
+    return {
+        "schema_version": 1,
+        "kernel_trial": record,
+        "file": relative.as_posix(),
+        "content": content,
+    }
+
+
 def _agents(workspace: Path, limit: int) -> dict[str, object]:
     catalog = _catalog(workspace)
     values = [item for item in catalog["agents"] if isinstance(item, dict)]
@@ -591,6 +693,19 @@ def _parser() -> argparse.ArgumentParser:
     kernel_read = commands.add_parser("kernel-read", help="inspect one exact Kernel artifact")
     kernel_read.add_argument("--revision", required=True)
     kernel_read.add_argument("--file")
+    trials = commands.add_parser(
+        "kernel-trials",
+        help="list exact experimental Kernels, including reverted candidates",
+    )
+    trials.add_argument("--epoch", type=int)
+    trials.add_argument("--decision")
+    trials.add_argument("--limit", type=int, default=200)
+    trial_read = commands.add_parser(
+        "kernel-trial-read",
+        help="inspect one exact unversioned Kernel Trial artifact",
+    )
+    trial_read.add_argument("--trial", required=True)
+    trial_read.add_argument("--file")
     agents = commands.add_parser("agents", help="list versioned Agent designs")
     agents.add_argument("--limit", type=int, default=200)
     agent_diff = commands.add_parser("agent-diff", help="diff two visible Agent repositories")
@@ -633,6 +748,15 @@ def main() -> int:
             result = _kernels(workspace, arguments.epoch, _bounded_limit(arguments.limit))
         elif arguments.command == "kernel-read":
             result = _kernel_read(workspace, arguments.revision, arguments.file)
+        elif arguments.command == "kernel-trials":
+            result = _trials(
+                workspace,
+                arguments.epoch,
+                arguments.decision,
+                _bounded_limit(arguments.limit),
+            )
+        elif arguments.command == "kernel-trial-read":
+            result = _trial_read(workspace, arguments.trial, arguments.file)
         elif arguments.command == "agents":
             result = _agents(workspace, _bounded_limit(arguments.limit))
         elif arguments.command == "agent-diff":

@@ -854,6 +854,102 @@ async def test_all_structured_agate_job_commands_use_attempt_context(tmp_path: P
 
 
 @pytest.mark.anyio
+async def test_check_carries_first_private_shape_init_kwargs(tmp_path: Path) -> None:
+    client = FakeAgateClient({"job_id": "ck_test", "status": "succeeded"})
+    builder = CapturingBuilder()
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    contract = _contract().model_copy(
+        update={
+            "shapes": {
+                "b": {
+                    "init_kwargs": {
+                        "max_seqlen_q": 446,
+                        "max_seqlen_k": 4323,
+                    }
+                },
+                "a": {
+                    "init_kwargs": {
+                        "max_seqlen_q": 4319,
+                        "max_seqlen_k": 4327,
+                    }
+                },
+            }
+        }
+    )
+    adapter = AgateGatewayAdapter(
+        client,
+        builder,
+        StaticContexts(AgateEvaluationContext("flash_attention", "H20", Dsl.TRITON, contract)),
+        jobs,
+        wait_timeout_s=1200,
+    )
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    candidate.joinpath("kernel.py").write_text("class Model: pass\n")
+
+    result = await adapter.execute(
+        GatewayAdapterRequest(
+            new_attempt_id(),
+            GatewayOperation.CHECK,
+            "check-shape-1",
+            digest("candidate"),
+            candidate,
+            None,
+            None,
+            None,
+        )
+    )
+
+    assert result.status == "completed"
+    kind, payload = client.submitted[0]
+    assert kind == "compile"
+    assert payload["init_kwargs"] == {
+        "max_seqlen_q": 4319,
+        "max_seqlen_k": 4327,
+    }
+    jobs.close()
+
+
+@pytest.mark.anyio
+async def test_check_treats_missing_or_null_init_kwargs_as_empty(tmp_path: Path) -> None:
+    client = FakeAgateClient({"job_id": "ck_test", "status": "succeeded"})
+    builder = CapturingBuilder()
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    contract = _contract().model_copy(
+        update={
+            "shapes": {
+                "b": {"init_kwargs": {"width": 2}},
+                "a": {"init_kwargs": None},
+            }
+        }
+    )
+    adapter = AgateGatewayAdapter(
+        client,
+        builder,
+        StaticContexts(AgateEvaluationContext("parameterized", "H20", Dsl.CUDA, contract)),
+        jobs,
+        wait_timeout_s=1200,
+    )
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    candidate.joinpath("kernel.py").write_text("class Model: pass\n")
+
+    base = (
+        new_attempt_id(),
+        GatewayOperation.CHECK,
+        "check-default",
+        digest("candidate"),
+        candidate,
+        None,
+        None,
+        None,
+    )
+    await adapter.execute(GatewayAdapterRequest(*base))
+    assert client.submitted[0][1]["init_kwargs"] == {}
+    jobs.close()
+
+
+@pytest.mark.anyio
 async def test_submit_and_sol_are_non_authoritative_attempt_owned_jobs(tmp_path: Path) -> None:
     client = FakeAgateClient({"job_id": "job", "status": "succeeded"})
     adapter, _builder, jobs = _adapter(tmp_path, client)

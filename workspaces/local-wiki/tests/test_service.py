@@ -5,10 +5,13 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import threading
+import time
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
+import anyio
 import pytest
 from atrex_runtime.domain.ids import (
     ArtifactDigest,
@@ -61,6 +64,7 @@ def test_settings_default_to_current_python() -> None:
     )
 
     assert settings.python_executable == Path(sys.executable).resolve()
+    assert settings.max_concurrent_queries == 16
 
 
 def _query() -> RuntimeKnowledgeQueryV1:
@@ -161,6 +165,59 @@ async def test_query_response_is_runtime_compatible_and_architecture_scoped(
     assert "--agent-cli" not in commands[0]
     assert "--timeout" not in commands[0]
     assert "--max-records" not in commands[0]
+    app.close()
+
+
+@pytest.mark.anyio
+async def test_query_execution_uses_bounded_concurrency(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    settings = _settings(tmp_path).model_copy(update={"max_concurrent_queries": 2})
+    state_lock = threading.Lock()
+    two_running = threading.Event()
+    active = 0
+    peak = 0
+
+    def run_query(_command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        nonlocal active, peak
+        with state_lock:
+            active += 1
+            peak = max(peak, active)
+            if active == 2:
+                two_running.set()
+        try:
+            if not two_running.wait(timeout=2):
+                raise AssertionError("queries remained globally serialized")
+            time.sleep(0.05)
+            return subprocess.CompletedProcess(
+                (),
+                0,
+                json.dumps({"records": {}, "notes": []}).encode(),
+                b"",
+            )
+        finally:
+            with state_lock:
+                active -= 1
+
+    monkeypatch.setattr(subprocess, "run", run_query)
+    app = build_application(settings, {})
+    statuses: list[int] = []
+
+    async def query_once() -> None:
+        status, _body = await _request(
+            app,
+            "/v1/knowledge/query",
+            _query().canonical_json_bytes(),
+        )
+        statuses.append(status)
+
+    async with anyio.create_task_group() as tasks:
+        for _ in range(4):
+            tasks.start_soon(query_once)
+
+    assert statuses == [200, 200, 200, 200]
+    assert peak == 2
     app.close()
 
 

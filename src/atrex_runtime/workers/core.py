@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 import anyio
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
-from .attempt_report import AttemptReportV2
+from .attempt_report import AttemptReportV3
 from .core_phase import CorePhaseRunner, PreparedCorePhase
 from .evidence_view import EVIDENCE_PROMPT_FILENAME
 from .launcher import WorkerLauncher, validate_worker_environment
@@ -147,13 +147,13 @@ class CoreOptimizerSessionDriver:
             launch.environment,
             label="Optimizer repository",
         )
-        report: AttemptReportV2 | None = None
+        report: AttemptReportV3 | None = None
         report_digest = None
         report_error: str | None = None
         candidate_digest = None
         if launch.attempt_report_path.exists() or launch.attempt_report_path.is_symlink():
             try:
-                report = AttemptReportV2.from_file(
+                report = AttemptReportV3.from_file(
                     launch.attempt_report_path,
                     expected_attempt_id=AttemptInputManifestV6.from_json_bytes(
                         prepared.manifest_path.read_bytes()

@@ -26,6 +26,7 @@ class LocalWikiSettings(BaseModel):
     query_timeout_seconds: int | None = Field(default=None, gt=0)
     bearer_token_env: str | None = None
     max_request_bytes: int = Field(gt=0)
+    max_concurrent_queries: int = Field(default=16, ge=1, le=64)
     max_results: int | None = Field(default=None, gt=0)
     max_response_bytes: int = Field(gt=0)
 

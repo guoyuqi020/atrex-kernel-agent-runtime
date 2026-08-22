@@ -67,6 +67,31 @@ def test_builder_allows_non_entry_repository_content(tmp_path: Path) -> None:
     assert candidate.dsl is Dsl.CUDA
 
 
+def test_builder_excludes_generated_cache_content_from_revision(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    source = _source(tmp_path)
+    baseline = KernelAgentRevisionBuilder(
+        artifacts,
+        limits=kernel_agent_limits(),
+    ).build_candidate(source, Dsl.TRITON)
+    (source / "src/__pycache__").mkdir()
+    (source / "src/__pycache__/main.cpython-314.pyc").write_bytes(b"generated")
+    (source / ".pytest_cache").mkdir()
+    (source / ".pytest_cache/state").write_text("generated", encoding="utf-8")
+    (source / ".coverage").write_text("generated", encoding="utf-8")
+
+    with_cache = KernelAgentRevisionBuilder(
+        artifacts,
+        limits=kernel_agent_limits(),
+    ).build_candidate(source, Dsl.TRITON)
+
+    assert with_cache.optimizer_digest == baseline.optimizer_digest
+    stored = artifacts.verify(with_cache.optimizer_digest).payload_path
+    assert not (stored / "src/__pycache__").exists()
+    assert not (stored / ".pytest_cache").exists()
+    assert not (stored / ".coverage").exists()
+
+
 def test_builder_rejects_runtime_selected_agent_adapter(tmp_path: Path) -> None:
     source = _source(tmp_path)
     manifest_path = source / "atrex-bundle.json"

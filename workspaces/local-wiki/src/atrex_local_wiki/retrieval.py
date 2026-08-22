@@ -35,17 +35,17 @@ class CorpusIndex:
         python_executable: Path,
         agent_cli: str | None,
         query_timeout_seconds: int | None,
+        max_concurrent_queries: int,
         max_results: int | None,
         max_response_bytes: int,
-        lock: threading.RLock,
     ) -> None:
         self._root = root.resolve()
         self._python = python_executable.resolve()
         self._agent_cli = agent_cli
         self._query_timeout_seconds = query_timeout_seconds
+        self._query_slots = threading.BoundedSemaphore(max_concurrent_queries)
         self._max_results = max_results
         self._max_response_bytes = max_response_bytes
-        self._lock = lock
         self._query_tool = self._root / "tools" / "query_nl.py"
         self._kernel_index = self._root / "kernel_wiki" / "records" / "index.json"
         self._hardware_index = self._root / "hardware_wiki" / "records" / "index.json"
@@ -80,7 +80,7 @@ class CorpusIndex:
         outer_timeout = (
             self._query_timeout_seconds + 30 if self._query_timeout_seconds is not None else None
         )
-        with self._lock:
+        with self._query_slots:
             try:
                 process = subprocess.run(
                     command,

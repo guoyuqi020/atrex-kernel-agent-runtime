@@ -8,24 +8,44 @@ import shutil
 import stat
 import tempfile
 from pathlib import Path
-from typing import Literal, Self, cast
+from typing import Literal, Protocol, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.ids import (
     ArtifactDigest,
+    AttemptId,
     EpochId,
     LineageId,
     parse_artifact_digest,
     parse_lineage_id,
 )
 from ..domain.models import Attempt, EpochStatus, KernelRevision, LineageStatus
+from ..gateway.control_models import GatewayKernelTrialRecord, GatewayMeasurementRecord
 from ..registry.base import Registry
 from ..serialization import write_canonical_json
 from .projection import EvidenceArtifactProjector
 
 EVIDENCE_CHECKPOINT_VERSION: Literal[1] = 1
+
+
+class HistoricalGatewayEvidenceSource(Protocol):
+    """Read normalized Runtime measurements and exact experimental Kernel snapshots."""
+
+    def list_evidence_measurements(
+        self,
+        attempt_ids: tuple[AttemptId, ...],
+        *,
+        limit: int,
+    ) -> tuple[GatewayMeasurementRecord, ...]: ...
+
+    def list_kernel_trials(
+        self,
+        attempt_ids: tuple[AttemptId, ...],
+        *,
+        limit: int,
+    ) -> tuple[GatewayKernelTrialRecord, ...]: ...
 
 
 class EvidenceCheckpointV1(BaseModel):
@@ -68,10 +88,12 @@ class LocalEvidenceAssembler:
         registry: Registry,
         artifacts: LocalArtifactStore,
         projector: EvidenceArtifactProjector | None = None,
+        measurements: HistoricalGatewayEvidenceSource | None = None,
     ) -> None:
         self._registry = registry
         self._artifacts = artifacts
         self._projector = projector
+        self._measurements = measurements
 
     def create_initial(
         self,
@@ -128,7 +150,17 @@ class LocalEvidenceAssembler:
         actual_entries = {entry.name for entry in previous.payload_path.iterdir()}
         required_entries = {"bootstrap-metadata.json", "checkpoint.json"}
         if not required_entries.issubset(actual_entries) or not actual_entries.issubset(
-            required_entries | {"bootstrap", "epochs", "traces", "lessons", "diffs", "reports"}
+            required_entries
+            | {
+                "bootstrap",
+                "epochs",
+                "traces",
+                "lessons",
+                "diffs",
+                "reports",
+                "measurements",
+                "kernel-trials",
+            }
         ):
             raise ValueError("lineage checkpoint has an unsupported file layout")
         metadata = EvidenceCheckpointV1.from_file(previous.payload_path / "checkpoint.json")
@@ -183,10 +215,14 @@ class LocalEvidenceAssembler:
         lesson_root = staging / "lessons"
         diff_root = staging / "diffs" / f"{epoch_number:08d}"
         report_root = staging / "reports" / f"{epoch_number:08d}"
+        measurement_root = staging / "measurements"
+        trial_root = staging / "kernel-trials"
         trace_root.mkdir(parents=True, mode=0o700)
         lesson_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         diff_root.mkdir(parents=True, mode=0o700)
         report_root.mkdir(parents=True, mode=0o700)
+        measurement_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        trial_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         lessons: list[JsonValue] = []
         trace_files: list[JsonValue] = []
         diff_files: list[JsonValue] = []
@@ -295,10 +331,38 @@ class LocalEvidenceAssembler:
                 "annotations": lessons,
             },
         )
+        measurement_relative: str | None = None
+        if self._measurements is not None:
+            attempt_ids = tuple(attempt.id for attempt in self._registry.list_attempts(epoch_id))
+            records = self._measurements.list_evidence_measurements(
+                attempt_ids,
+                limit=5_000,
+            )
+            measurement_relative = f"measurements/{epoch_number:08d}.json"
+            write_canonical_json(
+                measurement_root / f"{epoch_number:08d}.json",
+                {
+                    "schema_version": 1,
+                    "epoch_id": epoch_id,
+                    "measurements": [
+                        self._measurement_value(record) for record in reversed(records)
+                    ],
+                },
+            )
+            trials = self._measurements.list_kernel_trials(attempt_ids, limit=5_000)
+            write_canonical_json(
+                trial_root / f"{epoch_number:08d}.json",
+                {
+                    "schema_version": 1,
+                    "epoch_id": epoch_id,
+                    "kernel_trials": [self._kernel_trial_value(trial) for trial in trials],
+                },
+            )
         return {
             "trace_projections": trace_files,
             "agent_annotations": lesson_relative,
             "kernel_diffs": diff_files,
+            "measurements": measurement_relative,
         }
 
     @staticmethod
@@ -327,12 +391,66 @@ class LocalEvidenceAssembler:
 
     @staticmethod
     def _copy_derived_history(previous: Path, staging: Path) -> None:
-        for name in ("traces", "lessons", "diffs", "reports"):
+        for name in (
+            "traces",
+            "lessons",
+            "diffs",
+            "reports",
+            "measurements",
+            "kernel-trials",
+        ):
             source = previous / name
             if source.is_dir():
                 destination = staging / name
                 shutil.copytree(source, destination)
                 LocalEvidenceAssembler._make_directories_writable(destination)
+
+    @staticmethod
+    def _measurement_value(record: GatewayMeasurementRecord) -> dict[str, JsonValue]:
+        return {
+            "measurement_id": record.id,
+            "attempt_id": record.attempt_id,
+            "kernel_artifact_digest": record.candidate_artifact_digest,
+            "operation": record.point.kind.value,
+            "source_operation": record.source_operation.value,
+            "profile_level": record.point.profile_level,
+            "shape_id": record.point.shape_id,
+            "kernel_name": record.point.kernel_name,
+            "metrics": record.point.metrics,
+            "gateway_result_digest": record.gateway_result_digest,
+            "created_at": record.created_at,
+        }
+
+    @staticmethod
+    def _kernel_trial_value(record: GatewayKernelTrialRecord) -> dict[str, JsonValue]:
+        return {
+            "kernel_trial_id": record.id,
+            "attempt_id": record.attempt_id,
+            "recovery_generation": record.recovery_generation,
+            "ordinal": record.ordinal,
+            "candidate_artifact_digest": record.candidate_artifact_digest,
+            "disposition": record.disposition,
+            "observations": [
+                {
+                    "idempotency_key": item.idempotency_key,
+                    "operation": item.operation.value,
+                    "request_digest": item.request_digest,
+                    "result_artifact_digest": item.result_artifact_digest,
+                    "created_at": item.created_at,
+                }
+                for item in record.observations
+            ],
+            "annotations": [
+                {
+                    "sequence": item.sequence,
+                    "decision": item.decision,
+                    "experiment": item.experiment,
+                    "recorded_at": item.recorded_at,
+                }
+                for item in record.annotations
+            ],
+            "created_at": record.created_at,
+        }
 
     @staticmethod
     def _make_directories_writable(root: Path) -> None:

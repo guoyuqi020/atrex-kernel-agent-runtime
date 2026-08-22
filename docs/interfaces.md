@@ -42,6 +42,8 @@ All commands use `atrex-kernel-agent-runtime`. Commands that read deployment sta
 | `show-bootstrap-run` | `--config --attempt --generation N` | One physical Bootstrap execution. |
 | `list-evaluations` | `--config --attempt` | Every immutable evaluated Kernel/result pair. |
 | `show-evaluation` | `--config --evaluation` | Metadata; `--source` and `--result` add exact bounded payloads. |
+| `list-kernel-trials` | `--config --attempt` | Every exact experimental Candidate observed in one Attempt. |
+| `show-kernel-trial` | `--config --trial` | Trial operations/decisions; `--source` and `--result` add exact payloads. |
 | `gc-artifacts` | `--config --minimum-age-seconds --limit` | Dry-run CAS GC; deletion additionally requires `--apply --confirm-runtime-stopped`. |
 | `gc-workspaces` | same | Dry-run Worker-run GC with the same apply confirmation. |
 | `digest-evolver-bundle` | `--path` | Validate and digest a Bundle; optional file/byte bounds. |
@@ -56,6 +58,10 @@ tables and progress messages are operator presentation.
 - Every `/v1/admin/*` route requires `Authorization: Bearer <admin-token>`.
 - Gateway/Wiki: `400` invalid request, `403` invalid/expired/revoked authority, `409` idempotency or
   state conflict, `503` dependency unavailable.
+- A Gateway `400` with a recognized `operation` includes `request_schema`: the Agent-facing JSON
+  Schema generated from the same Pydantic model that rejected the request. Runtime-owned fields
+  are omitted, and `idempotency_key` is marked as Runtime-defaulted. An absent or unknown operation
+  instead returns `supported_operations`.
 - Administration: `400` invalid request, `401` missing/invalid token, `404` unknown identity,
   `409` invalid transition. Successful JSON uses `application/json`; Event export is NDJSON.
 
@@ -63,13 +69,30 @@ tables and progress messages are operator presentation.
 
 | Method and path | Request / response |
 | --- | --- |
-| `POST /v1/operations` | Gateway protocol v2; executes `evaluate`, `submit`, `profile`, `dev`, `check`, `sol`, `disassemble`, `poll`, `jobs`, `cancel`, `env`, `health`, or `config`. |
+| `POST /v1/operations` | Gateway protocol v2; executes evaluator operations plus Runtime-local history queries. |
 | `POST /v1/wiki/query` | Wiki protocol v1 `{schema_version, attempt_id, idempotency_key, query}`; returns a frozen response. |
 
 Candidate operations upload a complete Base64 file Bundle. Runtime seals it before execution.
 Every key is idempotent: the same key/request replays the committed response; changed content with
 the same key returns conflict. `evaluate` creates an exploratory evaluation record but does not by
 itself retain a Kernel revision.
+
+`measurements` is an unmetered Runtime-local read and never calls Agate. Runtime derives its Lineage
+and visibility boundary from the current Attempt capability. The Agent may filter by `kind`,
+`kernel_revision_id`, `kernel_artifact_digest`, `shape_id`, `kernel_name`, `metric`, and `limit`, but
+cannot select a Lineage. Results contain normalized scalar Evaluate/Profile metrics, Kernel version
+metadata when registered, and the raw Gateway Result Artifact digest.
+
+`kernel_trials` lists exact experimental Candidate snapshots from the current Attempt and its
+visible history. It accepts optional `decision` and `limit` filters and returns Trial IDs,
+observations, and Agent annotations without source text. `kernel_trial_read` accepts a Trial ID and
+optionally `file`: without `file` it returns the verified file index; with `file` it returns the
+exact UTF-8 or Base64 content. Both operations are unmetered, never call Agate, and do not accept a
+caller-selected Lineage or Attempt.
+For an older Trial's normalized Evaluate/Profile result, pass the returned
+`candidate_artifact_digest` to `measurements.kernel_artifact_digest`; a Trial ID or Gateway Result
+digest is not a Kernel measurement selector. Current-Attempt results remain available from the
+original operation response and become queryable history after the Attempt completes.
 
 ### Administration routes
 
@@ -87,6 +110,10 @@ itself retain a Kernel revision.
 | `GET /v1/admin/attempts/{id}/evaluations` | Evaluation list. |
 | `GET /v1/admin/attempts/{id}/evaluations/{eval}` | Evaluation detail. |
 | `GET .../evaluations/{eval}/{source,result}` | Exact bounded candidate files/raw result. |
+| `GET /v1/admin/attempts/{id}/kernel-trials` | Experimental Candidates, including reverted snapshots. |
+| `GET /v1/admin/attempts/{id}/kernel-trials/{trial}` | Trial observations and decisions. |
+| `GET .../kernel-trials/{trial}/source` | Exact unversioned Candidate files. |
+| `GET .../kernel-trials/{trial}/results` | Exact retained operation-result payloads. |
 | `GET /v1/admin/kernels/{id}` | Kernel detail with measurements. |
 | `GET /v1/admin/kernels/{id}/{source,measurements}` | Exact bounded files or measurement list. |
 | `GET /v1/admin/agent-revisions/{id}` | Agent revision detail. |
@@ -113,10 +140,10 @@ python src/runtime_tools.py <command> --request scratch/request.json
 
 | Command | Agent-authored request |
 | --- | --- |
-| `gateway-execute` | One Gateway operation and its operation-specific parameters. Candidate operations automatically upload the current working Kernel tree. |
+| `gateway-execute` | One Gateway operation and its operation-specific parameters. Candidate operations upload the working Kernel tree; `measurements`, `kernel_trials`, and `kernel_trial_read` query Runtime-owned visible history. |
 | `wiki-query` | `query` and optional `idempotency_key`; stdout is only Wiki `content`, not audit metadata. |
-| `record-experiment` | Exactly `name,hypothesis,change,evidence,result,decision`; decision is `continue`, `revert`, or `pivot`. |
-| `attempt-report` | Terminal schema-v2 report: status/decision, hypothesis, bottleneck, plan, change/profile/evaluation evidence, interpretation, sources, lessons, and next directions. |
+| `record-experiment` | Adds `candidate_artifact_digest`; measured results bind the exact Gateway Candidate before `continue`, `revert`, or `pivot`. |
+| `attempt-report` | Terminal schema-v3 report with source-bound experiments plus status, plan, evidence, interpretation, lessons, and next directions. |
 | `lineage-bootstrap-report` | Terminal Baseline report with `baseline_ready` or `blocked`; a ready report names positive latency and exact Candidate/Result digests. |
 
 `attempt-report` requires a non-empty contiguous Experiment journal and is write-once. Runtime does

@@ -82,6 +82,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Pa
     assert settings.campaign.optimizer.timeout_seconds == 3600
     assert settings.campaign.optimizer.bootstrap_timeout_seconds == 10_800
     assert settings.campaign.evolver.agent_backend == "codex"
+    assert settings.campaign.evolver.timeout_seconds == 10_800
     secrets = workspace / "runtime.env"
     assert secrets.stat().st_mode & 0o777 == 0o600
 

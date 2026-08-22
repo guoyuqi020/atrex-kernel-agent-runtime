@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 
+from ..artifacts.local import JsonValue
 from ..domain.ids import (
     ArtifactDigest,
     AttemptId,
@@ -33,6 +34,9 @@ class GatewayOperation(StrEnum):
     ENV = "env"
     HEALTH = "health"
     CONFIG = "config"
+    MEASUREMENTS = "measurements"
+    KERNEL_TRIALS = "kernel_trials"
+    KERNEL_TRIAL_READ = "kernel_trial_read"
     WIKI_QUERY = "wiki_query"
 
 
@@ -89,6 +93,108 @@ class GatewayEvaluationRecord:
             raise ValueError("a correct Gateway evaluation requires positive latency")
         if not self.correct and self.latency_us is not None:
             raise ValueError("an incorrect Gateway evaluation cannot carry latency")
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayMeasurementPoint:
+    """One normalized safe measurement extracted from a Gateway result."""
+
+    kind: GatewayOperation
+    profile_level: str | None
+    shape_id: str | None
+    kernel_name: str | None
+    metrics: dict[str, JsonValue]
+
+    def __post_init__(self) -> None:
+        if self.kind not in {GatewayOperation.EVALUATE, GatewayOperation.PROFILE}:
+            raise ValueError("historical measurement kind must be evaluate or profile")
+        if not self.metrics:
+            raise ValueError("historical measurement metrics cannot be empty")
+        if any(not key or not isinstance(key, str) for key in self.metrics):
+            raise ValueError("historical measurement metric names must be non-empty text")
+        if any(isinstance(value, (dict, list)) for value in self.metrics.values()):
+            raise ValueError("historical measurement metrics must be scalar JSON values")
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayMeasurementRecord:
+    """One immutable cross-Attempt measurement row retained by Runtime."""
+
+    id: str
+    attempt_id: AttemptId
+    recovery_generation: int
+    ordinal: int
+    source_operation: GatewayOperation
+    idempotency_key: str
+    candidate_artifact_digest: ArtifactDigest
+    gateway_result_digest: ArtifactDigest
+    point: GatewayMeasurementPoint
+    created_at: str
+
+    def __post_init__(self) -> None:
+        if not self.id.startswith("gmeasure_"):
+            raise ValueError("Gateway measurement ID must use the gmeasure_ prefix")
+        if self.recovery_generation < 0 or self.ordinal <= 0:
+            raise ValueError("Gateway measurement generation and ordinal are invalid")
+        if self.source_operation not in {
+            GatewayOperation.EVALUATE,
+            GatewayOperation.PROFILE,
+        }:
+            raise ValueError("Gateway measurement source must be evaluate or profile")
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayKernelTrialObservation:
+    """One Gateway operation performed against an exact experimental Kernel snapshot."""
+
+    idempotency_key: str
+    operation: GatewayOperation
+    request_digest: ArtifactDigest
+    result_artifact_digest: ArtifactDigest | None
+    created_at: str
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayKernelTrialAnnotation:
+    """One Agent-authored experiment decision bound to an immutable Kernel snapshot."""
+
+    sequence: int
+    decision: str
+    experiment: dict[str, JsonValue]
+    recorded_at: str
+
+    def __post_init__(self) -> None:
+        if self.sequence <= 0:
+            raise ValueError("Kernel Trial annotation sequence must be positive")
+        if self.decision not in {"continue", "revert", "pivot"}:
+            raise ValueError("Kernel Trial annotation decision is invalid")
+
+
+@dataclass(frozen=True, slots=True)
+class GatewayKernelTrialRecord:
+    """One durable exact Kernel snapshot observed during an optimization Attempt."""
+
+    id: str
+    attempt_id: AttemptId
+    recovery_generation: int
+    ordinal: int
+    candidate_artifact_digest: ArtifactDigest
+    observations: tuple[GatewayKernelTrialObservation, ...]
+    annotations: tuple[GatewayKernelTrialAnnotation, ...]
+    created_at: str
+
+    def __post_init__(self) -> None:
+        if not self.id.startswith("gtrial_"):
+            raise ValueError("Gateway Kernel Trial ID must use the gtrial_ prefix")
+        if self.recovery_generation < 0 or self.ordinal <= 0:
+            raise ValueError("Gateway Kernel Trial generation and ordinal are invalid")
+        if not self.observations:
+            raise ValueError("Gateway Kernel Trial requires at least one observation")
+
+    @property
+    def disposition(self) -> str:
+        """Return the latest explicit decision, or observed when none was published."""
+        return self.annotations[-1].decision if self.annotations else "observed"
 
 
 @dataclass(frozen=True, slots=True)

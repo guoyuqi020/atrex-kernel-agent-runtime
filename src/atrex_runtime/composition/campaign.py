@@ -227,6 +227,7 @@ def build_campaign_runtime(
             independent_final_evaluation=False,
             wiki_enabled=settings.gpu_wiki is not None,
             worker_sessions=registry,
+            kernel_trials=control,
             backend=campaign.optimizer.agent_backend,
         )
 
@@ -308,6 +309,7 @@ def build_campaign_runtime(
                 registry,
                 artifacts,
                 evidence_projector,
+                control,
             ),
             RegistryLineageLeaseManager(
                 registry,

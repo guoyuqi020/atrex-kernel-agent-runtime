@@ -51,6 +51,10 @@ The checked-in config does not override upstream query defaults. Therefore the p
 `query_timeout_seconds`, and `max_results` fields are explicit HTTP deployment overrides; no model
 credential is stored by local-wiki.
 
+`max_concurrent_queries` bounds simultaneous `query_nl.py` subprocesses and defaults to `16`.
+Additional requests wait for a slot. This prevents unbounded model/subprocess fan-out without
+serializing unrelated read-only queries behind one global lock.
+
 ```bash
 PYTHONPATH=workspaces/local-wiki/src \
   .venv/bin/python -m atrex_local_wiki serve \

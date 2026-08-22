@@ -3476,9 +3476,19 @@ class SqliteRegistry:
                 raise InvalidTransitionError(f"Epoch {epoch_id} lineage is not failed")
 
             attempts = self._connection.execute(
-                """SELECT id FROM attempts
-                   WHERE epoch_id = ? AND status = 'infrastructure_failed'
-                   ORDER BY branch, ordinal, id""",
+                """SELECT a.id FROM attempts AS a
+                   WHERE a.epoch_id = ? AND (
+                       a.status = 'infrastructure_failed'
+                       OR (
+                           a.status = 'running'
+                           AND a.output_kernel_revision_id IS NULL
+                           AND EXISTS (
+                               SELECT 1 FROM kernel_revisions AS kr
+                               WHERE kr.produced_by_attempt_id = a.id
+                           )
+                       )
+                   )
+                   ORDER BY a.branch, a.ordinal, a.id""",
                 (epoch_id,),
             ).fetchall()
             attempt_ids = tuple(parse_attempt_id(_required_text(row, "id")) for row in attempts)
@@ -3510,7 +3520,17 @@ class SqliteRegistry:
                 """UPDATE attempts SET status = 'running', infrastructure_failures = 0,
                    recovery_generation = recovery_generation + 1,
                    authority_started_at = ?, failure_reason = NULL
-                   WHERE epoch_id = ? AND status = 'infrastructure_failed'""",
+                   WHERE epoch_id = ? AND (
+                       status = 'infrastructure_failed'
+                       OR (
+                           status = 'running'
+                           AND output_kernel_revision_id IS NULL
+                           AND EXISTS (
+                               SELECT 1 FROM kernel_revisions AS kr
+                               WHERE kr.produced_by_attempt_id = attempts.id
+                           )
+                       )
+                   )""",
                 (created_at, epoch_id),
             )
             recovered_epoch_status = (

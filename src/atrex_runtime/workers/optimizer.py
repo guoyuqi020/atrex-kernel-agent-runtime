@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Protocol
 
-from ..domain.errors import InfrastructureError
-from ..domain.ids import ArtifactDigest, new_worker_session_id
+from ..domain.errors import InfrastructureError, InvalidTransitionError
+from ..domain.ids import ArtifactDigest, AttemptId, new_worker_session_id
 from ..domain.models import (
     AttemptReportStatus,
     TokenUsage,
@@ -26,7 +27,7 @@ from ..ports import (
     WorkerGatewayAuthorityProvider,
     WorkerSessionRecorder,
 )
-from .attempt_report import AttemptReportV2
+from .attempt_report import AttemptReportV3
 from .launcher import validate_worker_environment
 from .workspace import AttemptWorkspaceAssembler, PreparedAttempt
 
@@ -88,7 +89,7 @@ class OptimizerSessionResult:
     token_usage: TokenUsage
     token_budget: int
     session_trace_digest: ArtifactDigest | None = None
-    attempt_report: AttemptReportV2 | None = None
+    attempt_report: AttemptReportV3 | None = None
     attempt_report_digest: ArtifactDigest | None = None
     attempt_report_error: str | None = None
     candidate_artifact_digest: ArtifactDigest | None = None
@@ -110,6 +111,16 @@ class OptimizerSessionDriver(Protocol):
         ...
 
 
+class KernelTrialAnnotationRecorder(Protocol):
+    """Persist validated experiment decisions against Runtime-observed candidates."""
+
+    def record_kernel_trial_annotations(
+        self,
+        attempt_id: AttemptId,
+        experiments: Sequence[Mapping[str, object]],
+    ) -> object: ...
+
+
 class SessionOptimizerRunner(OptimizerRunner):
     """Translate durable Attempts into isolated Core Optimizer executions."""
 
@@ -127,6 +138,7 @@ class SessionOptimizerRunner(OptimizerRunner):
         independent_final_evaluation: bool = True,
         wiki_enabled: bool = False,
         worker_sessions: WorkerSessionRecorder | None = None,
+        kernel_trials: KernelTrialAnnotationRecorder | None = None,
         backend: str | None = None,
     ) -> None:
         self._workspaces = workspaces
@@ -140,6 +152,7 @@ class SessionOptimizerRunner(OptimizerRunner):
         self._independent_final_evaluation = independent_final_evaluation
         self._wiki_enabled = wiki_enabled
         self._worker_sessions = worker_sessions
+        self._kernel_trials = kernel_trials
         self._backend = backend
         if config.gateway_endpoint is not None:
             raise ValueError("Optimizer base config cannot contain pre-issued Gateway authority")
@@ -295,6 +308,24 @@ class SessionOptimizerRunner(OptimizerRunner):
         if result.attempt_report_digest is None:
             raise AssertionError("validated Attempt report has no sealed Artifact")
         report = result.attempt_report
+        if self._kernel_trials is not None:
+            try:
+                self._kernel_trials.record_kernel_trial_annotations(
+                    request.attempt_id,
+                    tuple(experiment.model_dump(mode="json") for experiment in report.experiments),
+                )
+            except (ValueError, InvalidTransitionError) as error:
+                detail = f"invalid Kernel Trial references: {error}"
+                self._events.record_runtime_event(
+                    "attempt.report_rejected",
+                    request.attempt_id,
+                    {**event_base, "reason": detail, "gateway_outcome_present": False},
+                )
+                return RunAttemptResult(
+                    failure_reason=detail,
+                    attempt_report_digest=result.attempt_report_digest,
+                    attempt_report_status=AttemptReportStatus(report.status),
+                )
         self._events.record_runtime_event(
             "attempt.reported",
             request.attempt_id,

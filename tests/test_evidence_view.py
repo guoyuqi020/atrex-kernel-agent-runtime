@@ -48,10 +48,7 @@ def _raw_trace(
         "estimated_tokens": 12_345,
     }
     (source / "provider/stdout.stream-json").write_text(
-        json.dumps(thinking_tokens)
-        + "\n"
-        + json.dumps(provider_event)
-        + "\n",
+        json.dumps(thinking_tokens) + "\n" + json.dumps(provider_event) + "\n",
         encoding="utf-8",
     )
     (source / "conversation.jsonl").write_text(
@@ -120,6 +117,7 @@ def _lineage(
     kernel_digests = {
         label: _kernel_digest(store, root / "kernel-sources", label) for label in kernel_ids
     }
+    trial_digest = _kernel_digest(store, root / "kernel-sources", "reverted-trial")
     attempts = []
     for branch, ordinal, attempt_id in (
         ("active", 1, "attempt_active"),
@@ -202,6 +200,52 @@ def _lineage(
             "sessions": [],
         },
     )
+    _write(
+        root / "measurements/00000001.json",
+        {
+            "schema_version": 1,
+            "epoch_id": "epoch_0123456789abcdef0123456789abcdef",
+            "measurements": [
+                {
+                    "measurement_id": f"measurement_{branch}",
+                    "attempt_id": attempt_id,
+                    "kernel_artifact_digest": str(kernel_digests[branch]),
+                    "operation": "evaluate",
+                    "source_operation": "evaluate",
+                    "profile_level": None,
+                    "shape_id": "opaque-shape-1",
+                    "kernel_name": None,
+                    "metrics": {"latency_us": 9.0 if branch == winner else 11.0},
+                    "gateway_result_digest": str(digest(f"gateway-{branch}")),
+                    "created_at": "2026-08-22T00:00:00+00:00",
+                }
+                for branch, attempt_id in (
+                    ("active", "attempt_active"),
+                    ("challenger", "attempt_challenger"),
+                )
+            ],
+        },
+    )
+    _write(
+        root / "kernel-trials/00000001.json",
+        {
+            "schema_version": 1,
+            "epoch_id": "epoch_0123456789abcdef0123456789abcdef",
+            "kernel_trials": [
+                {
+                    "kernel_trial_id": "gtrial_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "attempt_id": "attempt_active",
+                    "recovery_generation": 0,
+                    "ordinal": 1,
+                    "candidate_artifact_digest": str(trial_digest),
+                    "disposition": "revert",
+                    "observations": [{"operation": "evaluate"}],
+                    "annotations": [{"decision": "revert"}],
+                    "created_at": "2026-08-22T00:00:00+00:00",
+                }
+            ],
+        },
+    )
     return root
 
 
@@ -278,6 +322,10 @@ def test_optimizer_view_projects_one_promoted_agent_lineage_by_epoch(tmp_path: P
     assert manifest.prompt_fragment_sha256 == EVIDENCE_PROMPT_SHA256
     assert (destination / "instructions.md").read_text() == EVIDENCE_PROMPT_TEXT
     assert "layout v1" not in EVIDENCE_PROMPT_TEXT.lower()
+    assert '"operation":"kernel_trials"' in EVIDENCE_PROMPT_TEXT
+    assert '"operation":"kernel_trial_read"' in EVIDENCE_PROMPT_TEXT
+    assert '"operation":"measurements","kernel_artifact_digest"' in EVIDENCE_PROMPT_TEXT
+    assert "only `candidate_artifact_digest` identifies" in EVIDENCE_PROMPT_TEXT
     completed = destination / "epochs/00000001"
     current = destination / "epochs/00000002"
     completed_attempt_root = completed / "trajectories/00000001/attempts/00000001"
@@ -294,6 +342,8 @@ def test_optimizer_view_projects_one_promoted_agent_lineage_by_epoch(tmp_path: P
     assert '"branch"' not in json.dumps(lessons)
     assert not (completed / "branches").exists()
     assert not (completed / "evolution").exists()
+    measurements = json.loads((completed / "measurements.json").read_text())["measurements"]
+    assert [item["attempt_id"] for item in measurements] == ["attempt_active"]
     completed_trace = completed_attempt_root / "traces/run-0001/provider/stdout.stream-json"
     assert (
         "private prompt active"
@@ -303,9 +353,10 @@ def test_optimizer_view_projects_one_promoted_agent_lineage_by_epoch(tmp_path: P
     assert "secret-active" in completed_trace.read_text()
     assert "raw result active" in completed_trace.read_text()
     assert "thinking_tokens" not in completed_trace.read_text()
-    assert "thinking_tokens" not in (
-        completed_attempt_root / "traces/run-0001/conversation.jsonl"
-    ).read_text()
+    assert (
+        "thinking_tokens"
+        not in (completed_attempt_root / "traces/run-0001/conversation.jsonl").read_text()
+    )
     source_trace = store.verify(traces["active"]).payload_path
     assert "thinking_tokens" in (source_trace / "provider/stdout.stream-json").read_text()
     assert "thinking_tokens" in (source_trace / "conversation.jsonl").read_text()
@@ -388,7 +439,17 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
         "kernelrev_11111111111111111111111111111111",
         "kernelrev_22222222222222222222222222222222",
     }
+    measurements = json.loads((epoch_root / "measurements.json").read_text())["measurements"]
+    assert {item["attempt_id"] for item in measurements} == {
+        "attempt_active",
+        "attempt_challenger",
+    }
     assert (
         epoch_root / "kernels/kernelrev_22222222222222222222222222222222/kernel.py"
     ).read_text() == "# challenger\n"
+    trial_index = json.loads((epoch_root / "kernel-trials/index.json").read_text())
+    assert trial_index["kernel_trials"][0]["disposition"] == "revert"
+    assert (
+        epoch_root / "kernel-trials/gtrial_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/source/kernel.py"
+    ).read_text() == "# reverted-trial\n"
     assert not (destination / "epochs/00000002").exists()
