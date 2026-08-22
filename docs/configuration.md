@@ -184,8 +184,10 @@ cgroup. The outer container must allow the user/PID/IPC/UTS namespace operations
 Runtime applies the same read-only root, private `~/workspace`, sibling/Runtime-storage masking,
 dropped capabilities, and read-only Backend login-state projection as `sandbox`. Each Worker is
 therefore filesystem- and namespace-isolated, while all Workers share the outer container's total
-memory/CPU/PID limit. Use a dedicated container, do not mount the Docker socket, Runtime secrets,
-private evaluator data, or unrelated host paths into it, and apply resource limits at the OCI layer.
+memory/CPU/PID limit. To work under standard OCI seccomp policies, `container` projects the outer
+container's `/proc` read-only instead of mounting a fresh procfs; the host `sandbox` retains private
+procfs. Use a dedicated container, do not mount the Docker socket, Runtime secrets, private evaluator
+data, or unrelated host paths into it, and apply resource limits at the OCI layer.
 
 `sandbox` requires Linux, bubblewrap, and systemd with cgroup v2. Its fixed contract is:
 

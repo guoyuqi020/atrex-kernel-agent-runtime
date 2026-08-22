@@ -161,8 +161,9 @@ bubblewrap，但不需要 systemd、可写 cgroup 层级、sudo 或逐 Session c
 bwrap 使用 User/PID/IPC/UTS Namespace。Runtime 会应用与 `sandbox` 相同的只读根、私有
 `~/workspace`、兄弟 Workspace/Runtime Storage 遮蔽、Capability 丢弃和 Backend 登录态只读投影。
 因此 Worker 之间具有文件系统与 Namespace 隔离，但共享外层容器的内存、CPU 与 PID 总限额。
-必须使用专用容器，不要挂载 Docker Socket、Runtime Secret、私有评测数据或无关宿主路径，并在
-OCI 层设置资源限额。
+为兼容常见 OCI seccomp 策略，`container` 会只读投影外层容器的 `/proc`，而不是新挂载 procfs；
+宿主 `sandbox` 仍使用私有 procfs。必须使用专用容器，不要挂载 Docker Socket、Runtime Secret、
+私有评测数据或无关宿主路径，并在 OCI 层设置资源限额。
 
 `sandbox` 要求 Linux、bubblewrap 与启用 cgroup v2 的 systemd。固定边界如下：
 

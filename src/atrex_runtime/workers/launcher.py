@@ -876,21 +876,31 @@ class BwrapSandboxLauncher:
             "/",
             "--dev",
             "/dev",
-            "--proc",
-            "/proc",
-            "--tmpfs",
-            "/run",
-            "--dir",
-            "/run/systemd",
-            "--dir",
-            "/run/systemd/resolve",
-            "--ro-bind",
-            str(self.settings.resolv_conf.resolve()),
-            "/run/systemd/resolve/resolv.conf",
-            "--ro-bind",
-            str(self.settings.resolv_conf.resolve()),
-            "/run/systemd/resolve/stub-resolv.conf",
         ]
+        if self.use_systemd_cgroup:
+            bwrap.extend(("--proc", "/proc"))
+        else:
+            # Common OCI seccomp profiles reject a fresh procfs mount even when
+            # bubblewrap's user/mount namespace setup is otherwise permitted.
+            # Keep the outer container's procfs read-only in this deployment
+            # mode; the PID namespace still prevents signalling ancestor tasks.
+            bwrap.extend(("--ro-bind", "/proc", "/proc"))
+        bwrap.extend(
+            (
+                "--tmpfs",
+                "/run",
+                "--dir",
+                "/run/systemd",
+                "--dir",
+                "/run/systemd/resolve",
+                "--ro-bind",
+                str(self.settings.resolv_conf.resolve()),
+                "/run/systemd/resolve/resolv.conf",
+                "--ro-bind",
+                str(self.settings.resolv_conf.resolve()),
+                "/run/systemd/resolve/stub-resolv.conf",
+            )
+        )
         if interactive:
             # systemd-run owns the PTY. Keep /dev private, but make the
             # already-open devpts endpoint visible so terminal-aware CLIs can

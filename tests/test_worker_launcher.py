@@ -92,6 +92,11 @@ def test_container_launcher_uses_bwrap_without_systemd_and_projects_credentials(
     assert argv[0] == "/usr/bin/bwrap"
     assert "/usr/bin/systemd-run" not in argv
     assert not any(value.startswith("--property=") for value in argv)
+    assert "--proc" not in argv
+    assert any(
+        argv[index : index + 3] == ("--ro-bind", "/proc", "/proc")
+        for index in range(len(argv) - 2)
+    )
     assert "ATREX_SANDBOX=bwrap-container" in argv
     assert "ATREX_WORKSPACE=/home/agent/workspace" in argv
     assert str(qoder) in argv
@@ -447,6 +452,8 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
     bwrap = argv[bwrap_index:]
     ro_bind_index = bwrap.index("--ro-bind")
     assert bwrap[ro_bind_index : ro_bind_index + 3] == ("--ro-bind", "/", "/")
+    proc_index = bwrap.index("--proc")
+    assert bwrap[proc_index : proc_index + 2] == ("--proc", "/proc")
     assert str(tmp_path / "resolver/resolv.conf") in bwrap
     assert "/run/systemd/resolve/stub-resolv.conf" in bwrap
     assert "--cap-drop" in bwrap and "ALL" in bwrap

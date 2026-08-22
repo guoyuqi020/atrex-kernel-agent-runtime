@@ -10,6 +10,8 @@ directly: it does not invoke `systemd-run` or read/write a cgroup interface.
 
 The mode provides per-Session filesystem and user/PID/IPC/UTS namespace isolation, but not
 per-Session resource accounting. All Workers share the outer container's memory/CPU/PID limits.
+It projects the outer container's procfs read-only because common OCI seccomp profiles reject a
+fresh procfs mount; host `sandbox` mode continues to mount private procfs.
 Operators must use a dedicated container, allow bwrap's namespace operations, set aggregate limits
 in the OCI runtime, and avoid mounting the Docker socket, Runtime secrets, private evaluator data,
 or unrelated host paths. Deployments requiring per-Session cgroups continue to use `sandbox`.
