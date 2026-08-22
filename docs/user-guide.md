@@ -5,9 +5,11 @@ English | [中文](user-guide.zh.md)
 ## 1. Prerequisites
 
 Development mode requires Python 3.12+, Git, a supported Agent CLI (`claude`, `codex`,
-`qodercli`, or `pi`), and access to an Agate service/GPU environment. Production sandbox mode also
-requires Linux, bubblewrap, systemd with cgroup v2, and a dedicated non-root
-Worker user.
+`qodercli`, or `pi`), and access to an Agate service/GPU environment. Host production sandbox mode
+also requires Linux, bubblewrap, systemd with cgroup v2, and a dedicated non-root Worker user.
+Container mode instead requires Linux and bubblewrap inside a dedicated outer OCI container whose
+policy permits bwrap namespaces and whose operator supplies aggregate resource limits; it has no
+nested systemd/cgroup dependency.
 
 Clone all pinned repositories before installation:
 
@@ -47,7 +49,7 @@ Runtime config is strict schema v1. Important choices are:
 - Core base repository and Evolver repository/full commit;
 - Optimizer/Evolver Backend, executable command, environment allowlist, and Session policy;
 - Gate policy, comparison method, Roofline builder, and Production Gate;
-- `development` or Linux `sandbox` launcher;
+- `development`, outer-OCI `container`, or Linux `sandbox` launcher;
 - optional GPU Wiki query service;
 - administration and maintenance limits.
 

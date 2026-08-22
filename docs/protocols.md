@@ -154,10 +154,11 @@ the ordinary Epoch `attempt_id` shown in the Kernel catalog.
 
 Core `atrex-bundle.json` schema v1 declares one repository-relative entrypoint. Runtime sets `ATREX_CORE_PHASE` to `problem_generalization`, `framework_baseline`, or `optimization_attempt` and supplies phase-specific manifest/report paths, `ATREX_USAGE_UNIT`, `ATREX_USAGE_BUDGET`, a provider-usage report destination, optional Session trace, isolated home, and scoped Gateway/Wiki authority. QoderCLI uses credits; Claude, Codex, and Pi use provider tokens. Exit 0 means completed; exit 125 means the selected provider-native quota is exhausted; every other exit is explicit. A valid schema-v2 provider-usage report is mandatory.
 
-In Sandbox mode Runtime additionally sets `HOME=/home/agent`,
-`ATREX_WORKSPACE=/home/agent/workspace`, and `ATREX_SANDBOX=bwrap-cgroup-v1`. The Worker shares the
-host network and DNS directly; Runtime does not inject proxy variables or restrict reachable host
-ports. Filesystem and cgroup isolation are unaffected.
+In both production modes Runtime additionally sets `HOME=/home/agent` and
+`ATREX_WORKSPACE=/home/agent/workspace`. `ATREX_SANDBOX` is `bwrap-cgroup-v2` for `sandbox` and
+`bwrap-container` for `container`. The Worker shares the surrounding network and DNS directly;
+Runtime does not inject proxy variables or restrict reachable ports. Both modes retain the bwrap
+filesystem boundary; only `sandbox` adds a per-Session cgroup.
 Any host-absolute path below the Session root is translated to its `~/workspace` equivalent before
 launch.
 

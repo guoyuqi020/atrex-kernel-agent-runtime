@@ -47,3 +47,4 @@
 - [0042](0042-artifact-seeded-lineages.zh.md)：Artifact Seed Lineage
 - [0046](0046-worker-host-network.zh.md)：Sandbox Worker 共享宿主网络
 - [0047](0047-worker-owned-workspace-roots.zh.md)：由 Worker 创建 Sandbox Root
+- [0048](0048-outer-container-worker-launcher.zh.md)：外层容器 Worker 边界

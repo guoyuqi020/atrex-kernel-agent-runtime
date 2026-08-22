@@ -9,11 +9,13 @@ import pytest
 
 from atrex_runtime.config import (
     BackendCredentialSettings,
+    BwrapContainerSettings,
     BwrapSandboxSettings,
     CgroupResourceSettings,
 )
 from atrex_runtime.workers.launcher import (
     BackendCredentialMounts,
+    BwrapContainerLauncher,
     BwrapSandboxLauncher,
     CleanEnvironmentLauncher,
 )
@@ -44,6 +46,90 @@ def test_clean_environment_launcher_does_not_use_a_shell(tmp_path: Path) -> None
         "--flag",
     )
 
+
+def test_container_launcher_uses_bwrap_without_systemd_and_projects_credentials(
+    tmp_path: Path,
+) -> None:
+    host_home = tmp_path / "host-home"
+    qoder = host_home / ".qoder"
+    qodersec = host_home / ".qodersec"
+    (qoder / ".auth").mkdir(parents=True)
+    (qoder / ".auth/token").write_text("secret", encoding="utf-8")
+    (qoder / "tasks").mkdir()
+    (qoder / "tasks/old-task").write_text("volatile", encoding="utf-8")
+    (qoder / "settings.json").write_text("{}", encoding="utf-8")
+    qodersec.mkdir()
+    (qodersec / "identity").write_text("identity", encoding="utf-8")
+    credentials = BackendCredentialMounts.from_environment(
+        BackendCredentialSettings(host_home=host_home),
+        {"HOME": str(host_home), "PATH": "/usr/bin"},
+    )
+    assert credentials is not None
+    root = tmp_path / "attempt"
+    workspace = root / "run"
+    session_home = workspace / "sessions/core/agent-home"
+    session_home.mkdir(parents=True)
+    launcher = BwrapContainerLauncher(
+        Path("/usr/bin/env"),
+        BwrapContainerSettings(
+            bwrap_executable=Path("/usr/bin/bwrap"),
+            resolv_conf=_resolver(tmp_path),
+        ),
+        (root,),
+        credentials,
+    )
+
+    argv = launcher.wrap(
+        ("/opt/core/run.py",),
+        workspace=workspace,
+        environment={
+            "ATREX_AGENT_BACKEND": "qodercli",
+            "HOME": str(session_home),
+            "PATH": "/usr/bin",
+        },
+    )
+
+    assert argv[0] == "/usr/bin/bwrap"
+    assert "/usr/bin/systemd-run" not in argv
+    assert not any(value.startswith("--property=") for value in argv)
+    assert "ATREX_SANDBOX=bwrap-container" in argv
+    assert "ATREX_WORKSPACE=/home/agent/workspace" in argv
+    assert str(qoder) in argv
+    assert str(qodersec) in argv
+    assert "/home/agent/workspace/sessions/core/agent-home/.qoder" in argv
+    assert (session_home / ".qoder/tasks").is_dir()
+
+
+def test_container_launcher_requires_session_home_inside_workspace(tmp_path: Path) -> None:
+    host_home = tmp_path / "host-home"
+    (host_home / ".codex").mkdir(parents=True)
+    (host_home / ".codex/auth.json").write_text("{}", encoding="utf-8")
+    credentials = BackendCredentialMounts.from_environment(
+        BackendCredentialSettings(host_home=host_home),
+        {"HOME": str(host_home), "PATH": "/usr/bin"},
+    )
+    assert credentials is not None
+    workspace = tmp_path / "attempt/run"
+    workspace.mkdir(parents=True)
+    launcher = BwrapContainerLauncher(
+        Path("/usr/bin/env"),
+        BwrapContainerSettings(
+            bwrap_executable=Path("/usr/bin/bwrap"),
+            resolv_conf=_resolver(tmp_path),
+        ),
+        (workspace.parent,),
+        credentials,
+    )
+
+    with pytest.raises(ValueError, match="HOME must be inside"):
+        launcher.wrap(
+            ("/bin/true",),
+            workspace=workspace,
+            environment={
+                "ATREX_AGENT_BACKEND": "codex",
+                "HOME": str(tmp_path / "outside"),
+            },
+        )
 
 def test_launcher_rejects_invalid_environment_names(tmp_path: Path) -> None:
     launcher = CleanEnvironmentLauncher(Path("/usr/bin/env"))
@@ -508,6 +594,38 @@ def test_bwrap_host_check_serializes_shared_workspace_preparation(
     launcher.check_host()
 
     assert calls == ["locked", worker]
+    assert (tmp_path / ".atrex-sandbox-host.lock").is_file()
+
+
+def test_container_bwrap_host_check_skips_systemd_user_and_cgroup(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = Path("/usr/bin/env")
+    workspace_root = tmp_path / "attempt-workspaces"
+    launcher = BwrapContainerLauncher(
+        executable,
+        BwrapContainerSettings(
+            bwrap_executable=executable,
+            resolv_conf=_resolver(tmp_path),
+        ),
+        (workspace_root,),
+    )
+    monkeypatch.setattr("atrex_runtime.workers.launcher.platform.system", lambda: "Linux")
+    monkeypatch.setattr(
+        "atrex_runtime.workers.launcher.pwd.getpwnam",
+        lambda _name: pytest.fail("container mode must not resolve a systemd Worker user"),
+    )
+    calls: list[str] = []
+    monkeypatch.setattr(
+        BwrapSandboxLauncher,
+        "_check_container_workspace_access",
+        lambda _self: calls.append("probed"),
+    )
+
+    launcher.check_host()
+
+    assert calls == ["probed"]
     assert (tmp_path / ".atrex-sandbox-host.lock").is_file()
 
 

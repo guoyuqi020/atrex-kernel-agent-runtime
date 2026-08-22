@@ -2,7 +2,7 @@
 
 [English](architecture.md) | 中文
 
-Atrex Kernel Agent Runtime 是 Python 可信控制平面。Core 与 Evolver 是独立版本化、按完整 Commit 导入的不可信 Git 仓库；GPU Wiki 与 Agate 是外部服务。生产 Worker 使用 bubblewrap 与逐 Session cgroup v2 隔离。显式 `development` Launcher 在复用宿主 CLI 登录态时只提供轻量只读 Mount Namespace，仍缺少其余生产边界，也绝不会作为生产降级路径。
+Atrex Kernel Agent Runtime 是 Python 可信控制平面。Core 与 Evolver 是独立版本化、按完整 Commit 导入的不可信 Git 仓库；GPU Wiki 与 Agate 是外部服务。宿主机生产 Worker 使用 bubblewrap 与逐 Session cgroup v2 隔离；`container` Launcher 则把专用外层 OCI 容器作为部署边界，不依赖嵌套 systemd/cgroup。显式 `development` Launcher 在复用宿主 CLI 登录态时只提供轻量只读 Mount Namespace，仍缺少其余生产边界，也绝不会作为生产降级路径。
 
 ```mermaid
 flowchart LR
@@ -33,10 +33,11 @@ Gateway 调用只在 Runtime 内解析已封存 Contract。完整 Agate 原始 J
 统一的隐藏 Case 失败信息。Profile 只使用一个由不透明 ID 选择（或可信默认选择）的私有 Case，返回
 前移除 Request、Spec 与 Case 内容。Runtime 的权威 Bootstrap 和留存 Comparator 始终使用完整隐藏集合。
 
-`development` 与 `sandbox` 使用完全相同的协议。`development` 可避免 Workspace、Request、Result
+`development`、`container` 与 `sandbox` 使用完全相同的协议。`development` 可避免 Workspace、Request、Result
 和环境变量造成的意外泄漏，但它仍是无隔离的本地调试模式，无法抵抗同一宿主用户下的恶意进程扫描。
-`sandbox` 会进一步自动遮蔽 Runtime Storage 与所有兄弟 Worker Root，只挂载当前 Workspace，从而
-提供对抗性文件系统边界。
+`container` 与 `sandbox` 都通过 bwrap 为每个 Session 遮蔽 Runtime Storage 与所有兄弟 Worker Root，
+只挂载当前 Workspace。`sandbox` 还为每个 Session 创建 systemd cgroup；`container` 则由专用外层 OCI
+容器提供总资源限额。
 
 ## 生命周期
 

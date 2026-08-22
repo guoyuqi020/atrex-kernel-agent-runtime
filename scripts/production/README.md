@@ -16,9 +16,8 @@ mandatory; startup rejects any workspace whose `gate_policy.production_gate` is 
 - Configuration only: use `prepare.sh`.
 - Read-only result inspection: use `inspect.sh --workspace TASK [--dsl DSL]`.
 
-Do not wrap the complete command in `sudo bash ...`. The scripts escalate only transient-service
-and sandbox execution, preserving the invoking user's Home, PATH, provider login state, and Worker
-workspace ownership.
+Do not wrap the complete command in `sudo bash ...`. In `sandbox` mode the scripts escalate only
+transient-service and sandbox execution. In `container` mode they never escalate.
 
 ## Fixed schedule
 
@@ -32,9 +31,19 @@ workspace ownership.
 
 ## Prerequisites
 
-Production sandboxing requires Linux, bwrap, systemd with cgroup v2, root/sudo authority for
-transient services, the configured non-root Worker user, one supported Agent CLI, and Agate
-credentials. Workers share host DNS, routing, services, and public egress.
+Choose one Worker boundary:
+
+- `sandbox` requires Linux, bwrap, systemd with cgroup v2, root/sudo authority, and the configured
+  non-root Worker user.
+- `container` requires Linux and bwrap, but no systemd, writable cgroup hierarchy, sudo, or
+  per-Session cgroup. The OCI policy must allow bwrap's namespace operations. Runtime isolates each
+  Worker filesystem/namespace; the outer container supplies their shared memory, CPU, and PID total
+  limits. Do not mount the Docker socket, Runtime secrets, private evaluator data, or unrelated paths.
+
+Both modes require one supported Agent CLI and Agate credentials.
+In `container` mode, run the outer container as a non-root user when practical and verify that bwrap
+can create its user/PID/IPC/UTS namespaces; managed Runtime and Local Wiki processes retain that
+container identity.
 
 Preparing a new Campaign also requires clean Core and Evolver Git worktrees. Production records
 only commits, so staged, unstaged, or untracked Bundle files cause preparation to fail instead of
@@ -73,6 +82,7 @@ Start Runtime and Wiki once:
 bash scripts/production/services.sh start \
   --workspace workspaces/production/control-l20n \
   --hardware-target L20N \
+  --launcher-mode container \
   --env-file /secure/atrex-production.env
 ```
 
@@ -86,6 +96,9 @@ bash scripts/production/campaign.sh start \
   --target-epoch 10 \
   --env-file /secure/atrex-production.env
 ```
+
+The service workspace pins its launcher mode. Campaigns attached to it inherit that mode, so the
+Campaign command does not need to repeat `--launcher-mode`.
 
 Manage it independently of the shared services:
 

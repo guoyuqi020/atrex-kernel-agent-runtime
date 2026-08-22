@@ -178,6 +178,15 @@ This does not add cgroup, network, PID, IPC, or Runtime-storage isolation: devel
 cannot contain a malicious same-user process and is never selected as a fallback. Disable
 `backend_credentials` explicitly when running development mode on a platform without bubblewrap
 and authenticate through allowlisted environment variables instead.
+`container` runs each Worker through bubblewrap inside an operator-supplied outer OCI container.
+It requires Linux and bubblewrap, but no systemd, writable cgroup hierarchy, sudo, or per-Session
+cgroup. The outer container must allow the user/PID/IPC/UTS namespace operations used by bwrap.
+Runtime applies the same read-only root, private `~/workspace`, sibling/Runtime-storage masking,
+dropped capabilities, and read-only Backend login-state projection as `sandbox`. Each Worker is
+therefore filesystem- and namespace-isolated, while all Workers share the outer container's total
+memory/CPU/PID limit. Use a dedicated container, do not mount the Docker socket, Runtime secrets,
+private evaluator data, or unrelated host paths into it, and apply resource limits at the OCI layer.
+
 `sandbox` requires Linux, bubblewrap, and systemd with cgroup v2. Its fixed contract is:
 
 - host root read-only, private `/home`, `/tmp`, `/run`, `/dev`, and `/proc`;

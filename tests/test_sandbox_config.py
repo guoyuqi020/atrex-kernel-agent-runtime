@@ -9,7 +9,10 @@ import pytest
 
 from atrex_runtime.composition.campaign import build_worker_launcher
 from atrex_runtime.config import RuntimeSettings
-from atrex_runtime.workers.launcher import BwrapSandboxLauncher
+from atrex_runtime.workers.launcher import (
+    BwrapContainerLauncher,
+    BwrapSandboxLauncher,
+)
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 
@@ -48,6 +51,36 @@ def test_development_launcher_does_not_require_sandbox_settings(tmp_path: Path) 
     settings = RuntimeSettings.from_file(path)
     assert settings.campaign is not None
     assert settings.campaign.launcher.mode == "development"
+
+
+def test_container_launcher_does_not_require_systemd_or_cgroup_settings(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path, value = _config(tmp_path)
+    campaign = value["campaign"]
+    assert isinstance(campaign, dict)
+    campaign["launcher"] = {
+        "mode": "container",
+        "env_executable": "/usr/bin/env",
+        "backend_credentials": {"enabled": False},
+        "container": {
+            "bwrap_executable": "/usr/bin/bwrap",
+            "resolv_conf": "/etc/resolv.conf",
+        },
+    }
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    settings = RuntimeSettings.from_file(path)
+    monkeypatch.setattr(BwrapSandboxLauncher, "check_host", lambda _self: None)
+    launcher = build_worker_launcher(settings, {})
+
+    assert settings.campaign is not None
+    assert settings.campaign.launcher.mode == "container"
+    assert settings.campaign.launcher.container is not None
+    assert settings.campaign.launcher.sandbox is None
+    assert isinstance(launcher, BwrapContainerLauncher)
+    assert launcher.use_systemd_cgroup is False
 
 
 def test_sandbox_launcher_automatically_masks_runtime_storage(

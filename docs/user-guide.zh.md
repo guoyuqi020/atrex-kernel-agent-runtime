@@ -5,8 +5,10 @@
 ## 1. 前置条件
 
 开发模式要求 Python 3.12+、Git、一种受支持的 Agent CLI（`claude`、`codex`、`qodercli` 或
-`pi`），以及可访问的 Agate/GPU 环境。生产沙箱模式还要求 Linux、bubblewrap、systemd+cgroup
-v2 和专用非 root Worker 用户。Worker 共享宿主网络。
+`pi`），以及可访问的 Agate/GPU 环境。宿主机生产沙箱模式还要求 Linux、bubblewrap、
+systemd+cgroup v2 和专用非 root Worker 用户；`container` 模式要求在专用外层 OCI 容器内安装
+bubblewrap、允许其创建 Namespace，并由运维方设置资源总限额，但不需要嵌套 systemd/cgroup。
+Worker 共享所在环境的网络。
 
 安装前拉取全部固定版本仓库：
 
@@ -45,7 +47,7 @@ v1，主要需要确定：
 - Core Base 仓库及 Evolver 仓库/完整 Commit；
 - Optimizer/Evolver Backend、启动命令、环境白名单和 Session Policy；
 - Gate Policy、比较方法、Roofline Builder 和 Production Gate；
-- `development` 或 Linux `sandbox` Launcher；
+- `development`、外层 OCI `container` 或 Linux `sandbox` Launcher；
 - 可选 GPU Wiki Query 服务；
 - Administration 和 Maintenance 上限。
 

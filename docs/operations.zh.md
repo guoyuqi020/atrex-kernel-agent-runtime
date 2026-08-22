@@ -11,14 +11,18 @@ Core 与 Evolver 是部署批准、按完整 Commit 固定的 Git 仓库；相�
 ## 启动
 
 1. 创建受限 Owner 的 Storage/Workspace 目录。
-2. 在 Linux 安装 bubblewrap 并启用 cgroup v2；预置非 root
-   `launcher.sandbox.worker_user`，为可信 Launcher 提供受控的 system manager
-   transient-service 权限。使用
-   `sudo .venv/bin/python scripts/validate-linux-sandbox.py` 验证准确镜像。
+2. 选择 Worker 边界。`sandbox` 需要安装 bubblewrap、启用 cgroup v2、预置非 root
+   `launcher.sandbox.worker_user`，并授予可信 Launcher 受控的 system manager transient-service
+   权限，使用 `sudo .venv/bin/python scripts/validate-linux-sandbox.py` 验证准确镜像。
+   `container` 则要求把完整部署放入安装 bubblewrap 且设置了内存/CPU/PID 限额的专用 OCI
+   容器；容器内不需要 systemd、可写 cgroup 层级、sudo 或逐 Session cgroup，但 OCI 安全策略必须
+   允许 bwrap 使用所需 Namespace。
 3. 导出解码后至少 32 字节的 Base64 Capability Signing Key、Admin Bearer Token、所选 Agent
    Provider 凭据、Agate 凭据和可选 Wiki 凭据。Provider CLI 直接通过宿主网络连接，不需要
    Runtime 模型代理。
-4. 让必要 Provider CLI/配置可读，并只把最小不可变路径加入 `launcher.sandbox.read_only_bind_paths`。禁止挂载 Workspace Root、Registry、Artifact Store、Runtime 配置或宽泛宿主 Home。
+4. `sandbox` 只把最小不可变 Provider 路径加入 `launcher.sandbox.read_only_bind_paths`；
+   `container` 只把必需登录状态挂入外层容器，Runtime 会把白名单子集只读投影到各 bwrap Session Home。
+   禁止暴露 Docker Socket、私有评测数据或无关宿主存储。
 5. 启动 Service 并检查 `/readyz`，完成配置验证。
    ASGI 启动后，Runtime 会立即探测一次 Agate，之后每隔
    `agate.health_check_interval_s` 秒探测一次（默认 30 秒）；首次状态、故障与恢复均写入 Service
@@ -205,9 +209,10 @@ Artifact/Workspace GC 有界且默认 Dry Run。只有在部署静止并满足�
 
 ## 安全警告
 
-`launcher.mode=sandbox` 是唯一生产模式。bwrap、systemd/cgroup-v2 或配置的 Resolver 不可用时
-会 Fail Closed，绝不会降级到 development。该模式有意共享宿主网络，因此不隔离宿主服务、
-Worker 流量或出站目的地。
+`launcher.mode=sandbox` 与 `launcher.mode=container` 都是生产模式。两者在 bwrap 或配置的 Resolver
+不可用时都会 Fail Closed，绝不会降级到 development；`sandbox` 还要求 systemd/cgroup-v2，
+`container` 则依赖外层 OCI 的资源总限额。两者有意共享所在环境的 Network Namespace，因此不隔离
+宿主/容器服务、Worker 流量或出站目的地。
 `launcher.mode=development` 有意不隔离，只适合可信本地工作。生产晋升前必须在目标镜像执行
 负测：相邻/宿主读取、写出 `~/workspace`、直接 Internet/DNS 成功、Namespace 逃逸、Fork/
 内存/CPU 耗尽、超时清理以及凭据挂载范围。

@@ -48,3 +48,4 @@ designs were removed from the release tree. Current behavior is defined by code,
 - [0042](0042-artifact-seeded-lineages.md): Artifact-seeded Lineages
 - [0046](0046-worker-host-network.md): shared host networking for sandboxed Workers
 - [0047](0047-worker-owned-workspace-roots.md): Worker-created Sandbox roots
+- [0048](0048-outer-container-worker-launcher.md): outer-container Worker boundary

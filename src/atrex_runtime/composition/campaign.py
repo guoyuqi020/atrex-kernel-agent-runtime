@@ -64,6 +64,7 @@ from ..workers.evolution import (
 from ..workers.evolver_bundle import GitEvolverBundleResolver
 from ..workers.launcher import (
     BackendCredentialMounts,
+    BwrapContainerLauncher,
     BwrapSandboxLauncher,
     CleanEnvironmentLauncher,
     WorkerLauncher,
@@ -445,23 +446,26 @@ def build_worker_launcher(
     )
     if launch.mode == "development":
         return CleanEnvironmentLauncher(launch.env_executable, credentials)
-    sandbox = launch.sandbox
-    if sandbox is None:
-        raise ValueError("Sandbox launcher requires Sandbox settings")
+    boundary = launch.container if launch.mode == "container" else launch.sandbox
+    if boundary is None:
+        raise ValueError("bubblewrap launcher requires boundary settings")
     storage_hidden = (
         settings.storage.artifacts_root,
         settings.storage.registry_database.parent,
         settings.storage.gateway_database.parent,
         settings.storage.agate_jobs_database.parent,
     )
-    sandbox = sandbox.model_copy(
+    boundary = boundary.model_copy(
         update={
-            "hidden_host_paths": (*sandbox.hidden_host_paths, *storage_hidden),
+            "hidden_host_paths": (*boundary.hidden_host_paths, *storage_hidden),
         }
     )
-    launcher = BwrapSandboxLauncher(
+    launcher_type = (
+        BwrapContainerLauncher if launch.mode == "container" else BwrapSandboxLauncher
+    )
+    launcher = launcher_type(
         launch.env_executable,
-        sandbox,
+        boundary,
         (
             campaign.attempt_workspaces_root,
             campaign.evolution_workspaces_root,

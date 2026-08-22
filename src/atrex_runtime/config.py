@@ -419,27 +419,20 @@ class CgroupResourceSettings(BaseModel):
     tasks_max: int = Field(gt=0)
 
 
-class BwrapSandboxSettings(BaseModel):
-    """Strict Linux mount namespace and cgroup policy with host networking."""
+class BwrapFilesystemSettings(BaseModel):
+    """Shared bubblewrap filesystem and namespace boundary policy."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     bwrap_executable: Path
-    systemd_run_executable: Path
-    systemd_user: Literal[False] = False
-    worker_user: str = Field(
-        min_length=1,
-        pattern=r"^[a-z_][a-z0-9_-]*[$]?$",
-    )
     sandbox_home: PurePosixPath = PurePosixPath("/home/agent")
     workspace_mount: PurePosixPath = PurePosixPath("/home/agent/workspace")
     resolv_conf: Path = Path("/etc/resolv.conf")
     read_only_bind_paths: tuple[Path, ...] = ()
     hidden_host_paths: tuple[Path, ...] = ()
-    resources: CgroupResourceSettings
 
     @model_validator(mode="after")
-    def _validate_sandbox(self) -> BwrapSandboxSettings:
+    def _validate_sandbox(self) -> BwrapFilesystemSettings:
         if not self.sandbox_home.is_absolute() or self.sandbox_home.as_posix() == "/":
             raise ValueError("Sandbox home must be an absolute non-root path")
         if not self.workspace_mount.is_absolute():
@@ -462,7 +455,7 @@ class BwrapSandboxSettings(BaseModel):
                 raise ValueError(f"Sandbox {label} paths cannot be below /run")
         return self
 
-    def resolve_from(self, base: Path) -> BwrapSandboxSettings:
+    def resolve_from(self, base: Path) -> BwrapFilesystemSettings:
         """Resolve trusted host executable and mount paths from the config directory."""
 
         def resolve(path: Path) -> Path:
@@ -471,11 +464,37 @@ class BwrapSandboxSettings(BaseModel):
         return self.model_copy(
             update={
                 "bwrap_executable": resolve(self.bwrap_executable),
-                "systemd_run_executable": resolve(self.systemd_run_executable),
                 "resolv_conf": resolve(self.resolv_conf),
                 "read_only_bind_paths": tuple(resolve(path) for path in self.read_only_bind_paths),
                 "hidden_host_paths": tuple(resolve(path) for path in self.hidden_host_paths),
             }
+        )
+
+
+class BwrapContainerSettings(BwrapFilesystemSettings):
+    """Nested bubblewrap boundary whose outer container owns resource limits."""
+
+
+class BwrapSandboxSettings(BwrapFilesystemSettings):
+    """Strict Linux bubblewrap boundary plus systemd-managed cgroup v2 limits."""
+
+    systemd_run_executable: Path
+    systemd_user: Literal[False] = False
+    worker_user: str = Field(
+        min_length=1,
+        pattern=r"^[a-z_][a-z0-9_-]*[$]?$",
+    )
+    resources: CgroupResourceSettings
+
+    def resolve_from(self, base: Path) -> BwrapSandboxSettings:
+        resolved = super().resolve_from(base)
+        if not isinstance(resolved, BwrapSandboxSettings):
+            raise TypeError("resolved Sandbox settings changed model type")
+        executable = self.systemd_run_executable
+        if not executable.is_absolute():
+            executable = (base / executable).resolve()
+        return resolved.model_copy(
+            update={"systemd_run_executable": executable}
         )
 
 
@@ -501,19 +520,22 @@ class BackendCredentialSettings(BaseModel):
 
 
 class WorkerLaunchSettings(BaseModel):
-    """Explicit development launcher or mandatory Linux production sandbox."""
+    """Select development, outer-container, or host-sandbox Worker execution."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    mode: Literal["development", "sandbox"]
+    mode: Literal["development", "container", "sandbox"]
     env_executable: Path
     backend_credentials: BackendCredentialSettings = Field(
         default_factory=BackendCredentialSettings
     )
+    container: BwrapContainerSettings | None = None
     sandbox: BwrapSandboxSettings | None = None
 
     @model_validator(mode="after")
     def _validate_mode(self) -> WorkerLaunchSettings:
+        if (self.mode == "container") != (self.container is not None):
+            raise ValueError("launcher.container must be set exactly in container mode")
         if (self.mode == "sandbox") != (self.sandbox is not None):
             raise ValueError("launcher.sandbox must be set exactly in sandbox mode")
         return self
@@ -528,6 +550,9 @@ class WorkerLaunchSettings(BaseModel):
             update={
                 "env_executable": resolve(self.env_executable),
                 "backend_credentials": self.backend_credentials.resolve_from(base),
+                "container": (
+                    None if self.container is None else self.container.resolve_from(base)
+                ),
                 "sandbox": None if self.sandbox is None else self.sandbox.resolve_from(base),
             }
         )
@@ -875,15 +900,18 @@ class RuntimeSettings(BaseModel):
             return self
         if campaign.launcher.mode == "development":
             return self
-        sandbox = campaign.launcher.sandbox
-        if sandbox is None:
-            raise ValueError("Sandbox launcher requires Sandbox settings")
-
         gateway = urlsplit(campaign.gateway_proxy_url)
         if gateway.hostname is None:
             raise ValueError("Campaign Gateway URL has no host")
         if gateway.hostname != self.server.host or gateway.port != self.server.port:
             raise ValueError("Campaign Gateway URL must identify this Runtime API socket")
+        boundary = (
+            campaign.launcher.container
+            if campaign.launcher.mode == "container"
+            else campaign.launcher.sandbox
+        )
+        if boundary is None:
+            raise ValueError("bubblewrap launcher requires boundary settings")
         roots = (
             campaign.attempt_workspaces_root,
             campaign.evolution_workspaces_root,
@@ -892,7 +920,7 @@ class RuntimeSettings(BaseModel):
         )
         if any(
             bind.resolve().is_relative_to(root.resolve())
-            for bind in sandbox.read_only_bind_paths
+            for bind in boundary.read_only_bind_paths
             for root in roots
         ):
             raise ValueError("Sandbox read-only bind paths cannot expose Worker roots")
@@ -904,7 +932,7 @@ class RuntimeSettings(BaseModel):
         )
         if any(
             bind.resolve().is_relative_to(root.resolve())
-            for bind in sandbox.read_only_bind_paths
+            for bind in boundary.read_only_bind_paths
             for root in runtime_storage_roots
         ):
             raise ValueError("Sandbox read-only bind paths cannot expose Runtime storage")

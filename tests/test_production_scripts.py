@@ -170,6 +170,92 @@ def test_prepare_can_attach_task_to_existing_service_workspace(tmp_path: Path) -
     assert manifest["service_workspace"] == str(service_workspace.resolve())
 
 
+def test_prepare_container_mode_needs_no_systemd_or_cgroup_configuration(
+    tmp_path: Path,
+) -> None:
+    operator = _operator(tmp_path / "operator")
+    service_workspace = tmp_path / "service"
+    task_workspace = tmp_path / "task"
+    environment = dict(os.environ)
+    environment.update({"AGATE_URL": "https://agate.invalid", "AGATE_GPU": "test-gpu"})
+    subprocess.run(
+        (
+            sys.executable,
+            str(PRODUCTION / "prepare.py"),
+            "--services-only",
+            "--workspace",
+            str(service_workspace),
+            "--launcher-mode",
+            "container",
+        ),
+        check=True,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        (
+            sys.executable,
+            str(PRODUCTION / "prepare.py"),
+            "--kernel",
+            str(operator),
+            "--backend",
+            "codex",
+            "--workspace",
+            str(task_workspace),
+            "--service-workspace",
+            str(service_workspace),
+        ),
+        check=True,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+
+    service_manifest = json.loads(
+        service_workspace.joinpath("production-manifest.json").read_text(encoding="utf-8")
+    )
+    task_manifest = json.loads(
+        task_workspace.joinpath("production-manifest.json").read_text(encoding="utf-8")
+    )
+    settings = RuntimeSettings.from_file(task_workspace / "runtime.json")
+    runtime_document = json.loads(
+        task_workspace.joinpath("runtime.json").read_text(encoding="utf-8")
+    )
+    launcher_document = runtime_document["campaign"]["launcher"]
+
+    assert service_manifest["launcher_mode"] == "container"
+    assert task_manifest["launcher_mode"] == "container"
+    assert settings.campaign is not None
+    assert settings.campaign.launcher.mode == "container"
+    assert settings.campaign.launcher.container is not None
+    assert settings.campaign.launcher.sandbox is None
+    assert "systemd_run_executable" not in launcher_document["container"]
+    assert "resources" not in launcher_document["container"]
+
+    mismatch = subprocess.run(
+        (
+            sys.executable,
+            str(PRODUCTION / "prepare.py"),
+            "--kernel",
+            str(operator),
+            "--backend",
+            "codex",
+            "--workspace",
+            str(tmp_path / "mismatched-task"),
+            "--service-workspace",
+            str(service_workspace),
+            "--launcher-mode",
+            "sandbox",
+        ),
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert mismatch.returncode != 0
+    assert "must match the pinned service workspace" in mismatch.stderr
+
+
 def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
     workspace = tmp_path / "workspace"
     for index, dsl in enumerate(("cuda", "triton", "cutedsl"), start=1):

@@ -306,6 +306,17 @@ atrex_prod_require_control_plane_ready() {
 atrex_prod_escalate() {
   local script="$1"
   shift
+  local launcher_mode="${ATREX_LAUNCHER_MODE:-}"
+  if [[ -z "${launcher_mode}" && -f "${atrex_prod_manifest:-}" ]]; then
+    launcher_mode="$("${atrex_prod_python}" -c '
+import json, sys
+value=json.load(open(sys.argv[1], encoding="utf-8"))
+print(value.get("launcher_mode", "sandbox"))
+' "${atrex_prod_manifest}")" || return
+  fi
+  if [[ "${launcher_mode}" == "container" ]]; then
+    return 0
+  fi
   if [[ "$(uname -s)" != "Linux" ]]; then
     echo "Production sandbox execution requires Linux." >&2
     return 69
@@ -322,7 +333,7 @@ atrex_prod_escalate() {
   export ATREX_SANDBOX_HOST_PATH="${ATREX_SANDBOX_HOST_PATH:-${PATH}}"
   export ATREX_PYTHON="$(command -v "${atrex_prod_python}")"
   export ATREX_RUNTIME_CLI="$(command -v "${atrex_prod_cli}")"
-  exec sudo --preserve-env=AGATE_URL,AGATE_AK,AGATE_SK,AGATE_GPU,AGATE_HTTP_TIMEOUT,AGATE_WAIT_TIMEOUT,AGATE_HEALTH_CHECK_INTERVAL,ATREX_PRODUCTION_ROOT,ATREX_SANDBOX_HOST_HOME,ATREX_SANDBOX_HOST_PATH,ATREX_PYTHON,ATREX_RUNTIME_CLI,ATREX_WIKI_URL,ATREX_WIKI_TOKEN_ENV,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_API_KEY,ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL,ANTHROPIC_DEFAULT_OPUS_MODEL,ANTHROPIC_DEFAULT_SONNET_MODEL,CODEX_HOME,QODER_PERSONAL_ACCESS_TOKEN \
+  exec sudo --preserve-env=AGATE_URL,AGATE_AK,AGATE_SK,AGATE_GPU,AGATE_HTTP_TIMEOUT,AGATE_WAIT_TIMEOUT,AGATE_HEALTH_CHECK_INTERVAL,ATREX_LAUNCHER_MODE,ATREX_PRODUCTION_ROOT,ATREX_SANDBOX_HOST_HOME,ATREX_SANDBOX_HOST_PATH,ATREX_PYTHON,ATREX_RUNTIME_CLI,ATREX_WIKI_URL,ATREX_WIKI_TOKEN_ENV,ANTHROPIC_AUTH_TOKEN,ANTHROPIC_API_KEY,ANTHROPIC_BASE_URL,ANTHROPIC_MODEL,ANTHROPIC_DEFAULT_HAIKU_MODEL,ANTHROPIC_DEFAULT_OPUS_MODEL,ANTHROPIC_DEFAULT_SONNET_MODEL,CODEX_HOME,QODER_PERSONAL_ACCESS_TOKEN \
     -- bash "${script}" "$@"
 }
 

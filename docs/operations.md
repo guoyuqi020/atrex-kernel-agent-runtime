@@ -11,14 +11,20 @@ Core and Evolver are deployment-approved Git repositories pinned by full commit.
 ## Startup
 
 1. Create storage/workspace directories with restricted ownership.
-2. On Linux, install bubblewrap and enable cgroup v2. Provision the non-root
-   `launcher.sandbox.worker_user` and give the trusted launcher narrowly controlled system-manager
-   transient-service authority. Verify the exact image with
-   `sudo .venv/bin/python scripts/validate-linux-sandbox.py`.
+2. Choose a Worker boundary. For `sandbox`, install bubblewrap and enable cgroup v2, provision the
+   non-root `launcher.sandbox.worker_user`, grant narrowly controlled system-manager transient-service
+   authority, and run `sudo .venv/bin/python scripts/validate-linux-sandbox.py`. For `container`,
+   run the complete deployment in a dedicated OCI container with bubblewrap and explicit
+   memory/CPU/PID limits. It needs no systemd, writable cgroup hierarchy, sudo, or per-Session
+   cgroup, but the OCI security policy must allow bwrap's namespace operations.
 3. Export a Base64 capability signing key of at least 32 decoded bytes, the admin bearer token,
    selected Agent-provider credentials, Agate credentials, and optional Wiki credentials. Provider
    CLIs connect directly through the host network; no Runtime model proxy is required.
-4. Make required provider CLI/config paths system-readable and add only the minimum immutable paths to `launcher.sandbox.read_only_bind_paths`. Never bind a Workspace root, Registry, Artifact store, Runtime configuration, or broad host home.
+4. In `sandbox`, make required provider CLI/config paths system-readable and add only the minimum
+   immutable paths to `launcher.sandbox.read_only_bind_paths`. In `container`, mount only the required
+   provider login state into the outer container; Runtime projects the allowlisted subset read-only
+   into each bwrap Session Home. Never expose a Docker socket, private evaluator data, or unrelated
+   host storage.
 5. Validate configuration by starting the service and checking `/readyz`.
    After ASGI startup, Runtime also probes Agate immediately and every
    `agate.health_check_interval_s` seconds (30 seconds by default). Initial state, failure, and
@@ -214,10 +220,11 @@ Rotate the capability signing key only after quiescing or intentionally invalida
 
 ## Security warning
 
-`launcher.mode=sandbox` is the only production mode. It fails closed when bwrap,
-systemd/cgroup-v2, or the configured resolver is unavailable; it never falls back to development.
-It intentionally shares host networking, so it does not isolate host services, Worker traffic, or
-outbound destinations.
+`launcher.mode=sandbox` and `launcher.mode=container` are production modes. Both fail closed when
+bwrap or the configured resolver is unavailable and never fall back to development. `sandbox` also
+requires systemd/cgroup-v2; `container` relies on outer OCI resource limits instead. Both intentionally
+share their surrounding network namespace, so they do not isolate host/container services, Worker
+traffic, or outbound destinations.
 `launcher.mode=development` is intentionally unisolated and suitable only for trusted local work.
 Before production promotion, run the target-image suite: sibling/host reads, writes outside
 `~/workspace`, direct Internet/DNS success, namespace escape, fork/memory/CPU exhaustion, timeout

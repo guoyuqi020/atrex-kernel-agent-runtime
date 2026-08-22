@@ -18,6 +18,7 @@ start options:
   --seed-source FILE
   --optimizer-model MODEL
   --evolver-model MODEL
+  --launcher-mode sandbox|container
   --env-file FILE
 
 The shared Runtime and Wiki must already be running. A managed Campaign task
@@ -51,6 +52,7 @@ hardware_target="${AGATE_GPU:-}"
 seed_source=""
 optimizer_model=""
 evolver_model=""
+launcher_mode="${ATREX_LAUNCHER_MODE:-}"
 env_file=""
 while (( $# > 0 )); do
   case "$1" in
@@ -63,6 +65,7 @@ while (( $# > 0 )); do
     --seed-source) seed_source="${2:-}"; shift 2 ;;
     --optimizer-model) optimizer_model="${2:-}"; shift 2 ;;
     --evolver-model) evolver_model="${2:-}"; shift 2 ;;
+    --launcher-mode) launcher_mode="${2:-}"; shift 2 ;;
     --env-file) env_file="${2:-}"; shift 2 ;;
     *) usage; exit 64 ;;
   esac
@@ -179,7 +182,8 @@ stop_campaign() {
     return 0
   fi
   echo "Campaign task: sending SIGTERM to ${#pids[@]} process(es)"
-  sudo kill -TERM "${pids[@]}" >/dev/null 2>&1 || true
+  kill -TERM "${pids[@]}" >/dev/null 2>&1 || \
+    sudo kill -TERM "${pids[@]}" >/dev/null 2>&1 || true
   local _
   for _ in {1..100}; do
     local remaining=()
@@ -193,7 +197,8 @@ stop_campaign() {
   done
   if (( ${#pids[@]} > 0 )); then
     echo "Campaign task: sending SIGKILL to ${#pids[@]} remaining process(es)" >&2
-    sudo kill -KILL "${pids[@]}" >/dev/null 2>&1 || true
+    kill -KILL "${pids[@]}" >/dev/null 2>&1 || \
+      sudo kill -KILL "${pids[@]}" >/dev/null 2>&1 || true
     sleep 0.2
   fi
   local survivors
@@ -267,6 +272,7 @@ prepare_start() {
   [[ -n "${hardware_target}" ]] && prepare_args+=(--hardware-target "${hardware_target}")
   [[ -n "${optimizer_model}" ]] && prepare_args+=(--optimizer-model "${optimizer_model}")
   [[ -n "${evolver_model}" ]] && prepare_args+=(--evolver-model "${evolver_model}")
+  [[ -n "${launcher_mode}" ]] && prepare_args+=(--launcher-mode "${launcher_mode}")
   if ! "${atrex_prod_python}" "${script_dir}/prepare.py" "${prepare_args[@]}"; then
     rm -f -- "${workspace_output}"
     return 1
@@ -295,6 +301,7 @@ prepare_start() {
   [[ -n "${seed_source}" ]] && run_args+=(--seed-source "${seed_source}")
   [[ -n "${optimizer_model}" ]] && run_args+=(--optimizer-model "${optimizer_model}")
   [[ -n "${evolver_model}" ]] && run_args+=(--evolver-model "${evolver_model}")
+  [[ -n "${launcher_mode}" ]] && run_args+=(--launcher-mode "${launcher_mode}")
   [[ -n "${env_file}" ]] && run_args+=(--env-file "${env_file}")
   write_launch_args "${campaign_args_file}" "${run_args[@]}"
   start_prepared

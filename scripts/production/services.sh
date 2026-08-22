@@ -6,7 +6,7 @@ script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "${script_dir}/common.sh"
 
 usage() {
-  echo "usage: $0 start|stop|restart|status --workspace DIR [--hardware-target GPU] [--env-file FILE]" >&2
+  echo "usage: $0 start|stop|restart|status --workspace DIR [--hardware-target GPU] [--launcher-mode sandbox|container] [--env-file FILE]" >&2
 }
 
 if (( $# < 3 )); then
@@ -18,6 +18,7 @@ shift
 workspace=""
 env_file=""
 hardware_target="${AGATE_GPU:-}"
+launcher_mode="${ATREX_LAUNCHER_MODE:-}"
 while (( $# > 0 )); do
   case "$1" in
     --workspace)
@@ -33,6 +34,11 @@ while (( $# > 0 )); do
     --hardware-target)
       (( $# >= 2 )) || { usage; exit 64; }
       hardware_target="$2"
+      shift 2
+      ;;
+    --launcher-mode)
+      (( $# >= 2 )) || { usage; exit 64; }
+      launcher_mode="$2"
       shift 2
       ;;
     *)
@@ -66,10 +72,13 @@ if [[ "${action}" == "start" || "${action}" == "restart" ]]; then
       echo "--hardware-target or AGATE_GPU is required to initialize services" >&2
       exit 64
     fi
-    "${atrex_prod_python}" "${script_dir}/prepare.py" \
-      --services-only \
-      --workspace "${atrex_prod_workspace}" \
+    prepare_args=(
+      --services-only
+      --workspace "${atrex_prod_workspace}"
       --hardware-target "${hardware_target}"
+    )
+    [[ -n "${launcher_mode}" ]] && prepare_args+=(--launcher-mode "${launcher_mode}")
+    "${atrex_prod_python}" "${script_dir}/prepare.py" "${prepare_args[@]}"
   fi
 fi
 atrex_prod_require_service_workspace
@@ -79,6 +88,7 @@ atrex_prod_require_commands
 if [[ "${action}" != "status" ]]; then
   root_args=("${action}" --workspace "${atrex_prod_workspace}")
   [[ -n "${hardware_target}" ]] && root_args+=(--hardware-target "${hardware_target}")
+  [[ -n "${launcher_mode}" ]] && root_args+=(--launcher-mode "${launcher_mode}")
   [[ -n "${env_file}" ]] && root_args+=(--env-file "${env_file}")
   atrex_prod_escalate "$0" "${root_args[@]}"
 fi
@@ -127,6 +137,12 @@ start_local_wiki() {
     return 69
   fi
   local wiki_user wiki_uid wiki_gid
+  local service_launcher_mode
+  service_launcher_mode="$("${atrex_prod_python}" -c '
+import json, sys
+value=json.load(open(sys.argv[1], encoding="utf-8"))
+print(value.get("launcher_mode", "sandbox"))
+' "${atrex_prod_manifest}")"
   if ! wiki_user="$(atrex_prod_json_value "${atrex_prod_config}" \
     campaign.launcher.sandbox.worker_user 2>/dev/null)"; then
     wiki_user="$(atrex_prod_json_value "${atrex_prod_manifest}" worker_user)"
@@ -137,7 +153,7 @@ start_local_wiki() {
     "PYTHONPATH=${wiki_source}"
     "${atrex_prod_python}" -m atrex_local_wiki serve --config "${wiki_config}"
   )
-  if (( EUID == 0 )); then
+  if (( EUID == 0 )) && [[ "${service_launcher_mode}" == "sandbox" ]]; then
     if ! command -v setpriv >/dev/null 2>&1; then
       echo "Local GPU Wiki privilege drop requires setpriv." >&2
       return 69

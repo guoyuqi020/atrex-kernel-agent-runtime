@@ -2,7 +2,7 @@
 
 English | [中文](architecture.zh.md)
 
-Atrex Kernel Agent Runtime is a Python trusted control plane. Core and Evolver are untrusted, separately versioned Git repositories imported by full commit; GPU Wiki and Agate are external services. Production Workers use bubblewrap plus per-Session cgroup v2 isolation. The explicit `development` launcher uses only a lightweight read-only mount namespace when host CLI login state is reused; it lacks the remaining production boundaries and is never a production fallback.
+Atrex Kernel Agent Runtime is a Python trusted control plane. Core and Evolver are untrusted, separately versioned Git repositories imported by full commit; GPU Wiki and Agate are external services. Host production Workers use bubblewrap plus per-Session cgroup v2 isolation. The `container` launcher instead treats a dedicated outer OCI container as the deployment boundary and has no nested systemd/cgroup dependency. The explicit `development` launcher uses only a lightweight read-only mount namespace when host CLI login state is reused; it lacks the remaining production boundaries and is never a production fallback.
 
 ```mermaid
 flowchart LR
@@ -36,11 +36,13 @@ generic hidden-case failure text. Profiling uses one private case selected by op
 trusted default), and request/spec/case material is removed from the returned profile. Runtime's
 authoritative Bootstrap and retention comparators always evaluate the complete hidden set.
 
-This protocol is identical in `development` and `sandbox` modes. `development` prevents accidental
+This protocol is identical in `development`, `container`, and `sandbox` modes. `development` prevents accidental
 disclosure through workspaces, requests, results, and environments, but remains an unisolated local
-debug mode and cannot defend against a malicious same-user process scanning host storage. `sandbox`
-adds that adversarial filesystem boundary by automatically masking Runtime storage and all sibling
-Worker roots before mounting only the current workspace.
+debug mode and cannot defend against a malicious same-user process scanning host storage. Both
+`container` and `sandbox` add the same per-Session bwrap filesystem/namespace boundary by masking
+Runtime storage and all sibling Worker roots before mounting only the current workspace. `sandbox`
+additionally places each Session in a systemd-managed cgroup; `container` delegates aggregate resource
+limits to its dedicated outer OCI container.
 
 ## Lifecycle
 

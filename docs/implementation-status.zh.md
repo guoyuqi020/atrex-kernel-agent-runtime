@@ -19,7 +19,7 @@
 | Token 记账 | 已实现 | Optimizer 使用正数单 Session 配额；Evolver 不限 Token，但 Provider Usage Report 必须 Fail-closed | 真实 Provider 记账验收 |
 | 管理/运维 | 本地已实现 | 认证 Campaign/Task/恢复/Event/Lineage Seed API；覆盖 Optimizer、Baseline、Generalization、Evolver 且从进程启动前持续到终态的统一 Worker Session Catalog，保留原始 Trace/Workspace/Token/Error 身份；持久 Kernel/Evaluation/Bootstrap Run Catalog；有界准确 Source/Result 导出；Readiness；不启动 Agent 的真实 Attempt 调试 Shell；SQLite 备份路径；Artifact/Workspace GC | TLS/前置代理、外部告警、Crash 演练 |
 | 打包/来源隔离 | 本地已实现 | Runtime Wheel 排除 Core/Evolver；精确 Git 导入和封存 Provenance | 干净主机发布演练 |
-| 完整 Worker 隔离 | 文件系统/进程/资源隔离已实现；等待准确目标环境验收 | 两种模式都从 Worker 协议排除私有评测路径/数据；生产 bwrap 额外提供只读根、私有 `~/workspace`、Runtime Storage 与相邻 Root 遮蔽、Capability/Namespace 隔离；system-manager transient service 以非 root Worker 创建/探测 Root、执行 bwrap，并应用 cgroup v2 内存/Swap/CPU/PID 限制；跨进程 Host Check 锁和 Worker 原生创建覆盖 Lima virtiofs；Worker 有意共享宿主 DNS/路由/服务和公网出站；可重复 Lima 边界测试及 Claude/Codex/QoderCLI 真实请求通过 | 准确生产 Linux 逃逸/资源/超时/Soak 证据 |
+| 完整 Worker 隔离 | 宿主 Sandbox 与外层容器内嵌 bwrap 模式已实现 | 所有模式都从 Worker 协议排除私有评测路径/数据。两种生产模式都有只读根、私有 `~/workspace`、Runtime Storage/兄弟 Root 遮蔽、Capability 与 Namespace 隔离；宿主 `sandbox` 还提供逐 Session cgroup v2 限额，`container` 直接调用 bwrap 并把资源总限额交给专用 OCI 容器。 | 针对所选边界完成准确生产镜像逃逸/资源/超时/Soak 验收 |
 
 ## 自动化基线
 

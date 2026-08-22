@@ -19,6 +19,7 @@ from typing import Any, cast
 
 SUPPORTED_BACKENDS = ("claude", "codex", "qodercli", "pi")
 SUPPORTED_DSLS = ("cuda", "triton", "cutedsl")
+SUPPORTED_LAUNCHER_MODES = ("sandbox", "container")
 
 
 def _arguments() -> argparse.Namespace:
@@ -62,6 +63,15 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--runtime-port", type=int)
     parser.add_argument("--wiki-url", default=os.environ.get("ATREX_WIKI_URL"))
     parser.add_argument("--worker-user", default=os.environ.get("ATREX_SANDBOX_WORKER_USER"))
+    parser.add_argument(
+        "--launcher-mode",
+        choices=SUPPORTED_LAUNCHER_MODES,
+        default=os.environ.get("ATREX_LAUNCHER_MODE"),
+        help=(
+            "sandbox uses bwrap+systemd+cgroup; container uses bwrap directly and "
+            "delegates aggregate resource limits to the outer OCI container"
+        ),
+    )
     parser.add_argument(
         "--policy",
         type=Path,
@@ -211,7 +221,7 @@ def _ensure_runtime_secrets(path: Path) -> None:
 
 def _shared_control_plane(
     service_workspace: Path,
-) -> tuple[dict[str, Any], str]:
+) -> tuple[dict[str, Any], str, str]:
     """Load the immutable state and endpoint configuration of a service workspace."""
     service_workspace = service_workspace.expanduser().resolve()
     manifest = _load_object(
@@ -242,7 +252,10 @@ def _shared_control_plane(
         raise SystemExit(
             "service Runtime config is missing shared sections: " + ", ".join(missing)
         )
-    return runtime, secrets_text
+    launcher_mode = str(manifest.get("launcher_mode", "sandbox"))
+    if launcher_mode not in SUPPORTED_LAUNCHER_MODES:
+        raise SystemExit(f"unsupported service launcher mode: {launcher_mode}")
+    return runtime, secrets_text, launcher_mode
 
 
 def _attach_shared_control_plane(
@@ -301,6 +314,7 @@ def _prepare_service_workspace(
     worker_user = str(
         args.worker_user or os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
     )
+    launcher_mode = str(args.launcher_mode or "sandbox")
     workspace = args.workspace.expanduser().resolve()
     manifest_path = workspace / "production-manifest.json"
     if manifest_path.is_file():
@@ -314,6 +328,12 @@ def _prepare_service_workspace(
         )
         if not all(path.is_file() for path in required):
             raise SystemExit("production control-plane workspace is incomplete")
+        existing_mode = str(manifest.get("launcher_mode", "sandbox"))
+        if args.launcher_mode is not None and existing_mode != launcher_mode:
+            raise SystemExit(
+                "production control-plane workspace is pinned to launcher mode "
+                f"{existing_mode!r}, not {launcher_mode!r}"
+            )
         print(f"Reusing production control plane: {workspace}")
         return
 
@@ -342,6 +362,7 @@ def _prepare_service_workspace(
         wiki_url=wiki_url,
         worker_user=worker_user,
         host_home=host_home,
+        launcher_mode=launcher_mode,
         evolver_commit=evolver_commit,
         bench_commit=bench_commit,
     )
@@ -363,6 +384,7 @@ def _prepare_service_workspace(
             "evolver_commit": evolver_commit,
             "atrex_bench_commit": bench_commit,
             "worker_user": worker_user,
+            "launcher_mode": launcher_mode,
         },
     )
     from atrex_runtime.config import RuntimeSettings
@@ -416,6 +438,7 @@ def _runtime_config(
     wiki_url: str,
     worker_user: str,
     host_home: str,
+    launcher_mode: str,
     evolver_commit: str,
     bench_commit: str,
 ) -> dict[str, Any]:
@@ -453,6 +476,54 @@ def _runtime_config(
         "inherit": ["PATH"],
         "inherit_optional": optional_provider_env,
     }
+    if launcher_mode == "container":
+        launcher: dict[str, Any] = {
+            "mode": "container",
+            "env_executable": _resolve_executable("env", "/usr/bin/env"),
+            "backend_credentials": {
+                "enabled": True,
+                "host_home": host_home,
+            },
+            "container": {
+                "bwrap_executable": _resolve_executable("bwrap", "/usr/bin/bwrap"),
+                "sandbox_home": str(sandbox["sandbox_home"]),
+                "workspace_mount": str(sandbox["workspace_mount"]),
+                "resolv_conf": _resolver_source(),
+                "read_only_bind_paths": [],
+                "hidden_host_paths": [],
+            },
+        }
+    else:
+        launcher = {
+            "mode": "sandbox",
+            "env_executable": _resolve_executable("env", "/usr/bin/env"),
+            "backend_credentials": {
+                "enabled": True,
+                "host_home": host_home,
+                "development_bwrap_executable": _resolve_executable(
+                    "bwrap", "/usr/bin/bwrap"
+                ),
+            },
+            "sandbox": {
+                "bwrap_executable": _resolve_executable("bwrap", "/usr/bin/bwrap"),
+                "systemd_run_executable": _resolve_executable(
+                    "systemd-run", "/usr/bin/systemd-run"
+                ),
+                "systemd_user": False,
+                "worker_user": worker_user,
+                "sandbox_home": str(sandbox["sandbox_home"]),
+                "workspace_mount": str(sandbox["workspace_mount"]),
+                "resolv_conf": _resolver_source(),
+                "read_only_bind_paths": [],
+                "hidden_host_paths": [],
+                "resources": {
+                    "memory_max_bytes": int(sandbox["memory_max_bytes"]),
+                    "memory_swap_max_bytes": int(sandbox["memory_swap_max_bytes"]),
+                    "cpu_quota_percent": int(sandbox["cpu_quota_percent"]),
+                    "tasks_max": int(sandbox["tasks_max"]),
+                },
+            },
+        }
     campaign = {
         "attempt_workspaces_root": str(state / "attempt-workspaces"),
         "evolution_workspaces_root": str(state / "evolution-workspaces"),
@@ -544,34 +615,7 @@ def _runtime_config(
             "max_diagnostic_bytes": 131072,
             "max_output_manifest_bytes": 16384,
         },
-        "launcher": {
-            "mode": "sandbox",
-            "env_executable": _resolve_executable("env", "/usr/bin/env"),
-            "backend_credentials": {
-                "enabled": True,
-                "host_home": host_home,
-                "development_bwrap_executable": _resolve_executable("bwrap", "/usr/bin/bwrap"),
-            },
-            "sandbox": {
-                "bwrap_executable": _resolve_executable("bwrap", "/usr/bin/bwrap"),
-                "systemd_run_executable": _resolve_executable(
-                    "systemd-run", "/usr/bin/systemd-run"
-                ),
-                "systemd_user": False,
-                "worker_user": worker_user,
-                "sandbox_home": str(sandbox["sandbox_home"]),
-                "workspace_mount": str(sandbox["workspace_mount"]),
-                "resolv_conf": _resolver_source(),
-                "read_only_bind_paths": [],
-                "hidden_host_paths": [],
-                "resources": {
-                    "memory_max_bytes": int(sandbox["memory_max_bytes"]),
-                    "memory_swap_max_bytes": int(sandbox["memory_swap_max_bytes"]),
-                    "cpu_quota_percent": int(sandbox["cpu_quota_percent"]),
-                    "tasks_max": int(sandbox["tasks_max"]),
-                },
-            },
-        },
+        "launcher": launcher,
     }
     gpu_wiki: dict[str, Any] = {
         "base_url": wiki_url,
@@ -737,6 +781,7 @@ def main() -> None:
     )
     service_runtime: dict[str, Any] | None = None
     service_secrets: str | None = None
+    launcher_mode = str(args.launcher_mode or "sandbox")
     if service_workspace is not None:
         if (
             args.runtime_host is not None
@@ -747,7 +792,15 @@ def main() -> None:
                 "--runtime-host, --runtime-port, and --wiki-url cannot override a shared "
                 "service workspace"
             )
-        service_runtime, service_secrets = _shared_control_plane(service_workspace)
+        service_runtime, service_secrets, service_launcher_mode = _shared_control_plane(
+            service_workspace
+        )
+        if args.launcher_mode is not None and launcher_mode != service_launcher_mode:
+            raise SystemExit(
+                "Campaign launcher mode must match the pinned service workspace: "
+                f"{service_launcher_mode}"
+            )
+        launcher_mode = service_launcher_mode
         service_server = cast(dict[str, Any], service_runtime["server"])
         service_wiki = cast(dict[str, Any], service_runtime["gpu_wiki"])
         host = str(service_server["host"])
@@ -811,6 +864,7 @@ def main() -> None:
             if attached_service_workspace is not None
             else None
         ),
+        "launcher_mode": launcher_mode,
     }
     if manifest_path.is_file():
         existing = _load_object(manifest_path, "production manifest")
@@ -820,6 +874,9 @@ def main() -> None:
                 "move it aside or choose a new --workspace"
             )
         mutable_checkout_fields = {"core_commit", "evolver_commit", "atrex_bench_commit"}
+        # Manifests created before container mode implicitly used the strict
+        # systemd/cgroup sandbox.
+        existing.setdefault("launcher_mode", "sandbox")
         requested_inputs = {
             key: value
             for key, value in requested_identity.items()
@@ -908,6 +965,7 @@ def main() -> None:
         wiki_url=wiki_url,
         worker_user=worker_user,
         host_home=host_home,
+        launcher_mode=launcher_mode,
         evolver_commit=evolver_commit,
         bench_commit=bench_commit,
     )
@@ -937,6 +995,7 @@ def main() -> None:
     print(f"Production workspace: {workspace}")
     print(f"Atrex-Bench kernel: {operator_root}")
     print(f"Backend: {args.backend}")
+    print(f"Worker launcher: {launcher_mode}")
     print(f"DSL Campaign workspaces: {', '.join(SUPPORTED_DSLS)}")
     print("Production content policy gate: enabled")
     print("Schedule: bootstrap, then 2 Attempts/Branch/Epoch; 1 Challenger from Epoch 2")

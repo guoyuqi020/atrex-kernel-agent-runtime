@@ -156,6 +156,14 @@ Workspace 与环境，并只返回面向 Agent 的安全 Gateway Result 投影�
 Workspace 与私有 `/tmp` 可写。它仍不提供 cgroup、Network、PID、IPC 或 Runtime Storage
 隔离，无法约束恶意同用户进程，也绝不会被当作失败降级路径。在没有 bubblewrap 的平台上使用
 development 时，必须显式关闭 `backend_credentials` 并通过白名单环境变量鉴权。
+`container` 在运维方提供的外层 OCI 容器中通过 bubblewrap 运行每个 Worker。它要求 Linux 与
+bubblewrap，但不需要 systemd、可写 cgroup 层级、sudo 或逐 Session cgroup；外层容器必须允许
+bwrap 使用 User/PID/IPC/UTS Namespace。Runtime 会应用与 `sandbox` 相同的只读根、私有
+`~/workspace`、兄弟 Workspace/Runtime Storage 遮蔽、Capability 丢弃和 Backend 登录态只读投影。
+因此 Worker 之间具有文件系统与 Namespace 隔离，但共享外层容器的内存、CPU 与 PID 总限额。
+必须使用专用容器，不要挂载 Docker Socket、Runtime Secret、私有评测数据或无关宿主路径，并在
+OCI 层设置资源限额。
+
 `sandbox` 要求 Linux、bubblewrap 与启用 cgroup v2 的 systemd。固定边界如下：
 
 - 宿主根只读，并使用私有 `/home`、`/tmp`、`/run`、`/dev` 和 `/proc`；

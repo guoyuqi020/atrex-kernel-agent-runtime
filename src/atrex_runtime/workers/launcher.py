@@ -12,12 +12,17 @@ import stat
 import subprocess
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 from uuid import uuid4
 
-from ..config import BackendCredentialSettings, BwrapSandboxSettings
+from ..config import (
+    BackendCredentialSettings,
+    BwrapContainerSettings,
+    BwrapFilesystemSettings,
+    BwrapSandboxSettings,
+)
 
 _ENVIRONMENT_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _PRIVATE_PATH_ENVIRONMENT_KEYS = frozenset(
@@ -481,22 +486,29 @@ class CleanEnvironmentLauncher:
 
 @dataclass(frozen=True, slots=True)
 class BwrapSandboxLauncher:
-    """Build one bwrap mount sandbox inside a resource-restricted cgroup."""
+    """Build one bwrap boundary, optionally inside a systemd cgroup."""
 
     env_executable: Path
-    settings: BwrapSandboxSettings
+    settings: BwrapFilesystemSettings
     workspace_roots: tuple[Path, ...]
     credentials: BackendCredentialMounts | None = None
+    use_systemd_cgroup: bool = True
 
     def check_host(self) -> None:
         """Fail before scheduling when mandatory Linux isolation primitives are absent."""
         if platform.system() != "Linux":
-            raise RuntimeError("Sandbox launcher requires Linux; use explicit development mode")
-        for label, path in (
+            raise RuntimeError(
+                "bubblewrap launcher requires Linux; use explicit development mode"
+            )
+        executables = [
             ("bubblewrap", self.settings.bwrap_executable),
-            ("systemd-run", self.settings.systemd_run_executable),
             ("env", self.env_executable),
-        ):
+        ]
+        if self.use_systemd_cgroup:
+            if not isinstance(self.settings, BwrapSandboxSettings):
+                raise RuntimeError("systemd cgroup launch requires Sandbox settings")
+            executables.append(("systemd-run", self.settings.systemd_run_executable))
+        for label, path in executables:
             if not path.is_absolute() or not path.is_file() or not os.access(path, os.X_OK):
                 raise RuntimeError(f"Sandbox {label} executable is unavailable: {path}")
         resolver = self.settings.resolv_conf
@@ -504,27 +516,33 @@ class BwrapSandboxLauncher:
             resolver = resolver.resolve()
         if not resolver.is_file():
             raise RuntimeError(f"Sandbox resolver file is unavailable: {resolver}")
-        controllers = Path("/sys/fs/cgroup/cgroup.controllers")
-        if not controllers.is_file():
-            raise RuntimeError("Sandbox requires a mounted cgroup v2 hierarchy")
+        if self.use_systemd_cgroup:
+            controllers = Path("/sys/fs/cgroup/cgroup.controllers")
+            if not controllers.is_file():
+                raise RuntimeError("Sandbox requires a mounted cgroup v2 hierarchy")
         for path in self.settings.read_only_bind_paths:
             if path.is_symlink() or not path.exists():
                 raise RuntimeError(f"Sandbox read-only bind source is unavailable: {path}")
-        try:
-            worker = pwd.getpwnam(self.settings.worker_user)
-        except KeyError as error:
-            raise RuntimeError(
-                f"Sandbox Worker user does not exist: {self.settings.worker_user}"
-            ) from error
-        if worker.pw_uid == 0:
-            raise RuntimeError("Sandbox Worker user cannot be root")
+        worker: pwd.struct_passwd | None = None
+        if self.use_systemd_cgroup:
+            assert isinstance(self.settings, BwrapSandboxSettings)
+            try:
+                worker = pwd.getpwnam(self.settings.worker_user)
+            except KeyError as error:
+                raise RuntimeError(
+                    f"Sandbox Worker user does not exist: {self.settings.worker_user}"
+                ) from error
+            if worker.pw_uid == 0:
+                raise RuntimeError("Sandbox Worker user cannot be root")
         root_parents = {root.parent.resolve() for root in self.workspace_roots}
         lock_directory = (
             next(iter(root_parents)).parent
             if len(self.workspace_roots) > 1 and len(root_parents) == 1
             else self.workspace_roots[0].parent.resolve()
         )
-        if not lock_directory.is_dir():
+        if not self.use_systemd_cgroup and not lock_directory.exists():
+            lock_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if not lock_directory.is_dir() or lock_directory.is_symlink():
             raise RuntimeError(
                 f"Sandbox workspace parent is unavailable: {lock_directory}"
             )
@@ -533,7 +551,42 @@ class BwrapSandboxLauncher:
             # A production Campaign starts one Bootstrap process per DSL. They
             # share these roots, so host preparation must be cross-process safe.
             fcntl.flock(lock, fcntl.LOCK_EX)
-            self._check_host_workspace_access(worker)
+            if worker is None:
+                self._check_container_workspace_access()
+            else:
+                self._check_host_workspace_access(worker)
+
+    def _check_container_workspace_access(self) -> None:
+        """Probe bwrap without requiring a service manager or cgroup hierarchy."""
+        for root in self.workspace_roots:
+            if root.exists() and (not root.is_dir() or root.is_symlink()):
+                raise RuntimeError(f"Sandbox workspace path is unsafe: {root}")
+            root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        probe = self.workspace_roots[0] / f".sandbox-probe-{uuid4().hex}"
+        probe.mkdir(mode=0o700)
+        try:
+            argv = self.wrap(("/bin/true",), workspace=probe, environment={})
+            try:
+                result = subprocess.run(
+                    argv,
+                    stdin=subprocess.DEVNULL,
+                    capture_output=True,
+                    timeout=30,
+                    check=False,
+                    start_new_session=True,
+                )
+            except (OSError, subprocess.TimeoutExpired) as error:
+                raise RuntimeError(
+                    f"Container bwrap probe could not run: {type(error).__name__}"
+                ) from error
+            if result.returncode != 0:
+                diagnostic = result.stderr[:4096].decode(errors="replace").strip()
+                raise RuntimeError(
+                    f"Container bwrap probe failed with exit {result.returncode}: "
+                    f"{diagnostic}"
+                )
+        finally:
+            shutil.rmtree(probe, ignore_errors=True)
 
     def _check_host_workspace_access(self, worker: pwd.struct_passwd) -> None:
         for root in self.workspace_roots:
@@ -700,7 +753,7 @@ class BwrapSandboxLauncher:
         environment: Mapping[str, str],
         interactive: bool = False,
     ) -> tuple[str, ...]:
-        """Return a shell-free systemd-run + bwrap argv for one private workspace."""
+        """Return a shell-free bwrap argv, optionally wrapped by systemd-run."""
         if not runtime_argv:
             raise ValueError("runtime argv cannot be empty")
         validate_worker_environment(environment)
@@ -720,7 +773,9 @@ class BwrapSandboxLauncher:
         mapped_environment.setdefault("HOME", self.settings.sandbox_home.as_posix())
         mapped_environment.update(
             {
-                "ATREX_SANDBOX": "bwrap-cgroup-v1",
+                "ATREX_SANDBOX": (
+                    "bwrap-cgroup-v2" if self.use_systemd_cgroup else "bwrap-container"
+                ),
                 "ATREX_WORKSPACE": self.settings.workspace_mount.as_posix(),
             }
         )
@@ -918,6 +973,10 @@ class BwrapSandboxLauncher:
                 *translated_argv,
             )
         )
+        if not self.use_systemd_cgroup:
+            return tuple(bwrap)
+        if not isinstance(self.settings, BwrapSandboxSettings):
+            raise ValueError("systemd cgroup launch requires Sandbox settings")
         unit = f"atrex-worker-{uuid4().hex}.service"
         systemd = [str(self.settings.systemd_run_executable)]
         resources = self.settings.resources
@@ -1006,3 +1065,11 @@ class BwrapSandboxLauncher:
             parents.append(current)
             current = current.parent
         return tuple(reversed(parents))
+
+
+@dataclass(frozen=True, slots=True)
+class BwrapContainerLauncher(BwrapSandboxLauncher):
+    """Run the shared bwrap boundary without a nested systemd cgroup."""
+
+    settings: BwrapContainerSettings
+    use_systemd_cgroup: bool = field(default=False, init=False)

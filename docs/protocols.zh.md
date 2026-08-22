@@ -140,10 +140,11 @@ Eval 的正确性或延迟。
 
 Core `atrex-bundle.json` schema v1 声明唯一仓库相对入口。Runtime 把 `ATREX_CORE_PHASE` 设置为 `problem_generalization`、`framework_baseline` 或 `optimization_attempt`，并提供阶段 Manifest/Report、Token Budget/Report、可选 Session Trace、隔离 Home 与受限 Gateway/Wiki Authority。退出 0 表示完成，125 表示 Token Budget Exhausted，其他退出码均显式保留。Token Report 必须有效。
 
-Sandbox 模式下 Runtime 还会设置 `HOME=/home/agent`、
-`ATREX_WORKSPACE=/home/agent/workspace` 与 `ATREX_SANDBOX=bwrap-cgroup-v1`。Worker 直接共享
-宿主网络与 DNS；Runtime 不注入代理变量，也不限制可访问的宿主 Port。文件系统和 cgroup 隔离不受
-影响。任何位于 Session Root 下的宿主绝对路径都会
+两种生产模式下 Runtime 都会设置 `HOME=/home/agent` 与
+`ATREX_WORKSPACE=/home/agent/workspace`。`sandbox` 的 `ATREX_SANDBOX=bwrap-cgroup-v2`，
+`container` 则为 `bwrap-container`。Worker 直接共享所在环境的网络与 DNS；Runtime 不注入代理
+变量，也不限制可访问端口。两种模式都保留 bwrap 文件系统边界，只有 `sandbox` 增加逐 Session
+cgroup。任何位于 Session Root 下的宿主绝对路径都会
 在启动前映射到对应 `~/workspace` 路径。
 
 Evolver `atrex-evolver-bundle.json` schema v1 声明唯一入口。Runtime 固定通过 stdin 发送

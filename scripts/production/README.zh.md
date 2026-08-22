@@ -5,8 +5,9 @@
 这套脚本从 `third_party/atrex-bench/data` 中选择一个算子，创建 CUDA、Triton、CuteDSL
 三个单 DSL Campaign Workspace。三个 Campaign 共享一个可信 Runtime、Registry、Artifact
 Store、Wiki 和 Agate 连接，但分别持有 Campaign 定义、Bootstrap 输入、Evaluation
-Contract、结果和日志。每个 Agent Attempt 仍然拥有独立挂载沙箱、Home 和 cgroup，但直接
-共享宿主机网络。
+Contract、结果和日志。`sandbox` 模式下每个 Agent Attempt 拥有独立挂载沙箱、Home 和 cgroup；
+`container` 模式在专用外层 OCI 容器内使用 bwrap 提供逐 Worker 文件系统/Namespace 边界，
+由外层容器提供资源总限额。两者都直接共享所在环境的网络。
 
 生产内容 Policy Gate 是强制项。准备、运行和服务启动入口都会检查
 `campaign.gate_policy.production_gate == true`；自定义 Policy 或已有 Workspace 关闭该 Gate
@@ -20,8 +21,8 @@ Contract、结果和日志。每个 Agent Attempt 仍然拥有独立挂载沙箱
 - 只生成冻结配置：使用 `prepare.sh`。
 - 查看结果：使用 `inspect.sh --workspace TASK [--dsl DSL]`。
 
-不要把整个入口命令写成 `sudo bash ...`。脚本会在启动 bwrap/cgroup transient service 前自行
-提权，并通过专用环境字段保留原调用者的 Home、PATH 与 Provider 登录态。
+不要把整个入口命令写成 `sudo bash ...`。`sandbox` 模式只在启动 bwrap/cgroup transient
+service 前自行提权；`container` 模式完全不会提权。
 
 固定调度策略：
 
@@ -38,11 +39,18 @@ Contract、结果和日志。每个 Agent Attempt 仍然拥有独立挂载沙箱
 
 ## 前置条件
 
-生产 Worker 使用 `bwrap + cgroup`，因此必须在 Linux 上运行，并需要 root 或 sudo。安装
-当前仓库及 Local Wiki 依赖，并确认 `bwrap`、`systemd-run` 可用。Worker 不创建独立网络
-命名空间，直接复用宿主机 DNS 与公网连接。
-服务脚本会让 Local Wiki 以配置的非 root Sandbox Worker 身份运行，避免其上游意图查询 Agent
-CLI 在 root 身份下执行。
+Worker 边界有两种选择：
+
+- `sandbox` 要求 Linux、`bwrap`、启用 cgroup v2 的 systemd、root/sudo 和专用非 root Worker；
+- `container` 要求 Linux 与 bwrap，但不要求 systemd、可写 cgroup 层级、sudo 或逐 Session
+  cgroup；OCI 安全策略必须允许 bwrap 创建所需 Namespace。Runtime 隔离各 Worker 的文件系统与
+  Namespace，Docker/Kubernetes 则提供共享的内存、CPU 与 PID 总限额。不要挂载 Docker Socket、
+  Runtime Secret、私有评测数据或无关宿主路径。
+
+两种模式都需要受支持的 Agent CLI 和 Agate 凭据，并直接复用所在环境的 DNS 与公网连接。
+`sandbox` 模式下，服务脚本会让 Local Wiki 以配置的非 root Sandbox Worker 身份运行；
+`container` 模式沿用容器进程用户，建议直接以非 root 用户启动外层容器，并先验证 bwrap 能创建
+User/PID/IPC/UTS Namespace。
 
 准备新 Campaign 时，Core 和 Evolver Git Worktree 必须干净。生产配置只记录 Commit，因此存在
 已暂存、未暂存或未跟踪的 Bundle 文件时会直接失败，不再静默使用旧 `HEAD`。创建新 Workspace
@@ -70,6 +78,18 @@ chmod 0600 /secure/atrex-production.env
 
 如果没有设置 `ATREX_WIKI_URL`，配置默认使用并由服务脚本启动仓库中的 Local Wiki；设置
 该变量后则只检查远端 Wiki，不会管理远端进程。
+
+在普通 Docker 容器内首次启动常驻服务：
+
+```bash
+bash scripts/production/services.sh start \
+  --workspace workspaces/production/control-l20n \
+  --hardware-target L20N \
+  --launcher-mode container \
+  --env-file /secure/atrex-production.env
+```
+
+服务 Workspace 会固定该 Launcher 模式，后续附着的 `campaign.sh start` 会自动继承。
 
 ## 单任务一体化运行
 

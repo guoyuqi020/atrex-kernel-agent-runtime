@@ -33,7 +33,12 @@ from .evolver_bundle import (
     ResolvedGitEvolverBundle,
     evolver_bundle_sha256,
 )
-from .launcher import BwrapSandboxLauncher, CleanEnvironmentLauncher, WorkerLauncher
+from .launcher import (
+    BwrapContainerLauncher,
+    BwrapSandboxLauncher,
+    CleanEnvironmentLauncher,
+    WorkerLauncher,
+)
 from .lineage_bootstrap import (
     LINEAGE_BOOTSTRAP_MANIFEST_VERSION,
     LINEAGE_BOOTSTRAP_REPORT_VERSION,
@@ -75,6 +80,7 @@ __all__ = [
     "PROBLEM_GENERALIZATION_MANIFEST_VERSION",
     "AgentProblemV1",
     "AttemptInputManifestV6",
+    "BwrapContainerLauncher",
     "BwrapSandboxLauncher",
     "CleanEnvironmentLauncher",
     "CoreAgentProblemGenerator",

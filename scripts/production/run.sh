@@ -20,6 +20,7 @@ Options:
   --seed-source FILE           defaults to reference.py
   --optimizer-model MODEL
   --evolver-model MODEL
+  --launcher-mode sandbox|container
   --env-file FILE              optional trusted shell environment file
 EOF
 }
@@ -33,6 +34,7 @@ hardware_target="${AGATE_GPU:-}"
 seed_source=""
 optimizer_model=""
 evolver_model=""
+launcher_mode="${ATREX_LAUNCHER_MODE:-}"
 env_file=""
 prepared=false
 external_services=false
@@ -47,6 +49,7 @@ while (( $# > 0 )); do
     --seed-source) seed_source="${2:-}"; shift 2 ;;
     --optimizer-model) optimizer_model="${2:-}"; shift 2 ;;
     --evolver-model) evolver_model="${2:-}"; shift 2 ;;
+    --launcher-mode) launcher_mode="${2:-}"; shift 2 ;;
     --env-file) env_file="${2:-}"; shift 2 ;;
     --prepared) prepared=true; shift ;;
     --external-services) external_services=true; shift ;;
@@ -92,6 +95,7 @@ if [[ "${prepared}" == false ]]; then
   [[ -n "${hardware_target}" ]] && prepare_args+=(--hardware-target "${hardware_target}")
   [[ -n "${optimizer_model}" ]] && prepare_args+=(--optimizer-model "${optimizer_model}")
   [[ -n "${evolver_model}" ]] && prepare_args+=(--evolver-model "${evolver_model}")
+  [[ -n "${launcher_mode}" ]] && prepare_args+=(--launcher-mode "${launcher_mode}")
   "${atrex_prod_python}" "${script_dir}/prepare.py" "${prepare_args[@]}"
   workspace="$(<"${workspace_output}")"
   rm -f -- "${workspace_output}"
@@ -107,6 +111,7 @@ if [[ "${prepared}" == false ]]; then
   [[ -n "${seed_source}" ]] && resume_args+=(--seed-source "${seed_source}")
   [[ -n "${optimizer_model}" ]] && resume_args+=(--optimizer-model "${optimizer_model}")
   [[ -n "${evolver_model}" ]] && resume_args+=(--evolver-model "${evolver_model}")
+  [[ -n "${launcher_mode}" ]] && resume_args+=(--launcher-mode "${launcher_mode}")
   [[ -n "${env_file}" ]] && resume_args+=(--env-file "${env_file}")
   [[ -n "${service_workspace}" ]] && \
     resume_args+=(--service-workspace "${service_workspace}")
@@ -140,6 +145,7 @@ root_args=(
 [[ -n "${seed_source}" ]] && root_args+=(--seed-source "${seed_source}")
 [[ -n "${optimizer_model}" ]] && root_args+=(--optimizer-model "${optimizer_model}")
 [[ -n "${evolver_model}" ]] && root_args+=(--evolver-model "${evolver_model}")
+[[ -n "${launcher_mode}" ]] && root_args+=(--launcher-mode "${launcher_mode}")
 [[ -n "${env_file}" ]] && root_args+=(--env-file "${env_file}")
 [[ -n "${service_workspace}" ]] && \
   root_args+=(--service-workspace "${service_workspace}")
