@@ -71,6 +71,11 @@ def bootstrap_campaign(config_path: str, campaign_path: str) -> None:
             )
             spec = load_campaign_spec(campaign_path)
             result = bootstrapper.bootstrap_campaign(spec)
+            print(
+                f"Agate hardware resolved: {result.agate_gpu} -> {result.hardware_target}",
+                file=sys.stderr,
+                flush=True,
+            )
             for lineage in result.lineages:
                 revision = registry.get_kernel_revision(lineage.baseline_kernel_revision_id)
                 summary = gateway_result_sol_summary(

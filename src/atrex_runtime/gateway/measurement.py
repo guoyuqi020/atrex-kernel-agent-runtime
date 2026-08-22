@@ -95,7 +95,7 @@ class AgateKernelMeasurementRunner(KernelMeasurementRunner):
                 candidate_source=candidate_source,
                 operator=context.operator,
                 contract=batch.contract,
-                hardware_target=context.hardware_target,
+                hardware_target=context.agate_gpu,
                 dsl=context.dsl,
                 name=f"{context.operator}_comparison_{measurement_id}_batch_{batch.index}",
                 idempotency_key=batch.idempotency_key,

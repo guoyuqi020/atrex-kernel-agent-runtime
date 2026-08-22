@@ -369,7 +369,7 @@ def _prepare_service_workspace(
 
     RuntimeSettings.from_file(workspace / "runtime.json")
     print(f"Production control plane: {workspace}")
-    print(f"Hardware target: {hardware_target}")
+    print(f"Agate GPU environment: {hardware_target}")
     print(f"Runtime config: {workspace / 'runtime.json'}")
 
 

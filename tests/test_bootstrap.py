@@ -36,6 +36,7 @@ from atrex_runtime.gateway.contract import (
     AgateEvaluationOptionsV1,
     RuntimeGateContractPolicy,
 )
+from atrex_runtime.gateway.environment import ResolvedAgateEnvironment
 from atrex_runtime.kernel_agents import GitOptimizerBaseResult
 from atrex_runtime.ports import KernelAgentCandidate
 from atrex_runtime.registry.sqlite import SqliteRegistry
@@ -167,6 +168,7 @@ class FakeBaselineGenerator:
     def __init__(self, artifacts: LocalArtifactStore) -> None:
         self.calls: list[Dsl] = []
         self.models: list[str | None] = []
+        self.hardware_targets: list[str] = []
         self.gateway_digest = artifacts.put_json(
             {"correct": True, "latency_us": 9.0},
             ArtifactKind.GATEWAY_RESULT,
@@ -177,6 +179,7 @@ class FakeBaselineGenerator:
         assert isinstance(dsl, Dsl)
         self.calls.append(dsl)
         self.models.append(cast(str | None, values["model"]))
+        self.hardware_targets.append(str(values["hardware_target"]))
         return GeneratedLineageBaseline(
             cast(ArtifactDigest, values["input_kernel_digest"]),
             self.gateway_digest,
@@ -194,6 +197,7 @@ def _bootstrapper(
     roofline_builder: object | None = None,
     evolver_commit: str | None = None,
     gate_contract_policy: RuntimeGateContractPolicy | None = None,
+    hardware_target_resolver: object | None = None,
     max_parallel_lineages: int = 1,
 ) -> CampaignBootstrapper:
     return CampaignBootstrapper(
@@ -205,9 +209,44 @@ def _bootstrapper(
         roofline_builder=roofline_builder,  # type: ignore[arg-type]
         evolver_commit=evolver_commit,
         gate_contract_policy=gate_contract_policy,
+        hardware_target_resolver=hardware_target_resolver,  # type: ignore[arg-type]
         max_parallel_lineages=max_parallel_lineages,
         clock=lambda: NOW,
     )
+
+
+def test_campaign_bootstrap_resolves_agent_arch_from_agate_environment(tmp_path: Path) -> None:
+    spec = CampaignSpecV3.from_file(_campaign_spec(tmp_path, lineage_dsls=(Dsl.TRITON,)))
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    baseline = FakeBaselineGenerator(artifacts)
+
+    class Resolver:
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+
+        def resolve(self, gpu: str) -> ResolvedAgateEnvironment:
+            self.calls.append(gpu)
+            return ResolvedAgateEnvironment("L20N", "sm_120")
+
+    resolver = Resolver()
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        result = _bootstrapper(
+            registry,
+            artifacts,
+            FakeGitLoader(artifacts),
+            baseline,
+            hardware_target_resolver=resolver,
+        ).bootstrap_campaign(spec)
+        campaign = registry.get_campaign(result.campaign_id)
+        lineage = registry.get_lineage(result.lineages[0].lineage_id)
+
+    contract_path = artifacts.verify(result.lineages[0].evaluation_contract_digest).payload_path
+    contract = json.loads((contract_path / "value.json").read_text(encoding="utf-8"))
+    assert resolver.calls == ["nvidia-h100"]
+    assert campaign.hardware_target == "sm_120"
+    assert lineage.hardware_target == "sm_120"
+    assert baseline.hardware_targets == ["sm_120"]
+    assert contract["agate_gpu"] == "L20N"
 
 
 class ConcurrentBaselineGenerator(FakeBaselineGenerator):

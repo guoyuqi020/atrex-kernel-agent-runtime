@@ -62,6 +62,7 @@ class AgateEvaluationContractV1(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: Literal[1] = EVALUATION_CONTRACT_VERSION
+    agate_gpu: str | None = Field(default=None, min_length=1)
     candidate_path: str
     reference_py: str = Field(min_length=1)
     input_py: str = Field(min_length=1)
@@ -143,6 +144,11 @@ class AgateEvaluationContext:
     dsl: Dsl
     contract: AgateEvaluationContractV1
     evaluation_contract_digest: ArtifactDigest | None = None
+
+    @property
+    def agate_gpu(self) -> str:
+        """Return the Agate scheduler selector, distinct from Agent-visible architecture."""
+        return self.contract.agate_gpu or self.hardware_target
 
 
 class AgateEvaluationContextResolver(Protocol):

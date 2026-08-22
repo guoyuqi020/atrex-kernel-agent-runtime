@@ -49,7 +49,9 @@ v1，主要需要确定：
 - 可选 GPU Wiki Query 服务；
 - Administration 和 Maintenance 上限。
 
-从 Example 创建 Campaign schema-v3 文件。它选择 Operator、硬件、Evaluation Contract、精确 Core
+从 Example 创建 Campaign schema-v3 文件。输入的 `hardware_target` 用于选择 Agate GPU 环境；
+Bootstrap 会查询远端环境，把返回的架构（例如 `sm_120`）传给 Agent，并只将规范 Agate GPU
+别名用于调度。Campaign 还会选择 Operator、Evaluation Contract、精确 Core
 Commit、Epoch 拓扑、每个 DSL 的 Seed Kernel/Evidence 和可选 Lineage Model。不存在独立的
 Bootstrap JSON。
 

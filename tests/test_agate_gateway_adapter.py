@@ -366,6 +366,42 @@ async def test_eval_uses_sealed_context_and_maps_raw_atrex_result(tmp_path: Path
 
 
 @pytest.mark.anyio
+async def test_eval_schedules_with_agate_gpu_while_agent_context_uses_arch(
+    tmp_path: Path,
+) -> None:
+    client = FakeAgateClient(_successful_job())
+    builder = CapturingBuilder()
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    contract = _contract().model_copy(update={"agate_gpu": "L20N"})
+    adapter = AgateGatewayAdapter(
+        client,
+        builder,
+        StaticContexts(AgateEvaluationContext("vector_add", "sm_120", Dsl.TRITON, contract)),
+        jobs,
+        wait_timeout_s=1200,
+    )
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "kernel.py").write_text("class Model: pass\n")
+
+    await adapter.execute(
+        GatewayAdapterRequest(
+            attempt_id=new_attempt_id(),
+            operation=GatewayOperation.EVALUATE,
+            idempotency_key="resolved-hardware",
+            candidate_digest=digest("candidate"),
+            candidate_path=candidate,
+            profile_level=None,
+            kernel_regex=None,
+            job_id=None,
+        )
+    )
+
+    assert builder.calls[0]["gpu"] == "L20N"
+    jobs.close()
+
+
+@pytest.mark.anyio
 async def test_failed_eval_job_remains_an_infrastructure_outcome(tmp_path: Path) -> None:
     client = FakeAgateClient(
         {

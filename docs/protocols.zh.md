@@ -94,7 +94,8 @@ Artifact 身份。每条 Kernel 记录也包含生产它的 Agent Version。CLI 
 
 ## Bootstrap 与 Bundle
 
-Campaign schema v3 必须提供 `creation_key`、算子、硬件目标、Evaluation Contract
+Campaign schema v3 必须提供 `creation_key`、算子、写在 `hardware_target` 中的 Agate GPU
+环境选择器、Evaluation Contract
 路径、完整 `base_revision.commit`、`challenger_count`、`challenger_start_epoch`、
 `trajectories_per_branch`、`attempts_per_trajectory` 和各 DSL 的
 `baseline_kernel`/`initial_evidence`。`lineages` 的 Key 是权威且完整的初始 Bootstrap DSL 集合；可选
@@ -105,6 +106,11 @@ Model 身份，并以 `ATREX_AGENT_MODEL` 注入新 Session。Runtime 只导入�
 Optimizer Digest 为各 DSL 创建 Revision。一个稳定 Bootstrap Attempt 可以有多个 Append-only
 Recovery Generation；每个新物理 Session 获得新的 Capability Generation，旧 Gateway Operation
 按原 Generation 保留，只有正确且已提交的 Outcome 才能创建 Baseline。
+
+创建新 Campaign 前，Runtime 会调用 Agate `get_env(hardware_target)`。远端返回的 `arch`（例如
+`sm_120`）成为 Campaign/Lineage 中保存并传给所有 Agent 的硬件目标；远端返回的规范 `gpu`
+（例如 `L20N`）则作为 `agate_gpu` 单独封存在 Evaluation Contract 中，仅用于 Agate 调度。
+若响应缺少任一字段，Bootstrap 会直接失败，不会再从环境别名猜测 Agent 可见硬件信息。
 
 Lineage seed schema v1 必须提供 `creation_key`、固定 `dsl`、Epoch 拓扑和带判别字段的
 `seed`。`source_type: "artifacts"` 指定 `agent_artifact_digest` 与

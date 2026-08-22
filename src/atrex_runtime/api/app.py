@@ -280,6 +280,7 @@ def build_runtime_application(
                         registry,
                         environment,
                         control=control,
+                        agate_client=client,
                         finalizer=compose_authoritative_candidate_evaluator(
                             settings,
                             artifacts,

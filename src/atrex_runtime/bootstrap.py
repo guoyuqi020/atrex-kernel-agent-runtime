@@ -39,6 +39,7 @@ from .domain.models import (
     LineageStatus,
 )
 from .gateway.contract import AgateEvaluationContractV1, RuntimeGateContractPolicy
+from .gateway.environment import ResolvedAgateEnvironment
 from .kernel_agents import GitOptimizerBaseLoader
 from .ports import KernelAgentCandidate
 from .registry.base import Registry
@@ -113,6 +114,12 @@ class LineageBaselineGenerator(Protocol):
     ) -> GeneratedLineageBaseline: ...
 
 
+class HardwareTargetResolver(Protocol):
+    """Resolve an Agate environment selector into canonical GPU architecture metadata."""
+
+    def resolve(self, gpu: str) -> ResolvedAgateEnvironment: ...
+
+
 class _LineageBootstrapSpec(BaseModel):
     """Resolved common and DSL-specific inputs for one internal lineage step."""
 
@@ -164,7 +171,7 @@ class CampaignLineageSpecV2(BaseModel):
 
 
 class CampaignSpecV3(BaseModel):
-    """One immutable Campaign definition and its per-DSL lineage inputs."""
+    """One Campaign request whose hardware selector is resolved through Agate."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -315,6 +322,8 @@ class CampaignBootstrapResult:
 
     campaign_id: CampaignId
     lineages: tuple[BootstrapResult, ...]
+    hardware_target: str
+    agate_gpu: str
     roofline_mode: RooflineMode = field(default="profile-fallback", compare=False)
     roofline_detail: str | None = field(default=None, compare=False)
     problem_generalization_model: str | None = None
@@ -340,6 +349,7 @@ class CampaignBootstrapper:
         baseline_generator: LineageBaselineGenerator | None = None,
         roofline_builder: RooflineBuilder | None = None,
         roofline_resolved: Callable[[RooflineMode, str | None], None] | None = None,
+        hardware_target_resolver: HardwareTargetResolver | None = None,
         evolver_commit: str | None = None,
         gate_contract_policy: RuntimeGateContractPolicy | None = None,
         max_parallel_lineages: int = 1,
@@ -354,6 +364,7 @@ class CampaignBootstrapper:
         self._baseline_generator = baseline_generator
         self._roofline_builder = roofline_builder
         self._roofline_resolved = roofline_resolved
+        self._hardware_target_resolver = hardware_target_resolver
         self._evolver_commit = evolver_commit
         self._gate_contract_policy = gate_contract_policy
         self._max_parallel_lineages = max_parallel_lineages
@@ -361,6 +372,13 @@ class CampaignBootstrapper:
 
     def bootstrap_campaign(self, spec: CampaignSpecV3) -> CampaignBootstrapResult:
         """Import shared Core once, then initialize selected Lineages recoverably."""
+        requested_gpu = spec.hardware_target
+        environment = (
+            ResolvedAgateEnvironment(requested_gpu, requested_gpu)
+            if self._hardware_target_resolver is None
+            else self._hardware_target_resolver.resolve(requested_gpu)
+        )
+        spec = spec.model_copy(update={"hardware_target": environment.arch})
         selected = spec.selected_dsls()
         campaign_id = parse_campaign_id(self._derived_id("campaign", spec.creation_key))
         try:
@@ -383,6 +401,11 @@ class CampaignBootstrapper:
         input_contract = AgateEvaluationContractV1.model_validate(
             self._read_json(spec.evaluation_contract, "evaluation contract")
         )
+        if input_contract.agate_gpu not in {None, environment.gpu}:
+            raise ValueError(
+                "evaluation contract Agate GPU disagrees with the resolved environment"
+            )
+        input_contract = input_contract.model_copy(update={"agate_gpu": environment.gpu})
         if self._gate_contract_policy is not None:
             input_contract = self._gate_contract_policy.apply(input_contract)
         contract, roofline_mode, roofline_detail = self._resolve_evaluation_contract(
@@ -391,7 +414,7 @@ class CampaignBootstrapper:
                 None if existing_campaign is None else existing_campaign.evaluation_contract_digest
             ),
             operator=spec.operator,
-            hardware_target=spec.hardware_target,
+            hardware_target=environment.gpu,
         )
         if self._roofline_resolved is not None:
             self._roofline_resolved(roofline_mode, roofline_detail)
@@ -475,6 +498,8 @@ class CampaignBootstrapper:
         return CampaignBootstrapResult(
             campaign_id=campaign_id,
             lineages=tuple(results),
+            hardware_target=environment.arch,
+            agate_gpu=environment.gpu,
             roofline_mode=roofline_mode,
             roofline_detail=roofline_detail,
             problem_generalization_model=spec.problem_generalization_model,

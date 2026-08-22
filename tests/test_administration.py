@@ -119,7 +119,12 @@ class CapturingBootstrapper:
 
     def bootstrap_campaign(self, spec: CampaignSpecV3) -> CampaignBootstrapResult:
         self.calls.append(spec)
-        return CampaignBootstrapResult(self.result.campaign_id, (self.result,))
+        return CampaignBootstrapResult(
+            self.result.campaign_id,
+            (self.result,),
+            hardware_target="sm_90",
+            agate_gpu="nvidia-h100",
+        )
 
 
 @dataclass

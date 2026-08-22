@@ -23,7 +23,8 @@ from ..domain.ids import (
     parse_epoch_id,
 )
 from ..domain.models import Dsl, WorkerSession, WorkerSessionRole, WorkerSessionStatus
-from ..gateway.agate import AgateClient, AgateRequestBuilder
+from ..gateway.agate import AgateClient, AgateRequestBuilder, load_agate_sdk
+from ..gateway.configuration import build_agate_connection
 from ..gateway.contract import (
     AgateEvaluationOptionsV1,
     RuntimeGateContractPolicy,
@@ -37,6 +38,7 @@ from ..gateway.control_models import (
     GatewayEvaluationSource,
     GatewayOperation,
 )
+from ..gateway.environment import AgateHardwareTargetResolver
 from ..gateway.lineage_seed import AgateLineageSeedEvaluator
 from ..gateway.production_policy import ProductionKernelPolicy
 from ..kernel_agents import GitOptimizerBaseLoader, KernelAgentRevisionBuilder
@@ -91,9 +93,14 @@ def build_campaign_bootstrapper(
     *,
     control: SqliteGatewayControl | None = None,
     finalizer: AuthoritativeCandidateEvaluator | None = None,
+    agate_client: AgateClient | None = None,
     roofline_resolved: Callable[[RooflineMode, str | None], None] | None = None,
 ) -> CampaignBootstrapper:
     """Compose the one canonical Campaign bootstrap path for CLI and HTTP entrypoints."""
+    if agate_client is None:
+        agate_client, _request_builder = load_agate_sdk(
+            build_agate_connection(settings.agate, environment)
+        )
     return CampaignBootstrapper(
         registry,
         artifacts,
@@ -113,6 +120,7 @@ def build_campaign_bootstrapper(
         ),
         roofline_builder=build_roofline_builder(settings),
         roofline_resolved=roofline_resolved,
+        hardware_target_resolver=AgateHardwareTargetResolver(agate_client),
         evolver_commit=(None if settings.campaign is None else settings.campaign.evolver.commit),
         gate_contract_policy=build_gate_contract_policy(settings),
         max_parallel_lineages=(

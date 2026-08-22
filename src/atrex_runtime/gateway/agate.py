@@ -811,7 +811,7 @@ class AgateGatewayAdapter:
         payload = self._request_builder(
             candidate_source,
             reference,
-            context.hardware_target,
+            context.agate_gpu,
             name=f"{context.operator}_{request.attempt_id}",
             spec_fields={"languages": [context.dsl.value]},
             options=cast(Mapping[str, object], options.model_dump(mode="python")),
@@ -894,8 +894,12 @@ class AgateGatewayAdapter:
             self._read_json_object(request, payload_path, "submit payload")
         )
         spec = payload.get("spec")
-        if not isinstance(spec, dict) or spec.get("target_hardware") != [context.hardware_target]:
+        if not isinstance(spec, dict):
+            raise ValueError("submit payload requires spec")
+        target_hardware = spec.get("target_hardware")
+        if target_hardware is not None and target_hardware != [context.agate_gpu]:
             raise ValueError("submit payload target_hardware must match the Attempt")
+        spec["target_hardware"] = [context.agate_gpu]
         existing_key = payload.get("idempotency_key")
         if existing_key not in {None, request.idempotency_key}:
             raise ValueError("submit payload idempotency_key conflicts with the proxy request")
@@ -926,7 +930,7 @@ class AgateGatewayAdapter:
         if not isinstance(command, str) or not command:
             raise ValueError("dev requires command")
         payload: dict[str, object] = {
-            "spec": {"target_hardware": [context.hardware_target]},
+            "spec": {"target_hardware": [context.agate_gpu]},
             "command": command,
             "env_vars": request.parameters.get("env_vars", {}),
             "files": files,
@@ -952,7 +956,7 @@ class AgateGatewayAdapter:
         init_kwargs: dict[str, JsonValue] | None = None,
     ) -> dict[str, object]:
         payload: dict[str, object] = {
-            "spec": {"target_hardware": [context.hardware_target]},
+            "spec": {"target_hardware": [context.agate_gpu]},
             "candidate": candidate_source,
             "env_vars": request.parameters.get("env_vars", {}),
         }
@@ -994,7 +998,7 @@ class AgateGatewayAdapter:
         payload: dict[str, object] = dict(
             self._read_json_object(request, solution_path, "SOL solution")
         )
-        payload["gpu"] = context.hardware_target
+        payload["gpu"] = context.agate_gpu
         subset = request.parameters.get("subset")
         if subset is not None:
             payload["subset"] = subset

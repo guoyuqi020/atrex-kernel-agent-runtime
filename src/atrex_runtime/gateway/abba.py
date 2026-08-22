@@ -265,7 +265,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     comparison_id=comparison_id,
                     batch_index=index,
                     context_name=context.operator,
-                    hardware_target=context.hardware_target,
+                    hardware_target=context.agate_gpu,
                     contract=contract,
                     shape_ids=batch,
                     schedule=schedule,

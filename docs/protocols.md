@@ -104,7 +104,8 @@ projection as the authenticated API.
 
 ## Bootstrap and Bundle protocols
 
-Campaign schema v3 requires `creation_key`, operator, hardware target, Evaluation Contract
+Campaign schema v3 requires `creation_key`, operator, an Agate GPU environment selector in
+`hardware_target`, Evaluation Contract
 path, full `base_revision.commit`, `challenger_count`, `challenger_start_epoch`,
 `trajectories_per_branch`, `attempts_per_trajectory`, and per-DSL
 `baseline_kernel`/`initial_evidence`. The keys of `lineages` are the authoritative and complete
@@ -117,6 +118,12 @@ creates one revision per selected DSL from the same optimizer digest. One
 stable Bootstrap Attempt may have multiple append-only recovery Generations. Each new physical
 Session receives a fresh capability generation; old Gateway operations remain keyed by their
 original generation, while only a correct committed outcome can create the baseline.
+
+Before sealing a new Campaign, Runtime calls Agate `get_env(hardware_target)`. The returned `arch`
+(for example `sm_120`) becomes the Campaign/Lineage hardware target visible to every Agent. The
+canonical returned `gpu` (for example `L20N`) is sealed separately as `agate_gpu` in the Evaluation
+Contract and is used only for Agate scheduling. Bootstrap fails closed if Agate omits either field;
+an Agent-visible hardware target is never inferred from the environment alias.
 
 Lineage seed schema v1 requires `creation_key`, fixed `dsl`, Epoch topology, and a discriminated
 `seed`. `source_type: "artifacts"` names `agent_artifact_digest` and `kernel_artifact_digest`;

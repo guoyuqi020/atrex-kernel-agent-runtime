@@ -51,7 +51,10 @@ Runtime config is strict schema v1. Important choices are:
 - optional GPU Wiki query service;
 - administration and maintenance limits.
 
-Create a Campaign schema-v3 file from an example. It selects operator, hardware, Evaluation
+Create a Campaign schema-v3 file from an example. Its `hardware_target` input selects an Agate GPU
+environment. At Bootstrap, Runtime queries that environment and passes the returned architecture
+(such as `sm_120`) to Agents while retaining the canonical Agate GPU alias only for scheduling. The
+Campaign also selects operator, Evaluation
 Contract, exact Core commit, Epoch topology, per-DSL seed Kernel/Evidence, and optional per-Lineage
 models. There is no separate Bootstrap JSON.
 

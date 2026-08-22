@@ -224,6 +224,8 @@ def kernel_trial_value(trial: object) -> dict[str, object]:
 def bootstrap_result_value(result: CampaignBootstrapResult) -> dict[str, object]:
     return {
         "campaign_id": result.campaign_id,
+        "hardware_target": result.hardware_target,
+        "agate_gpu": result.agate_gpu,
         "problem_generalization_model": result.problem_generalization_model,
         "evolver_commit": result.evolver_commit,
         "roofline": {"mode": result.roofline_mode, "detail": result.roofline_detail},
