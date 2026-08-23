@@ -54,3 +54,45 @@ def test_success_starts_the_next_request_with_a_fresh_error_count() -> None:
 
     assert raw.calls == 4
     assert delays == [5.0, 5.0]
+
+
+class StatusError(Exception):
+    def __init__(self, status: int) -> None:
+        self.status = status
+        super().__init__(f"[{status}] source validation failed")
+
+
+@dataclass
+class StatusClient:
+    status: int
+    calls: int = 0
+
+    def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+        self.calls += 1
+        raise StatusError(self.status)
+
+
+@pytest.mark.parametrize("status", [400, 403, 404, 422])
+def test_permanent_client_errors_are_raised_without_retrying(status: int) -> None:
+    raw = StatusClient(status=status)
+    delays: list[float] = []
+    client = RetryingAgateClient(raw, sleeper=delays.append)
+
+    with pytest.raises(StatusError, match="source validation failed"):
+        client.submit_job("dev", {})
+
+    assert raw.calls == 1
+    assert delays == []
+
+
+@pytest.mark.parametrize("status", [408, 429, 500, 503])
+def test_retryable_statuses_keep_the_backoff_contract(status: int) -> None:
+    raw = StatusClient(status=status)
+    delays: list[float] = []
+    client = RetryingAgateClient(raw, sleeper=delays.append)
+
+    with pytest.raises(StatusError):
+        client.submit_job("dev", {})
+
+    assert raw.calls == 5
+    assert delays == [5.0, 10.0, 20.0, 40.0]

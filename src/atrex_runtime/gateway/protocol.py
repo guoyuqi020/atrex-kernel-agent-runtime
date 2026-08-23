@@ -19,6 +19,9 @@ from ..domain.ids import (
 
 GATEWAY_PROXY_PROTOCOL_VERSION: Literal[2] = 2
 
+# Agate rejects a larger per-job timeout with an unrecoverable 422.
+AGATE_MAX_JOB_TIMEOUT_S = 600
+
 
 class CandidateFileV2(BaseModel):
     """One regular candidate file with a safe workspace-relative path."""
@@ -131,7 +134,7 @@ class DevRequestV2(_CandidateRequestV2):
     operation: Literal["dev"]
     command: str = Field(min_length=1, max_length=16_384)
     env_vars: dict[str, str] = Field(default_factory=dict)
-    job_timeout_s: int | None = Field(default=None, gt=0, le=10_800)
+    job_timeout_s: int | None = Field(default=None, gt=0, le=AGATE_MAX_JOB_TIMEOUT_S)
     recycle: bool = True
     intent: (
         Literal[
@@ -165,7 +168,7 @@ class SolRequestV2(_DependencyRequestV2):
     subset: Literal["L1", "L2", "Quant", "FlashInfer-Bench"] | None = None
     definition_path: str | None = None
     workload_path: str | None = None
-    job_timeout_s: int | None = Field(default=None, gt=0, le=10_800)
+    job_timeout_s: int | None = Field(default=None, gt=0, le=AGATE_MAX_JOB_TIMEOUT_S)
     workload_timeout_s: int | None = Field(default=None, gt=0)
     compile_timeout_s: int | None = Field(default=None, gt=0)
     iterations: int | None = Field(default=None, gt=0)

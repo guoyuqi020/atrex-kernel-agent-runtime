@@ -18,7 +18,11 @@ from pydantic import TypeAdapter, ValidationError
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..asgi import AsgiReceive, AsgiSend, bearer_token, json_response, read_request_body
-from ..domain.errors import InfrastructureError, InvalidTransitionError
+from ..domain.errors import (
+    InfrastructureError,
+    InvalidTransitionError,
+    UpstreamGatewayError,
+)
 from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest
 from ..ports import RuntimeEventRecorder
 from ..serialization import canonical_json_digest
@@ -592,6 +596,12 @@ class GatewayProxyAsgiApp:
             await json_response(send, 403, {"error": "forbidden", "detail": str(error)})
         except InvalidTransitionError as error:
             await json_response(send, 409, {"error": "conflict", "detail": str(error)})
+        except UpstreamGatewayError as error:
+            await json_response(
+                send,
+                503,
+                {"error": "gateway_unavailable", "detail": str(error)},
+            )
         except InfrastructureError:
             await json_response(send, 503, {"error": "gateway_unavailable"})
         else:

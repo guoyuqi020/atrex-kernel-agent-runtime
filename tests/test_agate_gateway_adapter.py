@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import math
 import sqlite3
@@ -11,9 +12,14 @@ from pathlib import Path
 
 import pytest
 from conftest import NOW, digest, seed_lineage
+from pydantic import ValidationError
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
-from atrex_runtime.domain.errors import InfrastructureError, InvalidTransitionError
+from atrex_runtime.domain.errors import (
+    InfrastructureError,
+    InvalidTransitionError,
+    UpstreamGatewayError,
+)
 from atrex_runtime.domain.ids import AttemptId, new_attempt_id, new_epoch_id
 from atrex_runtime.domain.models import (
     Attempt,
@@ -37,6 +43,11 @@ from atrex_runtime.gateway.contract import (
     RegistryAgateEvaluationContextResolver,
 )
 from atrex_runtime.gateway.control import GatewayOperation
+from atrex_runtime.gateway.protocol import (
+    AGATE_MAX_JOB_TIMEOUT_S,
+    DevRequestV2,
+    SolRequestV2,
+)
 from atrex_runtime.gateway.proxy import GatewayAdapterRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
@@ -1206,3 +1217,105 @@ def test_published_agate_sdk_loads_through_production_factory() -> None:
     assert type(client).__module__ == "atrex_runtime.gateway.retrying_client"
     assert type(client.wrapped_client).__module__ == "atrex_gateway_client.client"  # type: ignore[attr-defined]
     assert builder.__module__ == "atrex_gateway_client.payload"
+
+
+@pytest.mark.parametrize(
+    ("model", "operation", "extra"),
+    [
+        (DevRequestV2, "dev", {"command": "python3 kernel.py"}),
+        (SolRequestV2, "sol", {"solution_path": "solution.json"}),
+    ],
+)
+def test_job_timeout_is_bounded_by_the_agate_job_limit(
+    model: type[DevRequestV2] | type[SolRequestV2],
+    operation: str,
+    extra: dict[str, str],
+) -> None:
+    assert AGATE_MAX_JOB_TIMEOUT_S == 600
+    payload: dict[str, object] = {
+        "operation": operation,
+        "attempt_id": str(new_attempt_id()),
+        "idempotency_key": "dv_timeout",
+        "candidate": {
+            "files": (
+                {
+                    "path": "kernel.py",
+                    "content_base64": base64.b64encode(b"class Model: pass\n").decode("ascii"),
+                },
+            )
+        },
+        **extra,
+    }
+
+    accepted = model.model_validate({**payload, "job_timeout_s": AGATE_MAX_JOB_TIMEOUT_S})
+    assert accepted.job_timeout_s == AGATE_MAX_JOB_TIMEOUT_S
+
+    with pytest.raises(ValidationError):
+        model.model_validate({**payload, "job_timeout_s": AGATE_MAX_JOB_TIMEOUT_S + 1})
+
+
+@pytest.mark.anyio
+async def test_dev_permanent_rejection_reaches_the_agent_as_an_invalid_request(
+    tmp_path: Path,
+) -> None:
+    rejection = FakeGatewayError(
+        400,
+        "validation",
+        {
+            "message": "source validation failed",
+            "details": {"forbidden_imports": ["os"]},
+        },
+    )
+    client = FakeAgateClient(_successful_job(), submit_error=rejection)
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "kernel.py").write_text("import os\n")
+
+    with pytest.raises(ValueError, match="blocked candidate") as raised:
+        await adapter.execute(
+            GatewayAdapterRequest(
+                new_attempt_id(),
+                GatewayOperation.DEV,
+                "dv_reject",
+                digest("candidate"),
+                candidate,
+                None,
+                None,
+                None,
+                {"command": "python3 kernel.py"},
+            )
+        )
+
+    assert not isinstance(raised.value, InfrastructureError)
+    assert len(client.submitted) == 1
+    jobs.close()
+
+
+@pytest.mark.anyio
+async def test_retryable_agate_status_is_passed_through_after_retries(tmp_path: Path) -> None:
+    outage = FakeGatewayError(503, "infra", {"message": "scheduler is draining"})
+    client = FakeAgateClient(_successful_job(), submit_error=outage)
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "kernel.py").write_text("class Model: pass\n")
+
+    with pytest.raises(UpstreamGatewayError) as raised:
+        await adapter.execute(
+            GatewayAdapterRequest(
+                new_attempt_id(),
+                GatewayOperation.DEV,
+                "dv_outage",
+                digest("candidate"),
+                candidate,
+                None,
+                None,
+                None,
+                {"command": "python3 kernel.py"},
+            )
+        )
+
+    assert raised.value.status == 503
+    assert "blocked candidate" in str(raised.value)
+    jobs.close()

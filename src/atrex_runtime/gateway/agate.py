@@ -20,7 +20,11 @@ import anyio
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, TypeAdapter, model_validator
 
 from ..artifacts.local import JsonValue
-from ..domain.errors import InfrastructureError, InvalidTransitionError
+from ..domain.errors import (
+    InfrastructureError,
+    InvalidTransitionError,
+    UpstreamGatewayError,
+)
 from ..domain.ids import AttemptId, parse_attempt_id
 from ..sqlite_support import configure_durable_sqlite
 from .batched_evaluate import ShapeBatch, ShapeBatchedEvaluateExecutor, ShapeBatchOutcome
@@ -38,7 +42,7 @@ from .repeated_evaluate import (
     repeated_evaluate_result,
     repeated_evaluate_worker_result,
 )
-from .retrying_client import RetryingAgateClient
+from .retrying_client import RETRYABLE_CLIENT_STATUSES, RetryingAgateClient
 
 AGATE_JOB_SCHEMA_VERSION = 2
 _JOB_KINDS = frozenset({"eval", "profile", "dev", "compile", "sol", "disassemble"})
@@ -1126,6 +1130,12 @@ class AgateGatewayAdapter:
                     pass
                 else:
                     raise AgateCandidateRejection(payload) from error
+            status = error_fields.get("status")
+            if isinstance(status, int) and not isinstance(status, bool):
+                message = f"Agate rejected the request: {error}"
+                if 400 <= status < 500 and status not in RETRYABLE_CLIENT_STATUSES:
+                    raise ValueError(message) from error
+                raise UpstreamGatewayError(status, message) from error
             raise InfrastructureError(
                 f"Agate SDK request failed: {type(error).__name__}: {error}"
             ) from error

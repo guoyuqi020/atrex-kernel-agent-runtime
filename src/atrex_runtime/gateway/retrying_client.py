@@ -11,7 +11,16 @@ _T = TypeVar("_T")
 _MAX_CONSECUTIVE_ERRORS = 5
 _INITIAL_BACKOFF_SECONDS = 5.0
 _MAX_BACKOFF_SECONDS = 40.0
+RETRYABLE_CLIENT_STATUSES = frozenset({408, 429})
 _LOGGER = logging.getLogger(__name__)
+
+
+def _is_permanent(error: Exception) -> bool:
+    """A 4xx other than request-timeout/overload cannot succeed on retry."""
+    status = getattr(error, "status", None)
+    if not isinstance(status, int):
+        return False
+    return 400 <= status < 500 and status not in RETRYABLE_CLIENT_STATUSES
 
 
 class RetryingAgateClient:
@@ -20,7 +29,8 @@ class RetryingAgateClient:
     A request is attempted at most five times. The four delays before the
     terminal attempt are 5, 10, 20, and 40 seconds. Any successful response ends
     the sequence, so the next request starts with a fresh consecutive-error
-    count.
+    count. A permanent 4xx other than 408 and 429 is raised immediately so the
+    caller can act on it instead of waiting out the backoff.
     """
 
     def __init__(
@@ -83,6 +93,14 @@ class RetryingAgateClient:
             try:
                 return request()
             except Exception as error:
+                if _is_permanent(error):
+                    _LOGGER.debug(
+                        "Agate %s failed permanently; not retrying: %s: %s",
+                        operation,
+                        type(error).__name__,
+                        error,
+                    )
+                    raise
                 if error_count == _MAX_CONSECUTIVE_ERRORS:
                     _LOGGER.error(
                         "Agate %s failed %d consecutive times; giving up: %s: %s",
