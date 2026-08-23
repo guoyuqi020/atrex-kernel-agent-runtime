@@ -288,7 +288,7 @@ def _local_wiki_config(root: Path, workspace: Path) -> dict[str, Any]:
         "database": str(workspace / "wiki-state/local-wiki.sqlite"),
         "bearer_token_env": None,
         "max_request_bytes": 4194304,
-        "max_concurrent_queries": 64,
+        "max_concurrent_queries": 16,
         "max_response_bytes": 1048576,
     }
 
