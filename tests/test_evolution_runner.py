@@ -920,3 +920,51 @@ Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
     assert value["instruction"] == "Run the versioned Evolver Bundle once."
     assert value["home"] == str(prepared.root / "scratch/agent-home")
     assert value["secondary_home"] == value["home"]
+
+
+def test_prepare_launch_binds_the_runtime_session_timeout(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(
+        _request(artifacts, tmp_path)
+    )
+    driver = SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        EvolutionProcessConfig(
+            bundle_commit="0" * 40,
+            bundle_tree="1" * 40,
+            bundle_artifact_digest=digest("evolver-bundle"),
+            command_argv=(str(Path(sys.executable).resolve()),),
+            agent_backend="claude",
+            isolated_home_environment_keys=("HOME",),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            environment=(),
+            timeout_seconds=10_800,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+        ),
+    )
+
+    launch = driver.prepare_launch(prepared)
+
+    assert launch.environment["ATREX_SESSION_TIMEOUT_SECONDS"] == "10800"
+
+
+def test_evolution_config_rejects_operator_override_of_the_session_timeout(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="Runtime-owned keys"):
+        EvolutionProcessConfig(
+            bundle_commit="0" * 40,
+            bundle_tree="1" * 40,
+            bundle_artifact_digest=digest("evolver-bundle"),
+            command_argv=(str(Path(sys.executable).resolve()),),
+            agent_backend="claude",
+            isolated_home_environment_keys=("HOME",),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            environment=(("ATREX_SESSION_TIMEOUT_SECONDS", "60"),),
+            timeout_seconds=10_800,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+        )

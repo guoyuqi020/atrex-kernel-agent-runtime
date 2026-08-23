@@ -741,6 +741,7 @@ class EvolutionProcessConfig:
             "ATREX_EVOLUTION_CANDIDATE",
             "ATREX_EVIDENCE_PROMPT_PATH",
             "ATREX_EVOLUTION_OUTPUT",
+            "ATREX_SESSION_TIMEOUT_SECONDS",
             "ATREX_USAGE_BUDGET",
             "ATREX_USAGE_UNIT",
             "ATREX_TOKEN_USAGE_REPORT",
@@ -874,6 +875,7 @@ class SubprocessEvolutionSessionDriver:
                     prepared.root / "input/evidence" / EVIDENCE_PROMPT_FILENAME
                 ),
                 "ATREX_EVOLUTION_OUTPUT": str(prepared.output_path),
+                "ATREX_SESSION_TIMEOUT_SECONDS": str(self._config.timeout_seconds),
             }
         )
         token_usage_path = prepared.root.joinpath(
