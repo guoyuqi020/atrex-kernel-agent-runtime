@@ -16,6 +16,7 @@ from .process import BoundedProcessConfig, BoundedProcessResult, BoundedProcessR
 from .session_trace import enforce_session_trace_retention
 from .token_usage import ProviderUsageReportV2, UsageUnit
 
+CORE_TIMEOUT_EXIT_STATUS = 124
 _UNSEALED_SESSION_MARKER = ".runtime-live-session"
 
 
@@ -172,6 +173,13 @@ class CorePhaseRunner:
             raise InfrastructureError(f"{label} process could not start: {error}") from error
         except TimeoutError as error:
             raise InfrastructureError(f"{label} exceeded its wall-time limit") from error
+        # The Bundle owns the inner Agent process and translates its wall-time
+        # expiration into the conventional timeout exit status. Check that
+        # terminal condition before validating usage: a killed Provider cannot
+        # emit its final authoritative usage event, so the resulting partial
+        # report is evidence of the timeout rather than its root cause.
+        if process.returncode == CORE_TIMEOUT_EXIT_STATUS:
+            raise InfrastructureError(f"{label} timed out")
         try:
             usage_unit: UsageUnit = (
                 "credits" if self._policy.agent_backend == "qodercli" else "provider_tokens"

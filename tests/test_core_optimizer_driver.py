@@ -13,6 +13,7 @@ import pytest
 from conftest import digest
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
+from atrex_runtime.domain.errors import InfrastructureError
 from atrex_runtime.domain.ids import (
     new_attempt_id,
     new_campaign_id,
@@ -421,3 +422,68 @@ print(json.dumps({
     assert result.session_trace_digest is not None
     trace = artifacts.verify(result.session_trace_digest).payload_path
     assert '"input_tokens": 12' in (trace / "provider/stdout.stream-json").read_text()
+
+
+def test_inner_agent_timeout_is_reported_as_a_timeout(tmp_path: Path) -> None:
+    root = tmp_path / "phase"
+    repository = root / "agent/optimizer"
+    repository.mkdir(parents=True)
+    (root / "sessions").mkdir()
+    (repository / "atrex-bundle.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "bundle_format": "atrex-kernel-agent-bundle-v1",
+                "entrypoint": {"command": "run.py"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    # A killed Provider leaves usage_complete false, which on its own reads as an
+    # invalid report rather than the timeout that produced it.
+    (repository / "run.py").write_text(
+        """import json
+import os
+import sys
+from pathlib import Path
+
+Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
+    "schema_version": 2,
+    "usage_unit": os.environ["ATREX_USAGE_UNIT"],
+    "budget": float(os.environ["ATREX_USAGE_BUDGET"]),
+    "consumed": 0,
+    "token_usage": {
+        "uncached_input_tokens": 0,
+        "output_tokens": 0,
+        "cache_read_tokens": 0,
+        "cache_write_tokens": 0
+    },
+    "credits": None,
+    "budget_exhausted": False,
+    "session_count": 1,
+    "model_request_count": 1,
+    "usage_complete": False
+}))
+sys.exit(124)
+""",
+        encoding="utf-8",
+    )
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    policy = CoreOptimizerProcessConfig(
+        agent_backend="claude",
+        command_prefix=(sys.executable,),
+        isolated_home_environment_keys=(),
+        session_trace_relative_path=None,
+        token_usage_report_relative_path="scratch/token-usage.json",
+        max_attempt_report_bytes=65_536,
+        timeout_seconds=30,
+        terminate_grace_seconds=1,
+        max_diagnostic_bytes=4096,
+        max_session_tokens=1000,
+    )
+    runner = CorePhaseRunner(CleanEnvironmentLauncher(Path("/usr/bin/env")), policy, artifacts)
+    prepared = runner.prepare(root, root / "sessions")
+    environment = runner.runtime_environment(prepared, phase="optimization_attempt")
+
+    with pytest.raises(InfrastructureError, match="test Core timed out"):
+        runner.run(prepared, environment, label="test Core")
