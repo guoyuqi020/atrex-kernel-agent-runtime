@@ -1062,5 +1062,8 @@ def test_bootstrap_subject_sees_only_its_own_kernel_trials(tmp_path: Path) -> No
 
     assert control.visible_measurement_attempt_ids(attempt_id) == (lineage_id, ())
     assert control.visible_kernel_trial_attempt_ids(attempt_id) == (lineage_id, (attempt_id,))
+    # The named Lineage has no row until Bootstrap completes, so its catalog is empty
+    # rather than a crash on the way to the Agent.
+    assert control.measurement_kernel_catalog(lineage_id) == {}
     control.close()
     registry.close()

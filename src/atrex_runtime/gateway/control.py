@@ -1265,7 +1265,11 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         lineage_id: LineageId,
     ) -> dict[ArtifactDigest, tuple[str, int, str]]:
         """Map sealed Kernel content to its lineage-local revision identity and version."""
-        self._registry.get_lineage(lineage_id)
+        try:
+            self._registry.get_lineage(lineage_id)
+        except KeyError:
+            # A Bootstrap subject names its Lineage before the row exists; it owns no Kernels yet.
+            return {}
         return {
             entry.revision.artifact_digest: (
                 str(entry.revision.id),
