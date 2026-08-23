@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[1]
@@ -73,7 +74,7 @@ def test_demo_resolves_the_first_saved_bootstrap_lineage(tmp_path: Path) -> None
 def test_temporary_wiki_shell_entrypoint_loads_without_starting_services() -> None:
     result = subprocess.run(
         (
-            str(REPOSITORY / ".venv/bin/python"),
+            sys.executable,
             str(EXAMPLE / "temporary_wiki_shell.py"),
             "--help",
         ),

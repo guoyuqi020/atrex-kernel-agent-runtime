@@ -8,6 +8,8 @@ import os
 import subprocess
 from pathlib import Path
 
+from conftest import with_local_interpreter
+
 from atrex_runtime.api.app import build_runtime_application
 from atrex_runtime.artifacts import LocalArtifactStore
 from atrex_runtime.bootstrap import load_campaign_spec
@@ -49,7 +51,7 @@ def _settings(tmp_path: Path) -> RuntimeSettings:
         agate_jobs_database=tmp_path / "agate.sqlite",
         artifacts_root=tmp_path / "artifacts",
     )
-    campaign = settings.campaign.model_copy(
+    campaign = with_local_interpreter(settings.campaign).model_copy(
         update={
             "attempt_workspaces_root": tmp_path / "attempts",
             "evolution_workspaces_root": tmp_path / "evolution",

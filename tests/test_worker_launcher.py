@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import pwd
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,6 +20,20 @@ from atrex_runtime.workers.launcher import (
     BwrapSandboxLauncher,
     CleanEnvironmentLauncher,
 )
+
+WORKER_USER = "atrex-worker"
+
+
+@pytest.fixture(autouse=True)
+def _resolvable_worker_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve the deployment's Worker account when this host has not provisioned it."""
+    try:
+        pwd.getpwnam(WORKER_USER)
+    except KeyError:
+        monkeypatch.setattr(
+            "atrex_runtime.workers.launcher.pwd.getpwnam",
+            lambda _name: SimpleNamespace(pw_uid=61234, pw_gid=61234),
+        )
 
 
 def _resolver(tmp_path: Path) -> Path:
@@ -94,8 +109,7 @@ def test_container_launcher_uses_bwrap_without_systemd_and_projects_credentials(
     assert not any(value.startswith("--property=") for value in argv)
     assert "--proc" not in argv
     assert any(
-        argv[index : index + 3] == ("--ro-bind", "/proc", "/proc")
-        for index in range(len(argv) - 2)
+        argv[index : index + 3] == ("--ro-bind", "/proc", "/proc") for index in range(len(argv) - 2)
     )
     assert "ATREX_SANDBOX=bwrap-container" in argv
     assert "ATREX_WORKSPACE=/home/agent/workspace" in argv
@@ -135,6 +149,7 @@ def test_container_launcher_requires_session_home_inside_workspace(tmp_path: Pat
                 "HOME": str(tmp_path / "outside"),
             },
         )
+
 
 def test_launcher_rejects_invalid_environment_names(tmp_path: Path) -> None:
     launcher = CleanEnvironmentLauncher(Path("/usr/bin/env"))
@@ -672,9 +687,7 @@ def test_bwrap_recreates_empty_foreign_owned_root_as_worker(
     monkeypatch.setattr(
         BwrapSandboxLauncher,
         "_require_worker_owned_path",
-        staticmethod(
-            lambda _path, selected_worker: ownership_checks.append(selected_worker)
-        ),
+        staticmethod(lambda _path, selected_worker: ownership_checks.append(selected_worker)),
     )
 
     launcher._ensure_worker_directory(workspace_root, worker)

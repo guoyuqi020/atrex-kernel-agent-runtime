@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from conftest import with_local_interpreter
 from pydantic import ValidationError
 
 from atrex_runtime.composition.campaign import build_core_process_config
@@ -53,7 +54,8 @@ def test_core_process_contract_contains_runtime_binding() -> None:
     settings = RuntimeSettings.from_file(CONFIG)
     assert settings.campaign is not None
 
-    process = build_core_process_config(settings.campaign)
+    campaign = with_local_interpreter(settings.campaign)
+    process = build_core_process_config(campaign)
 
     assert process.agent_backend == "qodercli"
     assert process.reasoning_effort == "max"
@@ -61,7 +63,7 @@ def test_core_process_contract_contains_runtime_binding() -> None:
     assert process.timeout_seconds == 3600
 
     bootstrap = build_core_process_config(
-        settings.campaign,
-        timeout_seconds=settings.campaign.optimizer.bootstrap_timeout_seconds,
+        campaign,
+        timeout_seconds=campaign.optimizer.bootstrap_timeout_seconds,
     )
     assert bootstrap.timeout_seconds == 10_800

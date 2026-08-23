@@ -6,6 +6,7 @@ import json
 import os
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 from atrex_runtime.bootstrap import CampaignSpecV3
@@ -23,7 +24,7 @@ def _prepare_command(
     campaign: Path,
 ) -> tuple[str, ...]:
     return (
-        str(REPOSITORY / ".venv/bin/python"),
+        sys.executable,
         str(SHARED / "prepare_campaign.py"),
         "--state-dir",
         str(state),

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import hashlib
+import sys
 from dataclasses import dataclass
 
+from atrex_runtime.config import CampaignRuntimeSettings
 from atrex_runtime.domain.ids import (
     ArtifactDigest,
     KernelAgentRevisionId,
@@ -29,6 +31,24 @@ from atrex_runtime.ports import BuildAttemptEvidenceRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
 NOW = "2026-08-14T00:00:00+00:00"
+
+
+def with_local_interpreter(campaign: CampaignRuntimeSettings) -> CampaignRuntimeSettings:
+    """Retarget checked-in Worker command prefixes at the interpreter running the tests.
+
+    The committed configuration names the repository's conventional `.venv/bin/python`,
+    which need not exist wherever the suite runs.
+    """
+    return campaign.model_copy(
+        update={
+            "optimizer": campaign.optimizer.model_copy(
+                update={"command_prefix": (sys.executable, *campaign.optimizer.command_prefix[1:])}
+            ),
+            "evolver": campaign.evolver.model_copy(
+                update={"command_prefix": (sys.executable, *campaign.evolver.command_prefix[1:])}
+            ),
+        }
+    )
 
 
 def kernel_agent_limits(*, max_entrypoint_bytes: int = 8192) -> KernelAgentBundleLimits:
