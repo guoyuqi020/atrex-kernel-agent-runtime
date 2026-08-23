@@ -1007,3 +1007,60 @@ async def test_failed_epoch_recovery_rotates_capability_and_resets_reservations(
     assert registry.get_attempt(attempt.id).authority_started_at == recovery_time
     control.close()
     registry.close()
+
+
+def test_visible_history_for_a_missing_attempt_is_a_conflict_not_a_crash(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"t" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    vanished = new_attempt_id()
+
+    with pytest.raises(InvalidTransitionError, match="Attempt not found") as raised:
+        control.visible_kernel_trial_attempt_ids(vanished)
+
+    assert str(vanished) in str(raised.value)
+    control.close()
+    registry.close()
+
+
+def test_bootstrap_subject_sees_only_its_own_kernel_trials(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"z" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    attempt_id = new_attempt_id()
+    lineage_id = parse_lineage_id("lineage_" + "2" * 32)
+    subject = BootstrapGatewaySubject(
+        attempt_id=attempt_id,
+        campaign_id=parse_campaign_id("campaign_" + "1" * 32),
+        lineage_id=lineage_id,
+        epoch_id=parse_epoch_id("epoch_" + "3" * 32),
+        kernel_agent_revision_id=parse_kernel_agent_revision_id("agentrev_" + "4" * 32),
+        operator="vector_add",
+        hardware_target="sm_120",
+        dsl=Dsl.CUDA,
+        evaluation_contract_digest=digest("contract"),
+        input_kernel_digest=digest("seed"),
+        evidence_digest=digest("evidence"),
+        created_at=NOW_DATETIME,
+    )
+    control.issue_bootstrap(
+        subject,
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.KERNEL_TRIALS}),
+            4,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+
+    assert control.visible_measurement_attempt_ids(attempt_id) == (lineage_id, ())
+    assert control.visible_kernel_trial_attempt_ids(attempt_id) == (lineage_id, (attempt_id,))
+    control.close()
+    registry.close()

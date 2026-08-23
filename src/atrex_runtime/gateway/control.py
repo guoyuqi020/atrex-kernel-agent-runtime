@@ -1148,9 +1148,22 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         current_attempt_id: AttemptId,
     ) -> tuple[LineageId, tuple[AttemptId, ...]]:
         """Return exactly the promoted and same-trajectory history visible to an Optimizer."""
-        current = self._registry.get_attempt(current_attempt_id)
-        current_epoch = self._registry.get_epoch(current.epoch_id)
-        lineage = self._registry.get_lineage(current_epoch.lineage_id)
+        try:
+            current = self._registry.get_attempt(current_attempt_id)
+        except KeyError as error:
+            try:
+                subject = self.get_bootstrap_subject(current_attempt_id)
+            except KeyError:
+                raise InvalidTransitionError(
+                    f"visible history is unavailable: Attempt not found: {current_attempt_id}"
+                ) from error
+            return subject.lineage_id, ()
+        try:
+            current_epoch = self._registry.get_epoch(current.epoch_id)
+            lineage = self._registry.get_lineage(current_epoch.lineage_id)
+        except KeyError as error:
+            reason = error.args[0] if error.args else error
+            raise InvalidTransitionError(f"visible history is unavailable: {reason}") from error
         visible: list[AttemptId] = []
         for epoch in self._registry.list_epochs(lineage.id):
             if epoch.number > current_epoch.number:
