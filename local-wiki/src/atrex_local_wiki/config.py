@@ -28,6 +28,9 @@ class LocalWikiSettings(BaseModel):
     max_request_bytes: int = Field(gt=0)
     max_concurrent_queries: int = Field(default=16, ge=1, le=64)
     max_results: int | None = Field(default=None, gt=0)
+    # Only for an operator whose name the corpus cannot speak for. Both automatic
+    # resolver stages read the Store itself, so a new Kernel needs no entry here.
+    operator_families: dict[str, str] = Field(default_factory=dict)
     max_response_bytes: int = Field(gt=0)
 
     @model_validator(mode="after")

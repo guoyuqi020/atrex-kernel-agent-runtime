@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .models import JsonValue, KnowledgeQueryV1
+from .operator_family import OperatorFamilyResolver
 
 
 class GpuWikiQueryError(ValueError):
@@ -39,6 +40,7 @@ class CorpusIndex:
         max_concurrent_queries: int,
         max_results: int | None,
         max_response_bytes: int,
+        operator_families: Mapping[str, str] | None = None,
     ) -> None:
         self._root = root.resolve()
         self._python = python_executable.resolve()
@@ -51,6 +53,9 @@ class CorpusIndex:
         self._kernel_index = self._root / "kernel_wiki" / "records" / "index.json"
         self._hardware_index = self._root / "hardware_wiki" / "records" / "index.json"
         self._validate_layout()
+        self._operators = OperatorFamilyResolver.from_index(
+            self._kernel_index, declared=operator_families
+        )
 
     def check_health(self) -> None:
         """Fail when the pinned tools or either public record store disappear."""
@@ -60,7 +65,8 @@ class CorpusIndex:
         """Return the exact public ``query_nl.py`` records/notes envelope."""
         description = (
             f"Target hardware reported by the runtime: {request.hardware_target}. "
-            f"Required DSL: {request.dsl}. Operator: {request.operator}. "
+            f"Required DSL: {request.dsl}. Operator: {request.operator}"
+            f"{self._operator_scope(request.operator)}. "
             f"Optimization question: {request.query}"
         )
         command: list[str] = [
@@ -113,6 +119,19 @@ class CorpusIndex:
             ):
                 raise GpuWikiQueryError("GPU Wiki records/notes have incompatible types")
             return GpuWikiQueryResult(_json_object(value), self._revision())
+
+    def _operator_scope(self, operator: str) -> str:
+        """Name the Store's own operator token so the query reaches that axis.
+
+        The pinned tool derives scope from prose alone, and its extractor is told
+        to copy the caller's spellings. A Runtime Kernel name such as
+        `fused_moe_fp8` is filed under `moe`, which the extractor cannot know, so
+        the axis stays open unless the token appears here.
+        """
+        scope = self._operators.resolve(operator)
+        if not scope.is_hard_filter:
+            return ""
+        return f" (store {scope.axis} scope: {scope.value})"
 
     def _validate_layout(self) -> None:
         required = (self._query_tool, self._kernel_index, self._hardware_index)
