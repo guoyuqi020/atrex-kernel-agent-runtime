@@ -7,3 +7,67 @@
 [submodule "third_party/atrex-bench"]
 	path = third_party/atrex-bench
 	url = git@github.com:guoyuqi020/atrex-bench.git
+[submodule "third_party/reference-projects/FlashMLA"]
+	path = third_party/reference-projects/FlashMLA
+	url = https://github.com/deepseek-ai/FlashMLA.git
+	update = none
+[submodule "third_party/reference-projects/aiter"]
+	path = third_party/reference-projects/aiter
+	url = https://github.com/ROCm/aiter.git
+	update = none
+[submodule "third_party/reference-projects/composable_kernel"]
+	path = third_party/reference-projects/composable_kernel
+	url = https://github.com/ROCm/composable_kernel.git
+	update = none
+[submodule "third_party/reference-projects/cuLA"]
+	path = third_party/reference-projects/cuLA
+	url = https://github.com/inclusionAI/cuLA.git
+	update = none
+[submodule "third_party/reference-projects/cute-gemm"]
+	path = third_party/reference-projects/cute-gemm
+	url = https://github.com/reed-lau/cute-gemm.git
+	update = none
+[submodule "third_party/reference-projects/cutex"]
+	path = third_party/reference-projects/cutex
+	url = https://github.com/deciding/cutex.git
+	update = none
+[submodule "third_party/reference-projects/cutlass"]
+	path = third_party/reference-projects/cutlass
+	url = https://github.com/NVIDIA/cutlass.git
+	update = none
+[submodule "third_party/reference-projects/DeepGEMM"]
+	path = third_party/reference-projects/DeepGEMM
+	url = https://github.com/deepseek-ai/DeepGEMM.git
+	update = none
+[submodule "third_party/reference-projects/flash-attention"]
+	path = third_party/reference-projects/flash-attention
+	url = https://github.com/Dao-AILab/flash-attention.git
+	update = none
+[submodule "third_party/reference-projects/flashinfer"]
+	path = third_party/reference-projects/flashinfer
+	url = https://github.com/flashinfer-ai/flashinfer.git
+	update = none
+[submodule "third_party/reference-projects/FlyDSL"]
+	path = third_party/reference-projects/FlyDSL
+	url = https://github.com/ROCm/FlyDSL.git
+	update = none
+[submodule "third_party/reference-projects/hpc-ops"]
+	path = third_party/reference-projects/hpc-ops
+	url = https://github.com/Tencent/hpc-ops.git
+	update = none
+[submodule "third_party/reference-projects/LeetCUDA"]
+	path = third_party/reference-projects/LeetCUDA
+	url = https://github.com/xlite-dev/LeetCUDA.git
+	update = none
+[submodule "third_party/reference-projects/quack"]
+	path = third_party/reference-projects/quack
+	url = https://github.com/Dao-AILab/quack.git
+	update = none
+[submodule "third_party/reference-projects/tilelang"]
+	path = third_party/reference-projects/tilelang
+	url = https://github.com/tile-ai/tilelang.git
+	update = none
+[submodule "third_party/reference-projects/triton"]
+	path = third_party/reference-projects/triton
+	url = https://github.com/triton-lang/triton.git
+	update = none

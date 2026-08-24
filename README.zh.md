@@ -38,6 +38,8 @@ Epoch：创建 Challenger -> 执行 Branch/Trajectory -> 比较 Kernel -> 选择
 - `src/atrex-kernel-agent-core/`：独立版本的 Optimizer Git Submodule
 - `src/atrex-kernel-agent-evolver/`：独立版本的 Evolver Git Submodule
 - `third_party/atrex-bench/`：固定版本的评测器源码 Submodule
+- [`third_party/reference-projects/`](third_party/reference-projects/README.zh.md)：作为优化参考
+  资料保存的上游 GPU Kernel 项目固定版本，按需检出
 - `examples/`：相互独立、可运行的工作流样例
 - `docs/`：设计、使用、接口、配置、运维和发布文档
 - `local-wiki/`：仅开发测试使用的 GPU Wiki 兼容服务

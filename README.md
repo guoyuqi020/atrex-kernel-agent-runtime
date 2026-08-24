@@ -40,6 +40,8 @@ immutable Evidence -> next Epoch
 - `src/atrex-kernel-agent-core/`: separately versioned Optimizer Git submodule
 - `src/atrex-kernel-agent-evolver/`: separately versioned Evolver Git submodule
 - `third_party/atrex-bench/`: pinned evaluator source submodule
+- [`third_party/reference-projects/`](third_party/reference-projects/README.md): pinned upstream GPU
+  kernel projects kept as optimization reference material, checked out on demand
 - `examples/`: self-contained runnable workflows
 - `docs/`: design, usage, interface, configuration, operation, and release documentation
 - `local-wiki/`: development-only wire-compatible GPU Wiki test service
