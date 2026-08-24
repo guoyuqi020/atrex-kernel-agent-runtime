@@ -16,10 +16,10 @@
     "max_error_bytes": 8192
   },
   "storage": {
-    "registry_database": "../../workspaces/local-wiki/state/runtime-state/registry.sqlite",
-    "gateway_database": "../../workspaces/local-wiki/state/runtime-state/gateway.sqlite",
-    "agate_jobs_database": "../../workspaces/local-wiki/state/runtime-state/agate-jobs.sqlite",
-    "artifacts_root": "../../workspaces/local-wiki/state/runtime-state/artifacts"
+    "registry_database": "../../local-wiki/state/runtime-state/registry.sqlite",
+    "gateway_database": "../../local-wiki/state/runtime-state/gateway.sqlite",
+    "agate_jobs_database": "../../local-wiki/state/runtime-state/agate-jobs.sqlite",
+    "artifacts_root": "../../local-wiki/state/runtime-state/artifacts"
   },
   "gateway_proxy": {
     "max_request_bytes": 1048576,
@@ -61,10 +61,10 @@
     "max_response_bytes": 1048576
   },
   "campaign": {
-    "attempt_workspaces_root": "../../workspaces/local-wiki/state/runtime-state/attempt-workspaces",
-    "evolution_workspaces_root": "../../workspaces/local-wiki/state/runtime-state/evolution-workspaces",
-    "problem_generalization_workspaces_root": "../../workspaces/local-wiki/state/runtime-state/problem-generalization-workspaces",
-    "lineage_bootstrap_workspaces_root": "../../workspaces/local-wiki/state/runtime-state/lineage-bootstrap-workspaces",
+    "attempt_workspaces_root": "../../local-wiki/state/runtime-state/attempt-workspaces",
+    "evolution_workspaces_root": "../../local-wiki/state/runtime-state/evolution-workspaces",
+    "problem_generalization_workspaces_root": "../../local-wiki/state/runtime-state/problem-generalization-workspaces",
+    "lineage_bootstrap_workspaces_root": "../../local-wiki/state/runtime-state/lineage-bootstrap-workspaces",
     "fencing_lease_seconds": 120,
     "fencing_heartbeat_seconds": 30,
     "gateway_proxy_url": "http://127.0.0.1:8765",

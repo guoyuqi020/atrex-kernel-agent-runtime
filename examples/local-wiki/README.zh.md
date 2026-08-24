@@ -13,18 +13,17 @@ Local Wiki 只是开发测试替身；生产环境通过远端
 python3 -m venv ~/.venvs/atrex-runtime
 source ~/.venvs/atrex-runtime/bin/activate
 python -m pip install -U pip
-python -m pip install -e '.[dev]' -e './workspaces/local-wiki[dev]'
+python -m pip install -e '.[dev]' -e './local-wiki[dev]'
 ```
 
 启动脚本默认使用 `PATH` 中的 `python3`；如需指定其他 Linux 解释器，可设置
 `ATREX_PYTHON`。Local Wiki 的查询子进程默认继承同一个解释器，示例配置不再保存任何
 绝对 `.venv` 路径。
 
-## 1. 固定版本的测试语料
+## 1. 测试语料
 
-上游准确的 `gpu-wiki` Tree 已 Vendor 到 `workspaces/local-wiki/corpus/gpu-wiki`，随 Runtime
-仓库一起发布。`workspaces/local-wiki/reference.lock.json` 记录来源仓库和 Commit。启动时无需
-准备 Sparse Checkout，也不需要网络下载。
+`gpu-wiki` 语料位于 `local-wiki/corpus/gpu-wiki`，是本仓库的普通内容。启动时无需额外
+Checkout，也不需要网络下载。
 
 ## 2. 启动 Local Wiki
 
@@ -41,7 +40,7 @@ curl -fsS http://127.0.0.1:8091/healthz
 ```
 
 启动时不会修改 Vendored 语料，而是把它同步到被 Git Ignore 的可写 Store：
-`workspaces/local-wiki/state/gpu-wiki`。Query 使用该 Store。
+`local-wiki/state/gpu-wiki`。Query 使用该 Store。
 
 也可以打开 [http://127.0.0.1:8091/](http://127.0.0.1:8091/) 使用浏览器客户端；每次 Query
 直接显示完整的安全服务 Record 及其稳定 ID。
@@ -86,7 +85,7 @@ Workspace 会全部删除。
 ## 4. 完整路径：启动本示例自己的 Runtime 并 Bootstrap
 
 Local example 会在首次运行时自动创建
-`workspaces/local-wiki/state/demo.env`，权限为 `0600`。其中只保存本地 Capability Signing Key
+`local-wiki/state/demo.env`，权限为 `0600`。其中只保存本地 Capability Signing Key
 和 Admin Token，Runtime、Bootstrap 与 Agent Shell 包装脚本会自动加载同一文件。可以提前检查
 文件是否已就绪，但不需要手工 `source`：
 
@@ -167,7 +166,7 @@ bash examples/local-wiki/start-agent-shell.sh
 ```
 
 无参数形式会读取 Bootstrap 包装脚本原子写入的
-`workspaces/local-wiki/state/last-bootstrap.json`，并使用其中第一条 `lineage_id`。仍然可以显式
+`local-wiki/state/last-bootstrap.json`，并使用其中第一条 `lineage_id`。仍然可以显式
 指定 Lineage 和 Shell：
 
 ```bash

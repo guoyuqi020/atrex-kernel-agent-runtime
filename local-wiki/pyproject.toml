@@ -32,13 +32,13 @@ packages = ["src/atrex_local_wiki"]
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
-pythonpath = ["src", "../../src"]
+pythonpath = ["src", "../src"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
 packages = ["atrex_local_wiki"]
-mypy_path = ["src", "../../src"]
+mypy_path = ["src", "../src"]
 
 [tool.ruff]
 target-version = "py312"

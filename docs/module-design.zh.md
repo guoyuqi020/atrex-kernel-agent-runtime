@@ -29,7 +29,7 @@ src/atrex_runtime/
 src/atrex-kernel-agent-core/       独立 Git Submodule
 src/atrex-kernel-agent-evolver/    独立 Git Submodule
 third_party/atrex-bench/            固定的可信 Evaluator Git Submodule
-workspaces/local-wiki/              外部接口测试替身
+local-wiki/                         仓库内的 GPU Wiki 服务与语料
 ```
 
 ## 关键模块

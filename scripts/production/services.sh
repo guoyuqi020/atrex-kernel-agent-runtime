@@ -126,7 +126,7 @@ start_local_wiki() {
     echo "Owned Local GPU Wiki process is alive but not ready: ${wiki_url}" >&2
     return 69
   fi
-  local wiki_source="${atrex_prod_root}/workspaces/local-wiki/src"
+  local wiki_source="${atrex_prod_root}/local-wiki/src"
   local wiki_config="${atrex_prod_workspace}/local-wiki.json"
   if [[ ! -d "${wiki_source}" || ! -f "${wiki_config}" ]]; then
     echo "Local GPU Wiki implementation/config is unavailable." >&2

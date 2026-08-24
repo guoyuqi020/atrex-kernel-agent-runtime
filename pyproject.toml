@@ -47,7 +47,6 @@ include = [
   "/scripts",
   "/src/atrex_runtime",
   "/tests",
-  "/workspaces/local-wiki",
 ]
 
 [tool.pytest.ini_options]

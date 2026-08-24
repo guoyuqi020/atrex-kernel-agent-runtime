@@ -16,9 +16,9 @@ sudo .venv/bin/python scripts/validate-linux-sandbox.py
 (cd src/atrex-kernel-agent-evolver && ../../.venv/bin/python -m pytest -q)
 (cd src/atrex-kernel-agent-evolver && ../../.venv/bin/ruff check src tests)
 (cd src/atrex-kernel-agent-evolver && ../../.venv/bin/mypy src tests)
-(cd workspaces/local-wiki && ../../.venv/bin/python -m pytest -q)
-(cd workspaces/local-wiki && ../../.venv/bin/ruff check src tests)
-(cd workspaces/local-wiki && ../../.venv/bin/mypy src tests)
+(cd local-wiki && ../.venv/bin/python -m pytest -q)
+(cd local-wiki && ../.venv/bin/ruff check src tests)
+(cd local-wiki && ../.venv/bin/mypy src tests)
 ```
 
 文档不固定测试数量，因为每次实现增量都会改变数量；发布证据必须保存上述命令的实际输出。

@@ -14,6 +14,7 @@ _FORBIDDEN_SOURCE_PARTS = frozenset(
         ".git",
         "third_party",
         "workspaces",
+        "local-wiki",
         "atrex-kernel-agent-core",
         "atrex-kernel-agent-evolver",
     }

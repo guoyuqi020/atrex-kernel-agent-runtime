@@ -283,7 +283,7 @@ def _local_wiki_config(root: Path, workspace: Path) -> dict[str, Any]:
         "schema_version": 1,
         "host": "127.0.0.1",
         "port": 8091,
-        "reference_root": str(root / "workspaces/local-wiki/corpus/gpu-wiki"),
+        "reference_root": str(root / "local-wiki/corpus/gpu-wiki"),
         "store_root": str(workspace / "wiki-state/gpu-wiki"),
         "database": str(workspace / "wiki-state/local-wiki.sqlite"),
         "bearer_token_env": None,

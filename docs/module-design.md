@@ -29,7 +29,7 @@ src/atrex_runtime/
 src/atrex-kernel-agent-core/       independent Git submodule
 src/atrex-kernel-agent-evolver/    independent Git submodule
 third_party/atrex-bench/            pinned trusted evaluator Git submodule
-workspaces/local-wiki/              external-interface test double
+local-wiki/                         first-class local GPU Wiki service and corpus
 ```
 
 ## Core modules

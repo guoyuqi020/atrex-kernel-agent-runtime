@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPOSITORY = Path(__file__).resolve().parents[1]
 EXAMPLE = REPOSITORY / "examples/local-wiki"
-LOCAL_WIKI = REPOSITORY / "workspaces/local-wiki"
+LOCAL_WIKI = REPOSITORY / "local-wiki"
 
 
 def _bash(command: str, *, environment: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -93,20 +93,11 @@ def test_all_local_wiki_shell_wrappers_parse() -> None:
     subprocess.run(("bash", "-n", *(str(path) for path in scripts)), check=True)
 
 
-def test_local_wiki_uses_the_vendored_pinned_upstream_corpus() -> None:
+def test_local_wiki_serves_the_in_repository_corpus() -> None:
     config = json.loads((LOCAL_WIKI / "configs/local.example.json").read_text())
-    lock = json.loads((LOCAL_WIKI / "reference.lock.json").read_text())
-    corpus = LOCAL_WIKI / lock["vendored_path"]
+    corpus = LOCAL_WIKI / "corpus/gpu-wiki"
 
     assert config["reference_root"] == "../corpus/gpu-wiki"
-    assert lock == {
-        "schema_version": 1,
-        "repository": "git@github.com:alibaba/atrex-kernel-agent.git",
-        "commit": "71b16928579474c93039053d2facfeaf7134e268",
-        "git_tree": "f83b706953a6e62d08863db0f349995f3c7f0081",
-        "vendored_path": "corpus/gpu-wiki",
-        "sparse_paths": ["gpu-wiki"],
-    }
     assert (corpus / "tools/query_nl.py").is_file()
     assert (corpus / "tools/ingest_feedback.py").is_file()
     assert (corpus / "tools/rebuild_importance.py").is_file()

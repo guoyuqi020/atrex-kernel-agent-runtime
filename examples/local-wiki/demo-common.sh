@@ -2,7 +2,7 @@
 
 atrex_demo_example_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 atrex_demo_runtime_root="$(cd -- "${atrex_demo_example_dir}/../.." && pwd)"
-atrex_demo_state_dir="${ATREX_DEMO_STATE_DIR:-${atrex_demo_runtime_root}/workspaces/local-wiki/state}"
+atrex_demo_state_dir="${ATREX_DEMO_STATE_DIR:-${atrex_demo_runtime_root}/local-wiki/state}"
 atrex_demo_env_file="${ATREX_DEMO_ENV_FILE:-${atrex_demo_state_dir}/demo.env}"
 atrex_demo_bootstrap_result_file="${ATREX_DEMO_BOOTSTRAP_RESULT_FILE:-${atrex_demo_state_dir}/last-bootstrap.json}"
 atrex_demo_python="${ATREX_PYTHON:-python3}"

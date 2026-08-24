@@ -42,7 +42,7 @@ immutable Evidence -> next Epoch
 - `third_party/atrex-bench/`: pinned evaluator source submodule
 - `examples/`: self-contained runnable workflows
 - `docs/`: design, usage, interface, configuration, operation, and release documentation
-- `workspaces/local-wiki/`: development-only wire-compatible GPU Wiki test service
+- `local-wiki/`: development-only wire-compatible GPU Wiki test service
 
 ## Quick start
 

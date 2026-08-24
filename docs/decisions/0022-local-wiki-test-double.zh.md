@@ -12,7 +12,7 @@ Runtime 已经拥有严格的实时 Query Client，但生产 GPU Wiki 由外部�
 
 ## 决策
 
-新增可独立打包的 Python 测试服务 `workspaces/local-wiki`。其生产模块不导入 `atrex_runtime` 或 `atrex-kernel-agent`，而是独立实现 v1 外部请求/响应字段、规范 JSON Digest 算法、HTTP Status 和可选 Bearer 认证。跨工作区测试使用 Runtime 的权威模型，从而发现任意一侧的漂移。
+新增可独立打包的 Python 测试服务 `local-wiki`。其生产模块不导入 `atrex_runtime` 或 `atrex-kernel-agent`，而是独立实现 v1 外部请求/响应字段、规范 JSON Digest 算法、HTTP Status 和可选 Bearer 认证。跨工作区测试使用 Runtime 的权威模型，从而发现任意一侧的漂移。
 
 本地适配器只保留 HTTP Envelope，直接执行 Commit 固定的参考 Wiki `tools/query_nl.py`，不重新
 实现 Intent 抽取、归一化、Widening、排序、硬件查询、Store 隔离或服务 Record 投影。因此 Query

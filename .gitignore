@@ -20,8 +20,7 @@ coverage/
 .coverage
 .DS_Store
 /runtime.json
-/workspaces/local-wiki/reference/
-/workspaces/local-wiki/state/
+/local-wiki/state/
 /workspaces/bootstrap-example/
 /workspaces/*-example*/
 /workspaces/production/

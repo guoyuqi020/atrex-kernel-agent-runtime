@@ -40,7 +40,7 @@ Epoch：创建 Challenger -> 执行 Branch/Trajectory -> 比较 Kernel -> 选择
 - `third_party/atrex-bench/`：固定版本的评测器源码 Submodule
 - `examples/`：相互独立、可运行的工作流样例
 - `docs/`：设计、使用、接口、配置、运维和发布文档
-- `workspaces/local-wiki/`：仅开发测试使用的 GPU Wiki 兼容服务
+- `local-wiki/`：仅开发测试使用的 GPU Wiki 兼容服务
 
 ## 快速开始
 

@@ -281,7 +281,7 @@ def main(argv: list[str] | None = None) -> int:
         created_at=created_at,
     )
 
-    state_parent = Path(__file__).resolve().parents[2] / "workspaces/local-wiki/state"
+    state_parent = Path(__file__).resolve().parents[2] / "local-wiki/state"
     state_parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with tempfile.TemporaryDirectory(prefix="temporary-lineage-", dir=state_parent) as temporary:
         root = Path(temporary).resolve()

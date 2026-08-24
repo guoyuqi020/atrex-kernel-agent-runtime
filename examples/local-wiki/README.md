@@ -13,18 +13,17 @@ repository's macOS `.venv`:
 python3 -m venv ~/.venvs/atrex-runtime
 source ~/.venvs/atrex-runtime/bin/activate
 python -m pip install -U pip
-python -m pip install -e '.[dev]' -e './workspaces/local-wiki[dev]'
+python -m pip install -e '.[dev]' -e './local-wiki[dev]'
 ```
 
 The wrapper uses `python3` from `PATH`. Set `ATREX_PYTHON` to another Linux interpreter when needed.
 The Local Wiki query subprocess inherits that same interpreter by default; no absolute `.venv` path
 is stored in the example configuration.
 
-## 1. Pinned test corpus
+## 1. Test corpus
 
-The exact upstream `gpu-wiki` tree is vendored under `workspaces/local-wiki/corpus/gpu-wiki` and
-ships with the Runtime repository. `workspaces/local-wiki/reference.lock.json` records its source
-repository and commit. No preparation, sparse checkout, or network access is required at startup.
+The `gpu-wiki` corpus lives at `local-wiki/corpus/gpu-wiki` as ordinary repository content. No
+preparation, extra checkout, or network access is required at startup.
 
 ## 2. Start Local Wiki
 
@@ -41,7 +40,7 @@ curl -fsS http://127.0.0.1:8091/healthz
 ```
 
 Startup keeps the vendored corpus unchanged and synchronizes it into the ignored writable Store at
-`workspaces/local-wiki/state/gpu-wiki`. Query uses that Store.
+`local-wiki/state/gpu-wiki`. Query uses that Store.
 
 Open [http://127.0.0.1:8091/](http://127.0.0.1:8091/) for the optional browser client. Each Query
 result displays complete safe served Records and their stable IDs.
@@ -87,7 +86,7 @@ Use `--dsl cuda`, `--dsl triton`, or `--dsl cutedsl` to change the temporary kno
 
 ## 4. Full path: start this example's Runtime and Bootstrap
 
-On first use, the local example creates `workspaces/local-wiki/state/demo.env` with mode `0600`.
+On first use, the local example creates `local-wiki/state/demo.env` with mode `0600`.
 It contains only the local capability signing key and admin token. The Runtime, Bootstrap, and Agent
 Shell wrappers automatically load the same file. You may prepare it explicitly, but never need to
 source it by hand:
@@ -170,7 +169,7 @@ bash examples/local-wiki/start-agent-shell.sh
 ```
 
 The no-argument form reads the first `lineage_id` from
-`workspaces/local-wiki/state/last-bootstrap.json`, which the Bootstrap wrapper writes atomically.
+`local-wiki/state/last-bootstrap.json`, which the Bootstrap wrapper writes atomically.
 An explicit Lineage and shell remain supported:
 
 ```bash

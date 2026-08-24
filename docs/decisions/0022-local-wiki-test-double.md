@@ -12,7 +12,7 @@ Runtime owns a strict live Query client, but the production GPU Wiki is develope
 
 ## Decision
 
-Add `workspaces/local-wiki` as an independently packaged Python test service. Its production modules do not import `atrex_runtime` or `atrex-kernel-agent`. They independently implement the version-1 external request/response fields, canonical JSON digest algorithm, HTTP statuses, and optional bearer authentication. Cross-workspace tests use Runtime's authoritative models to detect drift in either copy.
+Add `local-wiki` as an independently packaged Python test service. Its production modules do not import `atrex_runtime` or `atrex-kernel-agent`. They independently implement the version-1 external request/response fields, canonical JSON digest algorithm, HTTP statuses, and optional bearer authentication. Cross-workspace tests use Runtime's authoritative models to detect drift in either copy.
 
 The local adapter keeps only the HTTP envelope and executes the commit-pinned reference Wiki's own
 `tools/query_nl.py`; it does not reimplement intent extraction, normalization, widening, ranking,

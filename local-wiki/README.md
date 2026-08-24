@@ -2,11 +2,11 @@
 
 English | [中文](README.zh.md)
 
-This workspace is a local HTTP adapter for the independent Atrex GPU Wiki. It is for Runtime
-integration tests only. Query behavior is executed by the commit-pinned upstream implementation.
+This directory is a local HTTP adapter for the independent Atrex GPU Wiki. It is for Runtime
+integration tests only. Query behavior is executed by the corpus's own implementation.
 
 The adapter does not implement its own retrieval algorithm. For every query it executes the
-commit-pinned upstream `gpu-wiki/tools/query_nl.py`, including the upstream bridge Agent, intent
+corpus's `gpu-wiki/tools/query_nl.py`, including its bridge Agent, intent
 validation, normalization, safe widening, `kernel_wiki` ranking, `hardware_wiki` exact lookup,
 public/internal Store isolation, and served-record projection. Query `content` is therefore exactly:
 
@@ -19,8 +19,7 @@ and freezing. Every `records` mapping value is already the complete safe
 served Record. Consumers preserve its stable mapping key when the Record materially informs work;
 there is no separate read operation.
 
-The vendored pinned source remains immutable. Startup atomically synchronizes it into
-`state/gpu-wiki`. Runtime treats the Wiki as a read-only external knowledge source.
+Runtime treats the Wiki as a read-only external knowledge source.
 
 ## HTTP interface
 
@@ -31,22 +30,18 @@ The vendored pinned source remains immutable. Startup atomically synchronizes it
 | `GET /readyz` | Upstream tools, both indexes, and SQLite readiness. |
 | `POST /v1/knowledge/query` | Strict Runtime query; `content` is upstream `records/notes`. |
 
-## Pinned source
+## Corpus
 
-`reference.lock.json` pins Alibaba `atrex-kernel-agent` commit
-`71b16928579474c93039053d2facfeaf7134e268`. Its exact `gpu-wiki` tree is vendored at
-`corpus/gpu-wiki`, so a Runtime checkout is immediately runnable without a second Git clone.
-Maintainers refresh the vendored tree from the locked commit; Runtime execution never downloads or
-modifies it.
+`corpus/gpu-wiki` is ordinary content of this repository, so a checkout is immediately runnable.
+Startup copies it into the ignored writable `state/gpu-wiki` store, which is what lets the corpus
+tools record query feedback without modifying tracked files. Editing the corpus causes one re-copy
+on the next start.
 
-```bash
-git -C /path/to/atrex-kernel-agent archive \
-  71b16928579474c93039053d2facfeaf7134e268 gpu-wiki
-```
+Its original Apache-2.0 license and NOTICE are preserved beside it.
 
 ## Run
 
-The checked-in config does not override upstream query defaults. Therefore the pinned
+The checked-in config does not override upstream query defaults. Therefore the corpus's
 `query_nl.py` selects its own default bridge CLI, timeout, and Record cap. Optional `agent_cli`,
 `query_timeout_seconds`, and `max_results` fields are explicit HTTP deployment overrides; no model
 credential is stored by local-wiki.
@@ -56,21 +51,21 @@ Additional requests wait for a slot. This prevents unbounded model/subprocess fa
 serializing unrelated read-only queries behind one global lock.
 
 ```bash
-PYTHONPATH=workspaces/local-wiki/src \
+PYTHONPATH=local-wiki/src \
   .venv/bin/python -m atrex_local_wiki serve \
-  --config workspaces/local-wiki/configs/local.example.json
+  --config local-wiki/configs/local.example.json
 ```
 
 Open [http://127.0.0.1:8091/](http://127.0.0.1:8091/). When overriding `agent_cli`, use a backend
-accepted by the pinned upstream `tools/agent_launch.py`.
+accepted by the corpus's `tools/agent_launch.py`.
 
 ## Verify
 
 ```bash
-PYTHONPATH=src:workspaces/local-wiki/src .venv/bin/pytest workspaces/local-wiki/tests
-PYTHONPATH=workspaces/local-wiki/src \
-  .venv/bin/ruff check workspaces/local-wiki/src workspaces/local-wiki/tests
-PYTHONPATH=workspaces/local-wiki/src \
-  .venv/bin/mypy --config-file workspaces/local-wiki/pyproject.toml \
-  workspaces/local-wiki/src
+PYTHONPATH=src:local-wiki/src .venv/bin/pytest local-wiki/tests
+PYTHONPATH=local-wiki/src \
+  .venv/bin/ruff check local-wiki/src local-wiki/tests
+PYTHONPATH=local-wiki/src \
+  .venv/bin/mypy --config-file local-wiki/pyproject.toml \
+  local-wiki/src
 ```
