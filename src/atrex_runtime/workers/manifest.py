@@ -25,10 +25,10 @@ from ..domain.ids import (
 from ..domain.models import Dsl
 from ..serialization import canonical_json_bytes
 
-ATTEMPT_MANIFEST_VERSION: Literal[6] = 6
+ATTEMPT_MANIFEST_VERSION: Literal[7] = 7
 
 
-class AttemptArtifactPathsV6(BaseModel):
+class AttemptArtifactPathsV7(BaseModel):
     """Workspace-relative locations visible to an Optimizer worker."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -38,6 +38,7 @@ class AttemptArtifactPathsV6(BaseModel):
     evidence: Literal["input/evidence"] = "input/evidence"
     agent_problem: Literal["input/agent-problem"] = "input/agent-problem"
     optimizer: Literal["agent/optimizer"] = "agent/optimizer"
+    reference: Literal["reference"] = "reference"
 
 
 class AttemptTaskContextV5(BaseModel):
@@ -105,7 +106,7 @@ class AttemptTaskContextV5(BaseModel):
         return value
 
 
-class AttemptInputManifestV6(BaseModel):
+class AttemptInputManifestV7(BaseModel):
     """Immutable inputs for exactly one fresh Optimizer session.
 
     Evolver implementation details are deliberately absent: this protocol does
@@ -114,7 +115,7 @@ class AttemptInputManifestV6(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[6] = ATTEMPT_MANIFEST_VERSION
+    schema_version: Literal[7] = ATTEMPT_MANIFEST_VERSION
     attempt_id: AttemptId
     kernel_agent_revision_id: KernelAgentRevisionId
     input_kernel_revision_id: KernelRevisionId
@@ -124,7 +125,7 @@ class AttemptInputManifestV6(BaseModel):
     optimizer_digest: ArtifactDigest
     dsl: Dsl
     context: AttemptTaskContextV5
-    paths: AttemptArtifactPathsV6 = AttemptArtifactPathsV6()
+    paths: AttemptArtifactPathsV7 = AttemptArtifactPathsV7()
 
     @field_validator("attempt_id", mode="before")
     @classmethod

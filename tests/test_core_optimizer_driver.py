@@ -29,13 +29,13 @@ from atrex_runtime.workers.core import (
 )
 from atrex_runtime.workers.core_phase import CorePhaseRunner
 from atrex_runtime.workers.launcher import CleanEnvironmentLauncher
-from atrex_runtime.workers.manifest import AttemptInputManifestV6, AttemptTaskContextV5
+from atrex_runtime.workers.manifest import AttemptInputManifestV7, AttemptTaskContextV5
 from atrex_runtime.workers.optimizer import OptimizerSessionConfig
 from atrex_runtime.workers.workspace import PreparedAttempt
 
 
-def _attempt_manifest() -> AttemptInputManifestV6:
-    return AttemptInputManifestV6(
+def _attempt_manifest() -> AttemptInputManifestV7:
+    return AttemptInputManifestV7(
         attempt_id=new_attempt_id(),
         kernel_agent_revision_id=new_kernel_agent_revision_id(),
         input_kernel_revision_id=new_kernel_revision_id(),
@@ -278,7 +278,7 @@ print("core-owned optimizer finished")
 
 
 @pytest.mark.anyio
-async def test_runtime_executes_current_core_bundle_with_attempt_v6(tmp_path: Path) -> None:
+async def test_runtime_executes_current_core_bundle_with_attempt_v7(tmp_path: Path) -> None:
     root = tmp_path / "attempt"
     repository = root / "agent/optimizer"
     source = Path(__file__).resolve().parents[1] / "src/atrex-kernel-agent-core"
@@ -289,7 +289,14 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v6(tmp_path: Pa
             ".git", ".mypy_cache", ".pytest_cache", ".ruff_cache", "__pycache__", "*.pyc"
         ),
     )
-    for relative in ("input/kernel", "input/agent-problem", "work/kernel", "scratch", "sessions"):
+    for relative in (
+        "input/kernel",
+        "input/agent-problem",
+        "work/kernel",
+        "reference",
+        "scratch",
+        "sessions",
+    ):
         (root / relative).mkdir(parents=True, exist_ok=True)
     evidence = root / "input/evidence"
     (evidence / "epochs/00000001/attempts").mkdir(parents=True)

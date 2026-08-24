@@ -14,6 +14,10 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 - 移除 GPU Wiki Feedback 的生成、持久化、投递和接收；GPU Wiki 现在仅提供知识查询。
 - 新生产 Campaign 准备会拒绝不干净的 Core/Evolver Worktree，确保固定 Commit 准确标识
   Agent Bundle 源码。
+- 固定版本的上游 GPU Kernel 项目作为 Attempt Workspace 的 `reference/` 目录提供，在两种
+  bubblewrap 模式下从 `reference_projects_root` 只读挂载。
+- Attempt Manifest 升到 schema 7 以发布该参考路径。按 schema 6 注册的 Kernel Agent Revision
+  不再能启动，已有 Lineage 需要重新 Bootstrap。
 
 ## 0.1.0 - 2026-08-20
 

@@ -523,6 +523,15 @@ class BwrapSandboxLauncher:
         for path in self.settings.read_only_bind_paths:
             if path.is_symlink() or not path.exists():
                 raise RuntimeError(f"Sandbox read-only bind source is unavailable: {path}")
+        reference = self.settings.reference_projects_root
+        if reference is not None:
+            if reference.is_symlink() or not reference.is_dir():
+                raise RuntimeError(f"Sandbox reference projects root is unavailable: {reference}")
+            if not any(reference.iterdir()):
+                raise RuntimeError(
+                    "Sandbox reference projects root is empty; check out its submodules with "
+                    f"git submodule update --init --checkout {reference}"
+                )
         worker: pwd.struct_passwd | None = None
         if self.use_systemd_cgroup:
             assert isinstance(self.settings, BwrapSandboxSettings)
@@ -962,6 +971,9 @@ class BwrapSandboxLauncher:
                         str(sandbox_workspace / name),
                     )
                 )
+        reference = self.settings.reference_projects_root
+        if reference is not None and (workspace / "reference").is_dir():
+            bwrap.extend(("--ro-bind", str(reference), str(sandbox_workspace / "reference")))
         for source in sorted(workspace.glob("*.json")):
             if source.is_symlink() or not source.is_file():
                 raise ValueError("Sandbox top-level manifest must be a regular file")

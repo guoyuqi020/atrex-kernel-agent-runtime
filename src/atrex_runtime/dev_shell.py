@@ -52,7 +52,7 @@ from .workers.evolution import (
     EvolutionWorkspaceAssembler,
     SubprocessEvolutionSessionDriver,
 )
-from .workers.manifest import AttemptInputManifestV6, AttemptTaskContextV5
+from .workers.manifest import AttemptInputManifestV7, AttemptTaskContextV5
 from .workers.optimizer import OptimizerSessionConfig
 from .workers.workspace import LocalAttemptWorkspaceAssembler, PreparedAttempt
 
@@ -302,7 +302,7 @@ class TemporaryOptimizerDevShell:
         root: Path,
         request: TemporaryOptimizerDevShellRequest,
     ) -> PreparedAttempt:
-        manifest = AttemptInputManifestV6(
+        manifest = AttemptInputManifestV7(
             attempt_id=request.attempt_id,
             kernel_agent_revision_id=request.kernel_agent_revision_id,
             input_kernel_revision_id=request.input_kernel_revision_id,
@@ -356,6 +356,8 @@ class TemporaryOptimizerDevShell:
         session_root = root / "sessions"
         session_root.mkdir(mode=0o700)
         (root / "scratch").mkdir(mode=0o700)
+        # Stays empty on the host; the Sandbox binds the pinned reference tree over it.
+        (root / paths.reference).mkdir(mode=0o500)
         return PreparedAttempt(
             root=root,
             manifest_path=manifest_path,

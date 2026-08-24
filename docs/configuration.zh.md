@@ -173,6 +173,8 @@ bwrap 使用 User/PID/IPC/UTS Namespace。Runtime 会应用与 `sandbox` 相同�
   `~/workspace`；
 - `read_only_bind_paths` 只用于显式批准的不可变依赖或 Provider 配置，且不能位于任何 Worker
   Root 或 Runtime Storage Root 下；
+- `reference_projects_root` 在同样的边界约束下只读挂载到 Attempt Workspace 的 `reference/`
+  目录；参考项目是按需检出的 Submodule，因此 Host Check 会拒绝缺失、符号链接或空的目录树；
 - 每个 Session 独立限制 `memory_max_bytes`、`memory_swap_max_bytes`、
   `cpu_quota_percent` 与 `tasks_max`；
 - Worker 共享宿主机 Network Namespace，包括宿主 DNS、路由、公网出站和可达的宿主服务；

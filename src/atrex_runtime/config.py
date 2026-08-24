@@ -430,6 +430,7 @@ class BwrapFilesystemSettings(BaseModel):
     resolv_conf: Path = Path("/etc/resolv.conf")
     read_only_bind_paths: tuple[Path, ...] = ()
     hidden_host_paths: tuple[Path, ...] = ()
+    reference_projects_root: Path | None = None
 
     @model_validator(mode="after")
     def _validate_sandbox(self) -> BwrapFilesystemSettings:
@@ -467,6 +468,11 @@ class BwrapFilesystemSettings(BaseModel):
                 "resolv_conf": resolve(self.resolv_conf),
                 "read_only_bind_paths": tuple(resolve(path) for path in self.read_only_bind_paths),
                 "hidden_host_paths": tuple(resolve(path) for path in self.hidden_host_paths),
+                "reference_projects_root": (
+                    None
+                    if self.reference_projects_root is None
+                    else resolve(self.reference_projects_root)
+                ),
             }
         )
 
@@ -918,9 +924,12 @@ class RuntimeSettings(BaseModel):
             campaign.problem_generalization_workspaces_root,
             campaign.lineage_bootstrap_workspaces_root,
         )
+        exposed = boundary.read_only_bind_paths
+        if boundary.reference_projects_root is not None:
+            exposed = (*exposed, boundary.reference_projects_root)
         if any(
             bind.resolve().is_relative_to(root.resolve())
-            for bind in boundary.read_only_bind_paths
+            for bind in exposed
             for root in roots
         ):
             raise ValueError("Sandbox read-only bind paths cannot expose Worker roots")
@@ -932,7 +941,7 @@ class RuntimeSettings(BaseModel):
         )
         if any(
             bind.resolve().is_relative_to(root.resolve())
-            for bind in boundary.read_only_bind_paths
+            for bind in exposed
             for root in runtime_storage_roots
         ):
             raise ValueError("Sandbox read-only bind paths cannot expose Runtime storage")

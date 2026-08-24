@@ -255,6 +255,7 @@
         "resolv_conf": "/run/systemd/resolve/resolv.conf",
         "read_only_bind_paths": [],
         "hidden_host_paths": [],
+        "reference_projects_root": "third_party/reference-projects",
         "resources": {
           "memory_max_bytes": 17179869184,
           "memory_swap_max_bytes": 0,

@@ -17,6 +17,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   query-only external knowledge service.
 - Made new production Campaign preparation reject dirty Core or Evolver worktrees so commit pins
   always identify the exact Agent Bundle source.
+- Added pinned upstream GPU kernel projects as an Attempt workspace `reference/` tree, bound
+  read-only from `reference_projects_root` in both bubblewrap launcher modes.
+- Raised the Attempt manifest to schema 7 to publish that reference path. A Kernel Agent revision
+  registered against schema 6 no longer starts, so existing Lineages must be re-bootstrapped.
 
 ## 0.1.0 - 2026-08-20
 

@@ -484,6 +484,50 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
     assert bwrap[-1] == "/home/agent/workspace/agent/optimizer/run.py"
 
 
+def test_bwrap_launcher_binds_reference_projects_read_only_over_the_workspace(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "attempt-workspaces"
+    workspace = root / "attempt-1/run-1"
+    (workspace / "reference").mkdir(parents=True)
+    reference = tmp_path / "reference-projects"
+    (reference / "cutlass").mkdir(parents=True)
+    settings = BwrapSandboxSettings(
+        bwrap_executable=Path("/usr/bin/bwrap"),
+        systemd_run_executable=Path("/usr/bin/systemd-run"),
+        worker_user="atrex-worker",
+        resolv_conf=_resolver(tmp_path),
+        reference_projects_root=reference,
+        resources=CgroupResourceSettings(
+            memory_max_bytes=1,
+            memory_swap_max_bytes=0,
+            cpu_quota_percent=1,
+            tasks_max=1,
+        ),
+    )
+    launcher = BwrapSandboxLauncher(Path("/usr/bin/env"), settings, (root,))
+
+    argv = launcher.wrap(("/bin/true",), workspace=workspace, environment={"PATH": "/bin"})
+
+    bwrap = argv[argv.index("/usr/bin/bwrap") :]
+    destination = bwrap.index("/home/agent/workspace/reference")
+    assert bwrap[destination - 2 : destination + 1] == (
+        "--ro-bind",
+        str(reference),
+        "/home/agent/workspace/reference",
+    )
+    workspace_index = bwrap.index("/home/agent/workspace")
+    assert bwrap[workspace_index - 2] == "--bind"
+
+    without_mountpoint = root / "attempt-1/run-2"
+    without_mountpoint.mkdir(parents=True)
+    other = launcher.wrap(
+        ("/bin/true",), workspace=without_mountpoint, environment={"PATH": "/bin"}
+    )
+
+    assert str(reference) not in other
+
+
 def test_bwrap_launcher_uses_a_pty_only_for_interactive_commands(tmp_path: Path) -> None:
     root = tmp_path / "attempt-workspaces"
     workspace = root / "attempt-1/run-1"

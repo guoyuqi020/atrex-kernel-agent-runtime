@@ -14,7 +14,7 @@ from ..filesystem import make_tree_owner_writable
 from ..ports import RunAttemptRequest
 from ..registry.base import Registry
 from .evidence_view import assemble_optimizer_evidence_view
-from .manifest import AttemptInputManifestV6, AttemptTaskContextV5
+from .manifest import AttemptInputManifestV7, AttemptTaskContextV5
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +73,7 @@ class LocalAttemptWorkspaceAssembler:
         root = attempt_root / f"run-{uuid4().hex}"
         root.mkdir(mode=0o700)
 
-        manifest = AttemptInputManifestV6(
+        manifest = AttemptInputManifestV7(
             attempt_id=request.attempt_id,
             kernel_agent_revision_id=request.kernel_agent_revision_id,
             input_kernel_revision_id=request.input_kernel_revision_id,
@@ -136,6 +136,8 @@ class LocalAttemptWorkspaceAssembler:
         session_root = root / "sessions"
         session_root.mkdir(mode=0o700)
         (root / "scratch").mkdir(mode=0o700)
+        # Stays empty on the host; the Sandbox binds the pinned reference tree over it.
+        (root / paths.reference).mkdir(mode=0o500)
         return PreparedAttempt(
             root=root,
             manifest_path=manifest_path,
