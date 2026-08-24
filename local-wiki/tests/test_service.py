@@ -169,6 +169,49 @@ async def test_query_response_is_runtime_compatible_and_architecture_scoped(
 
 
 @pytest.mark.anyio
+async def test_absent_internal_store_note_is_dropped_without_hiding_a_public_outage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def run_query(_command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[bytes]:
+        return subprocess.CompletedProcess(
+            (),
+            0,
+            json.dumps(
+                {
+                    "records": {},
+                    "notes": [
+                        "[internal_gpu_wiki] store unavailable; module returned empty",
+                        "[gpu_wiki] store unavailable; module returned empty",
+                        "[internal_gpu_wiki] retrieval failed; module returned empty: boom",
+                        "[gpu_wiki] widened to any dsl",
+                    ],
+                }
+            ).encode(),
+            b"",
+        )
+
+    monkeypatch.setattr(subprocess, "run", run_query)
+    app = build_application(_settings(tmp_path), {})
+
+    status, body = await _request(
+        app,
+        "/v1/knowledge/query",
+        _query().canonical_json_bytes(),
+    )
+
+    assert status == 200
+    response = RuntimeKnowledgeSnapshotResponseV1.model_validate_json(body)
+    assert isinstance(response.content, dict)
+    assert response.content["notes"] == [
+        "[gpu_wiki] store unavailable; module returned empty",
+        "[internal_gpu_wiki] retrieval failed; module returned empty: boom",
+        "[gpu_wiki] widened to any dsl",
+    ]
+    app.close()
+
+
+@pytest.mark.anyio
 async def test_query_execution_uses_bounded_concurrency(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

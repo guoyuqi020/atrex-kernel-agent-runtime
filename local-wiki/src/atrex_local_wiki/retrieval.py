@@ -19,6 +19,12 @@ class GpuWikiQueryError(ValueError):
     """The pinned GPU Wiki rejected or failed one natural-language query."""
 
 
+# The pinned tool probes two fixed Store slots and always reports the private
+# `internal_gpu_wiki` sibling as missing, because upstream never publishes it.
+# Matching the wording exactly keeps a genuine `gpu_wiki` outage visible.
+_ABSENT_INTERNAL_STORE_NOTE = "[internal_gpu_wiki] store unavailable; module returned empty"
+
+
 @dataclass(frozen=True, slots=True)
 class GpuWikiQueryResult:
     """One upstream query result paired with the exact mutable Store revision."""
@@ -62,7 +68,7 @@ class CorpusIndex:
         self._validate_layout()
 
     def query(self, request: KnowledgeQueryV1) -> GpuWikiQueryResult:
-        """Return the exact public ``query_nl.py`` records/notes envelope."""
+        """Return the public ``query_nl.py`` envelope less the absent-internal-Store note."""
         description = (
             f"Target hardware reported by the runtime: {request.hardware_target}. "
             f"Required DSL: {request.dsl}. Operator: {request.operator}"
@@ -118,6 +124,9 @@ class CorpusIndex:
                 value.get("notes"), list
             ):
                 raise GpuWikiQueryError("GPU Wiki records/notes have incompatible types")
+            value["notes"] = [
+                note for note in value["notes"] if note != _ABSENT_INTERNAL_STORE_NOTE
+            ]
             return GpuWikiQueryResult(_json_object(value), self._revision())
 
     def _operator_scope(self, operator: str) -> str:

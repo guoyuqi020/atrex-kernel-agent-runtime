@@ -7,12 +7,16 @@
 
 适配器不再自行实现检索算法。每次 Query 都直接执行语料自带的
 `gpu-wiki/tools/query_nl.py`，因此 Bridge Agent、Intent 校验、归一化、安全 Widening、
-`kernel_wiki` 排序、`hardware_wiki` 精确查询、公有/内部 Store 隔离和 Record 投影均使用它的
-实现。Query 的 `content` 与该接口一致：
+`kernel_wiki` 排序、`hardware_wiki` 精确查询和 Record 投影均使用它的
+实现。Query 的 `content` 形如：
 
 ```json
 {"records":{"stable.record.id":{"store":"gpu_wiki","source":"kernel_wiki","type":"technique-card","applies_to":{},"match":{},"payload":{}}},"notes":[]}
 ```
+
+Record 逐字透传。适配器只移除一条 note：固定版工具会额外探测私有的 `internal_gpu_wiki` Store
+槽位，而上游并未发布它，本仓库也从不安装，因此那条恒定的“缺失”报告不携带任何信息。`gpu_wiki`
+本身的故障和其他所有 note 仍会原样返回给调用方。
 
 Runtime 继续负责带版本的 HTTP Envelope、Digest 校验、Attempt Authority 和结果冻结。
 每个 `records` Mapping Value 已经是完整的安全服务 Record；某条 Record 实际影响工作时，Consumer

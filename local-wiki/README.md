@@ -8,11 +8,16 @@ integration tests only. Query behavior is executed by the corpus's own implement
 The adapter does not implement its own retrieval algorithm. For every query it executes the
 corpus's `gpu-wiki/tools/query_nl.py`, including its bridge Agent, intent
 validation, normalization, safe widening, `kernel_wiki` ranking, `hardware_wiki` exact lookup,
-public/internal Store isolation, and served-record projection. Query `content` is therefore exactly:
+and served-record projection. Query `content` is therefore:
 
 ```json
 {"records":{"stable.record.id":{"store":"gpu_wiki","source":"kernel_wiki","type":"technique-card","applies_to":{},"match":{},"payload":{}}},"notes":[]}
 ```
+
+Records pass through verbatim. The adapter removes exactly one note: the pinned tool probes a
+second, private `internal_gpu_wiki` Store slot that upstream does not publish and this repository
+never installs, so its unconditional absence report carries no information. A `gpu_wiki` outage or
+any other note still reaches the caller.
 
 Runtime continues to provide the versioned HTTP envelope, digest verification, Attempt authority,
 and freezing. Every `records` mapping value is already the complete safe
