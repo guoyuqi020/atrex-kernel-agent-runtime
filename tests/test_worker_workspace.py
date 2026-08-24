@@ -34,7 +34,10 @@ from atrex_runtime.domain.models import (
 )
 from atrex_runtime.ports import RunAttemptRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
-from atrex_runtime.workers.manifest import AttemptInputManifestV7
+from atrex_runtime.workers.manifest import (
+    ATTEMPT_WORKSPACE_LAYOUT,
+    AttemptInputManifestV8,
+)
 from atrex_runtime.workers.workspace import LocalAttemptWorkspaceAssembler
 
 
@@ -204,7 +207,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
 
     first = assembler.prepare(request)
     second = assembler.prepare(request)
-    manifest = AttemptInputManifestV7.from_json_bytes(first.manifest_path.read_bytes())
+    manifest = AttemptInputManifestV8.from_json_bytes(first.manifest_path.read_bytes())
 
     assert first.root != second.root
     assert first.session_id != second.session_id
@@ -223,7 +226,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     working_file = first.root / "work/kernel/kernel.txt"
     assert os.stat(working_file).st_mode & 0o200
     assert not (os.stat(first.root / "input/kernel/kernel.txt").st_mode & 0o200)
-    reference = first.root / manifest.paths.reference
+    reference = first.root / ATTEMPT_WORKSPACE_LAYOUT.reference
     assert reference.is_dir()
     assert list(reference.iterdir()) == []
     assert not (os.stat(reference).st_mode & 0o200)

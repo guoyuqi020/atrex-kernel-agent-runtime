@@ -14,7 +14,7 @@ from .attempt_report import AttemptReportV3
 from .core_phase import CorePhaseRunner, PreparedCorePhase
 from .evidence_view import EVIDENCE_PROMPT_FILENAME
 from .launcher import WorkerLauncher, validate_worker_environment
-from .manifest import AttemptInputManifestV7
+from .manifest import AttemptInputManifestV8
 from .optimizer import OptimizerSessionConfig, OptimizerSessionResult
 from .process import BoundedProcessConfig
 from .workspace import PreparedAttempt
@@ -155,7 +155,7 @@ class CoreOptimizerSessionDriver:
             try:
                 report = AttemptReportV3.from_file(
                     launch.attempt_report_path,
-                    expected_attempt_id=AttemptInputManifestV7.from_json_bytes(
+                    expected_attempt_id=AttemptInputManifestV8.from_json_bytes(
                         prepared.manifest_path.read_bytes()
                     ).attempt_id,
                     max_bytes=self._config.max_attempt_report_bytes,

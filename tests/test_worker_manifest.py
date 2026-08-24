@@ -17,11 +17,11 @@ from atrex_runtime.domain.ids import (
     new_lineage_id,
 )
 from atrex_runtime.domain.models import Dsl
-from atrex_runtime.workers.manifest import AttemptInputManifestV7, AttemptTaskContextV5
+from atrex_runtime.workers.manifest import AttemptInputManifestV8, AttemptTaskContextV5
 
 
 def test_attempt_manifest_round_trips_and_excludes_evolver() -> None:
-    manifest = AttemptInputManifestV7(
+    manifest = AttemptInputManifestV8(
         attempt_id=new_attempt_id(),
         kernel_agent_revision_id=new_kernel_agent_revision_id(),
         input_kernel_revision_id=new_kernel_revision_id(),
@@ -44,18 +44,18 @@ def test_attempt_manifest_round_trips_and_excludes_evolver() -> None:
     )
 
     payload = manifest.canonical_json_bytes()
-    parsed = AttemptInputManifestV7.from_json_bytes(payload)
+    parsed = AttemptInputManifestV8.from_json_bytes(payload)
 
     assert parsed == manifest
     assert "evolver" not in payload.decode()
-    assert json.loads(payload)["schema_version"] == 7
-    assert json.loads(payload)["paths"]["reference"] == "reference"
+    assert json.loads(payload)["schema_version"] == 8
+    assert "paths" not in json.loads(payload)
     assert json.loads(payload)["context"]["operator"] == "vector_add"
 
 
 def test_attempt_manifest_rejects_unknown_fields_and_invalid_ids() -> None:
     payload = {
-        "schema_version": 7,
+        "schema_version": 8,
         "attempt_id": "not-an-attempt",
         "kernel_agent_revision_id": str(new_kernel_agent_revision_id()),
         "input_kernel_revision_id": str(new_kernel_revision_id()),
@@ -79,4 +79,4 @@ def test_attempt_manifest_rejects_unknown_fields_and_invalid_ids() -> None:
     }
 
     with pytest.raises(ValidationError):
-        AttemptInputManifestV7.model_validate(payload)
+        AttemptInputManifestV8.model_validate(payload)

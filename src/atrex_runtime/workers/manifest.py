@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, field_validator
@@ -25,20 +26,27 @@ from ..domain.ids import (
 from ..domain.models import Dsl
 from ..serialization import canonical_json_bytes
 
-ATTEMPT_MANIFEST_VERSION: Literal[7] = 7
+ATTEMPT_MANIFEST_VERSION: Literal[8] = 8
 
 
-class AttemptArtifactPathsV7(BaseModel):
-    """Workspace-relative locations visible to an Optimizer worker."""
+@dataclass(frozen=True, slots=True)
+class AttemptWorkspaceLayout:
+    """Workspace-relative locations the Runtime assembles for an Optimizer worker.
 
-    model_config = ConfigDict(frozen=True, extra="forbid")
+    The layout is fixed in this Runtime and restated in the Agent Prompt, so the
+    manifest does not carry it. Publishing it only let the worker compare one
+    hardcoded table against another, which no deployment could ever fail.
+    """
 
-    input_kernel: Literal["input/kernel"] = "input/kernel"
-    working_kernel: Literal["work/kernel"] = "work/kernel"
-    evidence: Literal["input/evidence"] = "input/evidence"
-    agent_problem: Literal["input/agent-problem"] = "input/agent-problem"
-    optimizer: Literal["agent/optimizer"] = "agent/optimizer"
-    reference: Literal["reference"] = "reference"
+    input_kernel: str = "input/kernel"
+    working_kernel: str = "work/kernel"
+    evidence: str = "input/evidence"
+    agent_problem: str = "input/agent-problem"
+    optimizer: str = "agent/optimizer"
+    reference: str = "reference"
+
+
+ATTEMPT_WORKSPACE_LAYOUT = AttemptWorkspaceLayout()
 
 
 class AttemptTaskContextV5(BaseModel):
@@ -106,7 +114,7 @@ class AttemptTaskContextV5(BaseModel):
         return value
 
 
-class AttemptInputManifestV7(BaseModel):
+class AttemptInputManifestV8(BaseModel):
     """Immutable inputs for exactly one fresh Optimizer session.
 
     Evolver implementation details are deliberately absent: this protocol does
@@ -115,7 +123,7 @@ class AttemptInputManifestV7(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[7] = ATTEMPT_MANIFEST_VERSION
+    schema_version: Literal[8] = ATTEMPT_MANIFEST_VERSION
     attempt_id: AttemptId
     kernel_agent_revision_id: KernelAgentRevisionId
     input_kernel_revision_id: KernelRevisionId
@@ -125,7 +133,6 @@ class AttemptInputManifestV7(BaseModel):
     optimizer_digest: ArtifactDigest
     dsl: Dsl
     context: AttemptTaskContextV5
-    paths: AttemptArtifactPathsV7 = AttemptArtifactPathsV7()
 
     @field_validator("attempt_id", mode="before")
     @classmethod

@@ -19,8 +19,11 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   always identify the exact Agent Bundle source.
 - Added pinned upstream GPU kernel projects as an Attempt workspace `reference/` tree, bound
   read-only from `reference_projects_root` in both bubblewrap launcher modes.
-- Raised the Attempt manifest to schema 7 to publish that reference path. A Kernel Agent revision
-  registered against schema 6 no longer starts, so existing Lineages must be re-bootstrapped.
+- Raised the Attempt manifest to schema 8 and stopped publishing the workspace layout in it. The
+  layout is fixed at both ends and stated in the Agent Prompt, so serializing it only compared one
+  hardcoded table against another while making every layout change a breaking protocol bump. A
+  Kernel Agent revision registered against an earlier schema no longer starts, so existing Lineages
+  must be re-bootstrapped.
 
 ## 0.1.0 - 2026-08-20
 

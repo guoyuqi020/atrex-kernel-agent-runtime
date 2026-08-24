@@ -52,7 +52,11 @@ from .workers.evolution import (
     EvolutionWorkspaceAssembler,
     SubprocessEvolutionSessionDriver,
 )
-from .workers.manifest import AttemptInputManifestV7, AttemptTaskContextV5
+from .workers.manifest import (
+    ATTEMPT_WORKSPACE_LAYOUT,
+    AttemptInputManifestV8,
+    AttemptTaskContextV5,
+)
 from .workers.optimizer import OptimizerSessionConfig
 from .workers.workspace import LocalAttemptWorkspaceAssembler, PreparedAttempt
 
@@ -302,7 +306,7 @@ class TemporaryOptimizerDevShell:
         root: Path,
         request: TemporaryOptimizerDevShellRequest,
     ) -> PreparedAttempt:
-        manifest = AttemptInputManifestV7(
+        manifest = AttemptInputManifestV8(
             attempt_id=request.attempt_id,
             kernel_agent_revision_id=request.kernel_agent_revision_id,
             input_kernel_revision_id=request.input_kernel_revision_id,
@@ -323,7 +327,7 @@ class TemporaryOptimizerDevShell:
                 agent_problem_digest=request.agent_problem_digest,
             ),
         )
-        paths = manifest.paths
+        paths = ATTEMPT_WORKSPACE_LAYOUT
         self._artifacts.materialize(request.input_kernel_digest, root / paths.input_kernel)
         checkpoint = self._artifacts.verify(request.epoch_evidence_checkpoint)
         if checkpoint.kind is not ArtifactKind.EVIDENCE:

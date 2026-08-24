@@ -16,8 +16,10 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
   Agent Bundle 源码。
 - 固定版本的上游 GPU Kernel 项目作为 Attempt Workspace 的 `reference/` 目录提供，在两种
   bubblewrap 模式下从 `reference_projects_root` 只读挂载。
-- Attempt Manifest 升到 schema 7 以发布该参考路径。按 schema 6 注册的 Kernel Agent Revision
-  不再能启动，已有 Lineage 需要重新 Bootstrap。
+- Attempt Manifest 升到 schema 8，并不再在其中发布 Workspace 布局。布局在两端都是固定的，
+  且已由 Agent Prompt 说明，序列化它只是让一张写死的表和另一张写死的表互相比较，同时把每次
+  布局调整都变成破坏性协议升级。按更早 schema 注册的 Kernel Agent Revision 不再能启动，
+  已有 Lineage 需要重新 Bootstrap。
 
 ## 0.1.0 - 2026-08-20
 

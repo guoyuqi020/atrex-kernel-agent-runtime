@@ -14,7 +14,7 @@ from ..filesystem import make_tree_owner_writable
 from ..ports import RunAttemptRequest
 from ..registry.base import Registry
 from .evidence_view import assemble_optimizer_evidence_view
-from .manifest import AttemptInputManifestV7, AttemptTaskContextV5
+from .manifest import ATTEMPT_WORKSPACE_LAYOUT, AttemptInputManifestV8, AttemptTaskContextV5
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,7 +73,7 @@ class LocalAttemptWorkspaceAssembler:
         root = attempt_root / f"run-{uuid4().hex}"
         root.mkdir(mode=0o700)
 
-        manifest = AttemptInputManifestV7(
+        manifest = AttemptInputManifestV8(
             attempt_id=request.attempt_id,
             kernel_agent_revision_id=request.kernel_agent_revision_id,
             input_kernel_revision_id=request.input_kernel_revision_id,
@@ -94,7 +94,7 @@ class LocalAttemptWorkspaceAssembler:
                 agent_problem_digest=campaign.agent_problem_digest,
             ),
         )
-        paths = manifest.paths
+        paths = ATTEMPT_WORKSPACE_LAYOUT
         self._artifacts.materialize(kernel.artifact_digest, root / paths.input_kernel)
         epoch_evidence = self._artifacts.verify(request.epoch_evidence_checkpoint)
         if epoch_evidence.kind is not ArtifactKind.EVIDENCE:

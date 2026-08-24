@@ -29,13 +29,13 @@ from atrex_runtime.workers.core import (
 )
 from atrex_runtime.workers.core_phase import CorePhaseRunner
 from atrex_runtime.workers.launcher import CleanEnvironmentLauncher
-from atrex_runtime.workers.manifest import AttemptInputManifestV7, AttemptTaskContextV5
+from atrex_runtime.workers.manifest import AttemptInputManifestV8, AttemptTaskContextV5
 from atrex_runtime.workers.optimizer import OptimizerSessionConfig
 from atrex_runtime.workers.workspace import PreparedAttempt
 
 
-def _attempt_manifest() -> AttemptInputManifestV7:
-    return AttemptInputManifestV7(
+def _attempt_manifest() -> AttemptInputManifestV8:
+    return AttemptInputManifestV8(
         attempt_id=new_attempt_id(),
         kernel_agent_revision_id=new_kernel_agent_revision_id(),
         input_kernel_revision_id=new_kernel_revision_id(),

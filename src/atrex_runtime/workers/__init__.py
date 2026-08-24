@@ -50,7 +50,7 @@ from .lineage_bootstrap import (
     LineageBootstrapWorkspaceAssembler,
     PreparedLineageBootstrap,
 )
-from .manifest import ATTEMPT_MANIFEST_VERSION, AttemptInputManifestV7
+from .manifest import ATTEMPT_MANIFEST_VERSION, AttemptInputManifestV8
 from .optimizer import (
     OptimizerSessionConfig,
     OptimizerSessionDriver,
@@ -79,7 +79,7 @@ __all__ = [
     "LINEAGE_BOOTSTRAP_REPORT_VERSION",
     "PROBLEM_GENERALIZATION_MANIFEST_VERSION",
     "AgentProblemV1",
-    "AttemptInputManifestV7",
+    "AttemptInputManifestV8",
     "BwrapContainerLauncher",
     "BwrapSandboxLauncher",
     "CleanEnvironmentLauncher",
