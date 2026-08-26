@@ -63,6 +63,7 @@ class LineageBootstrapPathsV2(BaseModel):
     working_kernel: Literal["work/kernel"] = "work/kernel"
     agent_problem: Literal[".runtime/agent-problem.json"] = ".runtime/agent-problem.json"
     optimizer: Literal["agent/optimizer"] = "agent/optimizer"
+    reference: Literal["reference"] = "reference"
 
 
 class LineageBootstrapManifestV2(BaseModel):
@@ -195,6 +196,8 @@ class LineageBootstrapWorkspaceAssembler:
         session_root = root / "sessions"
         session_root.mkdir(mode=0o700)
         (root / "scratch").mkdir(mode=0o700)
+        # Stays empty on the host; the Sandbox binds the pinned reference tree over it.
+        (root / paths.reference).mkdir(mode=0o500)
         persistent_skills = None
         persistent_tools = None
         persistent_lock = None

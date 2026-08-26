@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -197,6 +198,10 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert not (prepared.root / "input/agent-problem").exists()
     assert not (prepared.root / "input/evaluation-contract").exists()
     assert (prepared.root / "work/kernel/kernel.py").is_file()
+    reference = prepared.root / "reference"
+    assert reference.is_dir()
+    assert list(reference.iterdir()) == []
+    assert not (os.stat(reference).st_mode & 0o200)
     (prepared.root / "skills/baseline.md").write_text("reuse this lesson\n")
     (prepared.root / "tools/probe.py").write_text("print('probe')\n")
 
