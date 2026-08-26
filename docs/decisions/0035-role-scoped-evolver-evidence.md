@@ -23,21 +23,17 @@ Agent change from a lucky Kernel.
 - Evolver uses `all_completed_branches`; it has no in-progress Epoch and sees every completed Active
   and Challenger branch.
 
-Each Evolver Epoch preserves Active, Challenger, winner Agent, starting Kernel, and best Kernel
-identities. `branches/` contains every Attempt summary, report, diff, and an unredacted derived copy
-of each retained Session Artifact. Authoritative Session retention omits only high-frequency Claude
-`system/thinking_tokens` estimate telemetry; the derived copy applies the same rule to older
-Artifacts. `evolution/` contains every available Challenger Evolver Session. `kernels/index.json`
-records roles and authoritative outcomes, while each referenced exact Kernel Artifact is
-materialized once under `kernels/<kernel-revision-id>/`.
-
-The cumulative source Evidence stores structured starting and best Kernel facts in addition to their
-IDs. All Attempt output Kernels carrying Artifact Digests are projected.
+The durable Evidence store preserves Active, Challenger, winner Agent, Attempt outcomes, Session
+Artifacts, and exact Kernel identities for every completed branch. Evolution workspace projection is
+deliberately smaller: for each currently competing Agent, Runtime materializes an authoritative
+optimization summary plus one unredacted Conversation per Attempt from that Agent's latest completed
+Epoch. Completed non-current Agent versions receive the same compact summary alongside their source.
+Older detailed Epoch trees remain available only in Runtime's Registry and Artifact stores.
 
 ## Consequences
 
-- Evolver can compare successful and failed Agent designs against exact Kernel/evaluation history.
+- Evolver can compare successful and failed Agent designs using compact authoritative outcomes and
+  the latest relevant Conversations.
 - Optimizer branch isolation and fresh-session semantics do not change.
-- Evolver Evidence is larger and may repeat a retained Kernel across adjacent Epoch views; exact
-  content-addressed source identity remains explicit.
-- The Evolver Bundle validates `all_completed_branches` before using the projected history.
+- Runtime retains complete audit history without duplicating it into every Evolution workspace.
+- The frozen filesystem input remains branch-complete for current competition while bounded in size.

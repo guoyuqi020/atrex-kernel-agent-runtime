@@ -55,5 +55,5 @@ Inside the shell, inspect `attempt.json`, `input/`, `agent/`, `work/kernel/`, `s
 `scratch/`. For example, Runtime tools remain available through:
 
 ```bash
-python agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/request.json
+python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/request.json
 ```

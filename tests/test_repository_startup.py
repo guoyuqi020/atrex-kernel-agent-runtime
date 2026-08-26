@@ -112,7 +112,7 @@ def test_checked_in_comparison_evaluator_is_the_pinned_submodule(tmp_path: Path)
         gate.candidate_timeout_seconds,
         gate.performance_timeout_seconds,
         gate.lock_clocks,
-    ) == (600, 20, 120, True)
+    ) == (600, 120, 120, True)
     for comparison in (
         settings.campaign.kernel_retention_comparison,
         settings.campaign.agent_promotion_comparison,

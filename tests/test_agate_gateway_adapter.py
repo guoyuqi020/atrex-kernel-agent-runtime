@@ -304,7 +304,36 @@ def _successful_job() -> dict[str, object]:
                     "1": {"status": "passed"},
                 },
             },
-            "correctness": {"shapes": {"0": {"cases": []}, "1": {"cases": []}}},
+            "correctness": {
+                "shapes": {
+                    "0": {
+                        "cases": [
+                            {
+                                "outputs": [
+                                    {
+                                        "max_elementwise_abs_diff": 0.001,
+                                        "max_elementwise_rel_diff": 0.01,
+                                        "relative_l2": 0.002,
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "1": {
+                        "cases": [
+                            {
+                                "outputs": [
+                                    {
+                                        "max_elementwise_abs_diff": 0.002,
+                                        "max_elementwise_rel_diff": 0.008,
+                                        "relative_l2": 0.003,
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                }
+            },
             "performance": {
                 "shapes": {
                     "0": {
@@ -362,6 +391,12 @@ async def test_eval_uses_sealed_context_and_maps_raw_atrex_result(tmp_path: Path
     assert result.evaluation.latency_us == pytest.approx(math.sqrt(2000 * 4000))
     assert result.worker_result == {
         "all_pass": True,
+        "correctness": {
+            "status": "PASS",
+            "rel_err": 0.003,
+            "max_abs_err": 0.002,
+            "max_rel_err": 0.01,
+        },
         "failures": [],
         "latency_us_geomean": pytest.approx(math.sqrt(2000 * 4000)),
         "latency_us_by_shape": {"0": 2000.0, "1": 4000.0},
@@ -658,6 +693,10 @@ async def test_submission_validation_rejection_is_a_candidate_outcome(tmp_path: 
         "error": {
             "category": "candidate_rejected",
             "message": "candidate request rejected before evaluation job creation",
+            "details": {
+                "reason": "candidate_validation_failed",
+                "details": {"forbidden_imports": ["subprocess"]},
+            },
         },
     }
     jobs.close()
@@ -741,7 +780,10 @@ async def test_profile_result_hides_the_privately_selected_case(tmp_path: Path) 
     assert mapped.worker_result == {
         "job_id": "ev_test",
         "status": "succeeded",
-        "result": {"kernels": [{"name": "vector_add", "duration": 4.0}]},
+        "result": {
+            "shape_id": "1",
+            "kernels": [{"name": "vector_add", "duration": 4.0}],
+        },
     }
     jobs.close()
 
@@ -1255,7 +1297,7 @@ def test_job_timeout_is_bounded_by_the_agate_job_limit(
 
 
 @pytest.mark.anyio
-async def test_dev_permanent_rejection_reaches_the_agent_as_an_invalid_request(
+async def test_dev_permanent_rejection_reaches_the_agent_as_structured_candidate_validation(
     tmp_path: Path,
 ) -> None:
     rejection = FakeGatewayError(
@@ -1272,22 +1314,31 @@ async def test_dev_permanent_rejection_reaches_the_agent_as_an_invalid_request(
     candidate.mkdir()
     (candidate / "kernel.py").write_text("import os\n")
 
-    with pytest.raises(ValueError, match="blocked candidate") as raised:
-        await adapter.execute(
-            GatewayAdapterRequest(
-                new_attempt_id(),
-                GatewayOperation.DEV,
-                "dv_reject",
-                digest("candidate"),
-                candidate,
-                None,
-                None,
-                None,
-                {"command": "python3 kernel.py"},
-            )
+    mapped = await adapter.execute(
+        GatewayAdapterRequest(
+            new_attempt_id(),
+            GatewayOperation.DEV,
+            "dv_reject",
+            digest("candidate"),
+            candidate,
+            None,
+            None,
+            None,
+            {"command": "python3 kernel.py"},
         )
+    )
 
-    assert not isinstance(raised.value, InfrastructureError)
+    assert mapped.worker_result == {
+        "status": "rejected",
+        "error": {
+            "category": "candidate_rejected",
+            "message": "candidate request rejected before evaluation job creation",
+            "details": {
+                "message": "source validation failed",
+                "details": {"forbidden_imports": ["os"]},
+            },
+        },
+    }
     assert len(client.submitted) == 1
     jobs.close()
 

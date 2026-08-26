@@ -81,20 +81,29 @@ def _prepare_workspace(
         ),
     )
     for relative in (
+        ".runtime",
         "input/kernel",
-        "input/agent-problem",
         "input/evidence/epochs/00000001/attempts",
+        "reference",
         "work/kernel",
         "scratch",
         "sessions",
     ):
         (workspace / relative).mkdir(parents=True, exist_ok=True)
 
+    _write_json(
+        workspace / ".runtime/agent-problem.json",
+        {
+            "schema_version": "atrex.agent_problem.v1",
+            "objective": "inspect external GPU knowledge through the Runtime Wiki interface",
+        },
+    )
+
     prompt = "# Temporary Wiki session\n\nUse wiki-query for complete safe GPU Wiki Records.\n"
-    prompt_path = workspace / "input/evidence/instructions.md"
+    prompt_path = workspace / ".runtime/evidence-instructions.md"
     prompt_path.write_text(prompt, encoding="utf-8")
     _write_json(
-        workspace / "input/evidence/manifest.json",
+        workspace / ".runtime/evidence-manifest.json",
         {
             "schema_version": 1,
             "role": "optimizer",
@@ -113,11 +122,11 @@ def _prepare_workspace(
             },
         },
     )
-    manifest_path = workspace / "attempt.json"
+    manifest_path = workspace / ".runtime/attempt.json"
     _write_json(
         manifest_path,
         {
-            "schema_version": 6,
+            "schema_version": 9,
             "attempt_id": str(subject.attempt_id),
             "kernel_agent_revision_id": str(subject.kernel_agent_revision_id),
             "input_kernel_revision_id": str(new_kernel_revision_id()),
@@ -136,13 +145,6 @@ def _prepare_workspace(
                 "hardware_target": subject.hardware_target,
                 "evaluation_contract_digest": str(subject.evaluation_contract_digest),
                 "agent_problem_digest": str(_DIGEST),
-            },
-            "paths": {
-                "input_kernel": "input/kernel",
-                "working_kernel": "work/kernel",
-                "evidence": "input/evidence",
-                "agent_problem": "input/agent-problem",
-                "optimizer": "agent/optimizer",
             },
         },
     )
@@ -322,7 +324,7 @@ def main(argv: list[str] | None = None) -> int:
                         "Bootstrap: skipped",
                         "Agate Gateway: not required",
                         "Try:",
-                        "  python agent/optimizer/src/runtime_tools.py wiki-query "
+                        "  python3 agent/optimizer/src/runtime_tools.py wiki-query "
                         "--request scratch/wiki-query.json",
                         "Exit the shell to destroy the temporary Lineage, Proxy, and Workspace.",
                         "",

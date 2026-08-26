@@ -1,4 +1,4 @@
-"""Uniform bounded retry policy for synchronous Agate SDK requests."""
+"""Uniform persistent retry policy for synchronous Agate SDK requests."""
 
 from __future__ import annotations
 
@@ -8,9 +8,10 @@ from collections.abc import Callable
 from typing import TypeVar, cast
 
 _T = TypeVar("_T")
-_MAX_CONSECUTIVE_ERRORS = 5
+_EXPONENTIAL_BACKOFF_ERROR_LIMIT = 5
 _INITIAL_BACKOFF_SECONDS = 5.0
 _MAX_BACKOFF_SECONDS = 40.0
+_STEADY_RETRY_SECONDS = 60.0
 RETRYABLE_CLIENT_STATUSES = frozenset({408, 429})
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,11 +27,12 @@ def _is_permanent(error: Exception) -> bool:
 class RetryingAgateClient:
     """Apply one retry contract to every method used from the Agate SDK.
 
-    A request is attempted at most five times. The four delays before the
-    terminal attempt are 5, 10, 20, and 40 seconds. Any successful response ends
-    the sequence, so the next request starts with a fresh consecutive-error
-    count. A permanent 4xx other than 408 and 429 is raised immediately so the
-    caller can act on it instead of waiting out the backoff.
+    Transient failures use delays of 5, 10, 20, and 40 seconds for the first
+    five attempts. After the fifth consecutive failure, the request is retried
+    every 60 seconds without a terminal attempt limit. Any successful response
+    ends the sequence, so the next request starts with a fresh error count. A
+    permanent 4xx other than 408 and 429 is raised immediately because repeating
+    an invalid or unauthorized request cannot recover without changing it.
     """
 
     def __init__(
@@ -89,10 +91,12 @@ class RetryingAgateClient:
         )
 
     def _call(self, operation: str, request: Callable[[], _T]) -> _T:
-        for error_count in range(1, _MAX_CONSECUTIVE_ERRORS + 1):
+        error_count = 0
+        while True:
             try:
                 return request()
             except Exception as error:
+                error_count += 1
                 if _is_permanent(error):
                     _LOGGER.debug(
                         "Agate %s failed permanently; not retrying: %s: %s",
@@ -101,27 +105,23 @@ class RetryingAgateClient:
                         error,
                     )
                     raise
-                if error_count == _MAX_CONSECUTIVE_ERRORS:
-                    _LOGGER.error(
-                        "Agate %s failed %d consecutive times; giving up: %s: %s",
-                        operation,
-                        error_count,
-                        type(error).__name__,
-                        error,
+                if error_count < _EXPONENTIAL_BACKOFF_ERROR_LIMIT:
+                    delay = min(
+                        _MAX_BACKOFF_SECONDS,
+                        _INITIAL_BACKOFF_SECONDS * (2 ** (error_count - 1)),
                     )
-                    raise
-                delay = min(
-                    _MAX_BACKOFF_SECONDS,
-                    _INITIAL_BACKOFF_SECONDS * (2 ** (error_count - 1)),
-                )
+                    retry_state = (
+                        f"{error_count}/{_EXPONENTIAL_BACKOFF_ERROR_LIMIT}"
+                    )
+                else:
+                    delay = _STEADY_RETRY_SECONDS
+                    retry_state = f"persistent attempt {error_count}"
                 _LOGGER.warning(
-                    "Agate %s failed (%d/%d); retrying in %.1f seconds: %s: %s",
+                    "Agate %s failed (%s); retrying in %.1f seconds: %s: %s",
                     operation,
-                    error_count,
-                    _MAX_CONSECUTIVE_ERRORS,
+                    retry_state,
                     delay,
                     type(error).__name__,
                     error,
                 )
                 self._sleeper(delay)
-        raise AssertionError("Agate retry loop terminated without a result")

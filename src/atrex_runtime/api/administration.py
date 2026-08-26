@@ -23,6 +23,7 @@ from ..asgi import (
 from ..asgi import (
     json_response as _json_response,
 )
+from ..attempt_reports import RuntimeAttemptReportProjector
 from ..bootstrap import (
     CampaignBootstrapResult,
     CampaignSpecV3,
@@ -186,6 +187,7 @@ class AdministrationAsgiApp:
         self._bootstrapper = bootstrapper
         self._lineage_seeder = lineage_seeder
         self._gateway_control = gateway_control
+        self._attempt_reports = RuntimeAttemptReportProjector(registry, artifacts)
         self._bearer_token = bearer_token.encode()
         self._max_request_bytes = max_request_bytes
         self._event_page_limit = event_page_limit
@@ -573,6 +575,10 @@ class AdministrationAsgiApp:
                 },
             )
             return
+        if len(parts) == 2 and parts[1] == "report":
+            attempt = self._registry.get_attempt(parse_attempt_id(parts[0]))
+            await _json_response(send, 200, self._attempt_reports.project(attempt))
+            return
         if len(parts) >= 2 and parts[1] == "kernel-trials" and len(parts) <= 4:
             if self._gateway_control is None:
                 await _json_response(send, 404, {"error": "not_found"})
@@ -605,10 +611,10 @@ class AdministrationAsgiApp:
                         "kernel_trial_id": trial.id,
                         "trial_label": f"g{trial.recovery_generation}-t{trial.ordinal}",
                         "attempt_id": attempt_id,
-                        "artifact_digest": trial.candidate_artifact_digest,
+                        "artifact_digest": trial.kernel_artifact_digest,
                         "referenced_at": trial.created_at,
                         "files": self._artifact_files(
-                            trial.candidate_artifact_digest,
+                            trial.kernel_artifact_digest,
                             expected_kind=ArtifactKind.KERNEL,
                         ),
                     },
@@ -687,10 +693,10 @@ class AdministrationAsgiApp:
                         f"g{evaluation.recovery_generation}-e{evaluation.ordinal}"
                     ),
                     "attempt_id": attempt_id,
-                    "artifact_digest": evaluation.candidate_artifact_digest,
+                    "artifact_digest": evaluation.kernel_artifact_digest,
                     "referenced_at": evaluation.created_at,
                     "files": self._artifact_files(
-                        evaluation.candidate_artifact_digest,
+                        evaluation.kernel_artifact_digest,
                         expected_kind=ArtifactKind.KERNEL,
                     ),
                 },

@@ -6,6 +6,7 @@ import math
 import statistics
 
 from ..artifacts.local import JsonValue
+from .correctness import correctness_summary
 from .protocol import EvaluationV2
 
 _PRIVATE_RESULT_KEYS = frozenset(
@@ -40,6 +41,7 @@ _HIDDEN_DETAIL = "shape inputs and failure details withheld"
 _HIDDEN_FAILURE = (
     "one or more hidden evaluator cases failed; reproduce within the public shape_domain"
 )
+_CANDIDATE_REJECTED_CATEGORY = "candidate_rejected"
 
 
 def project_private_evaluation(
@@ -52,6 +54,7 @@ def project_private_evaluation(
     latency_by_shape = _latency_by_shape(payload, expected_shape_ids)
     return {
         "all_pass": evaluation.correct,
+        "correctness": correctness_summary(payload, passed=evaluation.correct),
         "failures": [] if evaluation.correct else [_HIDDEN_FAILURE],
         "latency_us_geomean": evaluation.latency_us if evaluation.correct else 0.0,
         "latency_us_by_shape": latency_by_shape,
@@ -63,10 +66,7 @@ def project_private_evaluation(
 def project_private_job(raw: JsonValue) -> JsonValue:
     """Keep safe job evidence while recursively removing private request/case material."""
     if isinstance(raw, dict) and raw.get("status") == "rejected":
-        return {
-            "status": "rejected",
-            "error": "candidate request rejected; hidden-case details withheld",
-        }
+        return project_candidate_rejection(raw.get("error"))
     if isinstance(raw, dict) and raw.get("status") in {"failed", "cancelled"}:
         return {
             "status": raw.get("status"),
@@ -74,6 +74,25 @@ def project_private_job(raw: JsonValue) -> JsonValue:
             "error": "gateway job did not complete; hidden-case details withheld",
         }
     return _strip_private_fields(raw)
+
+
+def project_candidate_rejection(detail: JsonValue) -> JsonValue:
+    """Expose pre-job source/schema validation while stripping private evaluator material.
+
+    Agate classifies these responses before a GPU job or hidden correctness case is executed. The
+    diagnostics are therefore actionable Candidate/source validation, not hidden-case outcomes.
+    Recursive stripping still removes evaluator inputs, references, Shapes, logs, and payloads if
+    an upstream response includes them unexpectedly.
+    """
+    safe_detail = _strip_private_fields(detail)
+    return {
+        "status": "rejected",
+        "error": {
+            "category": _CANDIDATE_REJECTED_CATEGORY,
+            "message": "candidate request rejected before evaluation job creation",
+            "details": safe_detail,
+        },
+    }
 
 
 def _evaluation_payload(raw: JsonValue) -> dict[str, JsonValue]:

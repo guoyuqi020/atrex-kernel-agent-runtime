@@ -57,6 +57,23 @@ def test_production_gate_accepts_self_contained_fixed_dsl(
     ProductionKernelPolicy().validate(tmp_path / "candidate", "kernel.py", dsl)
 
 
+def test_production_gate_explains_missing_cuda_marker_components(tmp_path: Path) -> None:
+    root = tmp_path / "candidate"
+    _write(
+        root,
+        "import torch\nfrom torch.utils.cpp_extension import load\n",
+    )
+
+    violations = ProductionKernelPolicy().violations(root, "kernel.py", Dsl.CUDA)
+
+    assert violations == (
+        "missing self-authored cuda implementation marker: kernel.py must contain "
+        "'__global__' CUDA source and reference at least one approved CUDA loader in the "
+        "same file (load_inline, cpp_extension, CUDAExtension, nvrtc, cuda.bindings); "
+        "detected __global__=no, approved_loader=cpp_extension",
+    )
+
+
 @pytest.mark.parametrize(
     ("source", "message"),
     [

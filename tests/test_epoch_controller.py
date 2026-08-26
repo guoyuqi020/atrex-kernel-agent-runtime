@@ -55,6 +55,7 @@ class FakeEvolver:
                 KernelAgentCandidate(
                     dsl=request.parent_revision.dsl,
                     optimizer_digest=digest("challenger-optimizer"),
+                    runtime_state_digest=digest("challenger-runtime-state"),
                 ),
             ),
             digest("evolution-trace"),
@@ -163,6 +164,25 @@ class FailingKernelComparator:
         _candidate: KernelRevision,
     ) -> KernelComparisonResult:
         raise InfrastructureError("authoritative comparison unavailable")
+
+
+class ReportAwareKernelComparator:
+    """Require a durable candidate-ready Report before every retention call."""
+
+    def __init__(self, registry: SqliteRegistry) -> None:
+        self._registry = registry
+        self.calls = 0
+
+    async def compare(
+        self,
+        _incumbent: KernelRevision,
+        candidate: KernelRevision,
+    ) -> KernelComparisonResult:
+        self.calls += 1
+        assert candidate.produced_by_attempt_id is not None
+        attempt = self._registry.get_attempt(candidate.produced_by_attempt_id)
+        assert attempt.attempt_report_status is AttemptReportStatus.CANDIDATE_READY
+        return KernelComparisonResult(True, "terminal Agent handoff is durable")
 
 
 class ConcurrencyProbeOptimizer:
@@ -431,7 +451,7 @@ async def test_epoch_rejects_unchanged_evolver_candidate(tmp_path: Path) -> None
         FakeAttemptEvidence(),
     )
 
-    with pytest.raises(ValueError, match="no Optimizer repository changes"):
+    with pytest.raises(ValueError, match="incomplete Agent Bundle"):
         await controller.run_epoch(
             seeded.lineage_id,
             1,
@@ -695,6 +715,7 @@ async def test_epoch_promotes_challenger_and_best_kernel_after_scoped_retry(
         result.challenger_scores[0].kernel_agent_revision_id
     )
     assert challenger.evolution_trace_digest == digest("evolution-trace")
+    assert challenger.runtime_state_digest == digest("challenger-runtime-state")
     assert optimizer.calls[BranchRole.ACTIVE][0] == optimizer.calls[BranchRole.ACTIVE][1]
     assert (
         optimizer.requests[BranchRole.ACTIVE][0].attempt_evidence_digest
@@ -867,11 +888,13 @@ async def test_running_attempt_resumes_without_repeating_registered_kernel(
         active=[candidate("active-second", 90)],
         challenger=[candidate("challenger-first", 80), candidate("challenger-second", 75)],
     )
+    retention = ReportAwareKernelComparator(registry)
     resumed_controller = EpochController(
         registry,
         evolver,
         resumed_optimizer,
         FakeAttemptEvidence(),
+        kernel_retention_comparator=retention,
     )
     result = await resumed_controller.run_epoch(
         seeded.lineage_id,
@@ -885,6 +908,7 @@ async def test_running_attempt_resumes_without_repeating_registered_kernel(
     assert recovered.output_kernel_revision_id is not None
     assert not recovered.accepted_as_branch_best
     assert recovered.failure_reason == "candidate lacks a candidate_ready Attempt report"
+    assert retention.calls == 3
     registry.close()
 
 

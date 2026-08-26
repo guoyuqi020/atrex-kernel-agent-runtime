@@ -190,7 +190,7 @@ def _write_config(tmp_path: Path) -> Path:
                         "atol": 0.01,
                         "rtol": 0.05,
                         "evaluation_timeout_seconds": 600,
-                        "candidate_timeout_seconds": 20,
+                        "candidate_timeout_seconds": 120,
                         "performance_timeout_seconds": 120,
                         "lock_clocks": False,
                         "evaluator": {
@@ -443,7 +443,7 @@ def test_campaign_config_uses_atrex_kernel_agent_gate_policy(tmp_path: Path) -> 
     assert gate.retention.correctness_cases == 1
     assert gate.retention.bench_iters == 100
     assert gate.production_gate is False
-    assert gate.candidate_timeout_seconds == 20
+    assert gate.candidate_timeout_seconds == 120
     assert gate.performance_timeout_seconds == 120
     assert gate.atol == 0.01
     assert gate.rtol == 0.05
@@ -610,6 +610,7 @@ def test_campaign_config_keeps_agent_framework_inside_core(tmp_path: Path) -> No
         evolution_session_driver=UnusedEvolutionSessionDriver(),
     )
     runtime.close()
+
 
 def test_campaign_config_rejects_removed_evolver_token_quota(tmp_path: Path) -> None:
     path = _write_config(tmp_path)

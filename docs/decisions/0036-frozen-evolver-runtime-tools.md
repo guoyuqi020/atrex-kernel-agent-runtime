@@ -1,49 +1,48 @@
-# ADR 0036: Frozen Runtime Tools for Evolver
+# ADR 0036: Filesystem-only Evolver evidence
 
 English | [中文](0036-frozen-evolver-runtime-tools.zh.md)
 
 ## Status
 
-Accepted and implemented.
+Accepted and implemented. This supersedes the earlier Evolver Runtime Tools design.
 
 ## Context
 
-ADR 0035 exposes all completed branches and exact Kernel artifacts to Evolver, but manual traversal
-of a long Epoch tree is expensive and error-prone. Runtime administration APIs can already render
-versioned histories, but granting their bearer token to Evolver would expose live mutable state and
-authority far beyond one Evolution session. A repository-owned helper would itself be evolvable or
-could drift from Runtime's Evidence contract.
+Evolver performs offline Agent engineering over one immutable Lineage checkpoint. Unlike Optimizer,
+it does not evaluate Kernels, query Wiki, append journals, or otherwise interact with mutable Runtime
+state. A dedicated command client, HTTP capability, query Catalog, and Candidate reset record duplicate
+facts that Runtime can materialize as ordinary read-only files.
 
 ## Decision
 
-Evolution Input schema v4 adds the fixed `runtime-tools/` path. Before each Evolver process starts,
-Runtime freezes:
+Evolution Input schema v10 has no Runtime query authority. Runtime materializes:
 
-- `catalog.json`, containing exact Lineage-local `vN` and `agent-vN` labels, revision identities,
-  parent links, provenance, evaluation facts, dispositions, and source paths;
-- `kernels/<kernel-revision-id>/`, containing every exact historical Lineage Kernel Artifact; and
-- `evolver_tools.py`, a Runtime-owned, standard-library-only inspection and constrained
-  Candidate-control client.
+- current Active and already-created Challenger repositories plus runtime state under `input/agents/`;
+- their latest-completed-Epoch optimization summaries and one Conversation per Attempt under
+  `input/evidence/`;
+- available prior Agent-creation `EvolutionOutput` files under `input/evolution-reports/`; and
+- completed non-current Agent repositories, summaries, and runtime state under
+  `input/historical/agent-vN/`.
 
-The client exposes bounded JSON `history`, `branches`, `attempts`, `kernels`, `kernel-read`, `agents`,
-`agent-diff`, and `trace-paths` commands. Its sole mutation is
-`candidate-reset --base <agentrev>`: it accepts only an immutable Manifest entry marked
-`lineage_history`, rejects links and special files, stages a complete writable copy, atomically
-replaces only `candidate/`, and records the chosen base in `scratch/candidate-base.json`. Runtime
-seals the tool and all input directories read-only before launch. Evolver's Session context supplies
-the exact interpreter/command pair; final sealing reconciles the base record, proposal, and actual
-repository diff.
+Evolver reads these files directly and may modify only Candidate `source/`, Candidate
+`runtime-state/`, and `scratch/`. Runtime initially copies Active Source and the latest completed
+Epoch winner's best-Kernel Trajectory terminal State after that Epoch's last Attempt. The next
+Epoch's Active Branch uses the same State seed. Missing terminal State falls back to that
+Trajectory's Epoch-start State, the revision seed, and empty default. For `evolve_from_history`,
+Evolver replaces Source with the selected historical
+Source and may synthesize the common seed from visible historical state. Runtime verifies eligibility
+and validates the reported Source-root-relative Diff plus its private State Diff. Every new Revision seals Source and State as one logical
+Bundle. No Candidate Base side
+record is trusted or required.
 
-This is a local frozen-workspace surface, not an HTTP capability. It carries no Admin, Registry,
-Gateway, Wiki, evaluation, or promotion credential and cannot observe changes made after workspace
-preparation. Direct Evidence and repository files remain available for verification.
+The Evolver query endpoint, query capability, public helper, Candidate allowlist, and private query
+snapshot are removed. Detailed history and full Evolution traces remain in Runtime's existing
+Evidence and Registry stores; only compact Agent-authored creation reports are projected.
 
 ## Consequences
 
-- Evolver gets a deterministic inspect workflow without weakening the trusted control boundary.
-- Version labels come from Registry catalogs rather than being inferred from directory order.
-- All historical Kernel sources are available even before the first completed Epoch.
-- Evolution workspaces grow with Lineage Kernel history; retention sizing remains an operational
-  concern.
-- Older Evolver Bundles that validate schema v3 cannot consume schema v4 and require an explicit
-  pinned-Commit upgrade.
+- Evolver's entire input contract is inspectable as a frozen filesystem tree.
+- Workspace and Prompt complexity are reduced.
+- No Evolver-scoped HTTP credential or query service exists.
+- Historical-base replacement is Agent-authored but independently validated by Runtime.
+- Optimizer Runtime Tools remain unchanged because Optimizer still needs live services and journals.

@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 import math
+import statistics
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, parse_artifact_digest
+from .correctness import correctness_summary, merge_correctness_summaries
 
 
 @dataclass(frozen=True, slots=True)
@@ -18,6 +22,179 @@ class GatewaySolSummary:
     percent: float | None
     source: str | None
     detail: str | None = None
+
+
+def gateway_result_projection(
+    artifacts: LocalArtifactStore,
+    digest: ArtifactDigest,
+    *,
+    correct: bool,
+    latency_us: float | None,
+) -> dict[str, JsonValue]:
+    """Return an Agent-safe projection of one authoritative Gateway result."""
+    value = _gateway_result_value(artifacts, digest)
+    operation = value.get("operation")
+    status = value.get("status")
+    by_shape = _latency_by_shape_value(artifacts, value, seen={digest})
+    return {
+        "operation": operation if isinstance(operation, str) and operation else "evaluate",
+        "status": status if isinstance(status, str) and status else "completed",
+        "correct": correct,
+        "correctness": _correctness_projection(artifacts, digest, passed=correct, seen=set()),
+        "latency_us_geomean": latency_us,
+        "latency_us_arith_mean": statistics.fmean(by_shape.values()) if by_shape else None,
+        "latency_us_by_shape": cast(dict[str, JsonValue], by_shape),
+    }
+
+
+def _gateway_result_value(
+    artifacts: LocalArtifactStore,
+    digest: ArtifactDigest,
+) -> dict[str, JsonValue]:
+    stored = artifacts.verify(digest)
+    if stored.kind is not ArtifactKind.GATEWAY_RESULT:
+        raise ValueError("Kernel evaluation does not reference a Gateway Result")
+    value = _read_json_object(stored.payload_path / "value.json")
+    if value is None:
+        raise ValueError("Gateway Result is not valid JSON")
+    return value
+
+
+def _correctness_projection(
+    artifacts: LocalArtifactStore,
+    digest: ArtifactDigest,
+    *,
+    passed: bool,
+    seen: set[ArtifactDigest],
+) -> dict[str, JsonValue]:
+    if digest in seen:
+        raise ValueError("Gateway Result measurement graph contains a cycle")
+    visited = {*seen, digest}
+    value = _gateway_result_value(artifacts, digest)
+    operation = value.get("operation")
+    if operation == "same_allocation_abba":
+        return correctness_summary(value.get("candidate"), passed=passed)
+    if operation == "evaluate_comparison":
+        measurements = value.get("measurements")
+        summaries: list[object] = []
+        if isinstance(measurements, list):
+            for measurement in measurements:
+                if not isinstance(measurement, dict):
+                    continue
+                raw_digest = measurement.get("gateway_result_digest")
+                if isinstance(raw_digest, str):
+                    summaries.append(
+                        _correctness_projection(
+                            artifacts,
+                            parse_artifact_digest(raw_digest),
+                            passed=passed,
+                            seen=visited,
+                        )
+                    )
+        return merge_correctness_summaries(summaries, passed=passed)
+    return correctness_summary(value, passed=passed)
+
+
+def _latency_by_shape_digest(
+    artifacts: LocalArtifactStore,
+    digest: ArtifactDigest,
+    *,
+    seen: set[ArtifactDigest],
+) -> dict[str, float]:
+    if digest in seen:
+        raise ValueError("Gateway Result measurement graph contains a cycle")
+    return _latency_by_shape_value(
+        artifacts,
+        _gateway_result_value(artifacts, digest),
+        seen={*seen, digest},
+    )
+
+
+def _latency_by_shape_value(
+    artifacts: LocalArtifactStore,
+    value: Mapping[str, object],
+    *,
+    seen: set[ArtifactDigest],
+) -> dict[str, float]:
+    operation = value.get("operation")
+    if operation == "same_allocation_abba":
+        candidate = value.get("candidate")
+        if isinstance(candidate, Mapping):
+            return _shape_mapping(candidate.get("latency_us_by_shape"))
+    if operation == "evaluate_comparison":
+        measurements = value.get("measurements")
+        if isinstance(measurements, list):
+            children = [
+                _latency_by_shape_digest(
+                    artifacts,
+                    parse_artifact_digest(raw_digest),
+                    seen=set(seen),
+                )
+                for measurement in measurements
+                if isinstance(measurement, Mapping)
+                and isinstance((raw_digest := measurement.get("gateway_result_digest")), str)
+            ]
+            return _mean_shape_mappings(children)
+    direct = _shape_mapping(value.get("latency_us_by_shape"))
+    if direct:
+        return direct
+    for key in ("result", "worker_result", "job"):
+        nested = value.get(key)
+        if isinstance(nested, Mapping):
+            projected = _latency_by_shape_value(artifacts, nested, seen=set(seen))
+            if projected:
+                return projected
+    stages = value.get("completed_stages")
+    if isinstance(stages, list):
+        for stage in reversed(stages):
+            if isinstance(stage, Mapping):
+                projected = _latency_by_shape_value(artifacts, stage, seen=set(seen))
+                if projected:
+                    return projected
+    jobs = value.get("jobs")
+    if isinstance(jobs, list):
+        return _mean_shape_mappings(
+            [
+                projected
+                for job in jobs
+                if isinstance(job, Mapping)
+                and (projected := _latency_by_shape_value(artifacts, job, seen=set(seen)))
+            ]
+        )
+    return {}
+
+
+def _shape_mapping(value: object) -> dict[str, float]:
+    if not isinstance(value, Mapping):
+        return {}
+    return {
+        str(shape_id): number
+        for shape_id, raw in value.items()
+        if (number := _positive_finite_number(raw)) is not None
+    }
+
+
+def _positive_finite_number(value: object) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if number > 0 and math.isfinite(number) else None
+
+
+def _mean_shape_mappings(values: list[dict[str, float]]) -> dict[str, float]:
+    if not values:
+        return {}
+    shared = set(values[0])
+    for value in values[1:]:
+        shared.intersection_update(value)
+    return {
+        shape_id: statistics.fmean(value[shape_id] for value in values)
+        for shape_id in sorted(shared, key=_shape_sort_key)
+    }
+
+
+def _shape_sort_key(value: str) -> tuple[int, int | str]:
+    return (0, int(value)) if value.isdigit() else (1, value)
 
 
 def gateway_result_sol_percent(

@@ -38,11 +38,11 @@ from atrex_runtime.gateway.control_models import (
 from atrex_runtime.registry.base import Registry
 from atrex_runtime.workers.evolution import (
     EvolutionAgentDescriptorV3,
-    EvolutionCandidateOutputV3,
-    EvolutionCandidateTraceV2,
-    EvolutionInputManifestV4,
-    EvolutionTraceV7,
-    VisibleAgentRevisionV1,
+    EvolutionCandidateTraceV3,
+    EvolutionInputManifestV10,
+    EvolutionOutput,
+    EvolutionTraceV9,
+    VisibleAgentRevisionV2,
 )
 from atrex_runtime.workers.token_usage import ProviderUsageReportV2, TokenUsageBucketsV2
 
@@ -272,21 +272,25 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
     session_digest = artifacts.put_directory(session_source, ArtifactKind.SESSION_LOG)
     parent_id = new_kernel_agent_revision_id()
     challenger_id = new_kernel_agent_revision_id()
-    candidate = EvolutionCandidateTraceV2(
+    candidate = EvolutionCandidateTraceV3(
         optimizer_digest=digest("optimizer"),
+        runtime_state_digest=digest("runtime-state"),
     )
-    trace = EvolutionTraceV7(
-        input=EvolutionInputManifestV4(
+    trace = EvolutionTraceV9(
+        input=EvolutionInputManifestV10(
             parent_revision_id=parent_id,
             evidence_checkpoint=digest("evidence"),
             idempotency_key="evolve:1",
             dsl=Dsl.TRITON,
             optimizer_digest=digest("parent-optimizer"),
             visible_agents=(
-                VisibleAgentRevisionV1(
+                VisibleAgentRevisionV2(
                     revision_id=parent_id,
                     optimizer_digest=digest("parent-optimizer"),
-                    path=f"input/agents/{parent_id}",
+                    path="input/agents/active/source",
+                    optimization_summary_path="input/evidence/active/optimization-summary.json",
+                    sessions_path="input/evidence/active/sessions",
+                    runtime_state_path="input/agents/active/runtime-state",
                     parent=True,
                     relationship="active",
                     challenger_ordinal=None,
@@ -328,9 +332,9 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
             model_request_count=1,
             usage_complete=True,
         ),
-        output=EvolutionCandidateOutputV3(
+        output=EvolutionOutput(
             proposal_type="evolved",
-            base_revision_id=parent_id,
+            kernel_agent_revision_id=parent_id,
             hypothesis="Register pressure limits occupancy",
             expected_effect="Increase occupancy",
             changed_paths=("prompts/episode.md",),
@@ -421,7 +425,7 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
                     ordinal=1,
                     source_operation=GatewayOperation.PROFILE,
                     idempotency_key="profile-1",
-                    candidate_artifact_digest=digest("candidate"),
+                    kernel_artifact_digest=digest("candidate"),
                     gateway_result_digest=digest("profile-result"),
                     point=GatewayMeasurementPoint(
                         kind=GatewayOperation.PROFILE,

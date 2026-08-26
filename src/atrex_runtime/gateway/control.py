@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from ..domain.errors import (
+    DirectionConcurrencyError,
     GatewayCapabilityPolicyChangedError,
     InfrastructureError,
     InvalidTransitionError,
@@ -83,10 +84,90 @@ from .control_models import (
 from .control_models import (
     GatewayOperation as GatewayOperation,
 )
+from .control_models import gateway_kernel_trial_id
 from .control_schema import (
     GATEWAY_SCHEMA_VERSION as GATEWAY_SCHEMA_VERSION,
 )
 from .control_schema import migrate_gateway_schema
+
+
+def _validate_profile_supporting_results(
+    visible_trials: Mapping[str, GatewayKernelTrialRecord],
+    experiments: Sequence[Mapping[str, object]],
+    supporting_results: Sequence[Mapping[str, object]],
+) -> None:
+    """Bind Agent-authored profile provenance to exact durable Gateway observations."""
+    if not supporting_results:
+        return
+    journal_bindings: set[tuple[ArtifactDigest, str, ArtifactDigest]] = set()
+    for experiment in experiments:
+        for side_name in ("before", "after"):
+            side = experiment.get(side_name)
+            if not isinstance(side, Mapping):
+                continue
+            kernel_value = side.get("kernel_artifact_digest")
+            trial_id = side.get("kernel_trial_id")
+            result_values = side.get("gateway_result_digests")
+            if (
+                not isinstance(kernel_value, str)
+                or not isinstance(trial_id, str)
+                or not isinstance(result_values, (list, tuple))
+            ):
+                continue
+            kernel = parse_artifact_digest(kernel_value)
+            for result_value in result_values:
+                if isinstance(result_value, str):
+                    journal_bindings.add((kernel, trial_id, parse_artifact_digest(result_value)))
+
+    seen_results: set[ArtifactDigest] = set()
+    has_profile = False
+    expected_fields = {
+        "operation",
+        "kernel_artifact_digest",
+        "kernel_trial_id",
+        "gateway_result_digest",
+    }
+    for reference in supporting_results:
+        if set(reference) != expected_fields:
+            raise ValueError("Profile supporting result fields are invalid")
+        operation_value = reference.get("operation")
+        if not isinstance(operation_value, str):
+            raise ValueError("Profile supporting result operation is invalid")
+        try:
+            operation = GatewayOperation(operation_value)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Profile supporting result operation is invalid") from error
+        if operation is not GatewayOperation.PROFILE:
+            raise ValueError("Profile supporting result operation must be profile")
+        has_profile = True
+        kernel_value = reference.get("kernel_artifact_digest")
+        trial_id = reference.get("kernel_trial_id")
+        result_value = reference.get("gateway_result_digest")
+        if not isinstance(kernel_value, str) or not isinstance(result_value, str):
+            raise ValueError("Profile supporting result requires Artifact Digests")
+        if not isinstance(trial_id, str):
+            raise ValueError("Profile supporting result requires a Kernel Trial ID")
+        kernel = parse_artifact_digest(kernel_value)
+        result = parse_artifact_digest(result_value)
+        if (kernel, trial_id, result) not in journal_bindings:
+            raise ValueError("Profile supporting result is absent from the Experiment journal")
+        trial = visible_trials.get(trial_id)
+        if trial is None:
+            raise ValueError("Profile supporting Kernel Trial is outside visible history")
+        if trial.kernel_artifact_digest != kernel:
+            raise ValueError("Profile supporting Kernel Trial does not match its Kernel")
+        if not any(
+            observation.operation is operation and observation.gateway_result_digest == result
+            for observation in trial.observations
+        ):
+            raise ValueError(
+                "Profile supporting result does not match the declared Gateway operation"
+            )
+        if result in seen_results:
+            raise ValueError("Profile supporting Gateway results must be unique")
+        seen_results.add(result)
+    if not has_profile:
+        raise ValueError("Profile evidence requires at least one profile result")
 
 
 def _utc_now() -> datetime:
@@ -96,18 +177,36 @@ def _utc_now() -> datetime:
 _UNMETERED_OPERATIONS = frozenset(
     {
         GatewayOperation.DEV,
-        GatewayOperation.MEASUREMENTS,
-        GatewayOperation.KERNEL_TRIALS,
-        GatewayOperation.KERNEL_TRIAL_READ,
+        GatewayOperation.KERNEL_TRIAL_SHOW,
+        GatewayOperation.KERNEL_ARTIFACT_READ,
+        GatewayOperation.GATEWAY_RESULT_READ,
+        GatewayOperation.DIRECTION_HISTORY,
+        GatewayOperation.EXPERIMENT_HISTORY,
+        GatewayOperation.DIRECTION_UPDATE,
+        GatewayOperation.DIRECTIONS_LIST,
+        GatewayOperation.DIRECTION_LOAD,
+        GatewayOperation.EXPERIMENT_RECORD,
+        GatewayOperation.EXPERIMENTS_LIST,
+        GatewayOperation.EXPERIMENT_LOAD,
+        GatewayOperation.JOURNAL_SNAPSHOT,
         GatewayOperation.WIKI_QUERY,
     }
 )
 
-_IMPLICIT_READ_OPERATIONS = frozenset(
+_IMPLICIT_RUNTIME_OPERATIONS = frozenset(
     {
-        GatewayOperation.MEASUREMENTS,
-        GatewayOperation.KERNEL_TRIALS,
-        GatewayOperation.KERNEL_TRIAL_READ,
+        GatewayOperation.KERNEL_TRIAL_SHOW,
+        GatewayOperation.KERNEL_ARTIFACT_READ,
+        GatewayOperation.GATEWAY_RESULT_READ,
+        GatewayOperation.DIRECTION_HISTORY,
+        GatewayOperation.EXPERIMENT_HISTORY,
+        GatewayOperation.DIRECTION_UPDATE,
+        GatewayOperation.DIRECTIONS_LIST,
+        GatewayOperation.DIRECTION_LOAD,
+        GatewayOperation.EXPERIMENT_RECORD,
+        GatewayOperation.EXPERIMENTS_LIST,
+        GatewayOperation.EXPERIMENT_LOAD,
+        GatewayOperation.JOURNAL_SNAPSHOT,
     }
 )
 
@@ -185,13 +284,15 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 "SELECT artifact_digest, gateway_result_digest FROM attempt_outcomes"
             ).fetchall()
             operation_rows = self._connection.execute(
-                """SELECT candidate_artifact_digest, result_artifact_digest
+                """SELECT kernel_artifact_digest, gateway_result_digest,
+                          result_artifact_digest
                      FROM gateway_operations
-                    WHERE candidate_artifact_digest IS NOT NULL
+                    WHERE kernel_artifact_digest IS NOT NULL
+                       OR gateway_result_digest IS NOT NULL
                        OR result_artifact_digest IS NOT NULL"""
             ).fetchall()
             annotation_rows = self._connection.execute(
-                "SELECT candidate_artifact_digest FROM gateway_trial_annotations"
+                "SELECT kernel_artifact_digest FROM gateway_trial_annotations"
             ).fetchall()
             subject_rows = self._connection.execute(
                 """SELECT evaluation_contract_digest, input_kernel_digest, evidence_digest
@@ -203,12 +304,18 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                    FROM bootstrap_runs"""
             ).fetchall()
             evaluation_rows = self._connection.execute(
-                """SELECT candidate_artifact_digest, gateway_result_digest
+                """SELECT kernel_artifact_digest, gateway_result_digest
                    FROM gateway_evaluations"""
             ).fetchall()
             measurement_rows = self._connection.execute(
-                """SELECT candidate_artifact_digest, gateway_result_digest
+                """SELECT kernel_artifact_digest, gateway_result_digest
                    FROM gateway_measurements"""
+            ).fetchall()
+            journal_digest_rows = self._connection.execute(
+                """SELECT DISTINCT value AS digest
+                     FROM runtime_experiments, json_tree(experiment_json)
+                    WHERE json_tree.type = 'text'
+                      AND json_tree.value GLOB 'sha256:*'"""
             ).fetchall()
         values: set[ArtifactDigest] = set()
         for row in rows:
@@ -218,14 +325,18 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     raise TypeError("persisted Gateway Artifact Digest must be text")
                 values.add(parse_artifact_digest(value))
         for row in operation_rows:
-            for column in ("candidate_artifact_digest", "result_artifact_digest"):
+            for column in (
+                "kernel_artifact_digest",
+                "gateway_result_digest",
+                "result_artifact_digest",
+            ):
                 value = row[column]
                 if value is not None:
                     if not isinstance(value, str):
                         raise TypeError("persisted operation Artifact Digest must be text")
                     values.add(parse_artifact_digest(value))
         for row in annotation_rows:
-            value = row["candidate_artifact_digest"]
+            value = row["kernel_artifact_digest"]
             if not isinstance(value, str):
                 raise TypeError("persisted Kernel Trial Artifact Digest must be text")
             values.add(parse_artifact_digest(value))
@@ -252,17 +363,22 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         raise TypeError("persisted Bootstrap Run Artifact Digest must be text")
                     values.add(parse_artifact_digest(value))
         for row in evaluation_rows:
-            for column in ("candidate_artifact_digest", "gateway_result_digest"):
+            for column in ("kernel_artifact_digest", "gateway_result_digest"):
                 value = row[column]
                 if not isinstance(value, str):
                     raise TypeError("persisted evaluation Artifact Digest must be text")
                 values.add(parse_artifact_digest(value))
         for row in measurement_rows:
-            for column in ("candidate_artifact_digest", "gateway_result_digest"):
+            for column in ("kernel_artifact_digest", "gateway_result_digest"):
                 value = row[column]
                 if not isinstance(value, str):
                     raise TypeError("persisted measurement Artifact Digest must be text")
                 values.add(parse_artifact_digest(value))
+        for row in journal_digest_rows:
+            value = row["digest"]
+            if not isinstance(value, str):
+                raise TypeError("persisted Experiment Artifact Digest must be text")
+            values.add(parse_artifact_digest(value))
         return values
 
     def issue(
@@ -554,7 +670,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             if self._clock() >= datetime.fromisoformat(row["expires_at"]):
                 raise PermissionError("Gateway capability has expired")
             allowed = json.loads(row["operations_json"])
-            if operation not in _IMPLICIT_READ_OPERATIONS and operation.value not in allowed:
+            if operation not in _IMPLICIT_RUNTIME_OPERATIONS and operation.value not in allowed:
                 raise PermissionError(f"Gateway operation is not allowed: {operation.value}")
 
             existing = connection.execute(
@@ -635,28 +751,28 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         attempt_id: AttemptId,
         idempotency_key: str,
         operation: GatewayOperation,
-        candidate_artifact_digest: ArtifactDigest,
+        kernel_artifact_digest: ArtifactDigest,
         *,
         recovery_generation: int | None = None,
     ) -> ArtifactDigest:
         """Bind an authorized operation to the exact candidate before external execution."""
-        candidate = parse_artifact_digest(str(candidate_artifact_digest))
+        candidate = parse_artifact_digest(str(kernel_artifact_digest))
         generation = self._subject_generation(attempt_id)
         if recovery_generation is not None and recovery_generation != generation:
             raise InvalidTransitionError("Gateway candidate belongs to a stale generation")
         with self._transaction() as connection:
             row = connection.execute(
-                """SELECT candidate_artifact_digest FROM gateway_operations
+                """SELECT kernel_artifact_digest FROM gateway_operations
                    WHERE attempt_id = ? AND recovery_generation = ?
                      AND idempotency_key = ? AND operation = ?""",
                 (attempt_id, generation, idempotency_key, operation.value),
             ).fetchone()
             if row is None:
                 raise InvalidTransitionError("operation candidate has no authorization reservation")
-            existing = row["candidate_artifact_digest"]
+            existing = row["kernel_artifact_digest"]
             if existing is None:
                 connection.execute(
-                    """UPDATE gateway_operations SET candidate_artifact_digest = ?
+                    """UPDATE gateway_operations SET kernel_artifact_digest = ?
                        WHERE attempt_id = ? AND recovery_generation = ?
                          AND idempotency_key = ?""",
                     (candidate, attempt_id, generation, idempotency_key),
@@ -706,46 +822,359 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 raise TypeError("persisted operation result Artifact Digest must be text")
             return parse_artifact_digest(existing)
 
+    def bind_operation_gateway_result(
+        self,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        operation: GatewayOperation,
+        gateway_result_digest: ArtifactDigest,
+        *,
+        recovery_generation: int | None = None,
+    ) -> ArtifactDigest:
+        """Bind an operation to the exact upstream Gateway result shown to the Agent."""
+        digest = parse_artifact_digest(str(gateway_result_digest))
+        generation = self._subject_generation(attempt_id)
+        if recovery_generation is not None and recovery_generation != generation:
+            raise InvalidTransitionError("Gateway result belongs to a stale generation")
+        with self._transaction() as connection:
+            row = connection.execute(
+                """SELECT gateway_result_digest FROM gateway_operations
+                   WHERE attempt_id = ? AND recovery_generation = ?
+                     AND idempotency_key = ? AND operation = ?""",
+                (attempt_id, generation, idempotency_key, operation.value),
+            ).fetchone()
+            if row is None:
+                raise InvalidTransitionError("Gateway result has no authorization reservation")
+            existing = row["gateway_result_digest"]
+            if existing is None:
+                connection.execute(
+                    """UPDATE gateway_operations SET gateway_result_digest = ?
+                       WHERE attempt_id = ? AND recovery_generation = ?
+                         AND idempotency_key = ?""",
+                    (digest, attempt_id, generation, idempotency_key),
+                )
+                return digest
+            if existing != digest:
+                raise InvalidTransitionError(
+                    "authorized operation already has a different Gateway result"
+                )
+            if not isinstance(existing, str):
+                raise TypeError("persisted Gateway result Artifact Digest must be text")
+            return parse_artifact_digest(existing)
+
+    def append_direction_event(
+        self,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        event: Mapping[str, object],
+        *,
+        recovery_generation: int,
+    ) -> dict[str, object]:
+        """Append one idempotent live Direction event and return its durable value."""
+        generation = self._subject_generation(attempt_id)
+        if recovery_generation != generation:
+            raise InvalidTransitionError("Direction event belongs to a stale recovery generation")
+        payload = json.dumps(
+            dict(event),
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        with self._transaction() as connection:
+            existing = connection.execute(
+                """SELECT event_json FROM runtime_direction_events
+                    WHERE attempt_id = ? AND idempotency_key = ?""",
+                (attempt_id, idempotency_key),
+            ).fetchone()
+            if existing is not None:
+                value = json.loads(str(existing["event_json"]))
+                if not isinstance(value, dict):
+                    raise TypeError("persisted Direction event must be a JSON object")
+                return value
+            if event.get("action") == "start":
+                latest_actions: dict[str, str] = {}
+                for row in connection.execute(
+                    """SELECT event_json FROM runtime_direction_events
+                         WHERE attempt_id = ? ORDER BY sequence""",
+                    (attempt_id,),
+                ).fetchall():
+                    prior = json.loads(str(row["event_json"]))
+                    if not isinstance(prior, dict):
+                        raise TypeError("persisted Direction event must be a JSON object")
+                    prior_direction_id = prior.get("direction_id")
+                    prior_action = prior.get("action")
+                    if isinstance(prior_direction_id, str) and isinstance(prior_action, str):
+                        latest_actions[prior_direction_id] = prior_action
+                requested_direction_id = str(event["direction_id"])
+                conflicts = tuple(
+                    sorted(
+                        direction_id
+                        for direction_id, latest_action in latest_actions.items()
+                        if latest_action == "start" and direction_id != requested_direction_id
+                    )
+                )
+                if conflicts:
+                    raise DirectionConcurrencyError(requested_direction_id, conflicts)
+            sequence = int(
+                connection.execute(
+                    """SELECT COALESCE(MAX(sequence), 0) + 1 AS value
+                         FROM runtime_direction_events WHERE attempt_id = ?""",
+                    (attempt_id,),
+                ).fetchone()["value"]
+            )
+            connection.execute(
+                """INSERT INTO runtime_direction_events(
+                       attempt_id, sequence, recovery_generation, idempotency_key,
+                       direction_event_id, direction_id, event_json, recorded_at
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    attempt_id,
+                    sequence,
+                    generation,
+                    idempotency_key,
+                    event["direction_event_id"],
+                    event["direction_id"],
+                    payload,
+                    event["recorded_at"],
+                ),
+            )
+        return dict(event)
+
+    def list_direction_events(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
+        """Return all live Direction events retained for one logical Attempt."""
+        with self._lock:
+            rows = self._connection.execute(
+                """SELECT event_json FROM runtime_direction_events
+                    WHERE attempt_id = ? ORDER BY sequence""",
+                (attempt_id,),
+            ).fetchall()
+        values: list[dict[str, object]] = []
+        for row in rows:
+            value = json.loads(str(row["event_json"]))
+            if not isinstance(value, dict):
+                raise TypeError("persisted Direction event must be a JSON object")
+            values.append(value)
+        return tuple(values)
+
+    def append_experiment(
+        self,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        experiment: Mapping[str, object],
+        *,
+        recovery_generation: int,
+    ) -> dict[str, object]:
+        """Append one idempotent live Experiment and return its durable value."""
+        generation = self._subject_generation(attempt_id)
+        if recovery_generation != generation:
+            raise InvalidTransitionError("Experiment belongs to a stale recovery generation")
+        payload = json.dumps(
+            dict(experiment),
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        with self._transaction() as connection:
+            existing = connection.execute(
+                """SELECT experiment_json FROM runtime_experiments
+                    WHERE attempt_id = ? AND idempotency_key = ?""",
+                (attempt_id, idempotency_key),
+            ).fetchone()
+            if existing is not None:
+                value = json.loads(str(existing["experiment_json"]))
+                if not isinstance(value, dict):
+                    raise TypeError("persisted Experiment must be a JSON object")
+                return value
+            sequence = int(
+                connection.execute(
+                    """SELECT COALESCE(MAX(sequence), 0) + 1 AS value
+                         FROM runtime_experiments WHERE attempt_id = ?""",
+                    (attempt_id,),
+                ).fetchone()["value"]
+            )
+            connection.execute(
+                """INSERT INTO runtime_experiments(
+                       attempt_id, sequence, recovery_generation, idempotency_key,
+                       experiment_id, direction_id, experiment_json, recorded_at
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    attempt_id,
+                    sequence,
+                    generation,
+                    idempotency_key,
+                    experiment["experiment_id"],
+                    experiment["direction_id"],
+                    payload,
+                    experiment["recorded_at"],
+                ),
+            )
+        return dict(experiment)
+
+    def list_experiments(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
+        """Return all live Experiments retained for one logical Attempt."""
+        with self._lock:
+            rows = self._connection.execute(
+                """SELECT experiment_json FROM runtime_experiments
+                    WHERE attempt_id = ? ORDER BY sequence""",
+                (attempt_id,),
+            ).fetchall()
+        values: list[dict[str, object]] = []
+        for row in rows:
+            value = json.loads(str(row["experiment_json"]))
+            if not isinstance(value, dict):
+                raise TypeError("persisted Experiment must be a JSON object")
+            values.append(value)
+        return tuple(values)
+
     def record_kernel_trial_annotations(
         self,
         attempt_id: AttemptId,
         experiments: Sequence[Mapping[str, object]],
         *,
+        profile_supporting_results: Sequence[Mapping[str, object]] = (),
         recovery_generation: int | None = None,
+        allow_baseline: bool = False,
     ) -> tuple[GatewayKernelTrialAnnotation, ...]:
-        """Validate and retain Agent experiment decisions against observed candidates."""
+        """Validate Experiment actions and retain their mapped Trial dispositions."""
         generation = self._subject_generation(attempt_id)
         if recovery_generation is not None and recovery_generation != generation:
             raise InvalidTransitionError("Kernel Trial annotations belong to a stale generation")
+        _, visible_attempt_ids = self.visible_kernel_trial_attempt_ids(attempt_id)
+        visible_trials = {
+            trial.id: trial for trial in self.list_kernel_trials(visible_attempt_ids, limit=5_000)
+        }
+        _validate_profile_supporting_results(
+            visible_trials,
+            experiments,
+            profile_supporting_results,
+        )
         records: list[GatewayKernelTrialAnnotation] = []
         with self._transaction() as connection:
             for expected_sequence, experiment in enumerate(experiments, 1):
                 sequence = experiment.get("sequence")
-                digest_value = experiment.get("candidate_artifact_digest")
-                decision = experiment.get("decision")
+                before = experiment.get("before")
+                after = experiment.get("after")
+                action = experiment.get("action")
                 recorded_at = experiment.get("recorded_at")
                 if sequence != expected_sequence:
                     raise ValueError("Kernel Trial annotation sequence must be contiguous")
-                if digest_value is None:
+                disposition_by_action = {
+                    "keep_after": "continue",
+                    "restore_before": "revert",
+                    "abandon_direction": "pivot",
+                }
+                if allow_baseline:
+                    # Baseline establishes the first measured candidate and is
+                    # therefore the Bootstrap equivalent of continuing from
+                    # the selected `after` subject. The exact action remains
+                    # preserved in experiment_json.
+                    disposition_by_action["baseline"] = "continue"
+                if action not in disposition_by_action:
+                    raise ValueError("Kernel Trial annotation action is invalid")
+                disposition = disposition_by_action[action]
+                if after is None:
+                    if before is not None:
+                        raise ValueError(
+                            "Kernel Trial annotation before and after must both be present or null"
+                        )
                     continue
+                if not isinstance(after, Mapping):
+                    raise ValueError("Kernel Trial annotation after evidence is invalid")
+                if action == "baseline":
+                    if before is not None:
+                        raise ValueError("Kernel Trial baseline annotation requires before=null")
+                else:
+                    if not isinstance(before, Mapping):
+                        raise ValueError("Kernel Trial annotation before evidence is invalid")
+                    before_digest_value = before.get("kernel_artifact_digest")
+                    before_trial_id = before.get("kernel_trial_id")
+                    before_gateway_result_values = before.get("gateway_result_digests")
+                    if not isinstance(before_digest_value, str):
+                        raise ValueError(
+                            "Kernel Trial annotation before requires a candidate Artifact Digest"
+                        )
+                    before_candidate = parse_artifact_digest(before_digest_value)
+                    if not isinstance(before_trial_id, str):
+                        raise ValueError("Kernel Trial annotation before requires a Trial ID")
+                    before_trial = visible_trials.get(before_trial_id)
+                    if before_trial is None:
+                        raise ValueError(
+                            "Kernel Trial annotation before Trial is outside visible history"
+                        )
+                    if before_trial.kernel_artifact_digest != before_candidate:
+                        raise ValueError(
+                            "Kernel Trial annotation before Trial does not match its candidate"
+                        )
+                    if (
+                        not isinstance(before_gateway_result_values, (list, tuple))
+                        or not before_gateway_result_values
+                    ):
+                        raise ValueError(
+                            "Kernel Trial annotation before requires Gateway result "
+                            "Artifact Digests"
+                        )
+                    before_observed_results = {
+                        observation.gateway_result_digest
+                        for observation in before_trial.observations
+                        if observation.gateway_result_digest is not None
+                    }
+                    for value in before_gateway_result_values:
+                        if not isinstance(value, str):
+                            raise ValueError(
+                                "Kernel Trial annotation before Gateway result must be text"
+                            )
+                        before_gateway_result = parse_artifact_digest(value)
+                        if before_gateway_result not in before_observed_results:
+                            raise ValueError(
+                                "Kernel Trial annotation before references a candidate/result pair "
+                                "not observed in visible history"
+                            )
+                digest_value = after.get("kernel_artifact_digest")
+                trial_id = after.get("kernel_trial_id")
+                gateway_result_values = after.get("gateway_result_digests")
                 if not isinstance(digest_value, str):
                     raise ValueError("Kernel Trial annotation requires a candidate Artifact Digest")
                 candidate = parse_artifact_digest(digest_value)
-                if decision not in {"continue", "revert", "pivot"}:
-                    raise ValueError("Kernel Trial annotation decision is invalid")
+                if not isinstance(trial_id, str):
+                    raise ValueError("Kernel Trial annotation requires a Trial ID")
+                after_trial = visible_trials.get(trial_id)
+                if after_trial is None or after_trial.attempt_id != attempt_id:
+                    raise ValueError(
+                        "Kernel Trial annotation after Trial does not match this logical "
+                        "Attempt's visible Trials"
+                    )
+                if after_trial.kernel_artifact_digest != candidate:
+                    raise ValueError(
+                        "Kernel Trial annotation kernel_trial_id does not match its candidate"
+                    )
+                if (
+                    not isinstance(gateway_result_values, (list, tuple))
+                    or not gateway_result_values
+                ):
+                    raise ValueError(
+                        "Kernel Trial annotation requires Gateway result Artifact Digests"
+                    )
+                gateway_results_list: list[ArtifactDigest] = []
+                for value in gateway_result_values:
+                    if not isinstance(value, str):
+                        raise ValueError("Kernel Trial annotation Gateway result must be text")
+                    gateway_results_list.append(parse_artifact_digest(value))
+                gateway_results = tuple(gateway_results_list)
                 if not isinstance(recorded_at, str) or not recorded_at:
                     raise ValueError("Kernel Trial annotation requires recorded_at")
-                observed = connection.execute(
-                    """SELECT 1 FROM gateway_operations
-                       WHERE attempt_id = ? AND recovery_generation = ?
-                         AND candidate_artifact_digest = ? LIMIT 1""",
-                    (attempt_id, generation, candidate),
-                ).fetchone()
-                if observed is None:
-                    raise ValueError(
-                        "Kernel Trial annotation references a candidate not observed "
-                        "in this Attempt"
-                    )
+                observed_after_results = {
+                    observation.gateway_result_digest
+                    for observation in after_trial.observations
+                    if observation.gateway_result_digest is not None
+                }
+                for gateway_result in gateway_results:
+                    if gateway_result not in observed_after_results:
+                        raise ValueError(
+                            "Kernel Trial annotation references a candidate/result pair not "
+                            "observed for the selected Trial"
+                        )
                 payload = json.dumps(
                     dict(experiment),
                     ensure_ascii=False,
@@ -753,25 +1182,26 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     sort_keys=True,
                     separators=(",", ":"),
                 )
-                values = (str(candidate), str(decision), payload, recorded_at)
+                values = (str(candidate), disposition, payload, recorded_at)
+                annotation_generation = after_trial.recovery_generation
                 existing = connection.execute(
                     """SELECT * FROM gateway_trial_annotations
                        WHERE attempt_id = ? AND recovery_generation = ? AND sequence = ?""",
-                    (attempt_id, generation, sequence),
+                    (attempt_id, annotation_generation, sequence),
                 ).fetchone()
                 if existing is None:
                     connection.execute(
                         """INSERT INTO gateway_trial_annotations(
                                attempt_id, recovery_generation, sequence,
-                               candidate_artifact_digest, decision, experiment_json, recorded_at
+                               kernel_artifact_digest, decision, experiment_json, recorded_at
                            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                        (attempt_id, generation, sequence, *values),
+                        (attempt_id, annotation_generation, sequence, *values),
                     )
                 elif (
                     tuple(
                         existing[column]
                         for column in (
-                            "candidate_artifact_digest",
+                            "kernel_artifact_digest",
                             "decision",
                             "experiment_json",
                             "recorded_at",
@@ -785,7 +1215,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 records.append(
                     GatewayKernelTrialAnnotation(
                         sequence=sequence,
-                        decision=str(decision),
+                        disposition=disposition,
                         experiment=json.loads(payload),
                         recorded_at=recorded_at,
                     )
@@ -806,14 +1236,14 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         placeholders = ",".join("?" for _attempt in attempt_ids)
         with self._lock:
             candidates = self._connection.execute(
-                f"""SELECT attempt_id, recovery_generation, candidate_artifact_digest,
+                f"""SELECT attempt_id, recovery_generation, kernel_artifact_digest,
                             MIN(created_at) AS first_created_at
                        FROM gateway_operations
                       WHERE attempt_id IN ({placeholders})
-                        AND candidate_artifact_digest IS NOT NULL
-                      GROUP BY attempt_id, recovery_generation, candidate_artifact_digest
+                        AND kernel_artifact_digest IS NOT NULL
+                      GROUP BY attempt_id, recovery_generation, kernel_artifact_digest
                       ORDER BY first_created_at, attempt_id, recovery_generation,
-                               candidate_artifact_digest
+                               kernel_artifact_digest
                       LIMIT ?""",
                 (*attempt_ids, limit),
             ).fetchall()
@@ -822,16 +1252,16 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             for candidate_row in candidates:
                 attempt = parse_attempt_id(str(candidate_row["attempt_id"]))
                 generation = int(candidate_row["recovery_generation"])
-                candidate = parse_artifact_digest(str(candidate_row["candidate_artifact_digest"]))
+                candidate = parse_artifact_digest(str(candidate_row["kernel_artifact_digest"]))
                 key = (str(attempt), generation)
                 ordinal = ordinals.get(key, 0) + 1
                 ordinals[key] = ordinal
                 operation_rows = self._connection.execute(
                     """SELECT idempotency_key, operation, request_digest,
-                              result_artifact_digest, created_at
+                              gateway_result_digest, result_artifact_digest, created_at
                          FROM gateway_operations
                         WHERE attempt_id = ? AND recovery_generation = ?
-                          AND candidate_artifact_digest = ?
+                          AND kernel_artifact_digest = ?
                         ORDER BY created_at, idempotency_key""",
                     (attempt, generation, candidate),
                 ).fetchall()
@@ -839,25 +1269,27 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     """SELECT sequence, decision, experiment_json, recorded_at
                          FROM gateway_trial_annotations
                         WHERE attempt_id = ? AND recovery_generation = ?
-                          AND candidate_artifact_digest = ?
+                          AND kernel_artifact_digest = ?
                         ORDER BY sequence""",
                     (attempt, generation, candidate),
                 ).fetchall()
-                identity = hashlib.sha256(
-                    f"{attempt}:{generation}:{candidate}".encode()
-                ).hexdigest()[:32]
                 records.append(
                     GatewayKernelTrialRecord(
-                        id=f"gtrial_{identity}",
+                        id=gateway_kernel_trial_id(attempt, generation, candidate),
                         attempt_id=attempt,
                         recovery_generation=generation,
                         ordinal=ordinal,
-                        candidate_artifact_digest=candidate,
+                        kernel_artifact_digest=candidate,
                         observations=tuple(
                             GatewayKernelTrialObservation(
                                 idempotency_key=str(row["idempotency_key"]),
                                 operation=GatewayOperation(str(row["operation"])),
                                 request_digest=parse_artifact_digest(str(row["request_digest"])),
+                                gateway_result_digest=(
+                                    None
+                                    if row["gateway_result_digest"] is None
+                                    else parse_artifact_digest(str(row["gateway_result_digest"]))
+                                ),
                                 result_artifact_digest=(
                                     None
                                     if row["result_artifact_digest"] is None
@@ -870,7 +1302,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         annotations=tuple(
                             GatewayKernelTrialAnnotation(
                                 sequence=int(row["sequence"]),
-                                decision=str(row["decision"]),
+                                disposition=str(row["decision"]),
                                 experiment=json.loads(str(row["experiment_json"])),
                                 recorded_at=str(row["recorded_at"]),
                             )
@@ -890,7 +1322,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 parse_attempt_id(str(row["attempt_id"]))
                 for row in self._connection.execute(
                     """SELECT DISTINCT attempt_id FROM gateway_operations
-                       WHERE candidate_artifact_digest IS NOT NULL"""
+                       WHERE kernel_artifact_digest IS NOT NULL"""
                 ).fetchall()
             )
         for trial in self.list_kernel_trials(attempts, limit=5_000):
@@ -943,7 +1375,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         *,
         source: GatewayEvaluationSource,
         idempotency_key: str,
-        candidate_artifact_digest: ArtifactDigest,
+        kernel_artifact_digest: ArtifactDigest,
         gateway_result_digest: ArtifactDigest,
         correct: bool,
         latency_us: float | None,
@@ -957,7 +1389,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             raise ValueError("a correct Gateway evaluation requires positive latency")
         if not correct and latency_us is not None:
             raise ValueError("an incorrect Gateway evaluation cannot carry latency")
-        candidate = parse_artifact_digest(str(candidate_artifact_digest))
+        candidate = parse_artifact_digest(str(kernel_artifact_digest))
         result = parse_artifact_digest(str(gateway_result_digest))
         generation = self._subject_generation(attempt_id)
         if recovery_generation is not None and recovery_generation != generation:
@@ -997,7 +1429,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 connection.execute(
                     """INSERT INTO gateway_evaluations(
                            id, attempt_id, recovery_generation, ordinal, source,
-                           idempotency_key, candidate_artifact_digest,
+                           idempotency_key, kernel_artifact_digest,
                            gateway_result_digest, correct, latency_us, agate_job_id,
                            created_at
                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
@@ -1016,7 +1448,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     for column in (
                         "source",
                         "idempotency_key",
-                        "candidate_artifact_digest",
+                        "kernel_artifact_digest",
                         "gateway_result_digest",
                         "correct",
                         "latency_us",
@@ -1065,7 +1497,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         *,
         source_operation: GatewayOperation,
         idempotency_key: str,
-        candidate_artifact_digest: ArtifactDigest,
+        kernel_artifact_digest: ArtifactDigest,
         gateway_result_digest: ArtifactDigest,
         points: tuple[GatewayMeasurementPoint, ...],
         recovery_generation: int | None = None,
@@ -1080,7 +1512,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         generation = self._subject_generation(attempt_id)
         if recovery_generation is not None and recovery_generation != generation:
             raise InvalidTransitionError("Gateway measurements belong to a stale generation")
-        candidate = parse_artifact_digest(str(candidate_artifact_digest))
+        candidate = parse_artifact_digest(str(kernel_artifact_digest))
         result = parse_artifact_digest(str(gateway_result_digest))
         created_at = self._clock().astimezone(UTC).isoformat()
         records: list[GatewayMeasurementRecord] = []
@@ -1135,7 +1567,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         ordinal=ordinal,
                         source_operation=source_operation,
                         idempotency_key=idempotency_key,
-                        candidate_artifact_digest=candidate,
+                        kernel_artifact_digest=candidate,
                         gateway_result_digest=result,
                         point=point,
                         created_at=created_at,
@@ -1164,7 +1596,15 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         except KeyError as error:
             reason = error.args[0] if error.args else error
             raise InvalidTransitionError(f"visible history is unavailable: {reason}") from error
-        visible: list[AttemptId] = []
+        with self._lock:
+            bootstrap_rows = self._connection.execute(
+                """SELECT attempt_id FROM bootstrap_gateway_subjects
+                    WHERE lineage_id = ? ORDER BY created_at, attempt_id""",
+                (str(lineage.id),),
+            ).fetchall()
+        visible: list[AttemptId] = [
+            parse_attempt_id(str(row["attempt_id"])) for row in bootstrap_rows
+        ]
         for epoch in self._registry.list_epochs(lineage.id):
             if epoch.number > current_epoch.number:
                 continue
@@ -1214,16 +1654,65 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         self,
         current_attempt_id: AttemptId,
     ) -> tuple[LineageId, tuple[AttemptId, ...]]:
-        """Return visible history plus the caller's own in-progress Kernel Trials."""
+        """Return completed branch history plus same-trajectory and live Kernel Trials."""
         lineage_id, visible = self.visible_measurement_attempt_ids(current_attempt_id)
-        return lineage_id, (*visible, current_attempt_id)
+        try:
+            current = self._registry.get_attempt(current_attempt_id)
+        except KeyError:
+            # Bootstrap subjects have no registered Attempt yet and can only read their own Trials.
+            return lineage_id, (*visible, current_attempt_id)
+        current_epoch = self._registry.get_epoch(current.epoch_id)
+        all_visible = list(visible)
+        seen = set(visible)
+        for epoch in self._registry.list_epochs(lineage_id):
+            if epoch.number >= current_epoch.number or epoch.status is not EpochStatus.COMPLETED:
+                continue
+            for attempt in self._registry.list_attempts(epoch.id):
+                if attempt.status is AttemptStatus.COMPLETED and attempt.id not in seen:
+                    all_visible.append(attempt.id)
+                    seen.add(attempt.id)
+        return lineage_id, (*all_visible, current_attempt_id)
+
+    def visible_attempt_report_artifacts(
+        self,
+        current_attempt_id: AttemptId,
+    ) -> tuple[tuple[AttemptId, ArtifactDigest], ...]:
+        """Return terminal Report Artifacts in the current Attempt's history scope."""
+        _lineage_id, visible_attempt_ids = self.visible_kernel_trial_attempt_ids(current_attempt_id)
+        values: list[tuple[AttemptId, ArtifactDigest]] = []
+        for attempt_id in visible_attempt_ids:
+            if attempt_id == current_attempt_id:
+                continue
+            try:
+                attempt = self._registry.get_attempt(attempt_id)
+            except KeyError:
+                completed_bootstrap = next(
+                    (
+                        run
+                        for run in reversed(self.list_bootstrap_runs(attempt_id))
+                        if run.status is BootstrapRunStatus.COMPLETED
+                        and run.report_digest is not None
+                    ),
+                    None,
+                )
+                if completed_bootstrap is not None:
+                    report_digest = completed_bootstrap.report_digest
+                    assert report_digest is not None
+                    values.append((attempt_id, report_digest))
+                continue
+            if (
+                attempt.status is AttemptStatus.COMPLETED
+                and attempt.attempt_report_digest is not None
+            ):
+                values.append((attempt.id, attempt.attempt_report_digest))
+        return tuple(values)
 
     def list_measurements(
         self,
         attempt_ids: tuple[AttemptId, ...],
         *,
         kind: GatewayOperation | None = None,
-        candidate_artifact_digest: ArtifactDigest | None = None,
+        kernel_artifact_digest: ArtifactDigest | None = None,
         shape_id: str | None = None,
         kernel_name: str | None = None,
         metric: str | None = None,
@@ -1242,9 +1731,9 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         if kind is not None:
             query += " AND kind = ?"
             parameters.append(kind.value)
-        if candidate_artifact_digest is not None:
-            query += " AND candidate_artifact_digest = ?"
-            parameters.append(str(parse_artifact_digest(str(candidate_artifact_digest))))
+        if kernel_artifact_digest is not None:
+            query += " AND kernel_artifact_digest = ?"
+            parameters.append(str(parse_artifact_digest(str(kernel_artifact_digest))))
         if shape_id is not None:
             query += " AND shape_id = ?"
             parameters.append(shape_id)
@@ -1291,7 +1780,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
     def find_agent_evaluation(
         self,
         attempt_id: AttemptId,
-        candidate_artifact_digest: ArtifactDigest,
+        kernel_artifact_digest: ArtifactDigest,
         *,
         gateway_result_digest: ArtifactDigest | None = None,
         recovery_generation: int | None = None,
@@ -1303,12 +1792,12 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             raise InvalidTransitionError("Agent evaluation lookup uses an invalid generation")
         query = """SELECT * FROM gateway_evaluations
                    WHERE attempt_id = ? AND recovery_generation = ? AND source = ?
-                     AND candidate_artifact_digest = ?"""
+                     AND kernel_artifact_digest = ?"""
         parameters: list[object] = [
             attempt_id,
             generation,
             GatewayEvaluationSource.AGENT.value,
-            str(parse_artifact_digest(str(candidate_artifact_digest))),
+            str(parse_artifact_digest(str(kernel_artifact_digest))),
         ]
         if gateway_result_digest is not None:
             query += " AND gateway_result_digest = ?"
@@ -1360,7 +1849,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 "authoritative outcome requires a current Runtime-final evaluation"
             )
         outcome = AttemptCandidateResult(
-            artifact_digest=evaluation.candidate_artifact_digest,
+            artifact_digest=evaluation.kernel_artifact_digest,
             gateway_result_digest=evaluation.gateway_result_digest,
             correct=evaluation.correct,
             latency_us=evaluation.latency_us,
@@ -1416,7 +1905,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             ordinal=int(row["ordinal"]),
             source=GatewayEvaluationSource(str(row["source"])),
             idempotency_key=str(row["idempotency_key"]),
-            candidate_artifact_digest=parse_artifact_digest(str(row["candidate_artifact_digest"])),
+            kernel_artifact_digest=parse_artifact_digest(str(row["kernel_artifact_digest"])),
             gateway_result_digest=parse_artifact_digest(str(row["gateway_result_digest"])),
             correct=bool(row["correct"]),
             latency_us=None if row["latency_us"] is None else float(row["latency_us"]),
@@ -1440,7 +1929,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             ordinal=int(row["ordinal"]),
             source_operation=GatewayOperation(str(row["source_operation"])),
             idempotency_key=str(row["idempotency_key"]),
-            candidate_artifact_digest=parse_artifact_digest(str(row["candidate_artifact_digest"])),
+            kernel_artifact_digest=parse_artifact_digest(str(row["kernel_artifact_digest"])),
             gateway_result_digest=parse_artifact_digest(str(row["gateway_result_digest"])),
             point=GatewayMeasurementPoint(
                 kind=GatewayOperation(str(row["kind"])),

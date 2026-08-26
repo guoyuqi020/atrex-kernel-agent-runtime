@@ -6,12 +6,14 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from typing import cast
 
 import anyio
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..bootstrap import CampaignBootstrapper, GeneratedLineageBaseline, RooflineMode
 from ..config import RuntimeSettings
+from ..domain.errors import InfrastructureError
 from ..domain.ids import (
     ArtifactDigest,
     AttemptId,
@@ -37,6 +39,7 @@ from ..gateway.control_models import (
     GatewayCapabilityPolicy,
     GatewayEvaluationSource,
     GatewayOperation,
+    gateway_kernel_trial_id,
 )
 from ..gateway.environment import AgateHardwareTargetResolver
 from ..gateway.lineage_seed import AgateLineageSeedEvaluator
@@ -50,12 +53,12 @@ from ..workers import (
     CoreAgentProblemGenerator,
     CoreLineageBootstrapSessionDriver,
     CoreProblemGeneralizationSessionDriver,
-    LineageBootstrapManifestV1,
-    LineageBootstrapReportV1,
+    LineageBootstrapManifestV2,
     LineageBootstrapSessionConfig,
     LineageBootstrapWorkspaceAssembler,
     ProblemGeneralizationWorkspaceAssembler,
 )
+from ..workers.attempt_report import AttemptReportV12
 from .campaign import (
     build_core_process_config,
     build_worker_launcher,
@@ -267,7 +270,10 @@ class CoreLineageBaselineGenerator:
         environment: tuple[tuple[str, str], ...],
         wiki_enabled: bool,
         backend: str | None = None,
+        max_infrastructure_retries: int = 0,
     ) -> None:
+        if max_infrastructure_retries < 0:
+            raise ValueError("Bootstrap infrastructure retries cannot be negative")
         self._workspaces = workspaces
         self._sessions = sessions
         self._control = control
@@ -281,8 +287,73 @@ class CoreLineageBaselineGenerator:
         self._environment = environment
         self._wiki_enabled = wiki_enabled
         self._backend = backend
+        self._max_infrastructure_retries = max_infrastructure_retries
 
     def generate(
+        self,
+        *,
+        bootstrap_attempt_id: AttemptId,
+        campaign_id: CampaignId,
+        lineage_id: LineageId,
+        kernel_agent_revision_id: KernelAgentRevisionId,
+        optimizer_digest: ArtifactDigest,
+        input_kernel_digest: ArtifactDigest,
+        evaluation_contract_digest: ArtifactDigest,
+        agent_problem_digest: ArtifactDigest,
+        evidence_digest: ArtifactDigest,
+        dsl: Dsl,
+        operator: str,
+        hardware_target: str,
+        model: str | None = None,
+    ) -> GeneratedLineageBaseline:
+        """Retry transient Bootstrap infrastructure failures with fresh authority."""
+        failures = 0
+        while True:
+            try:
+                return self._generate_once(
+                    bootstrap_attempt_id=bootstrap_attempt_id,
+                    campaign_id=campaign_id,
+                    lineage_id=lineage_id,
+                    kernel_agent_revision_id=kernel_agent_revision_id,
+                    optimizer_digest=optimizer_digest,
+                    input_kernel_digest=input_kernel_digest,
+                    evaluation_contract_digest=evaluation_contract_digest,
+                    agent_problem_digest=agent_problem_digest,
+                    evidence_digest=evidence_digest,
+                    dsl=dsl,
+                    operator=operator,
+                    hardware_target=hardware_target,
+                    model=model,
+                )
+            except InfrastructureError as error:
+                failures += 1
+                if failures > self._max_infrastructure_retries:
+                    if self._max_infrastructure_retries:
+                        error.add_note(
+                            "Bootstrap infrastructure retry budget exhausted: "
+                            f"failures={failures}, "
+                            f"max_retries={self._max_infrastructure_retries}"
+                        )
+                    raise
+                failed_generation = self._control.current_generation(bootstrap_attempt_id)
+                self._registry.record_runtime_event(
+                    "bootstrap.lineage_baseline_retrying",
+                    bootstrap_attempt_id,
+                    {
+                        "campaign_id": campaign_id,
+                        "lineage_id": lineage_id,
+                        "kernel_agent_revision_id": kernel_agent_revision_id,
+                        "dsl": dsl.value,
+                        "failed_generation": failed_generation,
+                        "next_generation": failed_generation + 1,
+                        "retry_number": failures,
+                        "max_infrastructure_retries": self._max_infrastructure_retries,
+                        "error_type": type(error).__name__,
+                        "error_message": str(error),
+                    },
+                )
+
+    def _generate_once(
         self,
         *,
         bootstrap_attempt_id: AttemptId,
@@ -330,7 +401,28 @@ class CoreLineageBaselineGenerator:
         recovered = self._control.get_committed_outcome(bootstrap_attempt_id)
         if recovered is not None:
             self._control.revoke(bootstrap_attempt_id)
-            return self._validated_outcome(recovered, bootstrap_attempt_id)
+            completed = next(
+                (
+                    run
+                    for run in reversed(self._control.list_bootstrap_runs(bootstrap_attempt_id))
+                    if run.status is BootstrapRunStatus.COMPLETED
+                    and run.report_digest is not None
+                    and run.session_trace_digest is not None
+                ),
+                None,
+            )
+            if completed is None:
+                raise RuntimeError(
+                    "Committed Bootstrap outcome has no completed Report and Session Trace"
+                )
+            validated = self._validated_outcome(recovered, bootstrap_attempt_id)
+            return GeneratedLineageBaseline(
+                validated.artifact_digest,
+                validated.gateway_result_digest,
+                cast(float, validated.latency_us),
+                cast(ArtifactDigest, completed.report_digest),
+                cast(ArtifactDigest, completed.session_trace_digest),
+            )
         result = None
         outcome = None
         terminal_reason = "infrastructure-error"
@@ -348,8 +440,9 @@ class CoreLineageBaselineGenerator:
             )
             if checkpoint is None:
                 prepared = self._workspaces.prepare(
-                    LineageBootstrapManifestV1(
+                    LineageBootstrapManifestV2(
                         bootstrap_attempt_id=bootstrap_attempt_id,
+                        lineage_id=lineage_id,
                         kernel_agent_revision_id=kernel_agent_revision_id,
                         input_kernel_digest=input_kernel_digest,
                         optimizer_digest=optimizer_digest,
@@ -396,6 +489,11 @@ class CoreLineageBaselineGenerator:
                         wiki_capability=capability.token if self._wiki_enabled else None,
                     ),
                 )
+                if result.finish_reason.startswith("process-exit-"):
+                    terminal_reason = result.finish_reason
+                    raise InfrastructureError(
+                        f"Core lineage baseline {result.finish_reason}"
+                    )
                 if result.finish_reason != "completed":
                     terminal_reason = result.finish_reason
                     raise RuntimeError(f"Core lineage baseline {result.finish_reason}")
@@ -408,12 +506,38 @@ class CoreLineageBaselineGenerator:
                 if result.report.status == "blocked":
                     terminal_reason = "blocked"
                     raise RuntimeError(f"Core lineage baseline blocked: {result.report.blocker}")
-                if result.candidate_artifact_digest is None:
+                if result.report.status != "candidate_ready":
+                    terminal_reason = "invalid-report-status"
+                    raise ValueError(
+                        "Bootstrap Attempt must nominate a candidate or report blocked"
+                    )
+                if result.kernel_artifact_digest is None:
                     terminal_reason = "missing-candidate"
                     raise ValueError("Core lineage baseline did not submit a candidate Kernel")
-                if result.report.candidate_artifact_digest != result.candidate_artifact_digest:
-                    terminal_reason = "candidate-mismatch"
-                    raise ValueError("Core lineage baseline report disagrees with submitted Kernel")
+                nominated_result_digest, nominated_generation = self._nominated_evaluation(
+                    result.report,
+                    bootstrap_attempt_id,
+                    result.kernel_artifact_digest,
+                    capability.recovery_generation,
+                )
+                terminal_reason = "invalid-report-references"
+                self._control.record_kernel_trial_annotations(
+                    bootstrap_attempt_id,
+                    tuple(
+                        experiment.model_dump(mode="json")
+                        for experiment in result.report.experiments
+                    ),
+                    profile_supporting_results=(
+                        ()
+                        if result.report.profile_evidence is None
+                        else tuple(
+                            item.model_dump(mode="json")
+                            for item in result.report.profile_evidence.supporting_results
+                        )
+                    ),
+                    recovery_generation=capability.recovery_generation,
+                    allow_baseline=True,
+                )
                 self._registry.finish_worker_session(
                     worker_session_id,
                     status=WorkerSessionStatus.COMPLETED,
@@ -423,9 +547,7 @@ class CoreLineageBaselineGenerator:
                     token_usage=result.token_usage,
                 )
                 worker_session_terminal = True
-                candidate_digest = result.candidate_artifact_digest
-                nominated_result_digest = result.report.gateway_result_digest
-                nominated_generation = capability.recovery_generation
+                candidate_digest = result.kernel_artifact_digest
             else:
                 self._control.begin_bootstrap_run(
                     bootstrap_attempt_id,
@@ -448,7 +570,7 @@ class CoreLineageBaselineGenerator:
                     nominated_recovery_generation=nominated_generation,
                 )
             )
-            baseline = self._validated_outcome(outcome, bootstrap_attempt_id)
+            self._validated_outcome(outcome, bootstrap_attempt_id)
         except BaseException as error:
             if worker_session_id is not None and not worker_session_terminal:
                 timed_out = "wall-time limit" in str(error)
@@ -483,7 +605,7 @@ class CoreLineageBaselineGenerator:
                 outcome.artifact_digest
                 if outcome is not None
                 else (
-                    result.candidate_artifact_digest
+                    result.kernel_artifact_digest
                     if result is not None
                     else None
                     if checkpoint is None
@@ -557,7 +679,13 @@ class CoreLineageBaselineGenerator:
                 "latency_us": outcome.latency_us,
             },
         )
-        return baseline
+        return GeneratedLineageBaseline(
+            outcome.artifact_digest,
+            outcome.gateway_result_digest,
+            cast(float, outcome.latency_us),
+            cast(ArtifactDigest, run.report_digest),
+            cast(ArtifactDigest, run.session_trace_digest),
+        )
 
     def _reconcile_superseded_worker_sessions(
         self,
@@ -603,46 +731,80 @@ class CoreLineageBaselineGenerator:
             report_artifact = self._artifacts.verify(run.report_digest)
             if report_artifact.kind is not ArtifactKind.ATTEMPT_REPORT:
                 raise ValueError("Bootstrap recovery report Artifact has the wrong kind")
-            report = LineageBootstrapReportV1.model_validate_json(
+            report = AttemptReportV12.model_validate_json(
                 report_artifact.payload_path.joinpath("value.json").read_bytes()
             )
-            if report.bootstrap_attempt_id != attempt_id:
+            if report.attempt_id != attempt_id:
                 raise ValueError("Bootstrap recovery report belongs to another Attempt")
-            if (
-                report.status != "baseline_ready"
-                or report.candidate_artifact_digest is None
-                or report.gateway_result_digest is None
-            ):
+            if report.status != "candidate_ready" or run.candidate_digest is None:
                 continue
-            candidate = self._artifacts.verify(report.candidate_artifact_digest)
+            candidate = self._artifacts.verify(run.candidate_digest)
             if candidate.kind is not ArtifactKind.KERNEL:
                 raise ValueError("Bootstrap recovery candidate Artifact has the wrong kind")
-            gateway_result = self._artifacts.verify(report.gateway_result_digest)
-            if gateway_result.kind is not ArtifactKind.GATEWAY_RESULT:
-                raise ValueError("Bootstrap recovery Gateway result Artifact has the wrong kind")
-            evaluation = next(
-                (
-                    item
-                    for item in reversed(self._control.list_evaluations(attempt_id))
-                    if item.recovery_generation < before_generation
-                    and item.source is GatewayEvaluationSource.AGENT
-                    and item.candidate_artifact_digest == report.candidate_artifact_digest
-                    and item.gateway_result_digest == report.gateway_result_digest
-                    and item.correct
-                ),
+            result_digest, generation = self._nominated_evaluation(
+                report,
+                attempt_id,
+                run.candidate_digest,
                 None,
             )
-            if evaluation is None:
-                raise ValueError("Bootstrap recovery nomination has no correct Agent evaluation")
+            gateway_result = self._artifacts.verify(result_digest)
+            if gateway_result.kind is not ArtifactKind.GATEWAY_RESULT:
+                raise ValueError("Bootstrap recovery Gateway result Artifact has the wrong kind")
             return _BaselineFinalizationCheckpoint(
-                recovery_generation=evaluation.recovery_generation,
+                recovery_generation=generation,
                 workspace_path=run.workspace_path,
                 session_trace_digest=run.session_trace_digest,
                 report_digest=run.report_digest,
-                candidate_digest=report.candidate_artifact_digest,
-                nominated_gateway_result_digest=report.gateway_result_digest,
+                candidate_digest=run.candidate_digest,
+                nominated_gateway_result_digest=result_digest,
             )
         return None
+
+    def _nominated_evaluation(
+        self,
+        report: AttemptReportV12,
+        attempt_id: AttemptId,
+        candidate_digest: ArtifactDigest,
+        recovery_generation: int | None,
+    ) -> tuple[ArtifactDigest, int]:
+        """Resolve the correct Evaluate explicitly bound to the final Kernel by its Journal."""
+        referenced_bindings: set[tuple[str, ArtifactDigest]] = set()
+        for experiment in report.experiments:
+            for subject in (experiment.before, experiment.after):
+                if (
+                    subject is not None
+                    and subject.kernel_artifact_digest == candidate_digest
+                ):
+                    referenced_bindings.update(
+                        (subject.kernel_trial_id, result)
+                        for result in subject.gateway_result_digests
+                    )
+        evaluation = next(
+            (
+                item
+                for item in reversed(self._control.list_evaluations(attempt_id))
+                if (recovery_generation is None or item.recovery_generation == recovery_generation)
+                and item.source is GatewayEvaluationSource.AGENT
+                and item.kernel_artifact_digest == candidate_digest
+                and (
+                    gateway_kernel_trial_id(
+                        attempt_id,
+                        item.recovery_generation,
+                        candidate_digest,
+                    ),
+                    item.gateway_result_digest,
+                )
+                in referenced_bindings
+                and item.correct
+            ),
+            None,
+        )
+        if evaluation is None:
+            raise ValueError(
+                "Bootstrap candidate has no correct Agent Evaluate referenced by its Experiment "
+                "Journal"
+            )
+        return evaluation.gateway_result_digest, evaluation.recovery_generation
 
     @staticmethod
     def _run_event_payload(
@@ -662,7 +824,7 @@ class CoreLineageBaselineGenerator:
             "status": run.status.value,
             "finish_reason": run.finish_reason,
             "failure_reason": run.failure_reason,
-            "candidate_artifact_digest": run.candidate_digest,
+            "kernel_artifact_digest": run.candidate_digest,
             "gateway_result_digest": run.gateway_result_digest,
             "baseline_report_artifact_digest": run.report_digest,
             "session_trace_digest": run.session_trace_digest,
@@ -677,14 +839,10 @@ class CoreLineageBaselineGenerator:
     @staticmethod
     def _validated_outcome(
         outcome: AttemptCandidateResult, attempt_id: AttemptId
-    ) -> GeneratedLineageBaseline:
+    ) -> AttemptCandidateResult:
         if not outcome.correct or outcome.latency_us is None:
             raise ValueError(f"Core lineage baseline is not correct: {attempt_id}")
-        return GeneratedLineageBaseline(
-            outcome.artifact_digest,
-            outcome.gateway_result_digest,
-            outcome.latency_us,
-        )
+        return outcome
 
 
 def build_core_lineage_baseline_generator(
@@ -713,6 +871,7 @@ def build_core_lineage_baseline_generator(
         LineageBootstrapWorkspaceAssembler(
             campaign.lineage_bootstrap_workspaces_root,
             artifacts,
+            attempt_workspaces_root=campaign.attempt_workspaces_root,
         ),
         CoreLineageBootstrapSessionDriver(
             build_worker_launcher(settings, environment),
@@ -733,4 +892,5 @@ def build_core_lineage_baseline_generator(
         environment=campaign.optimizer.environment.resolve(environment),
         wiki_enabled=settings.gpu_wiki is not None,
         backend=campaign.optimizer.agent_backend,
+        max_infrastructure_retries=campaign.max_infrastructure_retries,
     )

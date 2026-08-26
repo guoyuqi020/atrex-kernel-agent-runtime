@@ -977,11 +977,17 @@ async def test_administration_exposes_every_evaluation_source_and_result(
             GatewayOperation.EVALUATE,
             agent_result,
         )
+        control.bind_operation_gateway_result(
+            attempt_id,
+            "agent-1",
+            GatewayOperation.EVALUATE,
+            agent_result,
+        )
         agent = control.record_evaluation(
             attempt_id,
             source=GatewayEvaluationSource.AGENT,
             idempotency_key="agent-1",
-            candidate_artifact_digest=candidate,
+            kernel_artifact_digest=candidate,
             gateway_result_digest=agent_result,
             correct=True,
             latency_us=10.0,
@@ -991,7 +997,7 @@ async def test_administration_exposes_every_evaluation_source_and_result(
             attempt_id,
             source=GatewayEvaluationSource.RUNTIME_FINAL,
             idempotency_key="runtime-final",
-            candidate_artifact_digest=candidate,
+            kernel_artifact_digest=candidate,
             gateway_result_digest=final_result,
             correct=True,
             latency_us=11.0,
@@ -1001,15 +1007,25 @@ async def test_administration_exposes_every_evaluation_source_and_result(
             attempt_id,
             (
                 {
+                    "experiment_id": "experiment_" + "a" * 32,
                     "sequence": 1,
                     "recorded_at": NOW,
                     "name": "reverted experiment",
                     "hypothesis": "test",
                     "change": "test",
-                    "candidate_artifact_digest": str(candidate),
+                    "before": {
+                        "kernel_artifact_digest": str(candidate),
+                        "kernel_trial_id": control.list_kernel_trials((attempt_id,))[0].id,
+                        "gateway_result_digests": [str(agent_result)],
+                    },
+                    "after": {
+                        "kernel_artifact_digest": str(candidate),
+                        "kernel_trial_id": control.list_kernel_trials((attempt_id,))[0].id,
+                        "gateway_result_digests": [str(agent_result)],
+                    },
                     "evidence": "agent-1",
-                    "result": "regressed",
-                    "decision": "revert",
+                    "analysis": "the hypothesis failed because latency regressed",
+                    "action": "restore_before",
                 },
             ),
         )
@@ -1073,8 +1089,7 @@ async def test_administration_exposes_every_evaluation_source_and_result(
         status, trial_results = await _request(
             app,
             "GET",
-            f"/v1/admin/attempts/{attempt_id}/kernel-trials/"
-            f"{trial['kernel_trial_id']}/results",
+            f"/v1/admin/attempts/{attempt_id}/kernel-trials/{trial['kernel_trial_id']}/results",
         )
         assert status == 200
         assert trial_results["results"][0]["result"] == {"stage": "agent"}

@@ -499,9 +499,7 @@ class BwrapSandboxSettings(BwrapFilesystemSettings):
         executable = self.systemd_run_executable
         if not executable.is_absolute():
             executable = (base / executable).resolve()
-        return resolved.model_copy(
-            update={"systemd_run_executable": executable}
-        )
+        return resolved.model_copy(update={"systemd_run_executable": executable})
 
 
 class BackendCredentialSettings(BaseModel):
@@ -691,7 +689,7 @@ class GatePolicySettings(BaseModel):
     atol: float = Field(default=1e-2, ge=0)
     rtol: float = Field(default=0.05, ge=0)
     evaluation_timeout_seconds: int = Field(default=600, gt=0)
-    candidate_timeout_seconds: float = Field(default=20.0, gt=0)
+    candidate_timeout_seconds: float = Field(default=120.0, gt=0)
     performance_timeout_seconds: float = Field(default=120.0, gt=0)
     lock_clocks: bool = True
     evaluator: AtrexBenchComparisonEvaluatorSettings
@@ -758,11 +756,9 @@ class CampaignRuntimeSettings(BaseModel):
     gateway_operations: tuple[
         Literal[
             "evaluate",
-            "submit",
             "profile",
             "dev",
             "check",
-            "sol",
             "disassemble",
             "poll",
             "jobs",
@@ -927,11 +923,7 @@ class RuntimeSettings(BaseModel):
         exposed = boundary.read_only_bind_paths
         if boundary.reference_projects_root is not None:
             exposed = (*exposed, boundary.reference_projects_root)
-        if any(
-            bind.resolve().is_relative_to(root.resolve())
-            for bind in exposed
-            for root in roots
-        ):
+        if any(bind.resolve().is_relative_to(root.resolve()) for bind in exposed for root in roots):
             raise ValueError("Sandbox read-only bind paths cannot expose Worker roots")
         runtime_storage_roots = (
             self.storage.artifacts_root,

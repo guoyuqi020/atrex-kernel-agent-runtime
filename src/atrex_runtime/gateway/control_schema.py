@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-GATEWAY_SCHEMA_VERSION = 9
+GATEWAY_SCHEMA_VERSION = 12
 
 
 def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
@@ -56,6 +56,7 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
                 operation TEXT NOT NULL,
                 request_digest TEXT NOT NULL,
                 candidate_artifact_digest TEXT,
+                gateway_result_digest TEXT,
                 result_artifact_digest TEXT,
                 created_at TEXT NOT NULL,
                 PRIMARY KEY(attempt_id, recovery_generation, idempotency_key),
@@ -81,6 +82,8 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
         _create_gateway_measurements_table(connection)
         _create_gateway_trial_annotations_table(connection)
         _create_bootstrap_runs_table(connection)
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
         connection.execute(
             "INSERT INTO metadata(key, value) VALUES ('schema_version', ?)",
             (GATEWAY_SCHEMA_VERSION,),
@@ -109,6 +112,9 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
         _migrate_gateway_v7(connection)
         _migrate_gateway_v8(connection)
         _migrate_gateway_v9(connection)
+        _migrate_gateway_v10(connection)
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -119,6 +125,9 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
         _migrate_gateway_v7(connection)
         _migrate_gateway_v8(connection)
         _migrate_gateway_v9(connection)
+        _migrate_gateway_v10(connection)
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -128,6 +137,9 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
         _migrate_gateway_v7(connection)
         _migrate_gateway_v8(connection)
         _migrate_gateway_v9(connection)
+        _migrate_gateway_v10(connection)
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -136,6 +148,9 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
         _migrate_gateway_v7(connection)
         _migrate_gateway_v8(connection)
         _migrate_gateway_v9(connection)
+        _migrate_gateway_v10(connection)
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -143,12 +158,39 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
     elif row["value"] == 7:
         _migrate_gateway_v8(connection)
         _migrate_gateway_v9(connection)
+        _migrate_gateway_v10(connection)
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
         )
     elif row["value"] == 8:
         _migrate_gateway_v9(connection)
+        _migrate_gateway_v10(connection)
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
+            (GATEWAY_SCHEMA_VERSION,),
+        )
+    elif row["value"] == 9:
+        _migrate_gateway_v10(connection)
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
+            (GATEWAY_SCHEMA_VERSION,),
+        )
+    elif row["value"] == 10:
+        _migrate_gateway_v11(connection)
+        _migrate_gateway_v12(connection)
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
+            (GATEWAY_SCHEMA_VERSION,),
+        )
+    elif row["value"] == 11:
+        _migrate_gateway_v12(connection)
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -181,6 +223,91 @@ def _create_gateway_evaluations_table(connection: sqlite3.Connection) -> None:
     )
 
 
+def _migrate_gateway_v10(connection: sqlite3.Connection) -> None:
+    """Distinguish the upstream Gateway result from the cached Proxy response Artifact."""
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(gateway_operations)").fetchall()
+    }
+    if "gateway_result_digest" not in columns:
+        connection.execute("ALTER TABLE gateway_operations ADD COLUMN gateway_result_digest TEXT")
+
+
+def _migrate_gateway_v11(connection: sqlite3.Connection) -> None:
+    """Name sealed candidate Artifacts by their durable Kernel identity."""
+    for table in (
+        "gateway_operations",
+        "gateway_evaluations",
+        "gateway_measurements",
+        "gateway_trial_annotations",
+    ):
+        columns = {
+            str(row["name"]) for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+        }
+        if "candidate_artifact_digest" in columns:
+            connection.execute(
+                f"ALTER TABLE {table} RENAME COLUMN "
+                "candidate_artifact_digest TO kernel_artifact_digest"
+            )
+
+    connection.executescript(
+        """
+        DROP INDEX IF EXISTS gateway_measurements_by_candidate;
+        DROP INDEX IF EXISTS gateway_operations_by_candidate;
+        DROP INDEX IF EXISTS gateway_trial_annotations_by_candidate;
+        CREATE INDEX IF NOT EXISTS gateway_measurements_by_kernel
+            ON gateway_measurements(kernel_artifact_digest, created_at, id);
+        CREATE INDEX IF NOT EXISTS gateway_operations_by_kernel
+            ON gateway_operations(
+                attempt_id, recovery_generation, kernel_artifact_digest, created_at
+            );
+        CREATE INDEX IF NOT EXISTS gateway_trial_annotations_by_kernel
+            ON gateway_trial_annotations(
+                attempt_id, recovery_generation, kernel_artifact_digest, sequence
+            );
+        """
+    )
+
+
+def _migrate_gateway_v12(connection: sqlite3.Connection) -> None:
+    """Persist live Direction and Experiment Journals at Runtime request boundaries."""
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS runtime_direction_events(
+            attempt_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL CHECK(sequence > 0),
+            recovery_generation INTEGER NOT NULL CHECK(recovery_generation >= 0),
+            idempotency_key TEXT NOT NULL,
+            direction_event_id TEXT NOT NULL UNIQUE,
+            direction_id TEXT NOT NULL,
+            event_json TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
+            PRIMARY KEY(attempt_id, sequence),
+            UNIQUE(attempt_id, idempotency_key),
+            FOREIGN KEY(attempt_id) REFERENCES gateway_capabilities(attempt_id)
+        );
+        CREATE INDEX IF NOT EXISTS runtime_direction_events_by_direction
+            ON runtime_direction_events(attempt_id, direction_id, sequence);
+
+        CREATE TABLE IF NOT EXISTS runtime_experiments(
+            attempt_id TEXT NOT NULL,
+            sequence INTEGER NOT NULL CHECK(sequence > 0),
+            recovery_generation INTEGER NOT NULL CHECK(recovery_generation >= 0),
+            idempotency_key TEXT NOT NULL,
+            experiment_id TEXT NOT NULL UNIQUE,
+            direction_id TEXT NOT NULL,
+            experiment_json TEXT NOT NULL,
+            recorded_at TEXT NOT NULL,
+            PRIMARY KEY(attempt_id, sequence),
+            UNIQUE(attempt_id, idempotency_key),
+            FOREIGN KEY(attempt_id) REFERENCES gateway_capabilities(attempt_id)
+        );
+        CREATE INDEX IF NOT EXISTS runtime_experiments_by_direction
+            ON runtime_experiments(attempt_id, direction_id, sequence);
+        """
+    )
+
+
 def _create_gateway_measurements_table(connection: sqlite3.Connection) -> None:
     connection.executescript(
         """
@@ -204,9 +331,25 @@ def _create_gateway_measurements_table(connection: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS gateway_measurements_by_attempt
             ON gateway_measurements(attempt_id, recovery_generation, created_at, ordinal);
-        CREATE INDEX IF NOT EXISTS gateway_measurements_by_candidate
-            ON gateway_measurements(candidate_artifact_digest, created_at, id);
         """
+    )
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(gateway_measurements)").fetchall()
+    }
+    digest_column = (
+        "kernel_artifact_digest"
+        if "kernel_artifact_digest" in columns
+        else "candidate_artifact_digest"
+    )
+    index_name = (
+        "gateway_measurements_by_kernel"
+        if digest_column == "kernel_artifact_digest"
+        else "gateway_measurements_by_candidate"
+    )
+    connection.execute(
+        f"CREATE INDEX IF NOT EXISTS {index_name} "
+        f"ON gateway_measurements({digest_column}, created_at, id)"
     )
 
 
@@ -237,7 +380,7 @@ def _migrate_gateway_v8(connection: sqlite3.Connection) -> None:
 
 
 def _migrate_gateway_v9(connection: sqlite3.Connection) -> None:
-    """Retain every candidate-bearing operation and its terminal experiment decision."""
+    """Retain every candidate-bearing operation and its terminal Experiment disposition."""
     columns = {
         str(row["name"])
         for row in connection.execute("PRAGMA table_info(gateway_operations)").fetchall()
@@ -246,11 +389,20 @@ def _migrate_gateway_v9(connection: sqlite3.Connection) -> None:
         connection.execute(
             "ALTER TABLE gateway_operations ADD COLUMN candidate_artifact_digest TEXT"
         )
+    evaluation_columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(gateway_evaluations)").fetchall()
+    }
+    evaluation_digest_column = (
+        "kernel_artifact_digest"
+        if "kernel_artifact_digest" in evaluation_columns
+        else "candidate_artifact_digest"
+    )
     connection.execute(
-        """
+        f"""
         UPDATE gateway_operations
            SET candidate_artifact_digest = (
-               SELECT evaluations.candidate_artifact_digest
+               SELECT evaluations.{evaluation_digest_column}
                  FROM gateway_evaluations AS evaluations
                 WHERE evaluations.attempt_id = gateway_operations.attempt_id
                   AND evaluations.recovery_generation = gateway_operations.recovery_generation
@@ -261,11 +413,20 @@ def _migrate_gateway_v9(connection: sqlite3.Connection) -> None:
            AND operation = 'evaluate'
         """
     )
+    measurement_columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(gateway_measurements)").fetchall()
+    }
+    measurement_digest_column = (
+        "kernel_artifact_digest"
+        if "kernel_artifact_digest" in measurement_columns
+        else "candidate_artifact_digest"
+    )
     connection.execute(
-        """
+        f"""
         UPDATE gateway_operations
            SET candidate_artifact_digest = (
-               SELECT measurements.candidate_artifact_digest
+               SELECT measurements.{measurement_digest_column}
                  FROM gateway_measurements AS measurements
                 WHERE measurements.attempt_id = gateway_operations.attempt_id
                   AND measurements.recovery_generation = gateway_operations.recovery_generation
@@ -288,7 +449,7 @@ def _migrate_gateway_v9(connection: sqlite3.Connection) -> None:
 
 
 def _create_gateway_trial_annotations_table(connection: sqlite3.Connection) -> None:
-    connection.executescript(
+    connection.execute(
         """
         CREATE TABLE IF NOT EXISTS gateway_trial_annotations(
             attempt_id TEXT NOT NULL,
@@ -300,12 +461,27 @@ def _create_gateway_trial_annotations_table(connection: sqlite3.Connection) -> N
             recorded_at TEXT NOT NULL,
             PRIMARY KEY(attempt_id, recovery_generation, sequence),
             FOREIGN KEY(attempt_id) REFERENCES gateway_capabilities(attempt_id)
-        );
-        CREATE INDEX IF NOT EXISTS gateway_trial_annotations_by_candidate
-            ON gateway_trial_annotations(
-                attempt_id, recovery_generation, candidate_artifact_digest, sequence
-            );
+        )
         """
+    )
+    columns = {
+        str(row["name"])
+        for row in connection.execute("PRAGMA table_info(gateway_trial_annotations)").fetchall()
+    }
+    digest_column = (
+        "kernel_artifact_digest"
+        if "kernel_artifact_digest" in columns
+        else "candidate_artifact_digest"
+    )
+    index_name = (
+        "gateway_trial_annotations_by_kernel"
+        if digest_column == "kernel_artifact_digest"
+        else "gateway_trial_annotations_by_candidate"
+    )
+    connection.execute(
+        f"CREATE INDEX IF NOT EXISTS {index_name} "
+        "ON gateway_trial_annotations("
+        f"attempt_id, recovery_generation, {digest_column}, sequence)"
     )
 
 

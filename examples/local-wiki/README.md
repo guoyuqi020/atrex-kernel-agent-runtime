@@ -73,7 +73,7 @@ Attempt environment, but does not start an Agent backend. Inside the shell, use 
 Runtime Tool:
 
 ```bash
-python agent/optimizer/src/runtime_tools.py \
+python3 agent/optimizer/src/runtime_tools.py \
   wiki-query --request scratch/wiki-query.json
 ```
 
@@ -127,7 +127,7 @@ workspace-owned `scratch/` directory:
 
 ```bash
 cp /path/to/atrex-runtime/examples/local-wiki/wiki-query.json scratch/wiki-query.json
-python agent/optimizer/src/runtime_tools.py \
+python3 agent/optimizer/src/runtime_tools.py \
   wiki-query --request scratch/wiki-query.json
 ```
 
@@ -201,6 +201,6 @@ python3 \
 ```
 
 The capability is not printed, but it is present in the process environment; do not copy `env`
-output into logs or chats. No token quota is charged because no Agent starts. Explicit `submit`,
-`evaluate`, or Wiki tool calls are still real controlled operations: they consume capability call
+output into logs or chats. No token quota is charged because no Agent starts. Explicit `evaluate`
+or Wiki tool calls are still real controlled operations: they consume capability call
 budget and create audit records. Do not run a Campaign scheduler for the same lineage concurrently.

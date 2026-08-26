@@ -12,6 +12,8 @@ import anyio
 
 from ..artifacts.local import JsonValue
 from .contract import AgateEvaluationContractV1
+from .correctness import merge_correctness_summaries
+from .private_results import project_candidate_rejection
 from .protocol import EvaluationV2
 
 EVALUATE_SHAPE_BATCH_SIZE = 4
@@ -77,6 +79,7 @@ class ShapeBatchedEvaluateExecutor:
         rejection: tuple[ShapeBatch, ShapeBatchOutcome] | None = None
 
         async with anyio.create_task_group() as tasks:
+
             async def run_one(batch: ShapeBatch) -> None:
                 nonlocal rejection
                 async with limiter:
@@ -261,6 +264,7 @@ def _worker_result(
     outcomes: tuple[ShapeBatchOutcome, ...],
 ) -> JsonValue:
     latency_by_shape: dict[str, JsonValue] = {}
+    correctness_values: list[object] = []
     for outcome in outcomes:
         worker = outcome.worker_result
         if not isinstance(worker, dict):
@@ -268,10 +272,17 @@ def _worker_result(
         values = worker.get("latency_us_by_shape")
         if isinstance(values, dict):
             latency_by_shape.update(values)
+        correctness = worker.get("correctness")
+        if isinstance(correctness, dict):
+            correctness_values.append(correctness)
     return cast(
         JsonValue,
         {
             "all_pass": evaluation.correct,
+            "correctness": merge_correctness_summaries(
+                correctness_values,
+                passed=evaluation.correct,
+            ),
             "failures": (
                 []
                 if evaluation.correct
@@ -324,16 +335,7 @@ def _candidate_rejected_outcome(
             "shape_batch_count": batch_count,
         },
     )
-    worker_result = cast(
-        JsonValue,
-        {
-            "status": "rejected",
-            "error": {
-                "category": CANDIDATE_REJECTED_CATEGORY,
-                "message": "candidate request rejected before evaluation job creation",
-            },
-        },
-    )
+    worker_result = project_candidate_rejection(detail)
     return BatchedEvaluateOutcome(
         job,
         EvaluationV2(correct=False, latency_us=None),

@@ -25,7 +25,8 @@ Distinct requests use distinct idempotency keys; an identical retry replays the 
 and record without another external submission. Exploratory records never commit an Attempt
 outcome.
 
-`candidate_ready` or `baseline_ready` nominates the exact final `work/kernel` tree. Runtime seals the
+`candidate_ready` nominates the exact final `work/kernel` tree in both Bootstrap and ordinary
+optimization Attempts. Runtime seals the
 tree itself and requires a correct exploratory record for those exact bytes. Bootstrap submits a
 fresh Agate evaluation with Runtime-owned credentials and a stable Runtime-final idempotency key.
 An optimization Attempt instead provisionally registers the exact nominated Artifact and delegates

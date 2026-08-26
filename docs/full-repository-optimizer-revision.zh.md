@@ -36,7 +36,17 @@ Runtime 入口必须只执行一个 Attempt。旧的外层 Campaign CLI 不会�
 
 ## 自进化
 
-独立版本化的固定 Evolver Bundle 获得只读 Parent Optimizer 仓库、已完成 Epoch Evidence，以及一个初始由 Active 填充的可写整仓 Candidate。选择 `evolve_from_history` 时，受约束的 Runtime Tool 可以把 Candidate 原子切换到已完成 Lineage 历史；最终封存会校验记录的 Base 与真实 Diff。Evolver 可以修改任何通过校验的 Optimizer 自有文件，包括 Agent 框架选择、Prompt、Skill、Workflow 和 Helper Tool。Runtime、Evolver 代码和策略不在 Candidate 中，因此无法被修改。递归 Evolver 自进化仍然推迟，并需要独立评测与晋升设计。
+独立版本化的固定 Evolver Bundle 获得只读 Parent Agent、已完成 Epoch Evidence，以及分别由 Active
+Source 和最近完成 Epoch 获胜分支中、产出最佳 Kernel 的 Trajectory 在 Epoch 最后一个 Attempt 后的
+终态 State 初始化的可写 Candidate `source/`、`runtime-state/{skills,tools}/`；下一 Epoch 的 Active
+Branch 使用相同 State 种子。缺失终态 State 时依次回退到该 Trajectory 的 Epoch 起始 State、
+Revision Seed 和空默认值。选择
+`evolve_from_history` 时，Evolver 用可见历史 Agent 的 Source 替换 Candidate Source，并可从可见历史
+状态整理公共种子；最终封存校验声明的 Agent Revision、报告的 Source Diff 与私有 State Diff，并把完整 Source 与 State 存为一个逻辑
+Bundle。Evolver 可以修改任何通过校验的 Optimizer
+文件与 Revision 级 Candidate State 种子，包括 Agent 框架选择、Prompt、Workflow、
+Skill/Tool 生命周期机制和 Helper 实现。根级 `skills/` 和 `tools/` 在 Source 中无效。Runtime、Evolver
+代码和策略不在 Candidate 中，因此无法被修改。递归 Evolver 自进化仍然推迟，并需要独立评测与晋升设计。
 
 只有完整仓库快照通过文件策略、Manifest 校验、容量限制及独立 Active/Challenger 评估后，Candidate 才能被接受。成功的 Lineage Revision 仍只属于该 Lineage；Runtime 不会向上游 Core 仓库 Push、Merge、Rebase 或创建 Ref。
 

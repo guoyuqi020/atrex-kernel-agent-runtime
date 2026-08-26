@@ -39,7 +39,7 @@
     "atol": 0.01,
     "rtol": 0.05,
     "evaluation_timeout_seconds": 600,
-    "candidate_timeout_seconds": 20,
+    "candidate_timeout_seconds": 120,
     "performance_timeout_seconds": 120,
     "lock_clocks": true
   },

@@ -698,6 +698,10 @@ def test_attempt_history_cli_keeps_completed_pivot_without_kernel_version(
             digest("pivot-report"),
             AttemptReportStatus.PIVOT,
         )
+        runtime_state_digest = digest("pivot-runtime-state")
+        input_runtime_state_digest = digest("pivot-input-runtime-state")
+        registry.record_attempt_input_runtime_state(attempt.id, input_runtime_state_digest)
+        registry.record_attempt_runtime_state(attempt.id, runtime_state_digest)
         registry.complete_attempt(
             attempt.id,
             None,
@@ -723,6 +727,8 @@ def test_attempt_history_cli_keeps_completed_pivot_without_kernel_version(
     shown = json.loads(capsys.readouterr().out)
     assert shown["status"] == "completed"
     assert shown["attempt_report_status"] == "pivot"
+    assert shown["input_runtime_state_digest"] == input_runtime_state_digest
+    assert shown["runtime_state_digest"] == runtime_state_digest
 
 
 def test_artifact_gc_apply_requires_explicit_stopped_confirmation(tmp_path: Path) -> None:
@@ -825,7 +831,7 @@ def test_bootstrap_run_cli_lists_and_shows_exact_generation(
             attempt_id,
             source=GatewayEvaluationSource.AGENT,
             idempotency_key="cli-evaluation",
-            candidate_artifact_digest=candidate,
+            kernel_artifact_digest=candidate,
             gateway_result_digest=raw_result,
             correct=True,
             latency_us=7.0,

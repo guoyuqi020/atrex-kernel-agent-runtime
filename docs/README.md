@@ -5,8 +5,8 @@ English | [中文](README.zh.md)
 ## Start here
 
 - [User Guide](user-guide.md): install, configure, bootstrap, run, inspect, recover, and maintain.
-- [Interface Reference](interfaces.md): CLI, HTTP API, Optimizer Runtime Tools, Evolver tools, and
-  external service contracts.
+- [Interface Reference](interfaces.md): CLI, HTTP API, Optimizer Runtime Tools, Evolver filesystem
+  inputs, and external service contracts.
 - [Configuration Reference](configuration.md): Runtime schema v1 and Campaign schema v3.
 - [Runnable examples](../examples/README.md): remote Agate, Bootstrap, Lineage, Evolution, dev
   shells, and local Wiki.

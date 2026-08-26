@@ -127,11 +127,14 @@ async def test_artifact_seed_creates_independent_v0_roots_and_is_idempotent(
             == "lineage_seed"
         )
         assert registry.list_lineage_kernels(lineage.id)[0].revision_number == 0
-        metadata = artifacts.verify(result.evidence_checkpoint).payload_path
-        assert json.loads((metadata / "bootstrap-metadata.json").read_text()) == {
+        evidence = artifacts.verify(result.evidence_checkpoint).payload_path
+        assert json.loads((evidence / "bootstrap/report.json").read_text()) == {
             "schema_version": 1,
+            "status": "bootstrap_input",
             "source": "empty-lineage-seed",
+            "source_files": [],
         }
+        assert (evidence / "bootstrap/conversation.jsonl").read_text() == ""
 
 
 @pytest.mark.anyio

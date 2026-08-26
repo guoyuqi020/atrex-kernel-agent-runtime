@@ -29,13 +29,13 @@ from atrex_runtime.workers.core import (
 )
 from atrex_runtime.workers.core_phase import CorePhaseRunner
 from atrex_runtime.workers.launcher import CleanEnvironmentLauncher
-from atrex_runtime.workers.manifest import AttemptInputManifestV8, AttemptTaskContextV5
+from atrex_runtime.workers.manifest import AttemptInputManifestV9, AttemptTaskContextV5
 from atrex_runtime.workers.optimizer import OptimizerSessionConfig
 from atrex_runtime.workers.workspace import PreparedAttempt
 
 
-def _attempt_manifest() -> AttemptInputManifestV8:
-    return AttemptInputManifestV8(
+def _attempt_manifest() -> AttemptInputManifestV9:
+    return AttemptInputManifestV9(
         attempt_id=new_attempt_id(),
         kernel_agent_revision_id=new_kernel_agent_revision_id(),
         input_kernel_revision_id=new_kernel_revision_id(),
@@ -147,7 +147,8 @@ async def test_repository_driver_executes_core_declared_framework_neutral_entryp
     session_root = root / "sessions"
     session_root.mkdir()
     manifest = _attempt_manifest()
-    manifest_path = root / "attempt.json"
+    manifest_path = root / ".runtime/attempt.json"
+    manifest_path.parent.mkdir(exist_ok=True)
     manifest_path.write_bytes(manifest.canonical_json_bytes())
     (repository / "atrex-bundle.json").write_text(
         json.dumps(
@@ -198,30 +199,74 @@ Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
     "usage_complete": True
 }))
 Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
-    "schema_version": 3,
+    "schema_version": 12,
     "attempt_id": attempt["attempt_id"],
     "status": "blocked",
     "hypothesis": "test hypothesis",
-    "bottleneck": "test bottleneck",
-    "plan": ["test plan"],
-    "change_summary": "no candidate change",
-    "profile_evidence": "test profile evidence",
-    "evaluation_evidence": "test evaluation evidence",
-    "result_interpretation": "test result",
-    "decision": "blocked",
-    "research_sources": [],
-    "lessons": ["test lesson"],
-    "next_directions": ["test next direction"],
+    "diagnosis": {"bottleneck": "test bottleneck", "evidence": "test profile evidence"},
+    "approach": {
+        "summary": "test approach",
+        "steps": ["test plan"],
+        "expected_impact": "test expected impact",
+        "risks": []
+    },
+    "final_candidate": None,
+    "evidence_summary": {
+        "correctness": "test correctness evidence",
+        "performance": "test evaluation evidence"
+    },
+    "profile_evidence": None,
+    "analysis": "test result",
+    "knowledge_used": [],
+    "findings": [{
+        "category": "infrastructure",
+        "observation": "the task was blocked",
+        "root_cause": "test blocker",
+        "resolution": "no fix was possible within the Attempt",
+        "lesson": "test lesson",
+        "supporting_experiment_ids": ["experiment_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
+    }],
+    "blocker": "test blocker",
     "experiments": [{
+        "experiment_id": "experiment_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "direction_id": "direction_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "sequence": 1,
         "recorded_at": "2026-08-17T00:00:00Z",
         "name": "test experiment",
         "hypothesis": "test hypothesis",
         "change": "none",
-        "candidate_artifact_digest": None,
+        "before": None,
+        "after": None,
         "evidence": "test evidence",
-        "result": "blocked",
-        "decision": "pivot"
+        "analysis": "the hypothesis could not be measured",
+        "action": "abandon_direction"
+    }],
+    "direction_events": [{
+        "direction_event_id": "directionevent_11111111111111111111111111111111",
+        "direction_id": "direction_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "recorded_at": "2026-08-17T00:00:00Z",
+        "action": "propose",
+        "name": "test direction",
+        "hypothesis": "test hypothesis",
+        "rationale": "test evidence",
+        "plan": ["run the test"],
+        "success_criteria": "the test succeeds",
+        "stop_conditions": "the task is blocked",
+        "analysis": None,
+        "supporting_experiment_ids": []
+    }, {
+        "direction_event_id": "directionevent_22222222222222222222222222222222",
+        "direction_id": "direction_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "recorded_at": "2026-08-17T00:01:00Z",
+        "action": "abandon",
+        "name": None,
+        "hypothesis": None,
+        "rationale": None,
+        "plan": [],
+        "success_criteria": None,
+        "stop_conditions": None,
+        "analysis": "the task was blocked",
+        "supporting_experiment_ids": ["experiment_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
     }]
 }))
 print("core-owned optimizer finished")
@@ -264,6 +309,11 @@ print("core-owned optimizer finished")
     assert result.attempt_report_digest is not None
     assert result.session_trace_digest is not None
     assert artifacts.verify(result.session_trace_digest).kind is ArtifactKind.SESSION_LOG
+    assert result.runtime_state_digest is not None
+    assert (
+        artifacts.verify(result.runtime_state_digest).kind
+        is ArtifactKind.KERNEL_AGENT_RUNTIME_STATE
+    )
     assert launch == {
         "phase": "optimization_attempt",
         "attempt": str(manifest_path),
@@ -278,7 +328,7 @@ print("core-owned optimizer finished")
 
 
 @pytest.mark.anyio
-async def test_runtime_executes_current_core_bundle_with_attempt_v7(tmp_path: Path) -> None:
+async def test_runtime_executes_current_core_bundle_with_attempt_v9(tmp_path: Path) -> None:
     root = tmp_path / "attempt"
     repository = root / "agent/optimizer"
     source = Path(__file__).resolve().parents[1] / "src/atrex-kernel-agent-core"
@@ -291,19 +341,28 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v7(tmp_path: Pa
     )
     for relative in (
         "input/kernel",
-        "input/agent-problem",
+        ".runtime",
         "work/kernel",
         "reference",
         "scratch",
         "sessions",
     ):
         (root / relative).mkdir(parents=True, exist_ok=True)
+    (root / ".runtime/agent-problem.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "atrex.agent_problem.v1",
+                "objective": "implement example while exact cases remain private",
+            }
+        ),
+        encoding="utf-8",
+    )
     evidence = root / "input/evidence"
-    (evidence / "epochs/00000001/attempts").mkdir(parents=True)
+    (evidence / "epochs/00000001/trajectories/00000001/attempts").mkdir(parents=True)
     prompt = "# Runtime evidence\n\nUse only the current Attempt evidence.\n"
-    (evidence / "instructions.md").write_text(prompt, encoding="utf-8")
+    (root / ".runtime/evidence-instructions.md").write_text(prompt, encoding="utf-8")
     manifest = _attempt_manifest()
-    (evidence / "manifest.json").write_text(
+    (root / ".runtime/evidence-manifest.json").write_text(
         json.dumps(
             {
                 "schema_version": 1,
@@ -320,12 +379,14 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v7(tmp_path: Pa
                 "visibility": {
                     "completed_epochs": "promoted_lineage",
                     "current_attempts_before": 1,
+                    "current_trajectory_ordinal": 1,
                 },
             }
         ),
         encoding="utf-8",
     )
-    manifest_path = root / "attempt.json"
+    manifest_path = root / ".runtime/attempt.json"
+    manifest_path.parent.mkdir(exist_ok=True)
     manifest_path.write_bytes(manifest.canonical_json_bytes())
 
     provider_bin = tmp_path / "provider-bin"
@@ -355,30 +416,77 @@ rollout.write_text(json.dumps({
     },
 }) + "\\n")
 Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
-    "schema_version": 3,
+    "schema_version": 12,
     "attempt_id": attempt["attempt_id"],
     "status": "blocked",
     "hypothesis": "integration hypothesis",
-    "bottleneck": "integration bottleneck",
-    "plan": ["exercise the real Core entrypoint"],
-    "change_summary": "no candidate produced by the smoke Provider",
-    "profile_evidence": "not required for protocol integration",
-    "evaluation_evidence": "no evaluation because this is a blocked report",
-    "result_interpretation": "the Core protocol path completed",
-    "decision": "blocked",
-    "research_sources": [],
-    "lessons": ["Runtime and Core protocol versions agree"],
-    "next_directions": [],
+    "diagnosis": {
+        "bottleneck": "integration bottleneck",
+        "evidence": "not required for protocol integration"
+    },
+    "approach": {
+        "summary": "exercise the real Core entrypoint",
+        "steps": ["write a terminal report"],
+        "expected_impact": "validate the protocol path",
+        "risks": []
+    },
+    "final_candidate": None,
+    "evidence_summary": {
+        "correctness": "no evaluation because this is a blocked report",
+        "performance": "no performance result"
+    },
+    "profile_evidence": None,
+    "analysis": "the Core protocol path completed",
+    "knowledge_used": [],
+    "findings": [{
+        "category": "protocol",
+        "observation": "the Core wrote a terminal report",
+        "root_cause": "the Runtime and Core protocols agree",
+        "resolution": "sealed the compatible terminal handoff",
+        "lesson": "Runtime and Core protocol versions agree",
+        "supporting_experiment_ids": ["experiment_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
+    }],
+    "blocker": "smoke Provider does not produce a candidate",
     "experiments": [{
+        "experiment_id": "experiment_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "direction_id": "direction_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
         "sequence": 1,
         "recorded_at": "2026-08-17T00:00:00Z",
         "name": "real-core-smoke",
-        "hypothesis": "the current Core accepts Runtime manifest v6",
+        "hypothesis": "the current Core accepts Runtime manifest v9",
         "change": "none",
-        "candidate_artifact_digest": None,
+        "before": None,
+        "after": None,
         "evidence": "Core reached the Provider and wrote a terminal report",
-        "result": "completed",
-        "decision": "pivot"
+        "analysis": "the protocol integration completed successfully",
+        "action": "abandon_direction"
+    }],
+    "direction_events": [{
+        "direction_event_id": "directionevent_33333333333333333333333333333333",
+        "direction_id": "direction_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "recorded_at": "2026-08-17T00:00:00Z",
+        "action": "propose",
+        "name": "protocol smoke",
+        "hypothesis": "the current Core accepts Runtime manifest v9",
+        "rationale": "the integration path needs coverage",
+        "plan": ["write a terminal report"],
+        "success_criteria": "Runtime accepts the report",
+        "stop_conditions": "the protocol path is blocked",
+        "analysis": None,
+        "supporting_experiment_ids": []
+    }, {
+        "direction_event_id": "directionevent_44444444444444444444444444444444",
+        "direction_id": "direction_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "recorded_at": "2026-08-17T00:01:00Z",
+        "action": "abandon",
+        "name": None,
+        "hypothesis": None,
+        "rationale": None,
+        "plan": [],
+        "success_criteria": None,
+        "stop_conditions": None,
+        "analysis": "the smoke Provider cannot produce a candidate",
+        "supporting_experiment_ids": ["experiment_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
     }]
 }))
 print(json.dumps({"type": "thread.started", "thread_id": thread_id}), flush=True)

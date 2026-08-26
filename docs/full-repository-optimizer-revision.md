@@ -37,7 +37,21 @@ The Runtime entrypoint must execute exactly one Attempt. The old outer Campaign 
 
 ## Self-evolution
 
-The separately versioned fixed Evolver Bundle receives a read-only parent Optimizer repository, completed Epoch Evidence, and a writable full-repository Candidate initially seeded from Active. A constrained Runtime tool can atomically reset that Candidate to completed Lineage history for `evolve_from_history`; final sealing verifies the recorded base and actual diff. Evolver may change any validated Optimizer-owned file, including Agent-framework selection, prompts, skills, workflows, and helper tools. It cannot modify Runtime code, Evolver code, or policy because those files are not present in the Candidate. Recursive Evolver self-evolution remains deferred and requires its own evaluation and promotion design.
+The separately versioned fixed Evolver Bundle receives a read-only parent Agent, completed Epoch
+Evidence, and writable Candidate `source/` plus `runtime-state/{skills,tools}/` initialized from
+Active Source and the latest completed Epoch winner's best-Kernel Trajectory terminal State after
+that Epoch's last Attempt. The next Epoch's Active Branch uses the same State seed. Missing terminal
+State falls back to that Trajectory's Epoch-start State, the revision seed, and empty default. For
+`evolve_from_history`, Evolver replaces Source with an
+ordinary writable copy from one visible historical Agent and may synthesize the common seed from
+visible historical state; final sealing verifies the declared Agent revision, reported Source Diff,
+and private State Diff and
+stores complete Source plus State as one logical Bundle. Evolver may change any
+validated Optimizer-owned file, including Agent-framework selection, prompts, workflows, Skill/Tool
+lifecycle mechanisms, helper implementations, and the revision-wide Candidate state seed. Top-level
+`skills/` and `tools/` are invalid in source. It cannot modify Runtime code,
+Evolver code, or policy because those files are not present in the Candidate. Recursive Evolver
+self-evolution remains deferred and requires its own evaluation and promotion design.
 
 The candidate is accepted only when its complete repository snapshot passes file policy, manifest validation, size limits, and independent Active-versus-Challenger evaluation. A successful lineage revision remains private to that lineage. Runtime never pushes, merges, rebases, or creates refs in the upstream Core repository.
 

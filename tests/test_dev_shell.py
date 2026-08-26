@@ -61,7 +61,8 @@ class FakeWorkspaces:
         self.requests.append(request)
         run = self.root / f"run-{len(self.requests)}"
         run.mkdir(parents=True)
-        manifest = run / "attempt.json"
+        manifest = run / ".runtime/attempt.json"
+        manifest.parent.mkdir(parents=True)
         manifest.write_text("{}", encoding="utf-8")
         sessions = run / "sessions"
         sessions.mkdir()
@@ -120,13 +121,21 @@ class FakeEvolutionWorkspaces:
         run = self.root / f"run-{len(self.requests)}"
         (run / "candidate").mkdir(parents=True)
         (run / "scratch").mkdir()
-        manifest = run / "evolution-input.json"
+        control = self.root / ".control" / f"run-{len(self.requests)}"
+        manifest = control / ".runtime/evolution-input.json"
+        manifest.parent.mkdir(parents=True)
         manifest.write_text("{}", encoding="utf-8")
+        state_base = control / ".runtime/candidate-runtime-state-base"
+        (state_base / "skills").mkdir(parents=True)
+        (state_base / "tools").mkdir()
+        (state_base / "tools/README.md").write_text("# Tools\n", encoding="utf-8")
         return PreparedEvolution(
             root=run,
+            control_root=control,
             manifest_path=manifest,
             candidate_root=run / "candidate",
-            output_path=run / "scratch/evolution-output.json",
+            candidate_runtime_state_base_root=state_base,
+            output_path=run / "scratch/evolution-report.json",
             parent_revision=request.parent_revision,
         )
 
@@ -138,7 +147,8 @@ class FakeEvolutionSessions:
         return SimpleNamespace(
             environment={
                 "PATH": "/usr/bin:/bin",
-                "ATREX_EVOLUTION_INPUT": str(prepared.manifest_path),
+                "ATREX_EVOLUTION_INPUT_JSON": prepared.manifest_path.read_text(),
+                "ATREX_EVOLUTION_WORKSPACE": str(prepared.root),
                 "ATREX_EVOLUTION_CANDIDATE": str(prepared.candidate_root),
             }
         )
@@ -149,7 +159,7 @@ class FakeEvolutionSessions:
         launch: SimpleNamespace,
         runtime_argv: tuple[str, ...],
     ) -> tuple[str, ...]:
-        assert launch.environment["ATREX_EVOLUTION_INPUT"] == str(prepared.manifest_path)
+        assert launch.environment["ATREX_EVOLUTION_WORKSPACE"] == str(prepared.root)
         return runtime_argv
 
 
@@ -172,7 +182,7 @@ class FakeTemporarySessions:
         config: OptimizerSessionConfig,
     ) -> SimpleNamespace:
         assert config.gateway_capability == "temporary-capability"
-        assert (prepared.root / "attempt.json").is_file()
+        assert (prepared.root / ".runtime/attempt.json").is_file()
         assert (prepared.root / "work/kernel/kernel.py").is_file()
         return SimpleNamespace(environment={})
 
@@ -270,9 +280,10 @@ def test_temporary_dev_shell_skips_registry_and_destroys_workspace(tmp_path: Pat
 
     checkpoint_root = tmp_path / "checkpoint"
     (checkpoint_root / "bootstrap").mkdir(parents=True)
-    (checkpoint_root / "bootstrap-metadata.json").write_text(
-        '{"schema_version":1,"source":"test"}', encoding="utf-8"
+    (checkpoint_root / "bootstrap/report.json").write_text(
+        '{"status":"bootstrap_input"}', encoding="utf-8"
     )
+    (checkpoint_root / "bootstrap/conversation.jsonl").write_text("", encoding="utf-8")
     (checkpoint_root / "checkpoint.json").write_text(
         '{"schema_version":1,"lineage_id":"'
         + str(lineage_id)

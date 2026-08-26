@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -173,6 +174,17 @@ class FakeBaselineGenerator:
             {"correct": True, "latency_us": 9.0},
             ArtifactKind.GATEWAY_RESULT,
         )
+        self.report_digest = artifacts.put_json(
+            {"status": "baseline_ready", "approach": "test baseline"},
+            ArtifactKind.ATTEMPT_REPORT,
+        )
+        with tempfile.TemporaryDirectory(prefix="atrex-fake-baseline-") as temporary:
+            trace = Path(temporary)
+            (trace / "conversation.jsonl").write_text(
+                '{"type":"assistant/message","text":"baseline complete"}\n',
+                encoding="utf-8",
+            )
+            self.session_trace_digest = artifacts.put_directory(trace, ArtifactKind.SESSION_LOG)
 
     def generate(self, **values: object) -> GeneratedLineageBaseline:
         dsl = values["dsl"]
@@ -184,6 +196,8 @@ class FakeBaselineGenerator:
             cast(ArtifactDigest, values["input_kernel_digest"]),
             self.gateway_digest,
             9.0,
+            self.report_digest,
+            self.session_trace_digest,
         )
 
 
@@ -535,6 +549,25 @@ def test_campaign_bootstrap_is_idempotent_after_lineage_has_evolved(
             created_at=NOW,
         )
         registry.register_kernel_revision(evolved_kernel)
+        evolved_evidence = tmp_path / "evolved-evidence"
+        evolved_evidence.mkdir()
+        (evolved_evidence / "checkpoint.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "lineage_id": str(lineage.id),
+                    "through_epoch": 1,
+                    "previous_checkpoint_digest": str(
+                        first.lineages[0].initial_evidence_digest
+                    ),
+                }
+            ),
+            encoding="utf-8",
+        )
+        evolved_evidence_digest = artifacts.put_directory(
+            evolved_evidence,
+            ArtifactKind.EVIDENCE,
+        )
         registry._connection.execute(
             """UPDATE lineages SET active_kernel_agent_revision_id = ?,
                best_kernel_revision_id = ?, evidence_checkpoint = ?,
@@ -542,7 +575,7 @@ def test_campaign_bootstrap_is_idempotent_after_lineage_has_evolved(
             (
                 evolved_agent.id,
                 evolved_kernel.id,
-                artifacts.put_json({"epoch": 2}, ArtifactKind.EVIDENCE),
+                evolved_evidence_digest,
                 lineage.id,
             ),
         )

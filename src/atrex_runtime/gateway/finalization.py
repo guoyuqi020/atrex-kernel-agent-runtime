@@ -100,14 +100,14 @@ class AgateAuthoritativeCandidateEvaluator:
     async def finalize(
         self,
         attempt_id: AttemptId,
-        candidate_artifact_digest: ArtifactDigest,
+        kernel_artifact_digest: ArtifactDigest,
         *,
         nominated_gateway_result_digest: ArtifactDigest | None = None,
         nominated_recovery_generation: int | None = None,
         independent_evaluate: bool = True,
     ) -> AttemptCandidateResult:
         """Validate the nomination and optionally run an independent final Evaluate."""
-        candidate_digest = ArtifactDigest(str(candidate_artifact_digest))
+        candidate_digest = ArtifactDigest(str(kernel_artifact_digest))
         agent_evaluation = self._control.find_agent_evaluation(
             attempt_id,
             candidate_digest,
@@ -161,7 +161,7 @@ class AgateAuthoritativeCandidateEvaluator:
                 "gateway.agent_evaluation_adopted_for_abba",
                 attempt_id,
                 {
-                    "candidate_artifact_digest": candidate_digest,
+                    "kernel_artifact_digest": candidate_digest,
                     "agent_evaluation_id": agent_evaluation.id,
                     "gateway_result_digest": agent_evaluation.gateway_result_digest,
                     "latency_us": agent_evaluation.latency_us,
@@ -180,7 +180,7 @@ class AgateAuthoritativeCandidateEvaluator:
 
         event_base = {
             "source": GatewayEvaluationSource.RUNTIME_FINAL.value,
-            "candidate_artifact_digest": candidate_digest,
+            "kernel_artifact_digest": candidate_digest,
             "agent_evaluation_id": agent_evaluation.id,
             "recovery_generation": generation,
         }
@@ -441,7 +441,7 @@ class AgateAuthoritativeCandidateEvaluator:
                 "gateway.authoritative_profile_submitted",
                 attempt_id,
                 {
-                    "candidate_artifact_digest": candidate_digest,
+                    "kernel_artifact_digest": candidate_digest,
                     "agate_job_id": job_id,
                     "recovery_generation": generation,
                 },
@@ -453,7 +453,7 @@ class AgateAuthoritativeCandidateEvaluator:
                 "gateway.authoritative_profile_completed",
                 attempt_id,
                 {
-                    "candidate_artifact_digest": candidate_digest,
+                    "kernel_artifact_digest": candidate_digest,
                     "agate_job_id": job_id,
                     "recovery_generation": generation,
                     "status": job.get("status"),
@@ -466,7 +466,7 @@ class AgateAuthoritativeCandidateEvaluator:
                 "gateway.authoritative_profile_failed",
                 attempt_id,
                 {
-                    "candidate_artifact_digest": candidate_digest,
+                    "kernel_artifact_digest": candidate_digest,
                     "recovery_generation": generation,
                     "error": message,
                 },
@@ -492,7 +492,7 @@ class AgateAuthoritativeCandidateEvaluator:
             attempt_id,
             source=GatewayEvaluationSource.RUNTIME_FINAL,
             idempotency_key=idempotency_key,
-            candidate_artifact_digest=candidate_digest,
+            kernel_artifact_digest=candidate_digest,
             gateway_result_digest=result_digest,
             correct=correct,
             latency_us=latency_us,
@@ -509,7 +509,7 @@ class AgateAuthoritativeCandidateEvaluator:
             attempt_id,
             {
                 "source": GatewayEvaluationSource.RUNTIME_FINAL.value,
-                "candidate_artifact_digest": candidate_digest,
+                "kernel_artifact_digest": candidate_digest,
                 "agent_evaluation_id": agent_evaluation_id,
                 "agate_job_id": job_id,
                 "recovery_generation": generation,
@@ -548,7 +548,7 @@ class AgateAuthoritativeCandidateEvaluator:
         )
 
     async def _wait_for_job(self, job_id: str) -> dict[str, JsonValue]:
-        """Long-poll once; the shared Agate client owns the five-error retry policy."""
+        """Long-poll once; the shared Agate client owns persistent transport retries."""
         return await self._call(
             partial(
                 self._client.get_job,

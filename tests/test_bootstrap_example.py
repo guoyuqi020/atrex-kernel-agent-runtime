@@ -190,7 +190,7 @@ def test_bootstrap_local_secrets_override_inherited_shell_values(tmp_path: Path)
         "source examples/bootstrap/common.sh; "
         "atrex_example_load_local_secrets; "
         "printf '%s\\n%s\\n' \"$ATREX_CAPABILITY_SIGNING_KEY\" "
-        "\"$ATREX_ADMIN_BEARER_TOKEN\""
+        '"$ATREX_ADMIN_BEARER_TOKEN"'
     )
     result = subprocess.run(
         ("bash", "-c", command),

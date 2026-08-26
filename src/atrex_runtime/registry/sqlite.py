@@ -70,7 +70,7 @@ from ..domain.models import (
 )
 from ..sqlite_support import configure_durable_sqlite
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 29
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -598,6 +598,60 @@ class SqliteRegistry:
                     COMMIT;
                     """
                 )
+            version = 26
+        if version == 26:
+            with self._lock:
+                self._connection.execute("BEGIN IMMEDIATE")
+                try:
+                    if self._has_tables("attempts") and "runtime_state_digest" not in (
+                        self._table_columns("attempts")
+                    ):
+                        self._connection.execute(
+                            "ALTER TABLE attempts ADD COLUMN runtime_state_digest TEXT"
+                        )
+                    self._connection.execute("PRAGMA user_version = 27")
+                except BaseException:
+                    self._connection.execute("ROLLBACK")
+                    raise
+                else:
+                    self._connection.execute("COMMIT")
+            version = 27
+        if version == 27:
+            with self._lock:
+                self._connection.execute("BEGIN IMMEDIATE")
+                try:
+                    if self._has_tables("kernel_agent_revisions") and (
+                        "runtime_state_digest"
+                        not in self._table_columns("kernel_agent_revisions")
+                    ):
+                        self._connection.execute(
+                            "ALTER TABLE kernel_agent_revisions "
+                            "ADD COLUMN runtime_state_digest TEXT"
+                        )
+                    self._connection.execute("PRAGMA user_version = 28")
+                except BaseException:
+                    self._connection.execute("ROLLBACK")
+                    raise
+                else:
+                    self._connection.execute("COMMIT")
+            version = 28
+        if version == 28:
+            with self._lock:
+                self._connection.execute("BEGIN IMMEDIATE")
+                try:
+                    if self._has_tables("attempts") and (
+                        "input_runtime_state_digest" not in self._table_columns("attempts")
+                    ):
+                        self._connection.execute(
+                            "ALTER TABLE attempts "
+                            "ADD COLUMN input_runtime_state_digest TEXT"
+                        )
+                    self._connection.execute("PRAGMA user_version = 29")
+                except BaseException:
+                    self._connection.execute("ROLLBACK")
+                    raise
+                else:
+                    self._connection.execute("COMMIT")
             return
         if version == 14:
             with self._lock:
@@ -928,8 +982,15 @@ class SqliteRegistry:
                                         AND source_provenance_digest IS NULL
                                         AND evolution_trace_digest IS NOT NULL))
                             );
-                            INSERT INTO kernel_agent_revisions_v22
-                                SELECT * FROM kernel_agent_revisions;
+                            INSERT INTO kernel_agent_revisions_v22 (
+                                id, parent_id, creation_key, dsl, optimizer_digest,
+                                created_by, created_at, source_provenance_digest,
+                                evolution_trace_digest
+                            )
+                                SELECT id, parent_id, creation_key, dsl, optimizer_digest,
+                                       created_by, created_at, source_provenance_digest,
+                                       evolution_trace_digest
+                                FROM kernel_agent_revisions;
                             DROP TABLE kernel_agent_revisions;
                             ALTER TABLE kernel_agent_revisions_v22
                                 RENAME TO kernel_agent_revisions;
@@ -1076,6 +1137,7 @@ class SqliteRegistry:
                     created_at TEXT NOT NULL,
                     source_provenance_digest TEXT,
                     evolution_trace_digest TEXT,
+                    runtime_state_digest TEXT,
                     CHECK ((created_by IN ('bootstrap', 'lineage_seed')
                             AND source_provenance_digest IS NOT NULL
                             AND evolution_trace_digest IS NULL) OR
@@ -1227,6 +1289,8 @@ class SqliteRegistry:
                     attempt_report_status TEXT CHECK (attempt_report_status IN (
                         'candidate_ready', 'pivot', 'blocked'
                     )),
+                    runtime_state_digest TEXT,
+                    input_runtime_state_digest TEXT,
                     challenger_ordinal INTEGER NOT NULL CHECK (challenger_ordinal >= 0),
                     trajectory_ordinal INTEGER NOT NULL CHECK (trajectory_ordinal > 0),
                     iteration_ordinal INTEGER NOT NULL CHECK (iteration_ordinal > 0),
@@ -1331,7 +1395,7 @@ class SqliteRegistry:
                     owner TEXT NOT NULL,
                     lease_expires_at TEXT NOT NULL
                 );
-                PRAGMA user_version = 26;
+                PRAGMA user_version = 29;
                 COMMIT;
                 """
             )
@@ -2233,8 +2297,11 @@ class SqliteRegistry:
                     )
                 return existing
             self._connection.execute(
-                """INSERT INTO kernel_agent_revisions
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                """INSERT INTO kernel_agent_revisions (
+                       id, parent_id, creation_key, dsl, optimizer_digest,
+                       created_by, created_at, source_provenance_digest,
+                       evolution_trace_digest, runtime_state_digest
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     revision.id,
                     revision.parent_id,
@@ -2245,6 +2312,7 @@ class SqliteRegistry:
                     revision.created_at,
                     revision.source_provenance_digest,
                     revision.evolution_trace_digest,
+                    revision.runtime_state_digest,
                 ),
             )
             self._event(
@@ -2263,6 +2331,7 @@ class SqliteRegistry:
             revision.created_by,
             revision.source_provenance_digest,
             revision.evolution_trace_digest,
+            revision.runtime_state_digest,
         )
 
     def get_kernel_agent_revision(self, revision_id: KernelAgentRevisionId) -> KernelAgentRevision:
@@ -2466,6 +2535,11 @@ class SqliteRegistry:
                 None
                 if (trace := _optional_text(row, "evolution_trace_digest")) is None
                 else parse_artifact_digest(trace)
+            ),
+            runtime_state_digest=(
+                None
+                if (state := _optional_text(row, "runtime_state_digest")) is None
+                else parse_artifact_digest(state)
             ),
         )
 
@@ -3646,8 +3720,9 @@ class SqliteRegistry:
                        infrastructure_failures, recovery_generation, authority_started_at,
                        failure_reason, created_at, completed_at,
                        attempt_report_digest, attempt_report_status,
-                       challenger_ordinal, trajectory_ordinal, iteration_ordinal
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       challenger_ordinal, trajectory_ordinal, iteration_ordinal,
+                       input_runtime_state_digest
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     attempt.id,
                     attempt.epoch_id,
@@ -3670,6 +3745,7 @@ class SqliteRegistry:
                     attempt.challenger_ordinal,
                     attempt.trajectory_ordinal,
                     attempt.ordinal,
+                    attempt.input_runtime_state_digest,
                 ),
             )
             self._event(
@@ -3822,6 +3898,80 @@ class SqliteRegistry:
             for row in rows
         ]
 
+    def record_attempt_runtime_state(
+        self,
+        attempt_id: AttemptId,
+        runtime_state_digest: ArtifactDigest,
+    ) -> None:
+        """Point a running Attempt at its latest immutable post-Session state."""
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT status, runtime_state_digest FROM attempts WHERE id = ?",
+                (attempt_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Attempt not found: {attempt_id}")
+            existing = _optional_text(row, "runtime_state_digest")
+            if existing == runtime_state_digest:
+                return
+            if row["status"] != AttemptStatus.RUNNING:
+                raise InvalidTransitionError(
+                    f"Attempt {attempt_id} cannot record Runtime State"
+                )
+            cursor = self._connection.execute(
+                """UPDATE attempts SET runtime_state_digest = ?
+                   WHERE id = ? AND status = 'running'""",
+                (runtime_state_digest, attempt_id),
+            )
+            if cursor.rowcount != 1:
+                raise InvalidTransitionError(
+                    f"Attempt {attempt_id} cannot record Runtime State"
+                )
+            self._event(
+                "attempt.runtime_state_recorded",
+                attempt_id,
+                {
+                    "runtime_state_digest": runtime_state_digest,
+                    "previous_runtime_state_digest": existing,
+                },
+            )
+
+    def record_attempt_input_runtime_state(
+        self,
+        attempt_id: AttemptId,
+        runtime_state_digest: ArtifactDigest,
+    ) -> None:
+        """Attach the immutable logical input State to a running Attempt once."""
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT status, input_runtime_state_digest FROM attempts WHERE id = ?",
+                (attempt_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Attempt not found: {attempt_id}")
+            existing = _optional_text(row, "input_runtime_state_digest")
+            if existing == runtime_state_digest:
+                return
+            if existing is not None or row["status"] != AttemptStatus.RUNNING:
+                raise InvalidTransitionError(
+                    f"Attempt {attempt_id} cannot record Input Runtime State"
+                )
+            cursor = self._connection.execute(
+                """UPDATE attempts SET input_runtime_state_digest = ?
+                   WHERE id = ? AND status = 'running'
+                     AND input_runtime_state_digest IS NULL""",
+                (runtime_state_digest, attempt_id),
+            )
+            if cursor.rowcount != 1:
+                raise InvalidTransitionError(
+                    f"Attempt {attempt_id} cannot record Input Runtime State"
+                )
+            self._event(
+                "attempt.input_runtime_state_recorded",
+                attempt_id,
+                {"input_runtime_state_digest": runtime_state_digest},
+            )
+
     def record_attempt_report(
         self,
         attempt_id: AttemptId,
@@ -3899,6 +4049,19 @@ class SqliteRegistry:
                 None
                 if (report_status := _optional_text(row, "attempt_report_status")) is None
                 else AttemptReportStatus(report_status)
+            ),
+            runtime_state_digest=(
+                None
+                if (state := _optional_text(row, "runtime_state_digest")) is None
+                else parse_artifact_digest(state)
+            ),
+            input_runtime_state_digest=(
+                None
+                if (
+                    input_state := _optional_text(row, "input_runtime_state_digest")
+                )
+                is None
+                else parse_artifact_digest(input_state)
             ),
         )
 

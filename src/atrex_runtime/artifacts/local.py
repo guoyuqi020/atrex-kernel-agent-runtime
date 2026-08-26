@@ -28,6 +28,7 @@ class ArtifactKind(StrEnum):
     """Initial immutable artifact categories."""
 
     KERNEL_AGENT = "kernel_agent"
+    KERNEL_AGENT_RUNTIME_STATE = "kernel_agent_runtime_state"
     OPTIMIZER_SOURCE = "optimizer_source"
     EVOLVER_BUNDLE = "evolver_bundle"
     KERNEL = "kernel"
@@ -256,6 +257,33 @@ class LocalArtifactStore:
             return destination_path
         except BaseException:
             shutil.rmtree(destination_path, ignore_errors=True)
+            raise
+
+    def materialize_file(
+        self,
+        digest: ArtifactDigest,
+        member: str,
+        destination: str | Path,
+    ) -> Path:
+        """Copy one verified regular file from an Artifact to a new read-only path."""
+        artifact = self.verify(digest)
+        relative = PurePosixPath(member)
+        if relative.is_absolute() or ".." in relative.parts or relative.as_posix() == ".":
+            raise ValueError(f"unsafe artifact member path: {member!r}")
+        source = artifact.payload_path.joinpath(*relative.parts)
+        if source.is_symlink() or not source.is_file():
+            raise ValueError(f"artifact member is not a regular file: {member!r}")
+        destination_path = Path(destination)
+        if destination_path.exists() or destination_path.is_symlink():
+            raise FileExistsError(destination_path)
+        destination_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            with source.open("rb") as reader, destination_path.open("xb") as writer:
+                shutil.copyfileobj(reader, writer, length=1024 * 1024)
+            os.chmod(destination_path, 0o400)
+            return destination_path
+        except BaseException:
+            destination_path.unlink(missing_ok=True)
             raise
 
     def collect_garbage(

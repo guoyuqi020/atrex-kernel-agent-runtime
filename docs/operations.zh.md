@@ -27,9 +27,10 @@ Core 与 Evolver 是部署批准、按完整 Commit 固定的 Git 仓库；相�
    ASGI 启动后，Runtime 会立即探测一次 Agate，之后每隔
    `agate.health_check_interval_s` 秒探测一次（默认 30 秒）；首次状态、故障与恢复均写入 Service
    日志。该观测不改变 `/healthz` 或 `/readyz` 语义，外部服务短暂故障不会停止可信控制面。
-   所有 Agate SDK 请求使用同一套有界瞬时故障策略：分别退避 1、2、4、8 秒后重试，只有第 5
-   次连续调用仍然报错时才向上抛出；一次成功会让下一次请求重新计数。编译失败、正确性失败等
-   Job 终态属于结果，不会被该策略重新提交。
+   所有执行任务的 Agate SDK 请求使用同一套持久瞬时故障策略：分别退避 5、10、20、40 秒；第 5 次连续
+   失败后不再放弃，而是每隔 60 秒持续重试，直至成功。一次成功会让下一次请求重新计数。
+   不可重试的 4xx 校验或鉴权错误仍立即返回，因为必须修改请求才能成功。编译失败、正确性失败等
+   Job 终态属于结果，不会被该策略重新提交。周期性健康观测仍是有界单次探针，不持有 Campaign 工作。
 6. 执行 Campaign schema-v3 Bootstrap 时保持 Runtime、Gateway 和可选 Wiki 可用；Core Baseline
    Session 会回调 Runtime。
 7. 使用绝对目标 Epoch 调度 Campaign；Wiki Drainer 独立运行。

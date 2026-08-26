@@ -94,6 +94,13 @@ atrex-kernel-agent-runtime bootstrap \
 Bootstrap 以 `creation_key` 幂等。它冻结 Campaign Contract 与 Commit，可选生成公开 Agent Problem，
 为每个 DSL 运行一个 Core Baseline Session，保留所有 Bootstrap Generation 和评测，最后发布
 `agent-v0` 与权威 Kernel `v0`。相同输入重试会继续已有进度；改变不可变输入会被拒绝。
+Bootstrap 发生进程退出或基础设施错误时，会在 `campaign.max_infrastructure_retries` 上限内自动
+重试；每次重试都会获得新的 Capability、Workspace、Session 和执行 Generation。Optimizer Attempt
+的基础设施重试也由同一个配置项控制。
+Evolver 的进程退出和基础设施错误同样使用该上限；Runtime 会先保留失败 Worker Session 和
+Evolution Failure Trace，再使用新 Workspace 重试。
+生成的 Epoch-0 Evidence 对后续 Optimizer/Evolver 只暴露 `bootstrap/report.json` 和
+`bootstrap/conversation.jsonl`。
 
 ## 6. 运行 Epoch
 
@@ -189,7 +196,18 @@ atrex-kernel-agent-runtime dev-shell --config runtime.json --lineage "$LINEAGE"
 atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$LINEAGE" --epoch 2
 ```
 
-只用于可信调试。Optimizer Runtime Tools 与 Evolver 检查工具见[接口说明](interfaces.zh.md)。
+只用于可信调试。Optimizer Runtime Tools 与 Evolver 的只读文件系统输入 Contract 见
+[接口说明](interfaces.zh.md)。
+
+每个 Optimizer Workspace 都包含可写的 `skills/` 与 `tools/`。Session 退出时，Runtime 会封存其
+准确终态，并把 Artifact Digest 记录到生产它的 Attempt。后续串行 Attempt 从该 State 继续，本地缓存
+丢失后也能准确重建。Framework Bootstrap 初始化 `agent-v0` State。Evolver 从最近完成 Epoch 获胜
+分支中、产出最佳 Kernel 的 Trajectory 在该 Epoch 最后一个 Attempt 后的终态 State 开始；下一
+Epoch 的 Active Branch 从完全相同的 State 开始。每个新 Agent
+Revision 都把 Source 与 State 一起封存为
+一个逻辑 Bundle，每条新 Trajectory 获得独立 State 副本。
+每个持久工具的调用方法、输入输出、依赖、示例和限制都必须同步写入
+`tools/README.md`。
 
 ## 11. 恢复与维护
 

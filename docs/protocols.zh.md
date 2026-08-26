@@ -10,7 +10,9 @@
 | --- | --- | --- |
 | `GET /healthz` | 无 | 进程存活。 |
 | `GET /readyz` | 无 | 本地 Registry、Gateway Control、Agate Job Store、Artifact Store 探针。 |
-| `POST /v1/operations` | Attempt Capability | 结构化 Gateway Operation；Agent 的每次 `evaluate` 都形成不可变探索记录。 |
+| `POST /v1/operations` | Attempt Capability | 结构化 GPU/Agate Operation；Agent 的每次 `evaluate` 都形成不可变探索记录。 |
+| `POST /v1/runtime/queries` | Attempt Capability | 按已知 Trial、Kernel 源码或 Gateway Result 执行不计配额的读取。 |
+| `POST /v1/runtime/journals` | Attempt Capability | 立即持久化 Direction/Experiment Mutation，并执行授权的 list/load 读取。 |
 | `POST /v1/wiki/query` | Attempt Capability | Runtime 补全上下文的实时 Wiki 查询，返回前冻结。 |
 | `POST /v1/admin/campaigns/bootstrap` | Admin Bearer | 只接受 Campaign schema v3。 |
 | `POST /v1/admin/campaigns/{id}/lineages` | Admin Bearer | 从已封存 Agent 与 Kernel 内容增加独立版本化的 Lineage。 |
@@ -21,6 +23,7 @@
 | `GET /v1/admin/campaigns/{id}/attempts` | Admin Bearer | 跨 Campaign Lineage 查询全部 Attempt，包括无 Candidate 的结果。 |
 | `GET /v1/admin/lineages/{id}/attempts` | Admin Bearer | 查询单个 Lineage 完整、有序的 Attempt 历史。 |
 | `GET /v1/admin/attempts/{id}` | Admin Bearer | 查询一个 Attempt 的状态、Report 处置和输入/输出版本关系。 |
+| `GET /v1/admin/attempts/{id}/report` | Admin Bearer | 查询包含 parent/Candidate 权威 Gateway 性能的 Runtime 最终 Attempt Report。 |
 | `GET /v1/admin/attempts/{id}/evaluations` | Admin Bearer | 查询有序的 Agent 探索评测和 Runtime 终评。 |
 | `GET /v1/admin/attempts/{id}/evaluations/{evaluation_id}` | Admin Bearer | 查询一对不可变的被评测 Kernel/Result 身份。 |
 | `GET .../evaluations/{evaluation_id}/source` | Admin Bearer | 返回该次评测对应的准确、有界 Kernel 文件。 |
@@ -47,30 +50,54 @@ Agent 的每次不同评测都会封存准确 Candidate 与原始 Result，但�
 Candidate 由 Runtime 封存，并通过配置的权威留存 Comparator 评测；只有 `runtime_final` 记录会关联权威 Outcome。CLI 的
 `list-evaluations` 与 `show-evaluation [--source] [--result]` 暴露同一份历史。
 每个 Candidate 型 Operation 都会在外部执行前绑定封存后的 Candidate Artifact；即使 Operation
-失败、Event 被裁剪或源码被回退，该绑定仍是持久 Artifact Root。Schema-v3 Attempt Report 可以
-把 `continue`、`revert`、`pivot` 注解绑定到当前 Attempt 已观察的 Digest。这些未版本化
-`Kernel Trial` 不占用 `vN` Revision 编号。
-Optimizer 可用 `operation: "kernel_trials"` 列出这些 Trial，再用
-`operation: "kernel_trial_read"` 获取已验证的精确文件索引或源码。Runtime 会包含当前 Attempt，
+失败、Event 被裁剪或源码被回退，该绑定仍是持久 Artifact Root。Schema-v12 Agent Attempt Handoff 为
+每个 Direction 和 Experiment 分配持久 ID。Direction 定义不可变，状态变化以事件追加；每个 Experiment
+绑定其 Direction。普通比较 Action 会把 `before`、`after` 两侧分别绑定到准确 Kernel Artifact、
+Kernel Trial 与非空 Gateway Result Digest 列表。Bootstrap 专用的 `baseline` Action 则要求
+`before=null` 和完整 `after`，只建立首个测量锚点，不注册 `v0`。`evidence` 保存观测事实，
+`analysis` 保存解释与假设判定；其他 `action` 记录 Agent 保留 After Kernel、恢复 Before Kernel 或
+放弃方向，并由 Runtime 映射为已观察 `after` Trial 的内部处置状态。Report 的终态 `status` 只是
+Optimizer 交接状态，不是保留决策；协议不接受顶层 `decision`。这些未版本化 `Kernel Trial`
+不占用 `vN` Revision 编号。随后 Runtime 把 Handoff 与 Registry 中的输入/输出 Kernel 及其权威
+Gateway Result Artifact 合并，派生 schema-v1 最终 Attempt Report。该投影展示准确 Kernel
+Artifact 身份与整体/逐 Shape 延迟，但不暴露内部 Kernel Revision ID；同时把可信内容级
+Production Gate 投影为 `NOT_ENABLED`、`PASS`、`FAIL` 或 `NOT_RUN`，该字段完全由 Runtime 生成。
+Direction 与 Experiment Mutation 统一使用 `/v1/runtime/journals`。Runtime 会在响应前完成校验与
+持久提交，并把幂等键绑定到逻辑 Attempt，因此 Journal 可以立即查询，且不因物理 Session 失败或
+Recovery Generation 变化而丢失。`attempt-report` 从 Runtime 获取快照，并把同一份权威的本 Attempt
+Journal 嵌入终态 Handoff；终态发布不是 Journal 第一次持久化的时点。
+已完成的选中和未选中搜索路径都会向后续 Optimizer Session 提供冻结的 Direction/Experiment
+Journal，但不暴露调度来源。
+Optimizer 可用 Gateway 响应或已保留 Experiment 记录中的已知 Trial ID 调用
+`kernel-trial-show` 查看溯源信息，按
+`kernel_artifact_digest` 调用 `kernel-artifact-read` 读取准确源码，并按
+`gateway_result_digest` 调用 `gateway-result-read` 读取规范化 Agent 可见测量。Runtime 会包含当前 Attempt，
 因此同一 Session 内回退的 Candidate 仍可恢复；更早 Attempt 则继续遵循已晋升分支与同轨迹可见性
-规则。这两个 Runtime 本地读操作不计配额，也不会访问 Agate。
+规则。这些 Runtime 本地读操作不计配额，也不会访问 Agate。
 Worker 返回与管理面可见的原始 Result 有意不同：私有输入、Request、逐 Case 失败详情和 Evaluator
-Spec 都会被隐藏。`evaluate` 只返回聚合正确性/延迟，以及可选的按不透明 `shape_id` 标识的延迟；
-`profile` 可选一个不透明 `shape_id`，省略时由评测器选择一个私有 Case，并返回脱敏后的 Profiler
-视图。`check` 不暴露 Shape 选择参数：Runtime 确定性选择 Contract 中排序后的第一个不透明
+Spec 都会被隐藏。`evaluate` 只返回聚合正确性/延迟，以及可选的按不透明数字 `shape_id` 标识的延迟；
+`profile` 可选一个数字 `shape_id`，省略时由评测器选择一个私有 Case，并只用该编号标记脱敏后的
+Profiler 视图。`check` 不暴露 Shape 选择参数：Runtime 确定性选择 Contract 中排序后的第一个不透明
 Shape，并把其私有 `init_kwargs` 传给 Agate Compile，使参数化 `Model` 构造器得到正确检查。
 该协议不依赖 `launcher.mode`。
 
-Runtime 把成功的 `evaluate` 与 `profile` 响应规范化为只追加的 `gateway_measurements` 记录。
-`operation: "measurements"` 通过同一个 Attempt 范围 Gateway Endpoint 查询这些记录，不消耗
-评测调用配额，也不会访问 Agate。可见性由 Runtime 推导，而非调用方选择：对 Optimizer，已完成
-Epoch 只暴露胜出分支 Attempt；当前 Epoch 只暴露相同 Branch、Challenger Slot 与 Trajectory 中
-更早完成的 Attempt。过滤器可选择 Kernel Revision/Artifact、Operation Kind、不透明 Shape、
-Profiler Kernel、Metric 名称和有界数量。每条记录保留原始 Gateway Result Digest 以便审计。
+Runtime 把成功的 `evaluate` 与 `profile` 响应规范化为只追加的内部
+`gateway_measurements` 记录。它们继续供 Gate、冻结 Evidence 和管理接口使用，但不再作为独立的
+Agent 查询面。`kernel-trial-show` 接受已知 `kernel_trial_id`，只返回 Kernel Artifact Digest 和规范化
+`gateway_results`，Result Entry 不再重复已经解析过的 Gateway Result Digest。可见性由 Runtime
+推导，而非调用方选择：对 Optimizer，已完成 Epoch 只暴露
+胜出分支 Attempt；当前 Epoch 只暴露相同 Branch、Challenger Slot 与 Trajectory 中更早完成的
+Attempt，以及自身正在进行的 Trial。
 
 Attempt 历史独立于 Kernel 历史。`list-attempts [--format table]` 与 `show-attempt` 会保留
 `pivot`、`blocked`、基础设施失败及其他无 Candidate 的 Session；由于没有注册 Kernel
-Revision，这些 Attempt 不会获得输出 `vN`。
+Revision，这些 Attempt 不会获得输出 `vN`。完成的 Agent Session 还会封存准确终态 Runtime
+State；生产它的 Attempt 以 `runtime_state_digest` 记录 Artifact，已有 `attempt_id` 就是生产者引用，
+不存在额外的 State Checkpoint ID。串行恢复使用该不可变摘要，而不信任可变 Workspace 缓存。第一次
+物理 Session 前，Runtime 还会把逻辑输入封存为 `input_runtime_state_digest`；物理重试可以推进
+`runtime_state_digest`，但不会改写逻辑输入。正常情况下，Runtime 使用获胜分支最佳 Kernel
+Trajectory 最后一个 Attempt 的终态 State，作为下一 Epoch Active Branch 与 Evolver Candidate 的
+共同种子；第一个 Attempt Input 只作为缺失终态 State 时的兼容性回退。
 
 Epoch 历史暴露赛前 Active、有序 Challenger Pool、最终胜者、
 `active_retained`/`challenger_promoted` 决策、起始 Kernel 和全局最佳 Kernel。
@@ -148,31 +175,39 @@ cgroup。任何位于 Session Root 下的宿主绝对路径都会
 在启动前映射到对应 `~/workspace` 路径。
 
 Evolver `atrex-evolver-bundle.json` schema v1 声明唯一入口。Runtime 固定通过 stdin 发送
-`Run the versioned Evolver Bundle once.`。Evolution Input schema v4 固定 Parent、Evidence
+`Run the versioned Evolver Bundle once.`。Evolution Input schema v10 固定 Parent、Evidence
 Checkpoint、DSL、Optimizer Digest、Workspace Path 和只读 `visible_agents` Catalog；其中包含
 Active Parent、已保留的 Lineage Agent 历史，以及同一 Epoch 中此前创建的 Challenger。每个条目
 包含仓库路径、Parent Link、创建者、关系类型，以及适用时的当前 Epoch Challenger Ordinal。
-带判别字段的 Output schema v3 声明提案形态、所选 Revision/Base、假设、预期效果，以及适用时的
-准确 Changed Paths；Trace schema v7 记录所选 Model、
+无版本号的 Evolution Output 声明提案形态、所选 Agent Revision、假设、预期效果，以及相对于 Source
+根目录的准确 Changed Paths；Trace schema v9 记录所选 Model、
 Bundle Commit/Tree/Artifact 与进程证据。Evolver 没有 Token 截止；必需 Report 使用空 Budget
 记录完整 Provider Usage。
-Schema v4 还绑定 `runtime-tools/`。Runtime 冻结 `catalog.json`、全部 Lineage Kernel Artifact
-和冻结的 `evolver_tools.py` Client。其有界 JSON 检索命令包括 `history`、`branches`、`attempts`、
-`kernels`、`kernel-read`、`agents`、`agent-diff` 和 `trace-paths`。`candidate-reset` 是唯一写操作：
-它只把已完成 Lineage 历史原子加载到 `candidate/` 并记录 Base。Client 不携带 HTTP Credential
-或可变 Runtime 权限。
+Schema v10 不包含 Runtime 查询权限。Evolver 直接从冻结文件读取当前 Agent、历史
+Agent、优化汇总、最近 Epoch Conversation 和 Runtime State。从历史派生时，它把所选历史 Source 复制到
+Candidate Source，并可从可见历史状态整理扁平公共种子；Runtime 无需 Candidate Base 旁路记录，直接验证
+Agent Revision、报告的 Source Diff 与私有 Runtime State Diff。
+Agent 通过只读 Bundle 内的本地 `evolution-report` 命令提交该输出。无效 Draft 返回结构化
+`issues`、`request_schema` 与 `recovery` 且不发布；第一个有效 Draft 原子写入
+`scratch/evolution-report.json`。Agent 退出后 Runtime 再独立校验报告和 Candidate。
+按 Trajectory 划分的 `runtime-state/trajectories/<N>/{skills,tools}/` 是唯一的自适应 Skill/Tool 存储，
+属于非版本化 Lineage 状态。根级 `skills/` 和 `tools/` 在版本化 Agent Source 中无效。Evolver 可直接
+整理扁平的 `candidate/runtime-state/{skills,tools}/` 公共种子，也可修改控制未来状态使用方式的版本化
+机制。Runtime 始终独立封存 Candidate Source 与 State，并把两者组合为同一个不可变 Agent Bundle；
+所有新 Trajectory 都从该 Bundle 的 State 初始化。State 是否相对输入发生修改不影响封存。Agent
+Revision 直接记录 `optimizer_digest` 与 `runtime_state_digest`；Evolution Trace 是来源证据，而不是
+State 身份的唯一位置。缺少直接字段的旧 Revision 仍可通过 Trace 兼容读取。
 
 ## Evidence 与 Wiki
 
 Attempt Evidence schema v2 不可变，只包含相同 Branch Slot 和 Trajectory 中较早的 Attempt。
 已完成 Epoch Evidence 保留 Challenger 与 Trajectory 身份、Summary、Report、Diff、规范化
-Session Projection、规范化 Evaluate/Profile Measurement、Lesson 和来源 Digest。Agent View
-schema v1 按 Role 限制：Optimizer 只看到
-已晋升的完成 Lineage 和有界的当前同 Trajectory Attempt，并移除 Branch 控制身份；
-Evolver 看到所有已完成分支、明确 Agent 选择事实、每个 Attempt Outcome、所有 Challenger
-Evolution Trace 与被引用的精确 Kernel Artifact。两种 View 都按 Digest 把 Session Artifact
-物化为派生只读副本。Optimizer 投影只包含已晋升分支的完成 Epoch Measurement；Evolver
-投影冻结全部已完成 Active/Challenger Measurement，不需要实时 Gateway Authority。权威 Session
+Session Projection、规范化 Evaluate/Profile Measurement、Lesson 和来源 Digest。Agent View schema v1 按 Role
+限制：Optimizer 只看到已晋升的完成 Lineage 和有界的当前同 Trajectory Attempt，并移除 Branch
+控制身份。Runtime 从完整持久 Evidence 派生精简 Evolver 文件系统 View：每个当前参赛者获得一份
+权威的最近 Epoch 优化汇总和每个 Attempt 的一份 Conversation；已完成且非当前的 Agent 版本在源码旁获得
+一份汇总。更早的详细分支 Tree 和精确 Kernel Artifact 保留在 Runtime Registry 与 Artifact Store，不重复进
+Evolution Workspace。Evolver 不需要实时 Gateway Authority。权威 Session
 保留策略省略 Claude `system/thinking_tokens` 估算遥测，
 派生副本也会对旧 Session Artifact 防御性地应用同一规则。
 

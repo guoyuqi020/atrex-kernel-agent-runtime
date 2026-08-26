@@ -11,10 +11,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from ..artifacts.local import JsonValue
 from ..domain.ids import (
     AttemptId,
-    KernelRevisionId,
     parse_artifact_digest,
     parse_attempt_id,
-    parse_kernel_revision_id,
 )
 
 GATEWAY_PROXY_PROTOCOL_VERSION: Literal[2] = 2
@@ -249,52 +247,99 @@ class ConfigRequestV2(_GatewayRequestV2):
     operation: Literal["config"]
 
 
-class MeasurementsRequestV2(_GatewayRequestV2):
-    """Query normalized measurements visible to this Attempt's lineage position."""
+class KernelTrialShowRequestV2(_GatewayRequestV2):
+    """Read one visible Kernel Trial's provenance, observations, and decisions."""
 
-    operation: Literal["measurements"]
-    kind: Literal["evaluate", "profile"] | None = None
-    kernel_revision_id: KernelRevisionId | None = None
-    kernel_artifact_digest: str | None = Field(default=None, max_length=80)
-    shape_id: str | None = Field(default=None, min_length=1, max_length=200)
-    kernel_name: str | None = Field(default=None, min_length=1, max_length=500)
-    metric: str | None = Field(default=None, min_length=1, max_length=200)
-    limit: int = Field(default=50, gt=0, le=200)
+    operation: Literal["kernel_trial_show"]
+    kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
 
-    @field_validator("kernel_revision_id", mode="before")
-    @classmethod
-    def _validate_kernel_revision_id(cls, value: object) -> KernelRevisionId | None:
-        if value is None:
-            return None
-        if not isinstance(value, str):
-            raise ValueError("kernel_revision_id must be a string")
-        return parse_kernel_revision_id(value)
+
+class KernelArtifactReadRequestV2(_GatewayRequestV2):
+    """Read the file index or one source file from a visible Kernel Artifact."""
+
+    operation: Literal["kernel_artifact_read"]
+    kernel_artifact_digest: str = Field(max_length=80)
+    file: str | None = None
 
     @field_validator("kernel_artifact_digest")
     @classmethod
-    def _validate_kernel_artifact_digest(cls, value: str | None) -> str | None:
-        return None if value is None else str(parse_artifact_digest(value))
-
-
-class KernelTrialsRequestV2(_GatewayRequestV2):
-    """List exact experimental Kernel snapshots visible to this Attempt."""
-
-    operation: Literal["kernel_trials"]
-    decision: Literal["observed", "continue", "revert", "pivot"] | None = None
-    limit: int = Field(default=50, gt=0, le=200)
-
-
-class KernelTrialReadRequestV2(_GatewayRequestV2):
-    """Read the file index or one exact source file from a visible Kernel Trial."""
-
-    operation: Literal["kernel_trial_read"]
-    kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
-    file: str | None = None
+    def _validate_kernel_artifact_digest(cls, value: str) -> str:
+        return str(parse_artifact_digest(value))
 
     @field_validator("file")
     @classmethod
     def _validate_file(cls, value: str | None) -> str | None:
-        return None if value is None else _safe_relative_path(value, "Kernel Trial file")
+        return None if value is None else _safe_relative_path(value, "Kernel Artifact file")
+
+
+class GatewayResultReadRequestV2(_GatewayRequestV2):
+    """Read one exact visible upstream Gateway Result Artifact."""
+
+    operation: Literal["gateway_result_read"]
+    gateway_result_digest: str = Field(max_length=80)
+
+    @field_validator("gateway_result_digest")
+    @classmethod
+    def _validate_gateway_result_digest(cls, value: str) -> str:
+        return str(parse_artifact_digest(value))
+
+
+class DirectionHistoryRequestV2(_GatewayRequestV2):
+    """Read frozen Direction journals visible to one optimization Attempt."""
+
+    operation: Literal["direction_history"]
+
+
+class ExperimentHistoryRequestV2(_GatewayRequestV2):
+    """Read frozen Experiment journals visible to one optimization Attempt."""
+
+    operation: Literal["experiment_history"]
+
+
+class DirectionUpdateRequestV2(_GatewayRequestV2):
+    """Append one validated Direction proposal or lifecycle update."""
+
+    operation: Literal["direction_update"]
+    request: dict[str, JsonValue]
+
+
+class DirectionsListRequestV2(_GatewayRequestV2):
+    """List normalized Directions visible to one optimization Attempt."""
+
+    operation: Literal["directions_list"]
+
+
+class DirectionLoadRequestV2(_GatewayRequestV2):
+    """Load one normalized Direction visible to one optimization Attempt."""
+
+    operation: Literal["direction_load"]
+    direction_id: str = Field(pattern=r"^direction_[0-9a-f]{32}$")
+
+
+class ExperimentRecordRequestV2(_GatewayRequestV2):
+    """Append one validated Experiment to the authoritative Attempt Journal."""
+
+    operation: Literal["experiment_record"]
+    request: dict[str, JsonValue]
+
+
+class ExperimentsListRequestV2(_GatewayRequestV2):
+    """List Experiments visible to one optimization Attempt."""
+
+    operation: Literal["experiments_list"]
+
+
+class ExperimentLoadRequestV2(_GatewayRequestV2):
+    """Load one Experiment visible to one optimization Attempt."""
+
+    operation: Literal["experiment_load"]
+    experiment_id: str = Field(pattern=r"^experiment_[0-9a-f]{32}$")
+
+
+class JournalSnapshotRequestV2(_GatewayRequestV2):
+    """Read the current Attempt's authoritative Journal for terminal reporting."""
+
+    operation: Literal["journal_snapshot"]
 
 
 type GatewayProxyRequestV2 = Annotated[
@@ -311,23 +356,50 @@ type GatewayProxyRequestV2 = Annotated[
     | EnvRequestV2
     | HealthRequestV2
     | ConfigRequestV2
-    | MeasurementsRequestV2
-    | KernelTrialsRequestV2
-    | KernelTrialReadRequestV2,
+    | KernelTrialShowRequestV2
+    | KernelArtifactReadRequestV2
+    | GatewayResultReadRequestV2
+    | DirectionHistoryRequestV2
+    | ExperimentHistoryRequestV2
+    | DirectionUpdateRequestV2
+    | DirectionsListRequestV2
+    | DirectionLoadRequestV2
+    | ExperimentRecordRequestV2
+    | ExperimentsListRequestV2
+    | ExperimentLoadRequestV2
+    | JournalSnapshotRequestV2,
     Field(discriminator="operation"),
 ]
 
 
 GATEWAY_AGENT_SCHEMA_VERSION: Literal[1] = 1
 _RUNTIME_OWNED_REQUEST_FIELDS = frozenset({"schema_version", "attempt_id", "candidate"})
-_RUNTIME_DEFAULTED_REQUEST_FIELDS = frozenset({"idempotency_key"})
+_AGENT_HIDDEN_REQUEST_FIELDS = _RUNTIME_OWNED_REQUEST_FIELDS | {"idempotency_key"}
+_RUNTIME_QUERY_OPERATION_NAMES = frozenset(
+    {
+        "kernel_trial_show",
+        "kernel_artifact_read",
+        "gateway_result_read",
+        "direction_history",
+        "experiment_history",
+    }
+)
+_RUNTIME_JOURNAL_OPERATION_NAMES = frozenset(
+    {
+        "direction_update",
+        "directions_list",
+        "direction_load",
+        "experiment_record",
+        "experiments_list",
+        "experiment_load",
+        "journal_snapshot",
+    }
+)
 _GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
     "evaluate": EvaluateRequestV2,
-    "submit": SubmitRequestV2,
     "profile": ProfileRequestV2,
     "dev": DevRequestV2,
     "check": CheckRequestV2,
-    "sol": SolRequestV2,
     "disassemble": DisassembleRequestV2,
     "poll": PollRequestV2,
     "jobs": JobsRequestV2,
@@ -335,9 +407,18 @@ _GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
     "env": EnvRequestV2,
     "health": HealthRequestV2,
     "config": ConfigRequestV2,
-    "measurements": MeasurementsRequestV2,
-    "kernel_trials": KernelTrialsRequestV2,
-    "kernel_trial_read": KernelTrialReadRequestV2,
+    "kernel_trial_show": KernelTrialShowRequestV2,
+    "kernel_artifact_read": KernelArtifactReadRequestV2,
+    "gateway_result_read": GatewayResultReadRequestV2,
+    "direction_history": DirectionHistoryRequestV2,
+    "experiment_history": ExperimentHistoryRequestV2,
+    "direction_update": DirectionUpdateRequestV2,
+    "directions_list": DirectionsListRequestV2,
+    "direction_load": DirectionLoadRequestV2,
+    "experiment_record": ExperimentRecordRequestV2,
+    "experiments_list": ExperimentsListRequestV2,
+    "experiment_load": ExperimentLoadRequestV2,
+    "journal_snapshot": JournalSnapshotRequestV2,
 }
 
 
@@ -348,9 +429,9 @@ def gateway_agent_request_schema(
 ) -> dict[str, JsonValue]:
     """Project the live wire models into the request shape accepted from an Agent.
 
-    Runtime-owned identity and Candidate fields are attached by ``gateway-execute`` and are
-    deliberately absent. Every remaining field, default, enum, bound, and extra-field policy is
-    generated from the exact Pydantic model used by the Gateway Proxy.
+    Runtime-owned identity, operation, and Candidate fields are attached by the selected Core tool
+    binding and are deliberately absent. Every remaining field, default, enum, bound, and
+    extra-field policy is generated from the exact Pydantic model used by Runtime.
     """
     if operation is not None and operation not in _GATEWAY_REQUEST_MODELS:
         raise ValueError(f"unsupported Gateway operation: {operation}")
@@ -359,37 +440,63 @@ def gateway_agent_request_schema(
         names = tuple(name for name in names if name in allowed_operations)
         if operation is not None and not names:
             raise PermissionError(f"Gateway operation is not allowed: {operation}")
-    operations = {name: _agent_operation_schema(_GATEWAY_REQUEST_MODELS[name]) for name in names}
+    operations = {
+        name: _agent_operation_schema(
+            _GATEWAY_REQUEST_MODELS[name],
+            runtime_bound=(
+                name in _RUNTIME_QUERY_OPERATION_NAMES or name in _RUNTIME_JOURNAL_OPERATION_NAMES
+            ),
+        )
+        for name in names
+    }
+    request_contract = (
+        "runtime-query"
+        if operation in _RUNTIME_QUERY_OPERATION_NAMES
+        else "runtime-journal"
+        if operation in _RUNTIME_JOURNAL_OPERATION_NAMES
+        else "gateway-execute"
+        if operation is not None
+        else "runtime-operation"
+    )
+    runtime_owned_fields = _RUNTIME_OWNED_REQUEST_FIELDS | (
+        {"operation"}
+        if operation in _RUNTIME_QUERY_OPERATION_NAMES
+        or operation in _RUNTIME_JOURNAL_OPERATION_NAMES
+        else set()
+    )
     return cast(
         dict[str, JsonValue],
         {
             "schema_version": GATEWAY_AGENT_SCHEMA_VERSION,
             "gateway_protocol_version": GATEWAY_PROXY_PROTOCOL_VERSION,
-            "request_contract": "gateway-execute",
-            "runtime_owned_fields": sorted(_RUNTIME_OWNED_REQUEST_FIELDS),
-            "runtime_defaulted_fields": sorted(_RUNTIME_DEFAULTED_REQUEST_FIELDS),
+            "request_contract": request_contract,
+            "runtime_owned_fields": sorted(runtime_owned_fields),
             "operations": operations,
         },
     )
 
 
-def _agent_operation_schema(model: type[_GatewayRequestV2]) -> dict[str, object]:
+def _agent_operation_schema(
+    model: type[_GatewayRequestV2],
+    *,
+    runtime_bound: bool,
+) -> dict[str, object]:
     schema = deepcopy(model.model_json_schema(mode="validation"))
     properties = schema.get("properties")
     if not isinstance(properties, dict):
         raise TypeError(f"Gateway request schema has no properties: {model.__name__}")
-    for field_name in _RUNTIME_OWNED_REQUEST_FIELDS:
+    hidden_fields = _AGENT_HIDDEN_REQUEST_FIELDS | ({"operation"} if runtime_bound else set())
+    for field_name in hidden_fields:
         properties.pop(field_name, None)
     required = schema.get("required")
     if isinstance(required, list):
         schema["required"] = [
-            field_name
-            for field_name in required
-            if field_name not in (_RUNTIME_OWNED_REQUEST_FIELDS | _RUNTIME_DEFAULTED_REQUEST_FIELDS)
+            field_name for field_name in required if field_name not in hidden_fields
         ]
     # CandidateBundleV2 is the only nested definition and becomes unreachable after projection.
     schema.pop("$defs", None)
-    schema["title"] = model.__name__.removesuffix("RequestV2") + " gateway-execute request"
+    suffix = " Runtime request" if runtime_bound else " gateway-execute request"
+    schema["title"] = model.__name__.removesuffix("RequestV2") + suffix
     return schema
 
 
@@ -430,12 +537,22 @@ class GatewayProxyResponseV2(BaseModel):
         "env",
         "health",
         "config",
-        "measurements",
-        "kernel_trials",
-        "kernel_trial_read",
+        "kernel_trial_show",
+        "kernel_artifact_read",
+        "gateway_result_read",
+        "direction_history",
+        "experiment_history",
+        "direction_update",
+        "directions_list",
+        "direction_load",
+        "experiment_record",
+        "experiments_list",
+        "experiment_load",
+        "journal_snapshot",
     ]
     status: Literal["completed", "queued", "failed", "cancelled"]
-    candidate_artifact_digest: str | None = None
+    kernel_artifact_digest: str | None = None
+    kernel_trial_id: str | None = Field(default=None, pattern=r"^gtrial_[0-9a-f]{32}$")
     gateway_result_digest: str
     job_id: str | None = None
     evaluation: EvaluationV2 | None = None

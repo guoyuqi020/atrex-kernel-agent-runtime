@@ -284,6 +284,7 @@ class KernelAgentRevision:
     created_at: str
     source_provenance_digest: ArtifactDigest | None = None
     evolution_trace_digest: ArtifactDigest | None = None
+    runtime_state_digest: ArtifactDigest | None = None
 
     def __post_init__(self) -> None:
         if self.created_by not in {"bootstrap", "lineage_seed", "evolver"}:
@@ -546,6 +547,8 @@ class Attempt:
     completed_at: str | None
     attempt_report_digest: ArtifactDigest | None = None
     attempt_report_status: AttemptReportStatus | None = None
+    runtime_state_digest: ArtifactDigest | None = None
+    input_runtime_state_digest: ArtifactDigest | None = None
 
     def __post_init__(self) -> None:
         if self.branch is BranchRole.ACTIVE and self.challenger_ordinal != 0:

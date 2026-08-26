@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -34,9 +35,21 @@ class GatewayOperation(StrEnum):
     ENV = "env"
     HEALTH = "health"
     CONFIG = "config"
+    # Decode historical Registry rows only; these operations are not exposed by Agent protocol.
     MEASUREMENTS = "measurements"
     KERNEL_TRIALS = "kernel_trials"
-    KERNEL_TRIAL_READ = "kernel_trial_read"
+    KERNEL_TRIAL_SHOW = "kernel_trial_show"
+    KERNEL_ARTIFACT_READ = "kernel_artifact_read"
+    GATEWAY_RESULT_READ = "gateway_result_read"
+    DIRECTION_HISTORY = "direction_history"
+    EXPERIMENT_HISTORY = "experiment_history"
+    DIRECTION_UPDATE = "direction_update"
+    DIRECTIONS_LIST = "directions_list"
+    DIRECTION_LOAD = "direction_load"
+    EXPERIMENT_RECORD = "experiment_record"
+    EXPERIMENTS_LIST = "experiments_list"
+    EXPERIMENT_LOAD = "experiment_load"
+    JOURNAL_SNAPSHOT = "journal_snapshot"
     WIKI_QUERY = "wiki_query"
 
 
@@ -75,7 +88,7 @@ class GatewayEvaluationRecord:
     ordinal: int
     source: GatewayEvaluationSource
     idempotency_key: str
-    candidate_artifact_digest: ArtifactDigest
+    kernel_artifact_digest: ArtifactDigest
     gateway_result_digest: ArtifactDigest
     correct: bool
     latency_us: float | None
@@ -126,7 +139,7 @@ class GatewayMeasurementRecord:
     ordinal: int
     source_operation: GatewayOperation
     idempotency_key: str
-    candidate_artifact_digest: ArtifactDigest
+    kernel_artifact_digest: ArtifactDigest
     gateway_result_digest: ArtifactDigest
     point: GatewayMeasurementPoint
     created_at: str
@@ -150,24 +163,25 @@ class GatewayKernelTrialObservation:
     idempotency_key: str
     operation: GatewayOperation
     request_digest: ArtifactDigest
+    gateway_result_digest: ArtifactDigest | None
     result_artifact_digest: ArtifactDigest | None
     created_at: str
 
 
 @dataclass(frozen=True, slots=True)
 class GatewayKernelTrialAnnotation:
-    """One Agent-authored experiment decision bound to an immutable Kernel snapshot."""
+    """One Agent-authored Experiment action mapped to a Trial disposition."""
 
     sequence: int
-    decision: str
+    disposition: str
     experiment: dict[str, JsonValue]
     recorded_at: str
 
     def __post_init__(self) -> None:
         if self.sequence <= 0:
             raise ValueError("Kernel Trial annotation sequence must be positive")
-        if self.decision not in {"continue", "revert", "pivot"}:
-            raise ValueError("Kernel Trial annotation decision is invalid")
+        if self.disposition not in {"continue", "revert", "pivot"}:
+            raise ValueError("Kernel Trial annotation disposition is invalid")
 
 
 @dataclass(frozen=True, slots=True)
@@ -178,7 +192,7 @@ class GatewayKernelTrialRecord:
     attempt_id: AttemptId
     recovery_generation: int
     ordinal: int
-    candidate_artifact_digest: ArtifactDigest
+    kernel_artifact_digest: ArtifactDigest
     observations: tuple[GatewayKernelTrialObservation, ...]
     annotations: tuple[GatewayKernelTrialAnnotation, ...]
     created_at: str
@@ -193,8 +207,20 @@ class GatewayKernelTrialRecord:
 
     @property
     def disposition(self) -> str:
-        """Return the latest explicit decision, or observed when none was published."""
-        return self.annotations[-1].decision if self.annotations else "observed"
+        """Return the latest mapped disposition, or observed when none was published."""
+        return self.annotations[-1].disposition if self.annotations else "observed"
+
+
+def gateway_kernel_trial_id(
+    attempt_id: AttemptId,
+    recovery_generation: int,
+    kernel_artifact_digest: ArtifactDigest,
+) -> str:
+    """Return the stable identity of one exact candidate in an Attempt generation."""
+    identity = hashlib.sha256(
+        f"{attempt_id}:{recovery_generation}:{kernel_artifact_digest}".encode()
+    ).hexdigest()[:32]
+    return f"gtrial_{identity}"
 
 
 @dataclass(frozen=True, slots=True)

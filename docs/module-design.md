@@ -38,6 +38,15 @@ local-wiki/                         first-class local GPU Wiki service and corpu
 
 `bootstrap.py` supports only Campaign schema v3. The Campaign definition is separate from Runtime deployment configuration, and its non-empty `lineages` map is the sole initial DSL selection. Before any Agent Session it preserves an explicit Roofline or asks the optional `roofline.py` provider to execute the canonical Atrex Bench converter from one deployment-pinned Git commit, validates exact Shape coverage, and seals the result into the shared Evaluation Contract. It imports Core once per operation, shares the resulting optimizer digest and source provenance across selected DSL revisions, and requires either a supplied public Agent Problem or the Core problem-generalization phase. Campaign-level problem-generalization, the deployment-selected full Evolver Commit, and Lineage-level Optimizer/Evolver models are persisted as immutable resume inputs. `CampaignScheduler` validates the frozen Evolver Commit while holding a Lineage fence. A Core baseline generator is mandatory; precomputed Gateway-result and local-repository paths do not exist. `gateway/control.py` retains every Bootstrap execution in `bootstrap_runs` and keys Gateway operations by Attempt plus recovery Generation; `composition/bootstrap.py` commits terminal success or failure evidence for every caught Session exit.
 
+After a successful Baseline Session, Runtime replaces initialization input with an immutable Epoch-0
+Evidence checkpoint. Its Agent-facing `bootstrap/` directory contains only the terminal
+`report.json` and latest sealed backend-neutral `conversation.jsonl`, exactly like the compact
+historical representation of an ordinary Attempt. Bootstrap is otherwise a special Attempt: it
+uses the same Direction/Experiment journals, Runtime query tools, and schema-v12 `attempt-report`,
+but has Bootstrap-specific methodology and no earlier Lineage history. Its terminal journals and
+Gateway records become the root history visible to later Optimizer Attempts. Runtime metadata
+remains internal.
+
 Before Roofline resolution or any Core phase, Bootstrap applies Runtime `gate_policy` to the sealed
 Contract. Sampling, tolerances, timeouts, full validation mode, clock policy, evaluator commit, and
 Gate-owned runner controls therefore have one Campaign-frozen source of truth. The same Contract
@@ -59,6 +68,14 @@ an independent version tree and begins at Epoch 1.
 
 `workers/core_phase.py` is the common command-resolution, Sandbox launch, bounded process, token-report, and Session-trace acquisition path for optimization attempts, problem generalization, and framework baseline. `workers/launcher.py` constructs the systemd cgroup plus bwrap mount/process boundary, maps every host Workspace path to `~/workspace`, deliberately retains host networking, serializes concurrent host checks, and asks systemd to create workspace roots/probes directly as the non-root Worker for virtiofs-safe ownership. `workers/core.py`, `problem_generalization.py`, and `lineage_bootstrap.py` own only their phase-specific environment and output schemas.
 
+`workers/workspace.py` also maintains writable `skills/` and `tools/` snapshots outside physical
+Attempt run directories. They are keyed by Lineage, Agent revision, and Trajectory, restored into
+each fresh Optimizer Workspace, and atomically published when the Session exits. A child Agent
+revision inherits its parent's matching snapshot on first use. `tools/README.md` is mandatory and
+defines the usage contract for every saved tool. Framework Bootstrap publishes a revision-wide
+seed snapshot; every new trajectory of `agent-v0` begins from that snapshot and then diverges
+independently.
+
 `registry.worker_sessions` is the unified physical-process catalog for Optimizer Attempts, Framework Baselines, Problem Generalization, and Evolver runs. A running row is committed after workspace preparation and before authority acquisition or process launch. Exactly one terminal update records completion, failure, or timeout together with the unmodified sealed Session Trace when available, provider token usage, process status, diagnostics, and stable workspace/run identity. Context columns are nullable because Generalization precedes Campaign creation; existing Attempt/Epoch identities are automatically expanded to Campaign/Lineage context. The catalog complements role-specific protocol records such as `attempt_session_traces` and `bootstrap_runs`; it does not replace their domain evidence.
 
 `dev_shell.py` reuses the exact launch preparation in `workers/core.py`. It materializes a real
@@ -73,12 +90,29 @@ includes earlier Kernel history and any Challenger already attached to the selec
 excludes Kernels produced by the selected or later Epochs. It prepares the same Evolver environment
 but creates no Challenger, Agent execution, promotion, or token report.
 
-`workers/evolution.py` creates a fixed input/parent/agents/evidence/runtime-tools/candidate/scratch
-workspace and accepts same-DSL full-repository changes. It freezes exact Lineage-local Agent/Kernel
-version catalogs and every historical Kernel Artifact. `workers/evolver_tools.py` is copied into the
-workspace as a bounded frozen-snapshot inspection client plus the single constrained
-`candidate-reset` mutation. The latter admits only completed Lineage history, atomically replaces
-the Candidate, and writes the base record checked during sealing. Runtime launches the
+`workers/evolution.py` creates a fixed
+input/agents/evidence/historical/candidate/scratch workspace with Runtime-private control files and accepts
+same-DSL full-repository changes. It freezes exact Lineage-local Agent/Kernel version catalogs,
+every historical Kernel Artifact, and read-only per-Agent/per-Trajectory `skills/` and `tools/`
+snapshots for comparison by the Evolver. `input/agents/` contains only the current Active and
+current-Epoch Challengers; `input/evidence/<role>/` contains measured optimization effect and one
+conversation per Attempt from that Agent's latest completed Epoch, organized by Trajectory;
+Bootstrap and older conversations remain private Runtime history. `input/historical/agent-vN/`
+co-locates each non-current version's source, effect summary,
+and runtime state. Ordered `input/evolution-reports/evo-N.json` wrappers expose each available
+Agent-authored creation report plus Source Base/produced-Agent paths, not its full Evolution trace. Current runtime state sits beside its role source under `input/agents/`, not in
+Evidence. Each effect summary separates the latest completed Epoch's Attempt correctness and best
+per-Shape Gateway result from cumulative Epoch participation, wins, and losses. Detailed Epoch trees
+remain in the existing Runtime Evidence store and are not duplicated into Evolution workspaces.
+Runtime-state snapshots remain separate from versioned source. Candidate has writable `source/` and
+one flat, revision-wide `runtime-state/{skills,tools}/` seed. Top-level `skills/` and `tools/` remain
+invalid in source; Evolver may curate the common seed or revise the mechanism that consumes it.
+Runtime seals Source and State independently, pairs both as one logical Bundle, and copies its exact
+State to every new Revision Trajectory.
+Evolver reads only frozen files and receives no Runtime Tool or HTTP capability. A historical
+derivation copies selected historical Source into Candidate Source and may synthesize the common
+seed from visible historical state; Runtime validates the declared Agent revision, reported Source
+Diff, and private State Diff during sealing. Runtime launches the
 commit-pinned Evolver with one fixed stdin instruction. Provenance records commit, tree, sealed
 Artifact digest, argv digest, environment-key names, process result, token usage, session trace,
 output annotation, and candidate digest. Provider, model, and prompt selection belong to the Evolver
@@ -90,7 +124,7 @@ independent Trajectories concurrently within each Branch, and executes Attempts 
 Trajectory. `controller/attempt_evidence.py` isolates incremental memory by Trajectory;
 `controller/evidence.py` publishes the complete measured Epoch only after selection.
 
-`controller/projection.py` emits bounded normalized summaries that contain only a Session source digest; it deliberately excludes the unredacted `conversation.jsonl` from semantic projection. `workers/session_trace.py` applies the authoritative retention policy before every Core or Evolver Session Artifact is sealed: high-frequency Claude `system/thinking_tokens` estimate telemetry is removed from Provider stdout and the conversation, while authoritative usage remains in `events.jsonl`. `workers/evidence_view.py` follows the digest to materialize a derived read-only Agent copy and defensively applies the same policy to older Artifacts. `knowledge/ingest.py` independently constructs bounded retained Session upload projections after epoch completion and applies the same compatibility filter.
+`controller/projection.py` emits bounded normalized summaries that contain only a Session source digest; it deliberately excludes the unredacted `conversation.jsonl` from semantic projection. `workers/session_trace.py` applies the authoritative retention policy before every Core or Evolver Session Artifact is sealed: high-frequency Claude `system/thinking_tokens` estimate telemetry is removed from Provider stdout and the conversation, while authoritative usage remains in `events.jsonl`. For each Optimizer-visible historical Attempt, `workers/evidence_view.py` follows the latest sealed Session digest and exposes only a flat `conversation.jsonl` beside the Runtime Final `report.json`; every retry Artifact remains in Runtime storage. Evolver evidence retains its richer all-branch diagnostic view. `knowledge/ingest.py` independently constructs bounded retained Session upload projections after epoch completion and applies the same compatibility filter.
 
 ## Stable interfaces
 

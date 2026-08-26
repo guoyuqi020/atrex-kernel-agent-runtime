@@ -71,7 +71,7 @@ Runtime Wiki Proxy。它注入受限 Capability 和严格的 Core Attempt 环境
 Backend。在 Shell 中直接使用未修改的 Core Runtime Tool：
 
 ```bash
-python agent/optimizer/src/runtime_tools.py \
+python3 agent/optimizer/src/runtime_tools.py \
   wiki-query --request scratch/wiki-query.json
 ```
 
@@ -125,7 +125,7 @@ Optimizer Session 内执行。Runtime 会注入可信 Manifest、Proxy URL 和�
 
 ```bash
 cp /path/to/atrex-runtime/examples/local-wiki/wiki-query.json scratch/wiki-query.json
-python agent/optimizer/src/runtime_tools.py \
+python3 agent/optimizer/src/runtime_tools.py \
   wiki-query --request scratch/wiki-query.json
 ```
 
@@ -198,6 +198,6 @@ python3 \
 ```
 
 Capability 本身不会打印，但它存在于进程环境中，因此不要把 `env` 输出复制到日志或聊天。
-调试 Shell 没有 Token 配额记账，因为 Agent 未启动；如果在 Shell 中主动调用 `submit`、
-`evaluate` 或 Wiki Tool，这些仍是真实受控操作，会消耗 Capability Call Budget 并写入审计记录。
+调试 Shell 没有 Token 配额记账，因为 Agent 未启动；如果在 Shell 中主动调用 `evaluate` 或
+Wiki Tool，这些仍是真实受控操作，会消耗 Capability Call Budget 并写入审计记录。
 不要同时对同一 Lineage 运行 Campaign Scheduler。

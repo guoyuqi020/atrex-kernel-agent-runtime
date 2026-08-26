@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pytest
@@ -29,7 +30,7 @@ from atrex_runtime.ports import (
     WorkerGatewayAuthority,
 )
 from atrex_runtime.registry.sqlite import SqliteRegistry
-from atrex_runtime.workers.attempt_report import AttemptExperimentV2, AttemptReportV3
+from atrex_runtime.workers.attempt_report import AttemptExperimentV8, AttemptReportV12
 from atrex_runtime.workers.optimizer import (
     OptimizerSessionConfig,
     OptimizerSessionResult,
@@ -90,7 +91,7 @@ class FakeFinalizer:
     async def finalize(
         self,
         attempt_id: AttemptId,
-        candidate_artifact_digest: ArtifactDigest,
+        kernel_artifact_digest: ArtifactDigest,
         *,
         nominated_gateway_result_digest: ArtifactDigest | None = None,
         independent_evaluate: bool = True,
@@ -98,7 +99,7 @@ class FakeFinalizer:
         self.calls.append(
             (
                 attempt_id,
-                candidate_artifact_digest,
+                kernel_artifact_digest,
                 nominated_gateway_result_digest,
                 independent_evaluate,
             )
@@ -118,6 +119,7 @@ class FakeGatewayAuthorities:
 @dataclass
 class FakeSessionTraceRecorder:
     records: list[tuple[AttemptId, ArtifactDigest, str, int, TokenUsage]]
+    runtime_states: list[tuple[AttemptId, ArtifactDigest]] | None = None
 
     def record_attempt_session_trace(
         self,
@@ -138,6 +140,15 @@ class FakeSessionTraceRecorder:
             NOW,
         )
 
+    def record_attempt_runtime_state(
+        self,
+        attempt_id: AttemptId,
+        runtime_state_digest: ArtifactDigest,
+    ) -> None:
+        if self.runtime_states is None:
+            self.runtime_states = []
+        self.runtime_states.append((attempt_id, runtime_state_digest))
+
 
 @dataclass
 class FakeRuntimeEventRecorder:
@@ -152,6 +163,27 @@ class FakeRuntimeEventRecorder:
         self.records.append((kind, aggregate_id, payload))
 
 
+@dataclass
+class FakeKernelTrialRecorder:
+    records: list[
+        tuple[
+            AttemptId,
+            Sequence[Mapping[str, object]],
+            Sequence[Mapping[str, object]],
+        ]
+    ]
+
+    def record_kernel_trial_annotations(
+        self,
+        attempt_id: AttemptId,
+        experiments: Sequence[Mapping[str, object]],
+        *,
+        profile_supporting_results: Sequence[Mapping[str, object]] = (),
+    ) -> object:
+        self.records.append((attempt_id, experiments, profile_supporting_results))
+        return ()
+
+
 def _session_result(
     finish_reason: str,
     final_response: str,
@@ -160,33 +192,108 @@ def _session_result(
     with_report: bool = False,
 ) -> OptimizerSessionResult:
     report = (
-        AttemptReportV3(
-            schema_version=3,
+        AttemptReportV12(
+            schema_version=12,
             attempt_id=new_attempt_id(),
             status="candidate_ready",
             hypothesis="reduce memory traffic",
-            bottleneck="memory bandwidth",
-            plan=("coalesce loads",),
-            change_summary="coalesced global loads",
-            profile_evidence="survey localized memory traffic",
-            evaluation_evidence="Gateway evaluation completed",
-            result_interpretation="candidate is correct and faster",
-            decision="keep",
-            research_sources=(),
-            lessons=("coalescing helped",),
-            next_directions=(),
+            diagnosis={
+                "bottleneck": "memory bandwidth",
+                "evidence": "survey localized memory traffic",
+            },
+            approach={
+                "summary": "coalesce loads",
+                "steps": ["vectorize aligned loads"],
+                "expected_impact": "reduce memory transactions",
+                "risks": [],
+            },
+            final_candidate={"change_summary": "coalesced global loads"},
+            evidence_summary={
+                "correctness": "Gateway evaluation completed",
+                "performance": "candidate is faster",
+            },
+            profile_evidence={
+                "tool_used": "gateway-execute/profile",
+                "profiler": "ncu",
+                "profile_level": "survey",
+                "bottleneck_type": "memory_bound",
+                "evidence_summary": "survey localized memory traffic",
+                "evidence_chain": "survey counters support a memory-bound diagnosis",
+                "supporting_results": [
+                    {
+                        "operation": "profile",
+                        "kernel_artifact_digest": digest("candidate-experiment"),
+                        "kernel_trial_id": "gtrial_" + "b" * 32,
+                        "gateway_result_digest": digest("gateway-experiment"),
+                    }
+                ],
+            },
+            analysis="candidate is correct and faster",
+            knowledge_used=(),
+            findings=(
+                {
+                    "category": "performance",
+                    "observation": "latency improved",
+                    "root_cause": "coalesced global loads",
+                    "resolution": "kept the coalesced-load candidate",
+                    "lesson": "coalescing helped",
+                    "supporting_experiment_ids": ["experiment_" + "a" * 32],
+                },
+            ),
+            blocker=None,
             experiments=(
-                AttemptExperimentV2(
+                AttemptExperimentV8(
+                    experiment_id="experiment_" + "a" * 32,
+                    direction_id="direction_" + "a" * 32,
                     sequence=1,
                     recorded_at="2026-08-16T00:00:00+00:00",
                     name="coalescing",
                     hypothesis="coalescing helps",
                     change="vectorized loads",
-                    candidate_artifact_digest=digest("candidate-experiment"),
+                    before={
+                        "kernel_artifact_digest": digest("before-experiment"),
+                        "kernel_trial_id": "gtrial_" + "a" * 32,
+                        "gateway_result_digests": [digest("before-gateway")],
+                    },
+                    after={
+                        "kernel_artifact_digest": digest("candidate-experiment"),
+                        "kernel_trial_id": "gtrial_" + "b" * 32,
+                        "gateway_result_digests": [digest("gateway-experiment")],
+                    },
                     evidence="SOL memory traffic",
-                    result="correct and faster",
-                    decision="continue",
+                    analysis="the hypothesis held and the candidate is faster",
+                    action="keep_after",
                 ),
+            ),
+            direction_events=(
+                {
+                    "direction_event_id": "directionevent_" + "1" * 32,
+                    "direction_id": "direction_" + "a" * 32,
+                    "recorded_at": "2026-08-16T00:00:00+00:00",
+                    "action": "propose",
+                    "name": "coalesced loads",
+                    "hypothesis": "coalescing helps",
+                    "rationale": "profile localized memory traffic",
+                    "plan": ["vectorize aligned loads"],
+                    "success_criteria": "latency improves",
+                    "stop_conditions": "alignment is unsafe",
+                    "analysis": None,
+                    "supporting_experiment_ids": [],
+                },
+                {
+                    "direction_event_id": "directionevent_" + "2" * 32,
+                    "direction_id": "direction_" + "a" * 32,
+                    "recorded_at": "2026-08-16T00:01:00+00:00",
+                    "action": "complete",
+                    "name": None,
+                    "hypothesis": None,
+                    "rationale": None,
+                    "plan": [],
+                    "success_criteria": None,
+                    "stop_conditions": None,
+                    "analysis": "latency improved",
+                    "supporting_experiment_ids": ["experiment_" + "a" * 32],
+                },
             ),
         )
         if with_report
@@ -202,6 +309,7 @@ def _session_result(
         digest("attempt-report") if report is not None else None,
         None,
         digest("candidate") if report is not None else None,
+        digest("runtime-state"),
     )
 
 
@@ -228,7 +336,9 @@ async def test_existing_gateway_outcome_skips_workspace_and_core_process(
     tmp_path: Path,
 ) -> None:
     candidate = AttemptCandidateResult(digest("candidate"), digest("gateway"), True, 10.0)
-    prepared = PreparedAttempt(tmp_path, tmp_path / "attempt.json", tmp_path / "sessions", "s")
+    prepared = PreparedAttempt(
+        tmp_path, tmp_path / ".runtime/attempt.json", tmp_path / "sessions", "s"
+    )
     workspaces = FakeWorkspaceAssembler(prepared)
     sessions = FakeSessionDriver(_session_result("completed", "done"))
     authorities = FakeGatewayAuthorities()
@@ -258,13 +368,16 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
     tmp_path: Path,
 ) -> None:
     candidate = AttemptCandidateResult(digest("candidate"), digest("gateway"), False, None)
-    prepared = PreparedAttempt(tmp_path, tmp_path / "attempt.json", tmp_path / "sessions", "s")
+    prepared = PreparedAttempt(
+        tmp_path, tmp_path / ".runtime/attempt.json", tmp_path / "sessions", "s"
+    )
     configs: list[OptimizerSessionConfig] = []
     trace_digest = digest("session-trace")
     traces = FakeSessionTraceRecorder([])
     events = FakeRuntimeEventRecorder([])
     request = _request()
     finalizer = FakeFinalizer(candidate, [])
+    kernel_trials = FakeKernelTrialRecorder([])
     runner = SessionOptimizerRunner(
         FakeWorkspaceAssembler(prepared),
         FakeSessionDriver(
@@ -279,6 +392,7 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
         _config(tmp_path),
         independent_final_evaluation=False,
         wiki_enabled=True,
+        kernel_trials=kernel_trials,
     )
 
     result = await runner.run_attempt(request)
@@ -291,6 +405,14 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
     assert configs[0].model == "optimizer-model"
     assert traces.records[0][0] == request.attempt_id
     assert finalizer.calls == [(request.attempt_id, digest("candidate"), None, False)]
+    assert kernel_trials.records[0][2] == (
+        {
+            "operation": "profile",
+            "kernel_artifact_digest": digest("candidate-experiment"),
+            "kernel_trial_id": "gtrial_" + "b" * 32,
+            "gateway_result_digest": digest("gateway-experiment"),
+        },
+    )
     assert [kind for kind, _aggregate, _payload in events.records] == [
         "worker.started",
         "worker.exited",
@@ -300,8 +422,50 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
 
 
 @pytest.mark.anyio
+async def test_optimizer_rejects_bootstrap_only_baseline_experiment(tmp_path: Path) -> None:
+    session = _session_result("completed", "done", with_report=True)
+    assert session.attempt_report is not None
+    original = session.attempt_report.experiments[0]
+    baseline = original.model_copy(update={"action": "baseline", "before": None})
+    report = session.attempt_report.model_copy(update={"experiments": (baseline,)})
+    session = replace(session, attempt_report=report)
+    events = FakeRuntimeEventRecorder([])
+    runner = SessionOptimizerRunner(
+        FakeWorkspaceAssembler(
+            PreparedAttempt(
+                tmp_path,
+                tmp_path / ".runtime/attempt.json",
+                tmp_path / "sessions",
+                "s",
+            )
+        ),
+        FakeSessionDriver(session),
+        SequencedOutcomes([None]),
+        FakeFinalizer(
+            AttemptCandidateResult(digest("unused"), digest("unused-result"), True, 1.0),
+            [],
+        ),
+        FakeGatewayAuthorities(),
+        FakeSessionTraceRecorder([]),
+        events,
+        _config(tmp_path),
+    )
+
+    result = await runner.run_attempt(_request())
+
+    assert result.failure_reason == (
+        "invalid Attempt report: Experiment action baseline is Bootstrap-only"
+    )
+    assert [kind for kind, _aggregate, _payload in events.records][-1] == (
+        "attempt.report_rejected"
+    )
+
+
+@pytest.mark.anyio
 async def test_missing_gateway_outcome_is_a_consumed_optimizer_failure(tmp_path: Path) -> None:
-    prepared = PreparedAttempt(tmp_path, tmp_path / "attempt.json", tmp_path / "sessions", "s")
+    prepared = PreparedAttempt(
+        tmp_path, tmp_path / ".runtime/attempt.json", tmp_path / "sessions", "s"
+    )
     runner = SessionOptimizerRunner(
         FakeWorkspaceAssembler(prepared),
         FakeSessionDriver(_session_result("max-tokens", "")),
@@ -325,7 +489,9 @@ async def test_missing_gateway_outcome_is_a_consumed_optimizer_failure(tmp_path:
 @pytest.mark.anyio
 async def test_nonzero_core_exit_cannot_accept_a_gateway_candidate(tmp_path: Path) -> None:
     candidate = AttemptCandidateResult(digest("candidate"), digest("gateway"), True, 10.0)
-    prepared = PreparedAttempt(tmp_path, tmp_path / "attempt.json", tmp_path / "sessions", "s")
+    prepared = PreparedAttempt(
+        tmp_path, tmp_path / ".runtime/attempt.json", tmp_path / "sessions", "s"
+    )
     runner = SessionOptimizerRunner(
         FakeWorkspaceAssembler(prepared),
         FakeSessionDriver(
@@ -355,7 +521,9 @@ async def test_nonzero_core_exit_cannot_accept_a_gateway_candidate(tmp_path: Pat
 
 @pytest.mark.anyio
 async def test_optimizer_timeout_records_cleanup_lifecycle(tmp_path: Path) -> None:
-    prepared = PreparedAttempt(tmp_path, tmp_path / "attempt.json", tmp_path / "sessions", "s")
+    prepared = PreparedAttempt(
+        tmp_path, tmp_path / ".runtime/attempt.json", tmp_path / "sessions", "s"
+    )
     events = FakeRuntimeEventRecorder([])
     request = _request()
     runner = SessionOptimizerRunner(
@@ -388,7 +556,7 @@ async def test_optimizer_persists_successful_worker_session_and_raw_trace(
 ) -> None:
     prepared = PreparedAttempt(
         tmp_path / "run-success",
-        tmp_path / "attempt.json",
+        tmp_path / ".runtime/attempt.json",
         tmp_path / "sessions",
         "optimizer-run-1",
     )
@@ -426,7 +594,7 @@ async def test_optimizer_persists_successful_worker_session_and_raw_trace(
 async def test_optimizer_persists_timeout_without_waiting_for_trace(tmp_path: Path) -> None:
     prepared = PreparedAttempt(
         tmp_path / "run-timeout",
-        tmp_path / "attempt.json",
+        tmp_path / ".runtime/attempt.json",
         tmp_path / "sessions",
         "optimizer-run-timeout",
     )

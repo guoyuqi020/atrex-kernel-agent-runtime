@@ -19,7 +19,13 @@ flowchart LR
 
 ## Ownership boundaries
 
-Runtime owns Campaign/Epoch state, fencing, capabilities, immutable Artifacts, Backend/model policy, token-report validation, comparison, promotion, recovery, Wiki query freezing, and process lifetime. Core owns its Adapter implementations, prompts, skills, tool bindings, and optimization workflow. Evolver owns the hypothesis and source choice for one same-DSL Challenger, plus repository edits when it creates a revision. Agate owns correctness and performance measurement. GPU Wiki is a read-only external knowledge source from Runtime's perspective; lineage experience is not Wiki data.
+Runtime owns Campaign/Epoch state, fencing, capabilities, immutable Artifacts, Backend/model policy,
+token-report validation, comparison, promotion, recovery, Wiki query freezing, process lifetime, and
+adaptive Skill/Tool persistence. Core owns its Adapter implementations, prompts, tool bindings,
+optimization workflow, and the Session behavior that authors adaptive state. Evolver owns the
+hypothesis and source choice for one same-DSL Challenger, plus repository edits when it creates a
+revision. Agate owns correctness and performance measurement. GPU Wiki is a read-only external
+knowledge source from Runtime's perspective; lineage experience is not Wiki data.
 
 ## Private evaluation boundary
 
@@ -46,7 +52,7 @@ limits to its dedicated outer OCI container.
 
 ## Lifecycle
 
-Campaign bootstrap accepts only a separate Campaign schema-v3 definition and one full Core commit. Runtime deployment configuration owns services, Backend selection, credentials, and policy but not DSL topology or concrete model identity; the Campaign `lineages` keys are the complete initial Bootstrap DSL set and each Lineage binds its Optimizer/Evolver models. Bootstrap copies the configured full Evolver Commit into immutable Campaign state, so later scheduling and debugging reject deployment drift before resolving the Evolver Bundle. Before Agent execution, an optional trusted, commit-pinned Atrex Bench Builder fills a missing Roofline and Runtime seals it into the Campaign-shared Evaluation Contract; an existing Campaign reuses its sealed result. Runtime then imports Core once, creates or validates the shared Agent Problem, and runs `framework_baseline` sequentially for each selected DSL. A stable Bootstrap Attempt owns append-only physical execution Generations; each Generation has fresh authority and durable Session, token, report, failure, workspace, operation, and result audit. An active Campaign may later add an independent Lineage from sealed Agent and Kernel Artifacts; Runtime revalidates the Agent and re-evaluates the Kernel under the destination contract before creating fresh `agent-v0`/`v0` roots. The new Lineage inherits the Campaign-frozen Evolver Commit.
+Campaign bootstrap accepts only a separate Campaign schema-v3 definition and one full Core commit. Runtime deployment configuration owns services, Backend selection, credentials, and policy but not DSL topology or concrete model identity; the Campaign `lineages` keys are the complete initial Bootstrap DSL set and each Lineage binds its Optimizer/Evolver models. Bootstrap copies the configured full Evolver Commit into immutable Campaign state, so later scheduling and debugging reject deployment drift before resolving the Evolver Bundle. Before Agent execution, an optional trusted, commit-pinned Atrex Bench Builder fills a missing Roofline and Runtime seals it into the Campaign-shared Evaluation Contract; an existing Campaign reuses its sealed result. Runtime then imports Core once, creates or validates the shared Agent Problem, and runs `framework_baseline` sequentially for each selected DSL. A stable Bootstrap Attempt owns append-only physical execution Generations; each Generation has fresh authority and durable Session, token, schema-v12 Attempt Report, failure, workspace, operation, and result audit. Bootstrap uses the same journals and Runtime tools as an ordinary Attempt; its terminal journals, Gateway records, and reusable skill/tool seed form the initial history of every new trajectory. An active Campaign may later add an independent Lineage from sealed Agent and Kernel Artifacts; Runtime revalidates the Agent and re-evaluates the Kernel under the destination contract before creating fresh `agent-v0`/`v0` roots. The new Lineage inherits the Campaign-frozen Evolver Commit.
 
 One Epoch snapshots its Active Agent, starting Kernel, and Evidence, then sequentially proposes `K`
 Challengers. Each Evolver invocation chooses one of three forms: create a revision from Active
@@ -70,8 +76,19 @@ Each session is a fresh process. Model context is never reused. Attempt Evidence
 Attempts only from the same Trajectory. The Optimizer view contains only the promoted completed
 Agent lineage, while the Evolver view contains every completed Active/Challenger branch, Agent
 selection result, Attempt outcome, and exact referenced Kernel artifact. Runtime additionally
-freezes versioned Agent/Kernel catalogs, every historical Kernel Artifact, and a read-only local
-inspection client into each Evolution workspace. Evidence stores normalized
+freezes versioned Agent/Kernel catalogs and every historical Kernel Artifact. The Evolver workspace
+separates the current Active/Challenger source pool (`input/agents/`), their latest-completed-Epoch
+Attempt conversations and measured effect projection (`input/evidence/<role>/`), and completed Agent versions with source, accumulated
+effect, and per-Trajectory `skills/tools` (`input/historical/agent-vN/`). Prior Agent-creation reports
+are read-only files under `input/evolution-reports/`; full Evolution traces remain private. Detailed Epoch trees remain
+Runtime-private. Current runtime state sits beside its role source under `input/agents/`. Every
+Optimizer Session seals its terminal `skills/tools` as an immutable Runtime State Artifact and the
+producing Attempt records its `runtime_state_digest`; the Attempt ID is the producer identity, so
+there is no second checkpoint ID. A later serial Attempt restores that exact State if its local
+cache is missing. Runtime uses the terminal State after the last Attempt of the latest completed
+Epoch winner's best-Kernel Trajectory as the common seed for the next Active Branch and Evolver
+Candidate (falling back to that Trajectory's Epoch-start State, the revision seed, then an empty
+State). Evolver seals Candidate Source plus State as one logical Agent Bundle. Evidence stores normalized
 summaries and source Session digests. Agent workspaces materialize original unredacted Session
 Artifacts from those digests. Wiki Query exposes the external service's complete safe
 `records`/`notes` projection with stable Record IDs as mapping keys. Runtime freezes each Query

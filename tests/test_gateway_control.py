@@ -6,11 +6,16 @@ import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from conftest import NOW, digest, seed_lineage
 
-from atrex_runtime.domain.errors import InfrastructureError, InvalidTransitionError
+from atrex_runtime.domain.errors import (
+    DirectionConcurrencyError,
+    InfrastructureError,
+    InvalidTransitionError,
+)
 from atrex_runtime.domain.ids import (
     new_attempt_id,
     new_epoch_id,
@@ -45,6 +50,58 @@ from atrex_runtime.registry.sqlite import SqliteRegistry
 NOW_DATETIME = datetime(2026, 8, 14, tzinfo=UTC)
 
 
+def test_direction_start_is_atomically_single_active(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    attempt = _insert_attempt(registry)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"d" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    control.issue(
+        attempt.id,
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.DIRECTION_UPDATE}),
+            8,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+
+    def start(ordinal: int) -> object:
+        direction_id = f"direction_{ordinal:032x}"
+        event = {
+            "direction_event_id": f"directionevent_{ordinal:032x}",
+            "direction_id": direction_id,
+            "recorded_at": NOW_DATETIME.isoformat(),
+            "action": "start",
+        }
+        try:
+            return control.append_direction_event(
+                attempt.id,
+                f"direction-start-{ordinal}",
+                event,
+                recovery_generation=0,
+            )
+        except DirectionConcurrencyError as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = tuple(executor.map(start, (1, 2)))
+
+    recorded = tuple(result for result in results if isinstance(result, dict))
+    conflicts = tuple(
+        result for result in results if isinstance(result, DirectionConcurrencyError)
+    )
+    assert len(recorded) == 1
+    assert len(conflicts) == 1
+    assert conflicts[0].requested_direction_id != recorded[0]["direction_id"]
+    assert conflicts[0].in_progress_direction_ids == (recorded[0]["direction_id"],)
+    assert len(control.list_direction_events(attempt.id)) == 1
+    control.close()
+    registry.close()
+
+
 def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Path) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     attempt = _insert_attempt(registry)
@@ -57,8 +114,8 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
     capability = control.issue(
         attempt.id,
         GatewayCapabilityPolicy(
-            frozenset({GatewayOperation.DEV}),
-            2,
+            frozenset({GatewayOperation.DEV, GatewayOperation.PROFILE}),
+            3,
             NOW_DATETIME + timedelta(hours=1),
         ),
     )
@@ -76,37 +133,244 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
         candidate,
     )
     result = digest("dev-result")
+    control.bind_operation_gateway_result(
+        attempt.id,
+        "dev-reverted-1",
+        GatewayOperation.DEV,
+        result,
+    )
     control.commit_operation_artifact(
         attempt.id,
         "dev-reverted-1",
         GatewayOperation.DEV,
         result,
     )
+    control.authorize(
+        capability,
+        GatewayOperation.PROFILE,
+        idempotency_key="profile-reverted-1",
+        request_digest=str(digest("profile-request")),
+    )
+    control.bind_operation_candidate(
+        attempt.id,
+        "profile-reverted-1",
+        GatewayOperation.PROFILE,
+        candidate,
+    )
+    profile_result = digest("profile-result")
+    control.bind_operation_gateway_result(
+        attempt.id,
+        "profile-reverted-1",
+        GatewayOperation.PROFILE,
+        profile_result,
+    )
+    control.commit_operation_artifact(
+        attempt.id,
+        "profile-reverted-1",
+        GatewayOperation.PROFILE,
+        profile_result,
+    )
     experiment = {
+        "experiment_id": "experiment_" + "a" * 32,
         "sequence": 1,
         "recorded_at": NOW_DATETIME.isoformat(),
         "name": "failed tile",
         "hypothesis": "larger tile improves reuse",
         "change": "doubled block size",
-        "candidate_artifact_digest": str(candidate),
+        "before": {
+            "kernel_artifact_digest": str(candidate),
+            "kernel_trial_id": control.list_kernel_trials((attempt.id,))[0].id,
+            "gateway_result_digests": [str(result), str(profile_result)],
+        },
+        "after": {
+            "kernel_artifact_digest": str(candidate),
+            "kernel_trial_id": control.list_kernel_trials((attempt.id,))[0].id,
+            "gateway_result_digests": [str(result), str(profile_result)],
+        },
         "evidence": "dev-reverted-1",
-        "result": "latency regressed",
-        "decision": "revert",
+        "analysis": "the larger tile regressed latency",
+        "action": "restore_before",
     }
 
-    control.record_kernel_trial_annotations(attempt.id, (experiment,))
+    profile_reference = {
+        "operation": "profile",
+        "kernel_artifact_digest": str(candidate),
+        "kernel_trial_id": control.list_kernel_trials((attempt.id,))[0].id,
+        "gateway_result_digest": str(profile_result),
+    }
+    control.record_kernel_trial_annotations(
+        attempt.id,
+        (experiment,),
+        profile_supporting_results=(profile_reference,),
+    )
     trial = control.list_kernel_trials((attempt.id,))[0]
 
-    assert trial.candidate_artifact_digest == candidate
+    assert trial.kernel_artifact_digest == candidate
     assert trial.disposition == "revert"
     assert trial.observations[0].result_artifact_digest == result
     assert trial.annotations[0].experiment["change"] == "doubled block size"
     assert candidate in control.list_referenced_artifact_digests()
-    with pytest.raises(ValueError, match="not observed"):
+    with pytest.raises(ValueError, match="must be profile"):
         control.record_kernel_trial_annotations(
             attempt.id,
-            ({**experiment, "candidate_artifact_digest": str(digest("foreign"))},),
+            (experiment,),
+            profile_supporting_results=({**profile_reference, "operation": "dev"},),
         )
+    with pytest.raises(ValueError, match="absent from the Experiment journal"):
+        control.record_kernel_trial_annotations(
+            attempt.id,
+            (experiment,),
+            profile_supporting_results=(
+                {**profile_reference, "gateway_result_digest": str(digest("unrecorded"))},
+            ),
+        )
+    with pytest.raises(ValueError, match="must be profile"):
+        control.record_kernel_trial_annotations(
+            attempt.id,
+            (experiment,),
+            profile_supporting_results=(
+                {
+                    "operation": "dev",
+                    "kernel_artifact_digest": str(candidate),
+                    "kernel_trial_id": control.list_kernel_trials((attempt.id,))[0].id,
+                    "gateway_result_digest": str(result),
+                },
+            ),
+        )
+    with pytest.raises(ValueError, match="does not match"):
+        control.record_kernel_trial_annotations(
+            attempt.id,
+            (
+                {
+                    **experiment,
+                    "after": {
+                        **experiment["after"],
+                        "kernel_artifact_digest": str(digest("foreign")),
+                        "kernel_trial_id": "gtrial_" + "0" * 32,
+                    },
+                },
+            ),
+        )
+    with pytest.raises(ValueError, match="candidate/result pair not observed"):
+        control.record_kernel_trial_annotations(
+            attempt.id,
+            (
+                {
+                    **experiment,
+                    "after": {
+                        **experiment["after"],
+                        "gateway_result_digests": [str(digest("foreign-result"))],
+                    },
+                },
+            ),
+        )
+    with pytest.raises(ValueError, match="not observed in visible history"):
+        control.record_kernel_trial_annotations(
+            attempt.id,
+            (
+                {
+                    **experiment,
+                    "before": {
+                        **experiment["before"],
+                        "gateway_result_digests": [str(digest("foreign-before-result"))],
+                    },
+                },
+            ),
+        )
+    with pytest.raises(ValueError, match="outside visible history"):
+        control.record_kernel_trial_annotations(
+            attempt.id,
+            (
+                {
+                    **experiment,
+                    "before": {
+                        **experiment["before"],
+                        "kernel_trial_id": "gtrial_" + "f" * 32,
+                    },
+                },
+            ),
+        )
+    control.close()
+    registry.close()
+
+
+def test_kernel_trial_baseline_annotation_preserves_action_and_maps_to_continue(
+    tmp_path: Path,
+) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    attempt = _insert_attempt(registry)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"b" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    capability = control.issue(
+        attempt.id,
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.EVALUATE}),
+            1,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+    control.authorize(
+        capability,
+        GatewayOperation.EVALUATE,
+        idempotency_key="bootstrap-evaluate",
+        request_digest=str(digest("bootstrap-request")),
+    )
+    candidate = digest("bootstrap-candidate")
+    result = digest("bootstrap-result")
+    control.bind_operation_candidate(
+        attempt.id,
+        "bootstrap-evaluate",
+        GatewayOperation.EVALUATE,
+        candidate,
+    )
+    control.bind_operation_gateway_result(
+        attempt.id,
+        "bootstrap-evaluate",
+        GatewayOperation.EVALUATE,
+        result,
+    )
+    control.commit_operation_artifact(
+        attempt.id,
+        "bootstrap-evaluate",
+        GatewayOperation.EVALUATE,
+        result,
+    )
+    trial_id = control.list_kernel_trials((attempt.id,))[0].id
+    experiment = {
+        "experiment_id": "experiment_" + "b" * 32,
+        "sequence": 1,
+        "recorded_at": NOW_DATETIME.isoformat(),
+        "name": "establish baseline",
+        "hypothesis": "the direct implementation is correct",
+        "change": "kept the supplied seed unchanged",
+        "before": None,
+        "after": {
+            "kernel_artifact_digest": str(candidate),
+            "kernel_trial_id": trial_id,
+            "gateway_result_digests": [str(result)],
+        },
+        "evidence": "the Agent-visible Evaluate passed",
+        "analysis": "the first measured candidate establishes the baseline anchor",
+        "action": "baseline",
+    }
+
+    with pytest.raises(ValueError, match="action is invalid"):
+        control.record_kernel_trial_annotations(attempt.id, (experiment,))
+    annotations = control.record_kernel_trial_annotations(
+        attempt.id,
+        (experiment,),
+        allow_baseline=True,
+    )
+    trial = control.list_kernel_trials((attempt.id,))[0]
+
+    assert annotations[0].disposition == "continue"
+    assert annotations[0].experiment["action"] == "baseline"
+    assert trial.disposition == "continue"
+    assert trial.annotations[0].experiment["before"] is None
     control.close()
     registry.close()
 
@@ -134,7 +398,7 @@ def test_multiple_agent_evaluations_are_retained_before_runtime_final_outcome(
         attempt.id,
         source=GatewayEvaluationSource.AGENT,
         idempotency_key="agent-1",
-        candidate_artifact_digest=digest("candidate-1"),
+        kernel_artifact_digest=digest("candidate-1"),
         gateway_result_digest=digest("result-1"),
         correct=False,
         latency_us=None,
@@ -144,7 +408,7 @@ def test_multiple_agent_evaluations_are_retained_before_runtime_final_outcome(
         attempt.id,
         source=GatewayEvaluationSource.AGENT,
         idempotency_key="agent-2",
-        candidate_artifact_digest=digest("candidate-2"),
+        kernel_artifact_digest=digest("candidate-2"),
         gateway_result_digest=digest("result-2"),
         correct=True,
         latency_us=11.0,
@@ -154,7 +418,7 @@ def test_multiple_agent_evaluations_are_retained_before_runtime_final_outcome(
         attempt.id,
         source=GatewayEvaluationSource.RUNTIME_FINAL,
         idempotency_key="runtime-final",
-        candidate_artifact_digest=second.candidate_artifact_digest,
+        kernel_artifact_digest=second.kernel_artifact_digest,
         gateway_result_digest=digest("result-final"),
         correct=True,
         latency_us=12.0,
@@ -173,7 +437,7 @@ def test_multiple_agent_evaluations_are_retained_before_runtime_final_outcome(
         second.id,
         final.id,
     ]
-    assert outcome.artifact_digest == second.candidate_artifact_digest
+    assert outcome.artifact_digest == second.kernel_artifact_digest
     assert outcome.gateway_result_digest == digest("result-final")
     with pytest.raises(InvalidTransitionError, match="Runtime-final"):
         control.commit_authoritative_outcome(
@@ -271,7 +535,7 @@ def test_bootstrap_subject_can_use_gateway_before_registry_attempt_exists(
         attempt_id,
         source=GatewayEvaluationSource.RUNTIME_FINAL,
         idempotency_key="runtime-final",
-        candidate_artifact_digest=digest("candidate"),
+        kernel_artifact_digest=digest("candidate"),
         gateway_result_digest=digest("result"),
         correct=True,
         latency_us=9.0,
@@ -492,12 +756,30 @@ def test_gateway_schema_v4_migrates_operations_and_legacy_bootstrap_run(
             "SELECT value FROM metadata WHERE key = 'schema_version'"
         ).fetchone()
         columns = {row[1] for row in connection.execute("PRAGMA table_info(gateway_operations)")}
-        assert version == (9,)
-        assert "candidate_artifact_digest" in columns
+        assert version == (12,)
+        assert "kernel_artifact_digest" in columns
+        assert "candidate_artifact_digest" not in columns
+        assert "gateway_result_digest" in columns
         measurement_columns = {
             row[1] for row in connection.execute("PRAGMA table_info(gateway_measurements)")
         }
-        assert {"candidate_artifact_digest", "kind", "metrics_json"}.issubset(measurement_columns)
+        assert {"kernel_artifact_digest", "kind", "metrics_json"}.issubset(measurement_columns)
+        assert "candidate_artifact_digest" not in measurement_columns
+        evaluation_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(gateway_evaluations)")
+        }
+        annotation_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(gateway_trial_annotations)")
+        }
+        assert "kernel_artifact_digest" in evaluation_columns
+        assert "candidate_artifact_digest" not in evaluation_columns
+        assert "kernel_artifact_digest" in annotation_columns
+        assert "candidate_artifact_digest" not in annotation_columns
+        tables = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        assert {"runtime_direction_events", "runtime_experiments"}.issubset(tables)
     assert "recovery_generation" in columns
     migrated.close()
     registry.close()
@@ -596,7 +878,7 @@ async def test_capability_is_idempotent_scoped_and_persists_outcome(tmp_path: Pa
         attempt.id,
         source=GatewayEvaluationSource.RUNTIME_FINAL,
         idempotency_key="runtime-final",
-        candidate_artifact_digest=digest("candidate"),
+        kernel_artifact_digest=digest("candidate"),
         gateway_result_digest=digest("gateway-result"),
         correct=True,
         latency_us=12.5,
@@ -986,7 +1268,7 @@ async def test_failed_epoch_recovery_rotates_capability_and_resets_reservations(
             attempt.id,
             source=GatewayEvaluationSource.RUNTIME_FINAL,
             idempotency_key="stale-runtime-final",
-            candidate_artifact_digest=digest("stale-candidate"),
+            kernel_artifact_digest=digest("stale-candidate"),
             gateway_result_digest=digest("stale-result"),
             correct=True,
             latency_us=10.0,
@@ -1025,6 +1307,148 @@ def test_visible_history_for_a_missing_attempt_is_a_conflict_not_a_crash(tmp_pat
     assert str(vanished) in str(raised.value)
     control.close()
     registry.close()
+
+
+def test_optimizer_history_inherits_completed_bootstrap_subject(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    current = _insert_attempt(registry)
+    epoch = registry.get_epoch(current.epoch_id)
+    lineage = registry.get_lineage(epoch.lineage_id)
+    campaign = registry.get_campaign(lineage.campaign_id)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"h" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    bootstrap_attempt_id = new_attempt_id()
+    control.issue_bootstrap(
+        BootstrapGatewaySubject(
+            attempt_id=bootstrap_attempt_id,
+            campaign_id=campaign.id,
+            lineage_id=lineage.id,
+            epoch_id=parse_epoch_id("epoch_" + str(bootstrap_attempt_id).removeprefix("attempt_")),
+            kernel_agent_revision_id=current.kernel_agent_revision_id,
+            operator=campaign.operator,
+            hardware_target=campaign.hardware_target,
+            dsl=lineage.dsl,
+            evaluation_contract_digest=campaign.evaluation_contract_digest,
+            input_kernel_digest=digest("bootstrap-input"),
+            evidence_digest=digest("bootstrap-evidence"),
+            created_at=NOW_DATETIME,
+        ),
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.EVALUATE}),
+            4,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+    report_digest = digest("bootstrap-attempt-report")
+    control.finish_bootstrap_run(
+        bootstrap_attempt_id,
+        0,
+        status=BootstrapRunStatus.COMPLETED,
+        finish_reason="completed",
+        failure_reason=None,
+        report_digest=report_digest,
+        candidate_digest=digest("bootstrap-candidate"),
+        gateway_result_digest=digest("bootstrap-result"),
+    )
+
+    assert control.visible_measurement_attempt_ids(current.id) == (
+        lineage.id,
+        (bootstrap_attempt_id,),
+    )
+    assert control.visible_kernel_trial_attempt_ids(current.id) == (
+        lineage.id,
+        (bootstrap_attempt_id, current.id),
+    )
+    assert control.visible_attempt_report_artifacts(current.id) == (
+        (bootstrap_attempt_id, report_digest),
+    )
+    control.close()
+    registry.close()
+
+
+def test_kernel_trial_reads_include_losing_completed_branches() -> None:
+    lineage_id = parse_lineage_id("lineage_" + "1" * 32)
+    current_attempt_id = new_attempt_id()
+    promoted_attempt_id = new_attempt_id()
+    same_trajectory_attempt_id = new_attempt_id()
+    losing_attempt_id = new_attempt_id()
+    incomplete_attempt_id = new_attempt_id()
+    completed_epoch_id = new_epoch_id()
+    current_epoch_id = new_epoch_id()
+    completed_epoch = SimpleNamespace(
+        id=completed_epoch_id,
+        number=1,
+        status=EpochStatus.COMPLETED,
+    )
+    current_epoch = SimpleNamespace(
+        id=current_epoch_id,
+        number=2,
+        status=EpochStatus.RUNNING,
+    )
+    attempts = {
+        completed_epoch_id: [
+            SimpleNamespace(id=promoted_attempt_id, status=AttemptStatus.COMPLETED),
+            SimpleNamespace(id=losing_attempt_id, status=AttemptStatus.COMPLETED),
+            SimpleNamespace(id=incomplete_attempt_id, status=AttemptStatus.INFRASTRUCTURE_FAILED),
+        ],
+        current_epoch_id: [],
+    }
+    registry = SimpleNamespace(
+        get_attempt=lambda attempt_id: SimpleNamespace(epoch_id=current_epoch_id),
+        get_epoch=lambda epoch_id: current_epoch,
+        list_epochs=lambda requested_lineage: [completed_epoch, current_epoch],
+        list_attempts=lambda epoch_id: attempts[epoch_id],
+    )
+    control = object.__new__(SqliteGatewayControl)
+    control._registry = registry  # type: ignore[attr-defined]
+    control.visible_measurement_attempt_ids = lambda attempt_id: (  # type: ignore[method-assign]
+        lineage_id,
+        (promoted_attempt_id, same_trajectory_attempt_id),
+    )
+
+    assert control.visible_kernel_trial_attempt_ids(current_attempt_id) == (
+        lineage_id,
+        (
+            promoted_attempt_id,
+            same_trajectory_attempt_id,
+            losing_attempt_id,
+            current_attempt_id,
+        ),
+    )
+
+
+def test_journal_history_resolves_visible_terminal_report_artifacts() -> None:
+    lineage_id = parse_lineage_id("lineage_" + "3" * 32)
+    current_attempt_id = new_attempt_id()
+    first_attempt_id = new_attempt_id()
+    second_attempt_id = new_attempt_id()
+    first_digest = digest("first-report")
+    attempts = {
+        first_attempt_id: SimpleNamespace(
+            id=first_attempt_id,
+            status=AttemptStatus.COMPLETED,
+            attempt_report_digest=first_digest,
+        ),
+        second_attempt_id: SimpleNamespace(
+            id=second_attempt_id,
+            status=AttemptStatus.COMPLETED,
+            attempt_report_digest=None,
+        ),
+    }
+    control = object.__new__(SqliteGatewayControl)
+    control._registry = SimpleNamespace(get_attempt=lambda attempt_id: attempts[attempt_id])  # type: ignore[attr-defined]
+    control.visible_kernel_trial_attempt_ids = lambda _attempt_id: (  # type: ignore[method-assign]
+        lineage_id,
+        (first_attempt_id, second_attempt_id, current_attempt_id),
+    )
+
+    assert control.visible_attempt_report_artifacts(current_attempt_id) == (
+        (first_attempt_id, first_digest),
+    )
 
 
 def test_bootstrap_subject_sees_only_its_own_kernel_trials(tmp_path: Path) -> None:

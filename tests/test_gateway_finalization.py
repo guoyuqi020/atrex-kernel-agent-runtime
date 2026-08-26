@@ -292,7 +292,7 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
         attempt_id,
         source=GatewayEvaluationSource.AGENT,
         idempotency_key="agent-final",
-        candidate_artifact_digest=candidate_digest,
+        kernel_artifact_digest=candidate_digest,
         gateway_result_digest=agent_result,
         correct=True,
         latency_us=8.0,
@@ -338,7 +338,7 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert options["bench_iters"] == 5
     evaluations = control.list_evaluations(attempt_id)
     assert [item.source.value for item in evaluations] == ["agent", "runtime_final"]
-    assert evaluations[-1].candidate_artifact_digest == candidate_digest
+    assert evaluations[-1].kernel_artifact_digest == candidate_digest
     assert control.get_committed_outcome(attempt_id) == outcome
     assert [kind for kind, _aggregate, _payload in events.values] == [
         "gateway.authoritative_evaluation_submitted",
@@ -379,7 +379,7 @@ async def test_finalizer_uses_shared_client_retry_for_transient_poll_failure(
         attempt_id,
         source=GatewayEvaluationSource.AGENT,
         idempotency_key="agent-final",
-        candidate_artifact_digest=candidate_digest,
+        kernel_artifact_digest=candidate_digest,
         gateway_result_digest=agent_result,
         correct=True,
         latency_us=8.0,
@@ -437,7 +437,7 @@ async def test_finalizer_defers_authority_to_abba_without_an_extra_eval(tmp_path
         attempt_id,
         source=GatewayEvaluationSource.AGENT,
         idempotency_key="agent-final",
-        candidate_artifact_digest=candidate_digest,
+        kernel_artifact_digest=candidate_digest,
         gateway_result_digest=agent_result,
         correct=True,
         latency_us=8.0,
@@ -502,7 +502,7 @@ async def test_finalizer_runs_ordered_atrex_bootstrap_stages_and_uses_second_lat
         attempt_id,
         source=GatewayEvaluationSource.AGENT,
         idempotency_key="agent-final",
-        candidate_artifact_digest=candidate_digest,
+        kernel_artifact_digest=candidate_digest,
         gateway_result_digest=agent_result,
         correct=True,
         latency_us=8.0,
@@ -568,7 +568,7 @@ async def test_finalizer_profiles_correct_kernel_when_roofline_is_missing(
         attempt_id,
         source=GatewayEvaluationSource.AGENT,
         idempotency_key="agent-final",
-        candidate_artifact_digest=candidate_digest,
+        kernel_artifact_digest=candidate_digest,
         gateway_result_digest=agent_result,
         correct=True,
         latency_us=8.0,
@@ -634,7 +634,7 @@ async def test_finalizer_records_validation_rejection_as_authoritative_outcome(
         attempt_id,
         source=GatewayEvaluationSource.AGENT,
         idempotency_key="agent-final",
-        candidate_artifact_digest=candidate_digest,
+        kernel_artifact_digest=candidate_digest,
         gateway_result_digest=agent_result,
         correct=True,
         latency_us=8.0,

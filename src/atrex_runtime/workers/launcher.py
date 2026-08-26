@@ -255,9 +255,7 @@ class BackendCredentialMounts:
         for relative in self.writable_home_subpaths_for(backend):
             (session_home / relative).mkdir(parents=True, exist_ok=True, mode=0o700)
 
-    def qoder_state_overlays(
-        self, session_home: Path
-    ) -> tuple[tuple[Path, Path], ...]:
+    def qoder_state_overlays(self, session_home: Path) -> tuple[tuple[Path, Path], ...]:
         """Return private writable Qoder root-state files overlaid on its read-only Home."""
         overlays: list[tuple[Path, Path]] = []
         for relative in _QODER_SESSION_STATE_FILES:
@@ -409,9 +407,7 @@ class CleanEnvironmentLauncher:
                 if credentials.requires_writable_backend_home(backend)
             )
         )
-        writable_projection = (
-            credentials is not None and bool(writable_backends)
-        )
+        writable_projection = credentials is not None and bool(writable_backends)
         if not mounts and not writable_projection:
             assignments = tuple(
                 f"{key}={value}" for key, value in sorted(exact_environment.items())
@@ -497,9 +493,7 @@ class BwrapSandboxLauncher:
     def check_host(self) -> None:
         """Fail before scheduling when mandatory Linux isolation primitives are absent."""
         if platform.system() != "Linux":
-            raise RuntimeError(
-                "bubblewrap launcher requires Linux; use explicit development mode"
-            )
+            raise RuntimeError("bubblewrap launcher requires Linux; use explicit development mode")
         executables = [
             ("bubblewrap", self.settings.bwrap_executable),
             ("env", self.env_executable),
@@ -552,9 +546,7 @@ class BwrapSandboxLauncher:
         if not self.use_systemd_cgroup and not lock_directory.exists():
             lock_directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         if not lock_directory.is_dir() or lock_directory.is_symlink():
-            raise RuntimeError(
-                f"Sandbox workspace parent is unavailable: {lock_directory}"
-            )
+            raise RuntimeError(f"Sandbox workspace parent is unavailable: {lock_directory}")
         lock_path = lock_directory / ".atrex-sandbox-host.lock"
         with lock_path.open("a+b") as lock:
             # A production Campaign starts one Bootstrap process per DSL. They
@@ -591,8 +583,7 @@ class BwrapSandboxLauncher:
             if result.returncode != 0:
                 diagnostic = result.stderr[:4096].decode(errors="replace").strip()
                 raise RuntimeError(
-                    f"Container bwrap probe failed with exit {result.returncode}: "
-                    f"{diagnostic}"
+                    f"Container bwrap probe failed with exit {result.returncode}: {diagnostic}"
                 )
         finally:
             shutil.rmtree(probe, ignore_errors=True)
@@ -628,6 +619,8 @@ class BwrapSandboxLauncher:
             shutil.rmtree(probe, ignore_errors=True)
 
     def _ensure_worker_directory(self, path: Path, worker: pwd.struct_passwd) -> None:
+        if not isinstance(self.settings, BwrapSandboxSettings):
+            raise RuntimeError("Worker directory handoff requires Sandbox settings")
         if path.exists():
             if not path.is_dir() or path.is_symlink():
                 raise RuntimeError(f"Sandbox workspace path is unsafe: {path}")
@@ -702,9 +695,7 @@ class BwrapSandboxLauncher:
                 if worker_view == (worker.pw_uid, worker.pw_gid):
                     return
         suffix = (
-            ""
-            if worker_view is None
-            else f"; Worker view is {worker_view[0]}:{worker_view[1]}"
+            "" if worker_view is None else f"; Worker view is {worker_view[0]}:{worker_view[1]}"
         )
         raise RuntimeError(
             f"Sandbox path ownership handoff failed: {path} is "
@@ -718,6 +709,8 @@ class BwrapSandboxLauncher:
         worker: pwd.struct_passwd,
     ) -> tuple[int, int] | None:
         """Resolve virtiofs ownership through the identity that will execute the Worker."""
+        if not isinstance(self.settings, BwrapSandboxSettings):
+            return None
         if os.geteuid() != 0:
             return None
         stat_executable = shutil.which("stat", path="/usr/sbin:/usr/bin:/sbin:/bin")
@@ -791,9 +784,7 @@ class BwrapSandboxLauncher:
         backends = _projected_backends(mapped_environment, interactive=interactive)
         _inject_codex_ca_bundle(mapped_environment, backends)
         credential_mounts = (
-            ()
-            if self.credentials is None
-            else _credential_mounts_for(self.credentials, backends)
+            () if self.credentials is None else _credential_mounts_for(self.credentials, backends)
         )
         installation_roots = (
             ()
@@ -959,7 +950,7 @@ class BwrapSandboxLauncher:
                     self._translate_value(str(destination), workspace, sandbox_workspace),
                 )
             )
-        for name in ("input", "agent", "runtime-tools"):
+        for name in (".runtime", "input", "agent", "runtime-tools"):
             source = workspace / name
             if source.exists():
                 if source.is_symlink():

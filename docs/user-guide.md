@@ -99,7 +99,14 @@ atrex-kernel-agent-runtime bootstrap \
 Bootstrap is idempotent by `creation_key`. It freezes the Campaign contract and commits, optionally
 generates a public Agent Problem, runs one Core baseline Session per configured DSL, preserves every
 Bootstrap execution generation/evaluation, then publishes `agent-v0` and authoritative Kernel `v0`.
+Bootstrap process exits and infrastructure failures are retried automatically up to
+`campaign.max_infrastructure_retries`, using a fresh capability, workspace, Session, and execution
+Generation each time. The same limit governs Optimizer Attempt infrastructure retries.
+Evolver process exits and infrastructure failures use the same limit and preserve every failed
+Worker Session and Evolution failure trace before retrying in a fresh workspace.
 Retrying the same Campaign resumes completed work; changing immutable inputs is rejected.
+The resulting Epoch-0 Evidence exposes only `bootstrap/report.json` and
+`bootstrap/conversation.jsonl` to later Optimizer/Evolver sessions.
 
 ## 6. Run Epochs
 
@@ -200,8 +207,19 @@ atrex-kernel-agent-runtime dev-shell --config runtime.json --lineage "$LINEAGE"
 atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$LINEAGE" --epoch 2
 ```
 
-Use them only for trusted debugging. Optimizer Runtime Tools and Evolver inspection tools are
-documented in [Interface Reference](interfaces.md).
+Use them only for trusted debugging. Optimizer Runtime Tools and the Evolver's read-only filesystem
+input contract are documented in [Interface Reference](interfaces.md).
+
+Every Optimizer Workspace contains writable `skills/` and `tools/` directories. At Session exit,
+Runtime seals their exact terminal contents and records the Artifact Digest on the producing
+Attempt. The next serial Attempt continues from that State and can reconstruct it after local cache
+loss. Framework Bootstrap initializes the `agent-v0` State. Evolver starts from the State captured
+after the last Attempt of the latest completed Epoch winner's best-Kernel Trajectory. The next
+Epoch's Active Branch starts from the exact same State; every new
+Agent Revision seals its Source
+and State together as one logical Bundle, and each new trajectory receives an independent State
+copy. Keep `tools/README.md` synchronized with every saved
+tool's invocation, inputs, outputs, dependencies, example, and limitations.
 
 ## 11. Recovery and maintenance
 

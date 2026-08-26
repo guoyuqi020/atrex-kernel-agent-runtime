@@ -27,7 +27,7 @@ from ..ports import (
     WorkerGatewayAuthorityProvider,
     WorkerSessionRecorder,
 )
-from .attempt_report import AttemptReportV3
+from .attempt_report import AttemptReportV12
 from .launcher import validate_worker_environment
 from .workspace import AttemptWorkspaceAssembler, PreparedAttempt
 
@@ -89,10 +89,11 @@ class OptimizerSessionResult:
     token_usage: TokenUsage
     token_budget: int
     session_trace_digest: ArtifactDigest | None = None
-    attempt_report: AttemptReportV3 | None = None
+    attempt_report: AttemptReportV12 | None = None
     attempt_report_digest: ArtifactDigest | None = None
     attempt_report_error: str | None = None
-    candidate_artifact_digest: ArtifactDigest | None = None
+    kernel_artifact_digest: ArtifactDigest | None = None
+    runtime_state_digest: ArtifactDigest | None = None
 
     def __post_init__(self) -> None:
         if self.token_budget <= 0:
@@ -112,12 +113,14 @@ class OptimizerSessionDriver(Protocol):
 
 
 class KernelTrialAnnotationRecorder(Protocol):
-    """Persist validated experiment decisions against Runtime-observed candidates."""
+    """Persist validated Experiment actions against Runtime-observed candidates."""
 
     def record_kernel_trial_annotations(
         self,
         attempt_id: AttemptId,
         experiments: Sequence[Mapping[str, object]],
+        *,
+        profile_supporting_results: Sequence[Mapping[str, object]] = (),
     ) -> object: ...
 
 
@@ -284,6 +287,12 @@ class SessionOptimizerRunner(OptimizerRunner):
                 {**event_base, "preceding_status": exit_kind},
             )
         reason = result.finish_reason or "no-turn-end"
+        if result.runtime_state_digest is None:
+            raise InfrastructureError("Optimizer Session produced no Runtime State checkpoint")
+        self._session_traces.record_attempt_runtime_state(
+            request.attempt_id,
+            result.runtime_state_digest,
+        )
         if result.session_trace_digest is not None:
             self._session_traces.record_attempt_session_trace(
                 request.attempt_id,
@@ -308,11 +317,31 @@ class SessionOptimizerRunner(OptimizerRunner):
         if result.attempt_report_digest is None:
             raise AssertionError("validated Attempt report has no sealed Artifact")
         report = result.attempt_report
+        if any(experiment.action == "baseline" for experiment in report.experiments):
+            detail = "invalid Attempt report: Experiment action baseline is Bootstrap-only"
+            self._events.record_runtime_event(
+                "attempt.report_rejected",
+                request.attempt_id,
+                {**event_base, "reason": detail, "gateway_outcome_present": False},
+            )
+            return RunAttemptResult(
+                failure_reason=detail,
+                attempt_report_digest=result.attempt_report_digest,
+                attempt_report_status=AttemptReportStatus(report.status),
+            )
         if self._kernel_trials is not None:
             try:
                 self._kernel_trials.record_kernel_trial_annotations(
                     request.attempt_id,
                     tuple(experiment.model_dump(mode="json") for experiment in report.experiments),
+                    profile_supporting_results=(
+                        ()
+                        if report.profile_evidence is None
+                        else tuple(
+                            item.model_dump(mode="json")
+                            for item in report.profile_evidence.supporting_results
+                        )
+                    ),
                 )
             except (ValueError, InvalidTransitionError) as error:
                 detail = f"invalid Kernel Trial references: {error}"
@@ -333,7 +362,6 @@ class SessionOptimizerRunner(OptimizerRunner):
                 **event_base,
                 "attempt_report_artifact_digest": result.attempt_report_digest,
                 "status": report.status,
-                "decision": report.decision,
                 "gateway_outcome_present": outcome is not None,
             },
         )
@@ -344,7 +372,7 @@ class SessionOptimizerRunner(OptimizerRunner):
                 attempt_report_status=AttemptReportStatus(report.status),
             )
         if report.status == "candidate_ready":
-            if result.candidate_artifact_digest is None:
+            if result.kernel_artifact_digest is None:
                 return RunAttemptResult(
                     failure_reason="Attempt report declared candidate_ready without a candidate",
                     attempt_report_digest=result.attempt_report_digest,
@@ -353,7 +381,7 @@ class SessionOptimizerRunner(OptimizerRunner):
             try:
                 outcome = await self._finalizer.finalize(
                     request.attempt_id,
-                    result.candidate_artifact_digest,
+                    result.kernel_artifact_digest,
                     independent_evaluate=self._independent_final_evaluation,
                 )
             except ValueError as error:

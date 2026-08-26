@@ -11,7 +11,7 @@ import statistics
 import threading
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from typing import Literal, Protocol, cast
@@ -34,7 +34,11 @@ from .contract import (
     AgateEvaluationContractV1,
 )
 from .control_models import GatewayOperation
-from .private_results import project_private_evaluation, project_private_job
+from .private_results import (
+    project_candidate_rejection,
+    project_private_evaluation,
+    project_private_job,
+)
 from .protocol import EvaluationV2
 from .proxy import GatewayAdapterRequest, GatewayAdapterResult
 from .repeated_evaluate import (
@@ -462,6 +466,11 @@ class AgateGatewayAdapter:
                 kind,
                 binding_key=request.idempotency_key,
             )
+        if request.operation is GatewayOperation.PROFILE:
+            mapped = self._label_profile_shape(
+                mapped,
+                self._profile_shape_id(context.contract, request.parameters),
+            )
         if (
             request.operation is GatewayOperation.EVALUATE
             and mapped.evaluation is not None
@@ -493,7 +502,7 @@ class AgateGatewayAdapter:
         try:
             acceptance = await self._call(
                 lambda: self._client.submit_job(kind, payload),
-                validation_is_candidate=request.operation is not GatewayOperation.DEV,
+                validation_is_candidate=True,
             )
         except AgateCandidateRejection as rejection:
             rejected: JsonValue = {"status": "rejected", "error": rejection.payload}
@@ -505,11 +514,7 @@ class AgateGatewayAdapter:
                     if request.operation is GatewayOperation.EVALUATE
                     else None
                 ),
-                worker_result=(
-                    project_private_job(rejected)
-                    if request.operation in {GatewayOperation.EVALUATE, GatewayOperation.PROFILE}
-                    else None
-                ),
+                worker_result=project_candidate_rejection(rejection.payload),
             )
         job_id = acceptance.get("job_id")
         if not isinstance(job_id, str) or not job_id:
@@ -851,6 +856,31 @@ class AgateGatewayAdapter:
         return payload
 
     @staticmethod
+    def _profile_shape_id(
+        contract: AgateEvaluationContractV1,
+        parameters: Mapping[str, JsonValue],
+    ) -> str:
+        requested = parameters.get("shape_id")
+        shape_id = requested if isinstance(requested, str) else sorted(contract.shapes)[0]
+        if shape_id not in contract.shapes:
+            raise ValueError("profile shape_id is not an evaluator-owned opaque id")
+        return shape_id
+
+    @staticmethod
+    def _label_profile_shape(
+        result: GatewayAdapterResult,
+        shape_id: str,
+    ) -> GatewayAdapterResult:
+        worker = result.worker_result
+        if not isinstance(worker, dict):
+            return result
+        payload = worker.get("result")
+        if not isinstance(payload, dict):
+            return result
+        labeled_payload = {**payload, "shape_id": shape_id}
+        return replace(result, worker_result={**worker, "result": labeled_payload})
+
+    @staticmethod
     def _private_profile_inputs(
         contract: AgateEvaluationContractV1,
         parameters: Mapping[str, JsonValue],
@@ -860,10 +890,7 @@ class AgateGatewayAdapter:
         dict[str, JsonValue] | None,
     ]:
         """Select one opaque private case for profiling without exposing its values."""
-        requested = parameters.get("shape_id")
-        shape_id = requested if isinstance(requested, str) else sorted(contract.shapes)[0]
-        if shape_id not in contract.shapes:
-            raise ValueError("profile shape_id is not an evaluator-owned opaque id")
+        shape_id = AgateGatewayAdapter._profile_shape_id(contract, parameters)
 
         def subset(
             value: dict[str, JsonValue] | None,

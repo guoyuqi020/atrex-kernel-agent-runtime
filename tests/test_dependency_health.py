@@ -7,7 +7,9 @@ import logging
 
 import pytest
 
+from atrex_runtime.api.app import _bounded_agate_health_probe
 from atrex_runtime.dependency_health import PeriodicHealthMonitor
+from atrex_runtime.gateway.retrying_client import RetryingAgateClient
 
 
 @pytest.mark.anyio
@@ -60,3 +62,22 @@ async def test_monitor_treats_probe_exception_as_unhealthy(
 def test_monitor_rejects_nonpositive_interval() -> None:
     with pytest.raises(ValueError, match="interval must be positive"):
         PeriodicHealthMonitor("Agate", lambda: True, interval_seconds=0)
+
+
+def test_periodic_agate_probe_bypasses_persistent_operational_retries() -> None:
+    class OfflineClient:
+        calls = 0
+
+        def health(self) -> bool:
+            self.calls += 1
+            raise ConnectionError("Agate is offline")
+
+    raw = OfflineClient()
+    delays: list[float] = []
+    client = RetryingAgateClient(raw, sleeper=delays.append)
+
+    with pytest.raises(ConnectionError, match="offline"):
+        _bounded_agate_health_probe(client)()
+
+    assert raw.calls == 1
+    assert delays == []

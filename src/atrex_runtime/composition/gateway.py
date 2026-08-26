@@ -30,9 +30,7 @@ def compose_authoritative_candidate_evaluator(
 ) -> AgateAuthoritativeCandidateEvaluator:
     """Compose the evaluator from already-open Runtime and Agate resources."""
     campaign = settings.campaign
-    gate_policy = settings.gate_policy or (
-        None if campaign is None else campaign.gate_policy
-    )
+    gate_policy = settings.gate_policy or (None if campaign is None else campaign.gate_policy)
     return AgateAuthoritativeCandidateEvaluator(
         client,
         request_builder,
@@ -49,9 +47,7 @@ def compose_authoritative_candidate_evaluator(
                 for stage in gate_policy.bootstrap.stages
             )
         ),
-        bootstrap_bench_iters=(
-            5 if gate_policy is None else gate_policy.bootstrap.bench_iters
-        ),
+        bootstrap_bench_iters=(5 if gate_policy is None else gate_policy.bootstrap.bench_iters),
         profile_without_roofline=True,
         production_policy=production_policy or ProductionKernelPolicy(),
     )

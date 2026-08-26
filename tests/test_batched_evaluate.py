@@ -172,5 +172,6 @@ async def test_shape_batch_executor_stops_on_candidate_rejection() -> None:
         "error": {
             "category": CANDIDATE_REJECTED_CATEGORY,
             "message": "candidate request rejected before evaluation job creation",
+            "details": rejection,
         },
     }

@@ -5,8 +5,10 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import math
 import os
 import shutil
+import statistics
 import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
@@ -19,6 +21,7 @@ from pydantic import TypeAdapter, ValidationError
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..asgi import AsgiReceive, AsgiSend, bearer_token, json_response, read_request_body
 from ..domain.errors import (
+    DirectionConcurrencyError,
     InfrastructureError,
     InvalidTransitionError,
     UpstreamGatewayError,
@@ -30,10 +33,14 @@ from .control import SqliteGatewayControl
 from .control_models import (
     GatewayCapability,
     GatewayEvaluationSource,
+    GatewayKernelTrialRecord,
     GatewayMeasurementRecord,
     GatewayOperation,
+    gateway_kernel_trial_id,
 )
+from .correctness import correctness_summary
 from .diff_policy import RegistryCandidateDiffValidator
+from .journals import RuntimeJournalService
 from .measurement_history import normalized_measurement_points
 from .production_policy import CandidateProductionValidator
 from .protocol import (
@@ -42,14 +49,16 @@ from .protocol import (
     CandidateBundleV2,
     CheckRequestV2,
     DevRequestV2,
+    DirectionHistoryRequestV2,
     DisassembleRequestV2,
     EvaluateRequestV2,
     EvaluationV2,
+    ExperimentHistoryRequestV2,
     GatewayProxyRequestV2,
     GatewayProxyResponseV2,
-    KernelTrialReadRequestV2,
-    KernelTrialsRequestV2,
-    MeasurementsRequestV2,
+    GatewayResultReadRequestV2,
+    KernelArtifactReadRequestV2,
+    KernelTrialShowRequestV2,
     PollRequestV2,
     ProfileRequestV2,
     SolRequestV2,
@@ -67,6 +76,30 @@ _CANDIDATE_REQUEST_TYPES = (
     SolRequestV2,
     DisassembleRequestV2,
 )
+_RUNTIME_LOCAL_OPERATIONS = frozenset(
+    {
+        GatewayOperation.KERNEL_TRIAL_SHOW,
+        GatewayOperation.KERNEL_ARTIFACT_READ,
+        GatewayOperation.GATEWAY_RESULT_READ,
+        GatewayOperation.DIRECTION_HISTORY,
+        GatewayOperation.EXPERIMENT_HISTORY,
+    }
+)
+_RUNTIME_JOURNAL_OPERATIONS = frozenset(
+    {
+        GatewayOperation.DIRECTION_UPDATE,
+        GatewayOperation.DIRECTIONS_LIST,
+        GatewayOperation.DIRECTION_LOAD,
+        GatewayOperation.EXPERIMENT_RECORD,
+        GatewayOperation.EXPERIMENTS_LIST,
+        GatewayOperation.EXPERIMENT_LOAD,
+        GatewayOperation.JOURNAL_SNAPSHOT,
+    }
+)
+_RUNTIME_OWNED_ERROR_FIELDS = frozenset(
+    {"schema_version", "attempt_id", "candidate", "idempotency_key"}
+)
+_GATEWAY_OPERATION_NAMES = frozenset(operation.value for operation in GatewayOperation)
 
 
 def _utc_now() -> datetime:
@@ -144,13 +177,42 @@ class GatewayProxyService:
         self._candidate_diff = candidate_diff
         self._candidate_production = candidate_production
         self._clock = clock
+        self._journals = RuntimeJournalService(control, artifacts)
 
-    async def execute(self, token: str, payload: bytes) -> GatewayProxyResponseV2:
+    async def execute(
+        self,
+        token: str,
+        payload: bytes,
+        *,
+        operation_scope: Literal["gateway", "runtime", "journal"] | None = None,
+    ) -> GatewayProxyResponseV2:
         """Parse and execute one complete protocol request."""
         if len(payload) > self._limits.max_request_bytes:
             raise ValueError("Gateway Proxy request exceeds byte limit")
         request = _REQUEST_ADAPTER.validate_json(payload)
         operation = GatewayOperation(request.operation)
+        is_runtime_query = operation in _RUNTIME_LOCAL_OPERATIONS
+        is_runtime_journal = operation in _RUNTIME_JOURNAL_OPERATIONS
+        if operation_scope == "gateway" and is_runtime_query:
+            raise ValueError(
+                f"Runtime-local operation {operation.value!r} requires /v1/runtime/queries"
+            )
+        if operation_scope == "gateway" and is_runtime_journal:
+            raise ValueError(
+                f"Runtime Journal operation {operation.value!r} requires /v1/runtime/journals"
+            )
+        if operation_scope == "runtime" and is_runtime_journal:
+            raise ValueError(
+                f"Runtime Journal operation {operation.value!r} requires /v1/runtime/journals"
+            )
+        if operation_scope == "runtime" and not is_runtime_query:
+            raise ValueError(f"Gateway operation {operation.value!r} requires /v1/operations")
+        if operation_scope == "journal" and is_runtime_query:
+            raise ValueError(
+                f"Runtime-local operation {operation.value!r} requires /v1/runtime/queries"
+            )
+        if operation_scope == "journal" and not is_runtime_journal:
+            raise ValueError(f"Gateway operation {operation.value!r} requires /v1/operations")
         request_digest = canonical_json_digest(request.model_dump(mode="json"))
         authorization = self._control.authorize(
             GatewayCapability(token, request.attempt_id),
@@ -192,7 +254,7 @@ class GatewayProxyService:
             "operation": operation,
             "idempotency_key": request.idempotency_key,
             "request_digest": request_digest,
-            "candidate_artifact_digest": candidate_digest,
+            "kernel_artifact_digest": candidate_digest,
         }
         self._events.record_runtime_event(
             "gateway.operation_submitted",
@@ -200,15 +262,31 @@ class GatewayProxyService:
             event_base,
         )
         try:
-            if isinstance(request, MeasurementsRequestV2):
-                result = self._query_measurements(request)
-            elif isinstance(request, KernelTrialsRequestV2):
-                result = self._query_kernel_trials(request)
-            elif isinstance(request, KernelTrialReadRequestV2):
-                result = self._read_kernel_trial(request)
+            if isinstance(request, KernelTrialShowRequestV2):
+                result = self._show_kernel_trial(request)
+            elif isinstance(request, KernelArtifactReadRequestV2):
+                result = self._read_kernel_artifact(request)
+            elif isinstance(request, GatewayResultReadRequestV2):
+                result = self._read_gateway_result(request)
+            elif isinstance(request, DirectionHistoryRequestV2):
+                result = self._read_journal_history(request.attempt_id, "direction_events")
+            elif isinstance(request, ExperimentHistoryRequestV2):
+                result = self._read_journal_history(request.attempt_id, "experiments")
+            elif operation in _RUNTIME_JOURNAL_OPERATIONS:
+                result = GatewayAdapterResult(
+                    "completed",
+                    cast(JsonValue, self._journals.execute(request, authorization)),
+                )
             else:
                 result = await self._adapter.execute(adapter_request)
             result_digest = self._store_gateway_result(result)
+            self._control.bind_operation_gateway_result(
+                request.attempt_id,
+                request.idempotency_key,
+                operation,
+                result_digest,
+                recovery_generation=authorization.recovery_generation,
+            )
 
             if isinstance(request, EvaluateRequestV2):
                 if result.status != "completed" or result.evaluation is None:
@@ -219,7 +297,7 @@ class GatewayProxyService:
                     request.attempt_id,
                     source=GatewayEvaluationSource.AGENT,
                     idempotency_key=request.idempotency_key,
-                    candidate_artifact_digest=candidate_digest,
+                    kernel_artifact_digest=candidate_digest,
                     gateway_result_digest=result_digest,
                     correct=result.evaluation.correct,
                     latency_us=result.evaluation.latency_us,
@@ -234,7 +312,7 @@ class GatewayProxyService:
                     request.attempt_id,
                     source_operation=operation,
                     idempotency_key=request.idempotency_key,
-                    candidate_artifact_digest=candidate_digest,
+                    kernel_artifact_digest=candidate_digest,
                     gateway_result_digest=result_digest,
                     points=normalized_measurement_points(adapter_request, result),
                     recovery_generation=authorization.recovery_generation,
@@ -270,7 +348,16 @@ class GatewayProxyService:
             schema_version=GATEWAY_PROXY_PROTOCOL_VERSION,
             operation=request.operation,
             status=result.status,
-            candidate_artifact_digest=(None if candidate_digest is None else str(candidate_digest)),
+            kernel_artifact_digest=(None if candidate_digest is None else str(candidate_digest)),
+            kernel_trial_id=(
+                None
+                if candidate_digest is None
+                else gateway_kernel_trial_id(
+                    request.attempt_id,
+                    authorization.recovery_generation,
+                    candidate_digest,
+                )
+            ),
             gateway_result_digest=str(result_digest),
             job_id=result.job_id,
             evaluation=result.evaluation,
@@ -299,127 +386,8 @@ class GatewayProxyService:
             )
         return response
 
-    def _query_measurements(self, request: MeasurementsRequestV2) -> GatewayAdapterResult:
-        lineage_id, visible_attempt_ids = self._control.visible_measurement_attempt_ids(
-            request.attempt_id
-        )
-        catalog = self._control.measurement_kernel_catalog(lineage_id)
-        requested_digest = (
-            None
-            if request.kernel_artifact_digest is None
-            else parse_artifact_digest(request.kernel_artifact_digest)
-        )
-        if request.kernel_revision_id is not None:
-            revision_matches = [
-                digest
-                for digest, identity in catalog.items()
-                if identity[0] == request.kernel_revision_id
-            ]
-            if not revision_matches:
-                raise ValueError("kernel_revision_id is outside the visible Lineage")
-            revision_digest = revision_matches[0]
-            if requested_digest is not None and requested_digest != revision_digest:
-                raise ValueError("Kernel revision and Artifact filters disagree")
-            requested_digest = revision_digest
-        records = self._control.list_measurements(
-            visible_attempt_ids,
-            kind=None if request.kind is None else GatewayOperation(request.kind),
-            candidate_artifact_digest=requested_digest,
-            shape_id=request.shape_id,
-            kernel_name=request.kernel_name,
-            metric=request.metric,
-            limit=request.limit,
-        )
-        values: list[JsonValue] = []
-        for record in records:
-            identity = catalog.get(record.candidate_artifact_digest)
-            values.append(
-                {
-                    "measurement_id": record.id,
-                    "attempt_id": record.attempt_id,
-                    "kernel_revision_id": None if identity is None else identity[0],
-                    "kernel_revision_number": None if identity is None else identity[1],
-                    "kernel_version": None if identity is None else identity[2],
-                    "kernel_artifact_digest": record.candidate_artifact_digest,
-                    "operation": record.point.kind.value,
-                    "source_operation": record.source_operation.value,
-                    "profile_level": record.point.profile_level,
-                    "shape_id": record.point.shape_id,
-                    "kernel_name": record.point.kernel_name,
-                    "metrics": record.point.metrics,
-                    "gateway_result_digest": record.gateway_result_digest,
-                    "created_at": record.created_at,
-                }
-            )
-        return GatewayAdapterResult(
-            "completed",
-            cast(
-                JsonValue,
-                {
-                    "lineage_id": lineage_id,
-                    "through_attempt_id": request.attempt_id,
-                    "visible_attempt_count": len(visible_attempt_ids),
-                    "measurements": values,
-                },
-            ),
-        )
-
-    def _query_kernel_trials(self, request: KernelTrialsRequestV2) -> GatewayAdapterResult:
-        lineage_id, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(
-            request.attempt_id
-        )
-        trials = self._control.list_kernel_trials(visible_attempt_ids, limit=5_000)
-        if request.decision is not None:
-            trials = tuple(trial for trial in trials if trial.disposition == request.decision)
-        trials = tuple(reversed(trials[-request.limit :]))
-        values: list[JsonValue] = []
-        for trial in trials:
-            values.append(
-                {
-                    "kernel_trial_id": trial.id,
-                    "attempt_id": trial.attempt_id,
-                    "recovery_generation": trial.recovery_generation,
-                    "ordinal": trial.ordinal,
-                    "candidate_artifact_digest": trial.candidate_artifact_digest,
-                    "disposition": trial.disposition,
-                    "created_at": trial.created_at,
-                    "observations": [
-                        {
-                            "operation": observation.operation.value,
-                            "idempotency_key": observation.idempotency_key,
-                            "gateway_result_digest": observation.result_artifact_digest,
-                            "created_at": observation.created_at,
-                        }
-                        for observation in trial.observations
-                    ],
-                    "annotations": [
-                        {
-                            "sequence": annotation.sequence,
-                            "decision": annotation.decision,
-                            "experiment": annotation.experiment,
-                            "recorded_at": annotation.recorded_at,
-                        }
-                        for annotation in trial.annotations
-                    ],
-                }
-            )
-        return GatewayAdapterResult(
-            "completed",
-            cast(
-                JsonValue,
-                {
-                    "lineage_id": lineage_id,
-                    "through_attempt_id": request.attempt_id,
-                    "visible_attempt_count": len(visible_attempt_ids),
-                    "kernel_trials": values,
-                },
-            ),
-        )
-
-    def _read_kernel_trial(self, request: KernelTrialReadRequestV2) -> GatewayAdapterResult:
-        lineage_id, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(
-            request.attempt_id
-        )
+    def _show_kernel_trial(self, request: KernelTrialShowRequestV2) -> GatewayAdapterResult:
+        _, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(request.attempt_id)
         trial = next(
             (
                 value
@@ -430,9 +398,114 @@ class GatewayProxyService:
         )
         if trial is None:
             raise ValueError("Kernel Trial is outside the visible Lineage history")
-        artifact = self._artifacts.verify(trial.candidate_artifact_digest)
+        return GatewayAdapterResult(
+            "completed",
+            cast(
+                JsonValue,
+                {
+                    "kernel_artifact_digest": trial.kernel_artifact_digest,
+                    "gateway_results": self._trial_gateway_results(trial),
+                },
+            ),
+        )
+
+    def _trial_gateway_results(self, trial: GatewayKernelTrialRecord) -> list[JsonValue]:
+        values: list[JsonValue] = []
+        seen: set[ArtifactDigest] = set()
+        for observation in trial.observations:
+            digest = observation.gateway_result_digest
+            if digest is None or digest in seen:
+                continue
+            if observation.result_artifact_digest is None:
+                raise InfrastructureError("Gateway Result has no Agent-visible response Artifact")
+            seen.add(digest)
+            values.append(self._gateway_result_payload(observation.result_artifact_digest))
+        return values
+
+    def _read_kernel_artifact(
+        self,
+        request: KernelArtifactReadRequestV2,
+    ) -> GatewayAdapterResult:
+        lineage_id, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(
+            request.attempt_id
+        )
+        digest = parse_artifact_digest(request.kernel_artifact_digest)
+        matching = tuple(
+            trial
+            for trial in self._control.list_kernel_trials(visible_attempt_ids, limit=5_000)
+            if trial.kernel_artifact_digest == digest
+        )
+        if not matching:
+            raise ValueError("Kernel Artifact is outside the visible Lineage history")
+        response = self._kernel_artifact_payload(digest, request.file)
+        response.update(
+            {
+                "lineage_id": lineage_id,
+                "through_attempt_id": request.attempt_id,
+                "kernel_trial_ids": [trial.id for trial in matching],
+            }
+        )
+        return GatewayAdapterResult("completed", cast(JsonValue, response))
+
+    def _read_gateway_result(
+        self,
+        request: GatewayResultReadRequestV2,
+    ) -> GatewayAdapterResult:
+        _, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(request.attempt_id)
+        digest = parse_artifact_digest(request.gateway_result_digest)
+        matching = tuple(
+            (trial, observation)
+            for trial in self._control.list_kernel_trials(visible_attempt_ids, limit=5_000)
+            for observation in trial.observations
+            if observation.gateway_result_digest == digest
+        )
+        if not matching:
+            raise ValueError("Gateway Result is outside the visible Lineage history")
+        response_artifact_digests = {
+            observation.result_artifact_digest
+            for _, observation in matching
+            if observation.result_artifact_digest is not None
+        }
+        if len(response_artifact_digests) != 1:
+            raise InfrastructureError("Gateway Result has no unique Agent-visible response")
+        response = self._gateway_result_payload(next(iter(response_artifact_digests)))
+        return GatewayAdapterResult("completed", cast(JsonValue, response))
+
+    def _read_journal_history(
+        self,
+        attempt_id: AttemptId,
+        field: Literal["direction_events", "experiments"],
+    ) -> GatewayAdapterResult:
+        """Read frozen journals from terminal Attempt Report Artifacts."""
+        journals: list[JsonValue] = []
+        for report_attempt_id, digest in self._control.visible_attempt_report_artifacts(attempt_id):
+            artifact = self._artifacts.verify(digest)
+            if artifact.kind is not ArtifactKind.ATTEMPT_REPORT:
+                raise InfrastructureError("Attempt Report history has an invalid Artifact kind")
+            try:
+                report = json.loads((artifact.payload_path / "value.json").read_bytes())
+            except (FileNotFoundError, json.JSONDecodeError) as error:
+                raise InfrastructureError("Attempt Report history is invalid JSON") from error
+            if not isinstance(report, dict) or report.get("attempt_id") != report_attempt_id:
+                raise InfrastructureError("Attempt Report history disagrees with Registry state")
+            journal = report.get(field)
+            if not isinstance(journal, list):
+                raise InfrastructureError(f"Attempt Report has invalid {field}")
+            if journal:
+                journals.append(cast(JsonValue, journal))
+        return GatewayAdapterResult(
+            "completed",
+            cast(JsonValue, {"journals": journals}),
+        )
+
+    def _kernel_artifact_payload(
+        self,
+        digest: ArtifactDigest,
+        requested_file: str | None,
+    ) -> dict[str, JsonValue]:
+        artifact = self._artifacts.verify(digest)
         if artifact.kind is not ArtifactKind.KERNEL:
-            raise ValueError("Kernel Trial source Artifact has an invalid kind")
+            raise ValueError("Kernel source Artifact has an invalid kind")
         files: list[JsonValue] = []
         for path in sorted(
             candidate for candidate in artifact.payload_path.rglob("*") if candidate.is_file()
@@ -447,17 +520,13 @@ class GatewayProxyService:
                 }
             )
         response: dict[str, JsonValue] = {
-            "lineage_id": lineage_id,
-            "kernel_trial_id": trial.id,
-            "attempt_id": trial.attempt_id,
-            "candidate_artifact_digest": trial.candidate_artifact_digest,
-            "disposition": trial.disposition,
+            "kernel_artifact_digest": digest,
             "files": files,
         }
-        if request.file is not None:
-            source = artifact.payload_path.joinpath(*request.file.split("/"))
+        if requested_file is not None:
+            source = artifact.payload_path.joinpath(*requested_file.split("/"))
             if not source.is_file():
-                raise ValueError(f"Kernel Trial file does not exist: {request.file}")
+                raise ValueError(f"Kernel Artifact file does not exist: {requested_file}")
             content = source.read_bytes()
             try:
                 response["content"] = content.decode("utf-8")
@@ -465,8 +534,79 @@ class GatewayProxyService:
             except UnicodeDecodeError:
                 response["content"] = base64.b64encode(content).decode("ascii")
                 response["encoding"] = "base64"
-            response["file"] = request.file
-        return GatewayAdapterResult("completed", cast(JsonValue, response))
+            response["file"] = requested_file
+        return response
+
+    def _gateway_result_payload(
+        self,
+        response_artifact_digest: ArtifactDigest,
+    ) -> dict[str, JsonValue]:
+        """Return a minimal view of the recorded Agent-safe response."""
+        artifact = self._artifacts.verify(response_artifact_digest)
+        if artifact.kind is not ArtifactKind.GATEWAY_RESULT:
+            raise InfrastructureError("Gateway response Artifact has an invalid kind")
+        documents: dict[str, JsonValue] = {}
+        for path in sorted(
+            candidate for candidate in artifact.payload_path.rglob("*") if candidate.is_file()
+        ):
+            relative = path.relative_to(artifact.payload_path).as_posix()
+            try:
+                documents[relative] = cast(JsonValue, json.loads(path.read_bytes()))
+            except (json.JSONDecodeError, UnicodeDecodeError) as error:
+                raise InfrastructureError(
+                    "Gateway Result Artifact contains invalid JSON"
+                ) from error
+        value = documents.get("value.json")
+        if not isinstance(value, dict):
+            raise InfrastructureError("Gateway Result Artifact has no value.json")
+        return self._normalize_recorded_response(value)
+
+    @staticmethod
+    def _normalize_recorded_response(value: dict[str, JsonValue]) -> dict[str, JsonValue]:
+        operation = value.get("operation")
+        status = value.get("status")
+        result = value.get("result")
+        if not isinstance(operation, str) or not isinstance(status, str):
+            raise InfrastructureError("Gateway response Artifact has invalid operation status")
+        if not isinstance(result, dict) or operation != GatewayOperation.EVALUATE.value:
+            return {"operation": operation, "status": status, "result": result}
+
+        normalized: dict[str, JsonValue] = {}
+        for key in ("failures", "error"):
+            if key in result:
+                normalized[key] = result[key]
+        evaluation = value.get("evaluation")
+        correct = evaluation.get("correct") if isinstance(evaluation, dict) else None
+        latency = evaluation.get("latency_us") if isinstance(evaluation, dict) else None
+        if not isinstance(correct, bool):
+            correct = result.get("correct", result.get("all_pass"))
+        if not isinstance(latency, (int, float)) or isinstance(latency, bool):
+            latency = result.get("latency_us_geomean")
+        by_shape = result.get("latency_us_by_shape")
+        shape_latencies = (
+            [
+                float(item)
+                for item in by_shape.values()
+                if isinstance(item, (int, float))
+                and not isinstance(item, bool)
+                and math.isfinite(float(item))
+                and float(item) > 0
+            ]
+            if isinstance(by_shape, dict)
+            else []
+        )
+        normalized["correct"] = correct
+        normalized["correctness"] = correctness_summary(result, passed=correct is True)
+        normalized["latency_us_geomean"] = latency
+        normalized["latency_us_arith_mean"] = (
+            statistics.fmean(shape_latencies) if shape_latencies else None
+        )
+        normalized["latency_us_by_shape"] = by_shape if isinstance(by_shape, dict) else {}
+        return {
+            "operation": operation,
+            "status": status,
+            "result": normalized,
+        }
 
     def _store_gateway_result(self, result: GatewayAdapterResult) -> ArtifactDigest:
         if result.profile_result is None:
@@ -559,7 +699,7 @@ class GatewayProxyService:
 
 
 class GatewayProxyAsgiApp:
-    """Small ASGI adapter for the single versioned Gateway Proxy endpoint."""
+    """ASGI adapter separating remote Gateway work from Runtime-local queries."""
 
     def __init__(self, service: GatewayProxyService, limits: GatewayProxyLimits) -> None:
         self._service = service
@@ -573,7 +713,12 @@ class GatewayProxyAsgiApp:
     ) -> None:
         if scope.get("type") != "http":
             raise ValueError("Gateway Proxy supports only ASGI HTTP scopes")
-        if scope.get("method") != "POST" or scope.get("path") != "/v1/operations":
+        path = scope.get("path")
+        if scope.get("method") != "POST" or path not in {
+            "/v1/operations",
+            "/v1/runtime/queries",
+            "/v1/runtime/journals",
+        }:
             await json_response(send, 404, {"error": "not_found"})
             return
         token = bearer_token(scope.get("headers"))
@@ -587,11 +732,49 @@ class GatewayProxyAsgiApp:
                 self._limits.max_request_bytes,
                 oversized_message="Gateway Proxy request exceeds byte limit",
             )
-            result = await self._service.execute(token, body)
+            result = await self._service.execute(
+                token,
+                body,
+                operation_scope=(
+                    "runtime"
+                    if path == "/v1/runtime/queries"
+                    else "journal"
+                    if path == "/v1/runtime/journals"
+                    else "gateway"
+                ),
+            )
         except ValidationError as error:
-            await json_response(send, 400, _invalid_request_response(body, error))
+            await json_response(
+                send,
+                400,
+                _invalid_request_response(
+                    body,
+                    error,
+                    operation_scope=(
+                        "runtime"
+                        if path == "/v1/runtime/queries"
+                        else "journal"
+                        if path == "/v1/runtime/journals"
+                        else "gateway"
+                    ),
+                ),
+            )
         except ValueError as error:
-            await json_response(send, 400, _invalid_request_response(body, error))
+            await json_response(
+                send,
+                400,
+                _invalid_request_response(
+                    body,
+                    error,
+                    operation_scope=(
+                        "runtime"
+                        if path == "/v1/runtime/queries"
+                        else "journal"
+                        if path == "/v1/runtime/journals"
+                        else "gateway"
+                    ),
+                ),
+            )
         except PermissionError as error:
             await json_response(send, 403, {"error": "forbidden", "detail": str(error)})
         except InvalidTransitionError as error:
@@ -608,12 +791,61 @@ class GatewayProxyAsgiApp:
             await json_response(send, 200, result.model_dump(mode="json"))
 
 
-def _invalid_request_response(payload: bytes, error: Exception) -> dict[str, JsonValue]:
+def _invalid_request_response(
+    payload: bytes,
+    error: Exception,
+    *,
+    operation_scope: Literal["gateway", "runtime", "journal"] | None = None,
+) -> dict[str, JsonValue]:
     """Attach the exact Agent-facing schema for the operation that failed validation."""
     response: dict[str, JsonValue] = {
         "error": "invalid_request",
         "detail": str(error),
     }
+    if isinstance(error, DirectionConcurrencyError):
+        active_ids = list(error.in_progress_direction_ids)
+        response["issues"] = cast(
+            JsonValue,
+            [
+                {
+                    "path": "direction_id",
+                    "code": "direction_concurrency_conflict",
+                    "message": str(error),
+                }
+            ],
+        )
+        response["conflict"] = cast(
+            JsonValue,
+            {
+                "requested_direction_id": error.requested_direction_id,
+                "in_progress_direction_ids": active_ids,
+            },
+        )
+        response["recovery"] = cast(
+            JsonValue,
+            [
+                {
+                    "tool": "list-directions",
+                    "request": {"file": "scratch/directions-index.json"},
+                },
+                {
+                    "instruction": (
+                        "Continue exploration only under the existing in-progress Direction, or "
+                        "close it with update-direction action complete, abandon, defer, or block"
+                    )
+                },
+                {
+                    "instruction": (
+                        "The requested Direction was not started. Retry start only after no other "
+                        "Direction is in progress"
+                    )
+                },
+            ],
+        )
+    if isinstance(error, ValidationError):
+        issues = _agent_validation_issues(error)
+        if issues:
+            response["issues"] = cast(JsonValue, issues)
     operation: object = None
     try:
         value = json.loads(payload)
@@ -621,18 +853,73 @@ def _invalid_request_response(payload: bytes, error: Exception) -> dict[str, Jso
             operation = value.get("operation")
     except (json.JSONDecodeError, UnicodeDecodeError):
         pass
+    allowed_operations = _operations_for_scope(operation_scope)
     if isinstance(operation, str):
         try:
-            response["request_schema"] = gateway_agent_request_schema(operation)
-        except ValueError:
-            response["supported_operations"] = cast(JsonValue, _supported_gateway_operations())
+            response["request_schema"] = gateway_agent_request_schema(
+                operation,
+                allowed_operations=allowed_operations,
+            )
+        except (PermissionError, ValueError):
+            response["supported_operations"] = cast(
+                JsonValue,
+                _supported_gateway_operations(operation_scope),
+            )
     else:
-        response["supported_operations"] = cast(JsonValue, _supported_gateway_operations())
+        response["supported_operations"] = cast(
+            JsonValue,
+            _supported_gateway_operations(operation_scope),
+        )
     return response
 
 
-def _supported_gateway_operations() -> list[str]:
-    operations = gateway_agent_request_schema().get("operations")
+def _agent_validation_issues(error: ValidationError) -> list[dict[str, str]]:
+    """Return compact repair hints without echoing request values or Runtime-owned fields."""
+    issues: list[dict[str, str]] = []
+    for issue in error.errors(include_url=False, include_context=False, include_input=False):
+        location = [str(part) for part in issue.get("loc", ())]
+        if location and location[0] in _GATEWAY_OPERATION_NAMES:
+            location = location[1:]
+        if location and location[0] in _RUNTIME_OWNED_ERROR_FIELDS:
+            continue
+        message = issue.get("msg")
+        code = issue.get("type")
+        if not isinstance(message, str) or not isinstance(code, str):
+            continue
+        issues.append(
+            {
+                "path": ".".join(location) if location else "$",
+                "code": code,
+                "message": message,
+            }
+        )
+    return issues
+
+
+def _operations_for_scope(
+    operation_scope: Literal["gateway", "runtime", "journal"] | None,
+) -> frozenset[str] | None:
+    if operation_scope is None:
+        return None
+    runtime_operations = frozenset(operation.value for operation in _RUNTIME_LOCAL_OPERATIONS)
+    if operation_scope == "runtime":
+        return runtime_operations
+    if operation_scope == "journal":
+        return frozenset(operation.value for operation in _RUNTIME_JOURNAL_OPERATIONS)
+    return frozenset(
+        operation.value
+        for operation in GatewayOperation
+        if operation not in _RUNTIME_LOCAL_OPERATIONS
+        and operation not in _RUNTIME_JOURNAL_OPERATIONS
+    )
+
+
+def _supported_gateway_operations(
+    operation_scope: Literal["gateway", "runtime", "journal"] | None = None,
+) -> list[str]:
+    operations = gateway_agent_request_schema(
+        allowed_operations=_operations_for_scope(operation_scope)
+    ).get("operations")
     if not isinstance(operations, dict):
         raise TypeError("generated Gateway schema has no operation mapping")
     return sorted(operations)

@@ -249,18 +249,14 @@ def _shared_control_plane(
     )
     missing = [name for name in required_sections if not isinstance(runtime.get(name), dict)]
     if missing:
-        raise SystemExit(
-            "service Runtime config is missing shared sections: " + ", ".join(missing)
-        )
+        raise SystemExit("service Runtime config is missing shared sections: " + ", ".join(missing))
     launcher_mode = str(manifest.get("launcher_mode", "sandbox"))
     if launcher_mode not in SUPPORTED_LAUNCHER_MODES:
         raise SystemExit(f"unsupported service launcher mode: {launcher_mode}")
     return runtime, secrets_text, launcher_mode
 
 
-def _attach_shared_control_plane(
-    runtime: dict[str, Any], service_runtime: dict[str, Any]
-) -> None:
+def _attach_shared_control_plane(runtime: dict[str, Any], service_runtime: dict[str, Any]) -> None:
     """Point a task-local scheduler config at one long-running trusted control plane."""
     for section in (
         "server",
@@ -501,9 +497,7 @@ def _runtime_config(
             "backend_credentials": {
                 "enabled": True,
                 "host_home": host_home,
-                "development_bwrap_executable": _resolve_executable(
-                    "bwrap", "/usr/bin/bwrap"
-                ),
+                "development_bwrap_executable": _resolve_executable("bwrap", "/usr/bin/bwrap"),
             },
             "sandbox": {
                 "bwrap_executable": _resolve_executable("bwrap", "/usr/bin/bwrap"),
@@ -536,11 +530,9 @@ def _runtime_config(
         "gateway_proxy_url": f"http://{host}:{port}",
         "gateway_operations": [
             "evaluate",
-            "submit",
             "profile",
             "dev",
             "check",
-            "sol",
             "disassemble",
             "poll",
             "jobs",
@@ -825,9 +817,7 @@ def main() -> None:
     )
     default_workspace = root / "workspaces/production" / workspace_name
     workspace = (args.workspace or default_workspace).expanduser().resolve()
-    attached_service_workspace = (
-        service_workspace if service_workspace != workspace else None
-    )
+    attached_service_workspace = service_workspace if service_workspace != workspace else None
     seed_source = args.seed_source or selected_seed or "reference.py"
     seed = (operator_root / seed_source).resolve()
     if not seed.is_relative_to(operator_root) or seed.is_symlink() or not seed.is_file():
@@ -862,9 +852,7 @@ def main() -> None:
         "evolver_commit": evolver_commit,
         "atrex_bench_commit": bench_commit,
         "service_workspace": (
-            str(attached_service_workspace)
-            if attached_service_workspace is not None
-            else None
+            str(attached_service_workspace) if attached_service_workspace is not None else None
         ),
         "launcher_mode": launcher_mode,
     }
@@ -894,10 +882,7 @@ def main() -> None:
         required = (
             workspace / "runtime.json",
             workspace / "local-wiki.json",
-            *(
-                workspace / "dsls" / dsl / "campaign.json"
-                for dsl in SUPPORTED_DSLS
-            ),
+            *(workspace / "dsls" / dsl / "campaign.json" for dsl in SUPPORTED_DSLS),
         )
         if not all(path.is_file() for path in required):
             raise SystemExit("pinned production workspace is incomplete")
@@ -985,9 +970,7 @@ def main() -> None:
 
     RuntimeSettings.from_file(workspace / "runtime.json")
     for dsl in SUPPORTED_DSLS:
-        parsed_campaign = CampaignSpecV3.from_file(
-            workspace / "dsls" / dsl / "campaign.json"
-        )
+        parsed_campaign = CampaignSpecV3.from_file(workspace / "dsls" / dsl / "campaign.json")
         selected = tuple(value.value for value in parsed_campaign.selected_dsls())
         if selected != (dsl,):
             raise RuntimeError(f"{dsl} Campaign selected unexpected DSLs: {selected}")

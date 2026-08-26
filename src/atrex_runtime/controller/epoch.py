@@ -246,8 +246,17 @@ class EpochController:
                     candidate = proposal.candidate
                     if candidate.dsl is not parent.dsl or base.dsl is not parent.dsl:
                         raise ValueError("Evolver changed the lineage DSL")
-                    if candidate.optimizer_digest == base.optimizer_digest:
-                        raise ValueError("Evolver produced no Optimizer repository changes")
+                    if candidate.runtime_state_digest is None:
+                        raise ValueError(
+                            "Evolver produced an incomplete Agent Bundle without Runtime State"
+                        )
+                    if (
+                        candidate.optimizer_digest == base.optimizer_digest
+                        and candidate.runtime_state_digest == base.runtime_state_digest
+                    ):
+                        raise ValueError(
+                            "Evolver produced no Agent source or runtime-state changes"
+                        )
                     base_revision_id = base.id
                     revision = self._registry.register_kernel_agent_revision(
                         KernelAgentRevision(
@@ -259,6 +268,7 @@ class EpochController:
                             created_by="evolver",
                             created_at=self._clock(),
                             evolution_trace_digest=build.evolution_trace_digest,
+                            runtime_state_digest=candidate.runtime_state_digest,
                         )
                     )
             else:
@@ -539,6 +549,19 @@ class EpochController:
     ) -> None:
         input_kernel = self._registry.get_kernel_revision(attempt.input_kernel_revision_id)
         report_ready = attempt.attempt_report_status is AttemptReportStatus.CANDIDATE_READY
+        if not report_ready:
+            self._registry.complete_attempt(
+                attempt.id,
+                output.id,
+                accepted_as_branch_best=False,
+                failure_reason="candidate lacks a candidate_ready Attempt report",
+            )
+            return
+
+        # The Agent-authored terminal Report is immutable and deliberately does not
+        # own Kernel retention. Only after that handoff is durably registered may
+        # Runtime execute ordinary comparison or same-allocation ABBA and replace
+        # the provisional Candidate evaluation with the authoritative result.
         comparison = await self._kernel_retention_comparator.compare(input_kernel, output)
         authoritative = comparison.authoritative_candidate
         if authoritative is not None:
@@ -552,13 +575,8 @@ class EpochController:
                     gateway_result_digest=authoritative.gateway_result_digest,
                 ),
             )
-        improved = report_ready and comparison.accepted
-        if not report_ready:
-            report_failure = "candidate lacks a candidate_ready Attempt report"
-        elif not comparison.accepted:
-            report_failure = comparison.reason
-        else:
-            report_failure = None
+        improved = comparison.accepted
+        report_failure = comparison.reason if not comparison.accepted else None
         self._registry.complete_attempt(
             attempt.id,
             output.id,

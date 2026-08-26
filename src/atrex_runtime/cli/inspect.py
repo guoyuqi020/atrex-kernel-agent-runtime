@@ -534,7 +534,7 @@ def evaluations(
                 if include_source:
                     value["source_files"] = _artifact_files(
                         artifacts,
-                        evaluation.candidate_artifact_digest,
+                        evaluation.kernel_artifact_digest,
                         max_files=settings.gateway_proxy.max_candidate_files,
                         max_bytes=settings.gateway_proxy.max_candidate_bytes,
                     )
@@ -588,7 +588,7 @@ def kernel_trials(
                 if include_source:
                     value["source_files"] = _artifact_files(
                         artifacts,
-                        trial.candidate_artifact_digest,
+                        trial.kernel_artifact_digest,
                         max_files=settings.gateway_proxy.max_candidate_files,
                         max_bytes=settings.gateway_proxy.max_candidate_bytes,
                     )

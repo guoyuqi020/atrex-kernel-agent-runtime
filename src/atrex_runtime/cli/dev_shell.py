@@ -317,7 +317,11 @@ def open_evolver_dev_shell(
                 f"Campaign freezes Evolver commit {frozen_evolver_commit}; configured commit "
                 f"is {campaign.evolver.commit}"
             )
-        evolution_config = build_evolution_process_config(campaign, artifacts, os.environ)
+        evolution_config = build_evolution_process_config(
+            campaign,
+            artifacts,
+            os.environ,
+        )
         sessions = SubprocessEvolutionSessionDriver(
             build_worker_launcher(settings, os.environ),
             evolution_config,
@@ -328,6 +332,7 @@ def open_evolver_dev_shell(
                 campaign.evolution_workspaces_root,
                 artifacts,
                 evolver_bundle_digest=evolution_config.bundle_artifact_digest,
+                attempt_workspaces_root=campaign.attempt_workspaces_root,
             ),
             sessions,
             RegistryLineageLeaseManager(
@@ -369,9 +374,7 @@ def open_temporary_evolver_dev_shell(
     settings = RuntimeSettings.from_file(config_path)
     campaign = settings.campaign
     if campaign is None:
-        raise ValueError(
-            "temporary-evolver-dev-shell requires Campaign runtime configuration"
-        )
+        raise ValueError("temporary-evolver-dev-shell requires Campaign runtime configuration")
     spec = load_campaign_spec(campaign_path)
     selected = spec.selected_dsls()
     if len(selected) != 1:
@@ -384,9 +387,7 @@ def open_temporary_evolver_dev_shell(
         artifacts = LocalArtifactStore(settings.storage.artifacts_root)
         loader = build_optimizer_base_loader(settings, artifacts)
         if loader is None:
-            raise ValueError(
-                "temporary-evolver-dev-shell requires a Git Optimizer Base source"
-            )
+            raise ValueError("temporary-evolver-dev-shell requires a Git Optimizer Base source")
         base = loader.build_candidate(dsl, spec.base_revision.commit)
         campaign_id = new_campaign_id()
         lineage_id = new_lineage_id()
@@ -429,12 +430,17 @@ def open_temporary_evolver_dev_shell(
             kernel_catalog=(),
             model=lineage_spec.models.evolver,
         )
-        evolution_config = build_evolution_process_config(campaign, artifacts, os.environ)
+        evolution_config = build_evolution_process_config(
+            campaign,
+            artifacts,
+            os.environ,
+        )
         service = TemporaryEvolverDevShell(
             EvolutionWorkspaceAssembler(
                 campaign.evolution_workspaces_root,
                 artifacts,
                 evolver_bundle_digest=evolution_config.bundle_artifact_digest,
+                attempt_workspaces_root=campaign.attempt_workspaces_root,
             ),
             SubprocessEvolutionSessionDriver(
                 build_worker_launcher(settings, os.environ),

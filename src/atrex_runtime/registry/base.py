@@ -251,6 +251,18 @@ class Registry(Protocol):
 
     def list_attempt_session_traces(self, attempt_id: AttemptId) -> list[AttemptSessionTrace]: ...
 
+    def record_attempt_input_runtime_state(
+        self,
+        attempt_id: AttemptId,
+        runtime_state_digest: ArtifactDigest,
+    ) -> None: ...
+
+    def record_attempt_runtime_state(
+        self,
+        attempt_id: AttemptId,
+        runtime_state_digest: ArtifactDigest,
+    ) -> None: ...
+
     def record_attempt_report(
         self,
         attempt_id: AttemptId,

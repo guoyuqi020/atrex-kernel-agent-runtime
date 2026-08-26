@@ -22,7 +22,8 @@ Idempotency Key、Candidate/Result Digest、正确性、延迟、外部 Job 身�
 不同 Key；相同请求以相同 Key 重试时直接重放已有响应和记录，不会再次提交外部任务。探索记录
 永远不会提交 Attempt Outcome。
 
-`candidate_ready` 或 `baseline_ready` 提名最终的 `work/kernel` Tree。Runtime 自己封存该 Tree，
+Bootstrap 与普通优化 Attempt 都以 `candidate_ready` 提名最终的 `work/kernel` Tree。Runtime
+自己封存该 Tree，
 并要求存在一个针对完全相同字节的正确探索记录。Bootstrap 使用 Runtime 凭据和稳定的
 Runtime-final Idempotency Key 向 Agate 重新提交评测。优化 Attempt 则临时注册准确的提名 Artifact，
 并把最终权威交给 Kernel 留存：普通 Evaluate 按配置次数分别测量 A/B，以 B 的算术平均和聚合

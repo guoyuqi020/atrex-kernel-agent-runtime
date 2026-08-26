@@ -19,12 +19,12 @@ from atrex_runtime.kernel_agents import KernelAgentRevisionBuilder
 def _source(tmp_path: Path) -> Path:
     root = tmp_path / "agent"
     prompt = root / "prompts/episode.md"
-    skill = root / "skills/example/SKILL.md"
     prompt.parent.mkdir(parents=True)
-    skill.parent.mkdir(parents=True)
+    docs = root / "docs/design.md"
+    docs.parent.mkdir(parents=True)
     (root / "src").mkdir()
     prompt.write_text("Optimize through Runtime tools.\n", encoding="utf-8")
-    skill.write_text("# Evidence loop\n", encoding="utf-8")
+    docs.write_text("# Agent design\n", encoding="utf-8")
     (root / "atrex-bundle.json").write_text(
         json.dumps(
             {
@@ -52,12 +52,29 @@ def test_builder_seals_complete_repository(tmp_path: Path) -> None:
     stored = artifacts.verify(candidate.optimizer_digest).payload_path
     assert (stored / "src/main.py").is_file()
     assert (stored / "prompts/episode.md").is_file()
-    assert (stored / "skills/example/SKILL.md").is_file()
+    assert (stored / "docs/design.md").is_file()
+
+
+@pytest.mark.parametrize("name", ("skills", "tools"))
+def test_builder_rejects_top_level_adaptive_state_directories(
+    tmp_path: Path,
+    name: str,
+) -> None:
+    source = _source(tmp_path)
+    reserved = source / name
+    reserved.mkdir()
+    (reserved / "state.md").write_text("trajectory state\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=f"reserved top-level runtime-state path: {name}/"):
+        KernelAgentRevisionBuilder(
+            LocalArtifactStore(tmp_path / "artifacts"),
+            limits=kernel_agent_limits(),
+        ).build_candidate(source, Dsl.TRITON)
 
 
 def test_builder_allows_non_entry_repository_content(tmp_path: Path) -> None:
     source = _source(tmp_path)
-    (source / "docs").mkdir()
+    (source / "docs").mkdir(exist_ok=True)
     (source / "docs/design.md").write_text("supporting documentation\n")
     candidate = KernelAgentRevisionBuilder(
         LocalArtifactStore(tmp_path / "artifacts"),

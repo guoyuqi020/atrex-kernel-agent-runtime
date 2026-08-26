@@ -28,3 +28,24 @@ class UpstreamGatewayError(InfrastructureError):
 
 class LineageLeaseUnavailableError(RuntimeError):
     """Another trusted scheduler currently owns the requested lineage."""
+
+
+class DirectionConcurrencyError(ValueError):
+    """A logical Attempt tried to explore more than one Direction concurrently."""
+
+    def __init__(
+        self,
+        requested_direction_id: str,
+        in_progress_direction_ids: tuple[str, ...],
+    ) -> None:
+        if not in_progress_direction_ids:
+            raise ValueError("Direction concurrency conflict requires an active Direction")
+        self.requested_direction_id = requested_direction_id
+        self.in_progress_direction_ids = in_progress_direction_ids
+        super().__init__(
+            "Only one Direction may be in progress at a time: "
+            f"requested_direction_id={requested_direction_id}; "
+            f"in_progress_direction_ids={list(in_progress_direction_ids)}. "
+            "The requested Direction was not started. Continue the current Direction or close it "
+            "with complete, abandon, defer, or block before starting another Direction"
+        )

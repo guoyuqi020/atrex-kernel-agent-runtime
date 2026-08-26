@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import pytest
 from conftest import NOW, FakeAttemptEvidence, digest
 
-from atrex_runtime.artifacts.local import LocalArtifactStore
+from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.controller import (
     CampaignScheduler,
     EpochController,
@@ -63,6 +64,7 @@ class AdvancingEvolver:
                 KernelAgentCandidate(
                     dsl=request.parent_revision.dsl,
                     optimizer_digest=digest(f"challenger-optimizer-{ordinal}"),
+                    runtime_state_digest=digest(f"challenger-runtime-state-{ordinal}"),
                 ),
             ),
             digest(f"evolution-trace-{ordinal}"),
@@ -86,6 +88,42 @@ class ImprovingOptimizer:
                 latency_us=100.0 - ordinal,
             )
         )
+
+
+def test_completed_bootstrap_evidence_contains_only_report_and_conversation(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    report_digest = artifacts.put_json(
+        {"status": "baseline_ready", "approach": "plain baseline"},
+        ArtifactKind.ATTEMPT_REPORT,
+    )
+    trace = tmp_path / "trace"
+    trace.mkdir()
+    (trace / "conversation.jsonl").write_text(
+        json.dumps({"type": "assistant/message", "text": "baseline complete"}) + "\n",
+        encoding="utf-8",
+    )
+    session_digest = artifacts.put_directory(trace, ArtifactKind.SESSION_LOG)
+    lineage_id = new_lineage_id()
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        checkpoint = LocalEvidenceAssembler(registry, artifacts).create_bootstrap(
+            lineage_id,
+            report_digest=report_digest,
+            session_trace_digest=session_digest,
+        )
+
+    payload = artifacts.verify(checkpoint).payload_path
+    assert {path.name for path in payload.iterdir()} == {"bootstrap", "checkpoint.json"}
+    assert {path.name for path in (payload / "bootstrap").iterdir()} == {
+        "report.json",
+        "conversation.jsonl",
+    }
+    assert json.loads((payload / "bootstrap/report.json").read_text()) == {
+        "status": "baseline_ready",
+        "approach": "plain baseline",
+    }
+    assert "baseline complete" in (payload / "bootstrap/conversation.jsonl").read_text()
 
 
 def _seed_lineage(

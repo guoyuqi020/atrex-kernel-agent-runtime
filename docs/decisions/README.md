@@ -30,7 +30,7 @@ designs were removed from the release tree. Current behavior is defined by code,
 - [0028](0028-commit-only-runtime-boundary.md): commit-only Runtime/Agent boundary
 - [0031](0031-unbounded-evolver-token-accounting.md): Evolver token accounting without a cutoff
 - [0035](0035-role-scoped-evolver-evidence.md): role-scoped Evolver Evidence
-- [0036](0036-frozen-evolver-runtime-tools.md): frozen Evolver inspection tools
+- [0036](0036-frozen-evolver-runtime-tools.md): filesystem-only Evolver evidence
 - [0037](0037-runtime-bound-agent-backends.md): Runtime-bound Backend policy
 - [0039](0039-three-form-challenger-proposals.md): evolved/reuse/evolve-from-history proposals
 - [0041](0041-lineage-bound-model-selection.md): Lineage-bound model selection

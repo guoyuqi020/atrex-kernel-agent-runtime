@@ -31,16 +31,26 @@ def test_retrying_agate_client_uses_exponential_backoff_until_success() -> None:
     assert delays == [5.0, 10.0, 20.0]
 
 
-def test_retrying_agate_client_raises_after_five_consecutive_errors() -> None:
+def test_retrying_agate_client_enters_steady_retry_after_five_errors() -> None:
     raw = FlakyHealthClient(failures_before_success=5)
     delays: list[float] = []
     client = RetryingAgateClient(raw, sleeper=delays.append)
 
-    with pytest.raises(ConnectionError, match="temporary failure 5"):
-        client.health()
+    assert client.health() is True
 
-    assert raw.calls == 5
-    assert delays == [5.0, 10.0, 20.0, 40.0]
+    assert raw.calls == 6
+    assert delays == [5.0, 10.0, 20.0, 40.0, 60.0]
+
+
+def test_retrying_agate_client_retries_every_minute_until_recovery() -> None:
+    raw = FlakyHealthClient(failures_before_success=8)
+    delays: list[float] = []
+    client = RetryingAgateClient(raw, sleeper=delays.append)
+
+    assert client.health() is True
+
+    assert raw.calls == 9
+    assert delays == [5.0, 10.0, 20.0, 40.0, 60.0, 60.0, 60.0, 60.0]
 
 
 def test_success_starts_the_next_request_with_a_fresh_error_count() -> None:
@@ -65,11 +75,14 @@ class StatusError(Exception):
 @dataclass
 class StatusClient:
     status: int
+    failures_before_success: int | None = None
     calls: int = 0
 
     def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
         self.calls += 1
-        raise StatusError(self.status)
+        if self.failures_before_success is None or self.calls <= self.failures_before_success:
+            raise StatusError(self.status)
+        return {"status": "queued", "job_id": "job-recovered"}
 
 
 @pytest.mark.parametrize("status", [400, 403, 404, 422])
@@ -87,12 +100,14 @@ def test_permanent_client_errors_are_raised_without_retrying(status: int) -> Non
 
 @pytest.mark.parametrize("status", [408, 429, 500, 503])
 def test_retryable_statuses_keep_the_backoff_contract(status: int) -> None:
-    raw = StatusClient(status=status)
+    raw = StatusClient(status=status, failures_before_success=6)
     delays: list[float] = []
     client = RetryingAgateClient(raw, sleeper=delays.append)
 
-    with pytest.raises(StatusError):
-        client.submit_job("dev", {})
+    assert client.submit_job("dev", {}) == {
+        "status": "queued",
+        "job_id": "job-recovered",
+    }
 
-    assert raw.calls == 5
-    assert delays == [5.0, 10.0, 20.0, 40.0]
+    assert raw.calls == 7
+    assert delays == [5.0, 10.0, 20.0, 40.0, 60.0, 60.0]

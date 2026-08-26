@@ -15,21 +15,39 @@ overlapping histories.
 
 ## Decision
 
-Runtime keeps the source Artifacts independent but projects them into one read-only
-`EvidenceViewManifestV1` tree rooted at `input/evidence`. `manifest.json` binds the Agent role,
-Lineage checkpoint, last completed Epoch, optional in-progress snapshot, and visibility policy.
-`bootstrap/` and `epochs/NNNNNNNN/` form one chronology.
+Runtime keeps the source Artifacts independent but projects their authorized data into one
+read-only tree rooted at `input/evidence`. The internal `.runtime/evidence-manifest.json` binds the
+Agent role, Lineage checkpoint, last completed Epoch, optional in-progress snapshot, and visibility
+policy; `.runtime/evidence-instructions.md` is validated and injected into the Prompt. Neither is
+part of the Agent-facing Evidence tree. `bootstrap/` and `epochs/NNNNNNNN/` form one chronology.
 
 For an Optimizer, a completed Epoch contains only the promoted Agent revision's Attempts, while the
 current Epoch contains only lower-ordinal Attempts from the selected Trajectory. For an Evolver,
 completed Epochs contain all completed Active and Challenger branches as specified by ADR 0035.
 
-An Optimizer Epoch contains `attempts/` directly; it has no Agent-visible `branches/` directory or
-Active/Challenger task field. Each Attempt directory may contain a trusted summary, bounded Kernel
-diff, structured report, and complete original Session Artifact directories. Runtime resolves the
-selected source Digests and materializes those trace trees without redaction, filtering, or text
-rewriting. Agent and Evolver annotations remain explicitly untrusted. Snapshot selection is
-Manifest metadata, never a separate Evidence root or a replacement for a source Digest.
+Every Optimizer Epoch uses the same `trajectories/<ordinal>/attempts/<ordinal>/` hierarchy; it has no
+Agent-visible `branches/` directory or Active/Challenger task field. Attempts are serial within one
+Trajectory, advancing from the latest retained Kernel, while sibling Trajectories are independent
+parallel searches from the same Epoch-start Kernel. Epochs themselves are serial: Bootstrap seeds
+Epoch 1, and a completed Epoch independently promotes the next active Agent revision and the best
+retained correct Kernel. Consequently the next Epoch's Agent and starting Kernel need not have the
+same producer; when no Candidate improves the Kernel, the previous starting Kernel carries forward.
+Each visible Attempt directory contains only
+the Runtime Final `report.json` and the latest sealed `conversation.jsonl`. Runtime storage retains
+all Session, Kernel, Trial, Gateway Result, summary, and diff Artifacts; exact data is recovered
+through Runtime tools rather than duplicated into the Optimizer filesystem. Agent and Evolver
+annotations remain explicitly untrusted. Snapshot selection is Manifest metadata, never a separate
+Evidence root or a replacement for a source Digest. Evolver Evidence remains a richer all-branch
+diagnostic view. Cross-branch Direction and Experiment Journals used by list/load tools are appended
+immediately to Runtime-owned Attempt tables; terminal Report Artifacts freeze the handoff snapshot
+and remain a compatibility fallback. They are resolved on demand through Attempt-scoped Runtime
+queries; no Journal history projection is written into the Workspace. Evolver traces are never
+projected into Optimizer Evidence.
+
+Optimizer Epoch directories contain only `trajectories/`: Runtime does not project Epoch
+`summary.json`, `lessons.json`, or `measurements.json`. Scheduling state remains in the Registry,
+the current Kernel is authoritative under `input/kernel/`, and exact measurements remain bound to
+Gateway Result Artifacts. Evolver Evidence retains its richer aggregate files for diagnosis.
 
 Runtime writes one `instructions.md` Prompt Fragment beside the View Manifest. The Fragment describes
 the exact structure and reading rules without assigning the layout a separate version name. The

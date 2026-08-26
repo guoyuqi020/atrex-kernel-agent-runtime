@@ -19,7 +19,11 @@ flowchart LR
 
 ## 权责边界
 
-Runtime 持有 Campaign/Epoch 状态、Fencing、Capability、不可变 Artifact、Backend/Model Policy、Token Report 校验、比较、晋升、恢复、Wiki Query 冻结与进程生命周期。Core 持有 Adapter 实现、Prompt、Skill、Tool Binding 和优化 Workflow。Evolver 为当前固定 DSL 的一个 Challenger 提出假设并选择来源；需要创建 Revision 时再修改完整 Core 仓库 Candidate。Agate 负责正确性和性能测量。对 Runtime 而言 GPU Wiki 是只读外源知识；Lineage 历史经验不属于 Wiki。
+Runtime 持有 Campaign/Epoch 状态、Fencing、Capability、不可变 Artifact、Backend/Model Policy、Token Report 校验、比较、晋升、恢复、
+Wiki Query 冻结、进程生命周期和自适应 Skill/Tool 持久化。Core 持有 Adapter 实现、Prompt、Tool Binding、优化 Workflow，
+并定义 Session 如何产生自适应状态。Evolver 为当前固定 DSL 的一个 Challenger 提出假设并选择来源；需要创建 Revision
+时再修改完整 Core 仓库 Candidate。Agate 负责正确性和性能测量。对 Runtime 而言 GPU Wiki 是只读外源知识；
+Lineage 历史经验不属于 Wiki。
 
 ## 私有评测边界
 
@@ -41,7 +45,7 @@ Gateway 调用只在 Runtime 内解析已封存 Contract。完整 Agate 原始 J
 
 ## 生命周期
 
-Campaign Bootstrap 只接受独立的 Campaign schema-v3 定义和一个完整 Core Commit。Runtime 部署配置持有服务、Backend、凭据与策略，不持有 DSL 拓扑或具体 Model 身份；Campaign 的 `lineages` Key 是完整的初始 Bootstrap DSL 集合，每个 Lineage 绑定自己的 Optimizer/Evolver Model。Bootstrap 会把配置中的完整 Evolver Commit 复制进不可变 Campaign 状态，后续调度和调试会在解析 Evolver Bundle 前拒绝部署漂移。在执行 Agent 前，可选的可信、Commit 固定 Atrex Bench Builder 会补全缺失的 Roofline，Runtime 再把它封存进 Campaign 共用 Evaluation Contract；已有 Campaign 复用已封存结果。随后 Runtime 只导入一次 Core，创建或校验共用 Agent Problem，再为选定 DSL 顺序运行 `framework_baseline`。稳定 Bootstrap Attempt 持有 Append-only 物理执行 Generation；每个 Generation 都有新 Authority，以及持久 Session、Token、Report、Failure、Workspace、Operation 和结果审计。Active Campaign 之后还可从已封存 Agent/Kernel Artifact 增加独立 Lineage；Runtime 会重新校验 Agent，并在目标 Contract 下重评 Kernel，再创建新的 `agent-v0`/`v0` 根。新 Lineage 继承 Campaign 冻结的 Evolver Commit。
+Campaign Bootstrap 只接受独立的 Campaign schema-v3 定义和一个完整 Core Commit。Runtime 部署配置持有服务、Backend、凭据与策略，不持有 DSL 拓扑或具体 Model 身份；Campaign 的 `lineages` Key 是完整的初始 Bootstrap DSL 集合，每个 Lineage 绑定自己的 Optimizer/Evolver Model。Bootstrap 会把配置中的完整 Evolver Commit 复制进不可变 Campaign 状态，后续调度和调试会在解析 Evolver Bundle 前拒绝部署漂移。在执行 Agent 前，可选的可信、Commit 固定 Atrex Bench Builder 会补全缺失的 Roofline，Runtime 再把它封存进 Campaign 共用 Evaluation Contract；已有 Campaign 复用已封存结果。随后 Runtime 只导入一次 Core，创建或校验共用 Agent Problem，再为选定 DSL 顺序运行 `framework_baseline`。稳定 Bootstrap Attempt 持有 Append-only 物理执行 Generation；每个 Generation 都有新 Authority，以及持久 Session、Token、schema-v12 Attempt Report、Failure、Workspace、Operation 和结果审计。Bootstrap 使用和普通 Attempt 相同的 Journal 与 Runtime Tool；其终态 Journal、Gateway 记录与可复用 Skill/Tool Seed 构成每条新 Trajectory 的初始历史。Active Campaign 之后还可从已封存 Agent/Kernel Artifact 增加独立 Lineage；Runtime 会重新校验 Agent，并在目标 Contract 下重评 Kernel，再创建新的 `agent-v0`/`v0` 根。新 Lineage 继承 Campaign 冻结的 Evolver Commit。
 
 一个 Epoch 先冻结 Active Agent、起始 Kernel 和 Evidence，再串行提出 `K` 个 Challenger。每次
 Evolver 调用从三种形态中选择一种：从 Active 创建新 Revision（`evolved`）、原样复用一个历史
@@ -61,8 +65,19 @@ Epoch 包含 `(1 + K) × Y × X` 个 Optimizer Session 和 `K`
 Session 永远使用全新进程，不复用模型上下文。Attempt Evidence 只包含同一 Trajectory 内较早的
 Attempt。Optimizer View 只包含已晋升的完成 Agent Lineage；Evolver View 包含每个已完成的
 Active/Challenger 分支、Agent 选择结果、Attempt Outcome 与被引用的精确 Kernel Artifact。
-Runtime 还会在每个 Evolution Workspace 中冻结版本化 Agent/Kernel Catalog、全部历史 Kernel
-Artifact，以及带受约束 Candidate Reset 的本地工具。Evidence 保存规范化摘要和 Session 来源 Digest；Agent Workspace 按 Digest 物化原始、未
+Runtime 还会冻结版本化 Agent/Kernel Catalog 和全部历史 Kernel Artifact。Evolver Workspace
+明确拆分当前 Active/Challenger 源码池（`input/agents/`）、最近完成 Epoch 的 Attempt Conversation 与实测效果投影
+（`input/evidence/<role>/`），以及将源码、累计效果、逐 Trajectory `skills/tools` 放在一起的历史版本
+（`input/historical/agent-vN/`）。此前 Agent 创建时的报告位于只读
+`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，当前运行时状态位于
+`input/agents/` 对应角色源码旁边。每个 Optimizer Session 都把终态 `skills/tools` 封存为不可变
+Runtime State Artifact，生产它的 Attempt 记录 `runtime_state_digest`；Attempt ID 本身就是生产者
+身份，因此不再引入第二个 Checkpoint ID。后续串行 Attempt 在本地缓存丢失时会从该摘要恢复准确
+State。Runtime 使用最近完成 Epoch 获胜分支中、产出最佳 Kernel 的 Trajectory 在最后一个 Attempt
+结束后的终态 State，作为下一 Epoch Active Branch 与 Evolver Candidate 的共同种子；缺失时依次回退
+到该 Trajectory 的 Epoch 起始 State、Revision Seed 和空 State。Evolver 把 Candidate Source 与 State
+一起封存为一个逻辑
+Agent Bundle。Evidence 保存规范化摘要和 Session 来源 Digest；Agent Workspace 按 Digest 物化原始、未
 脱敏 Session Artifact。Wiki Query 暴露外部服务完整、安全的 `records`/`notes` 投影，并以稳定
 Record ID 作为 Mapping Key；Runtime 冻结每次 Query 交互，Core 只暴露知识内容。Runtime 不向
 Wiki 发送 Epoch 后数据。

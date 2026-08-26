@@ -15,7 +15,7 @@ from typing import Literal, Protocol, Self
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
 
 from .artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
-from .controller.evidence import LocalEvidenceAssembler
+from .controller.evidence import EvidenceCheckpointV1, LocalEvidenceAssembler
 from .domain.ids import (
     ArtifactDigest,
     AttemptId,
@@ -86,6 +86,8 @@ class GeneratedLineageBaseline:
     kernel_digest: ArtifactDigest
     gateway_result_digest: ArtifactDigest
     latency_us: float
+    report_digest: ArtifactDigest
+    session_trace_digest: ArtifactDigest
 
     def __post_init__(self) -> None:
         if self.latency_us <= 0:
@@ -598,10 +600,14 @@ class CampaignBootstrapper:
         bootstrap_attempt_id = parse_attempt_id(
             self._derived_id("attempt", f"{spec.creation_key}:{spec.dsl.value}:baseline")
         )
-        evidence_digest = LocalEvidenceAssembler(
+        evidence_assembler = LocalEvidenceAssembler(
             self._registry,
             self._artifacts,
-        ).create_initial(lineage_id, spec.initial_evidence)
+        )
+        bootstrap_input_digest = evidence_assembler.create_bootstrap_input(
+            lineage_id,
+            spec.initial_evidence,
+        )
         created_at = self._clock()
         campaign = Campaign(
             campaign_id,
@@ -646,12 +652,14 @@ class CampaignBootstrapper:
             if existing_lineage.next_epoch_number == 1 and (
                 existing_lineage.active_kernel_agent_revision_id != agent.id
                 or existing_lineage.best_kernel_revision_id != kernel_id
-                or existing_lineage.evidence_checkpoint != evidence_digest
             ):
                 raise ValueError(
                     "bootstrap creation_key resolved to different initial lineage state"
                 )
             existing_kernel = self._registry.get_kernel_revision(kernel_id)
+            initial_checkpoint = self._initial_evidence_checkpoint(
+                existing_lineage.evidence_checkpoint
+            )
             return BootstrapResult(
                 campaign_id,
                 lineage_id,
@@ -659,7 +667,7 @@ class CampaignBootstrapper:
                 kernel_id,
                 contract_digest,
                 problem_digest,
-                evidence_digest,
+                initial_checkpoint,
                 existing_kernel.created_at,
                 bootstrap_attempt_id,
                 agent.created_at,
@@ -679,7 +687,7 @@ class CampaignBootstrapper:
             input_kernel_digest=input_kernel_digest,
             evaluation_contract_digest=contract_digest,
             agent_problem_digest=problem_digest,
-            evidence_digest=evidence_digest,
+            evidence_digest=bootstrap_input_digest,
             dsl=spec.dsl,
             operator=spec.operator,
             hardware_target=spec.hardware_target,
@@ -688,6 +696,11 @@ class CampaignBootstrapper:
         kernel_digest = generated.kernel_digest
         gateway_digest = generated.gateway_result_digest
         latency_us = generated.latency_us
+        evidence_digest = evidence_assembler.create_bootstrap(
+            lineage_id,
+            report_digest=generated.report_digest,
+            session_trace_digest=generated.session_trace_digest,
+        )
         if self._artifacts.verify(kernel_digest).kind is not ArtifactKind.KERNEL:
             raise ValueError("bootstrap baseline generator returned the wrong Kernel kind")
         if self._artifacts.verify(gateway_digest).kind is not ArtifactKind.GATEWAY_RESULT:
@@ -734,6 +747,28 @@ class CampaignBootstrapper:
             spec.optimizer_model,
             spec.evolver_model,
         )
+
+    def _initial_evidence_checkpoint(
+        self,
+        digest: ArtifactDigest,
+    ) -> ArtifactDigest:
+        """Resolve the immutable through-Epoch-0 checkpoint from a cumulative chain."""
+        visited: set[ArtifactDigest] = set()
+        current = digest
+        while current not in visited:
+            visited.add(current)
+            artifact = self._artifacts.verify(current)
+            if artifact.kind is not ArtifactKind.EVIDENCE:
+                raise ValueError("Lineage Evidence checkpoint has the wrong Artifact kind")
+            checkpoint = EvidenceCheckpointV1.from_file(
+                artifact.payload_path / "checkpoint.json"
+            )
+            if checkpoint.through_epoch == 0:
+                return current
+            if checkpoint.previous_checkpoint_digest is None:
+                raise ValueError("Lineage Evidence chain has no Epoch-0 checkpoint")
+            current = checkpoint.previous_checkpoint_digest
+        raise ValueError("Lineage Evidence checkpoint chain contains a cycle")
 
     def _ensure_campaign(self, expected: Campaign) -> None:
         try:

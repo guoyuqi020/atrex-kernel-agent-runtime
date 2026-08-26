@@ -22,12 +22,60 @@ def test_registry_initializes_current_schema(tmp_path: Path) -> None:
     with closing(sqlite3.connect(path)) as connection:
         row = connection.execute("PRAGMA user_version").fetchone()
         feedback_table = connection.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type = 'table' AND name = 'wiki_feedback_outbox'"
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'wiki_feedback_outbox'"
         ).fetchone()
+        attempt_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(attempts)").fetchall()
+        }
+        agent_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(kernel_agent_revisions)").fetchall()
+        }
 
     assert row == (SCHEMA_VERSION,)
     assert feedback_table is None
+    assert "runtime_state_digest" in attempt_columns
+    assert "input_runtime_state_digest" in attempt_columns
+    assert "runtime_state_digest" in agent_columns
+
+
+def test_registry_migrates_schema_27_agent_bundle_state_digest(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite"
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("CREATE TABLE kernel_agent_revisions(id TEXT PRIMARY KEY)")
+        connection.execute("PRAGMA user_version = 27")
+
+    with SqliteRegistry(path):
+        pass
+
+    with closing(sqlite3.connect(path)) as connection:
+        version = connection.execute("PRAGMA user_version").fetchone()
+        columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(kernel_agent_revisions)").fetchall()
+        }
+
+    assert version == (SCHEMA_VERSION,)
+    assert "runtime_state_digest" in columns
+
+
+def test_registry_migrates_schema_28_attempt_input_state_digest(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite"
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("CREATE TABLE attempts(id TEXT PRIMARY KEY)")
+        connection.execute("PRAGMA user_version = 28")
+
+    with SqliteRegistry(path):
+        pass
+
+    with closing(sqlite3.connect(path)) as connection:
+        version = connection.execute("PRAGMA user_version").fetchone()
+        columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(attempts)").fetchall()
+        }
+
+    assert version == (SCHEMA_VERSION,)
+    assert "input_runtime_state_digest" in columns
 
 
 def test_registry_migrates_schema_25_by_removing_wiki_feedback_outbox(
@@ -44,8 +92,7 @@ def test_registry_migrates_schema_25_by_removing_wiki_feedback_outbox(
     with closing(sqlite3.connect(path)) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()
         table = connection.execute(
-            "SELECT name FROM sqlite_master "
-            "WHERE type = 'table' AND name = 'wiki_feedback_outbox'"
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'wiki_feedback_outbox'"
         ).fetchone()
 
     assert version == (SCHEMA_VERSION,)

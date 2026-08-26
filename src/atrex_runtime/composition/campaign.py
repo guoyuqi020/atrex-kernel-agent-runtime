@@ -10,6 +10,8 @@ import anyio
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..config import (
+    BwrapContainerSettings,
+    BwrapSandboxSettings,
     CampaignRuntimeSettings,
     ComparisonSettings,
     EvaluateComparisonSettings,
@@ -249,6 +251,7 @@ def build_campaign_runtime(
                     campaign.evolution_workspaces_root,
                     artifacts,
                     evolver_bundle_digest=evolution_config.bundle_artifact_digest,
+                    attempt_workspaces_root=campaign.attempt_workspaces_root,
                 ),
                 evolution_sessions,
                 artifacts,
@@ -257,6 +260,7 @@ def build_campaign_runtime(
                 max_output_manifest_bytes=campaign.evolver.max_output_manifest_bytes,
                 worker_sessions=registry,
                 backend=campaign.evolver.agent_backend,
+                max_infrastructure_retries=campaign.max_infrastructure_retries,
             )
 
         evolver = _LazyEvolverRunner(build_evolver)
@@ -460,20 +464,30 @@ def build_worker_launcher(
             "hidden_host_paths": (*boundary.hidden_host_paths, *storage_hidden),
         }
     )
-    launcher_type = (
-        BwrapContainerLauncher if launch.mode == "container" else BwrapSandboxLauncher
+    workspace_roots = (
+        campaign.attempt_workspaces_root,
+        campaign.evolution_workspaces_root,
+        campaign.problem_generalization_workspaces_root,
+        campaign.lineage_bootstrap_workspaces_root,
     )
-    launcher = launcher_type(
-        launch.env_executable,
-        boundary,
-        (
-            campaign.attempt_workspaces_root,
-            campaign.evolution_workspaces_root,
-            campaign.problem_generalization_workspaces_root,
-            campaign.lineage_bootstrap_workspaces_root,
-        ),
-        credentials,
-    )
+    if launch.mode == "container":
+        if not isinstance(boundary, BwrapContainerSettings):
+            raise TypeError("container launcher resolved the wrong boundary settings")
+        launcher: BwrapContainerLauncher | BwrapSandboxLauncher = BwrapContainerLauncher(
+            launch.env_executable,
+            boundary,
+            workspace_roots,
+            credentials,
+        )
+    else:
+        if not isinstance(boundary, BwrapSandboxSettings):
+            raise TypeError("sandbox launcher resolved the wrong boundary settings")
+        launcher = BwrapSandboxLauncher(
+            launch.env_executable,
+            boundary,
+            workspace_roots,
+            credentials,
+        )
     launcher.check_host()
     return launcher
 

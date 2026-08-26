@@ -30,10 +30,13 @@ Core and Evolver are deployment-approved Git repositories pinned by full commit.
    `agate.health_check_interval_s` seconds (30 seconds by default). Initial state, failure, and
    recovery are written to the service log. This observation does not change `/healthz` or
    `/readyz`; a temporary external outage does not stop the trusted control plane.
-   Every Agate SDK request uses the same bounded transient-failure policy: retry after 1, 2, 4,
-   and 8 seconds, and surface the error only after the fifth consecutive failed call. A successful
-   call resets the count for the next request. Terminal job results such as compilation or
+   Every operational Agate SDK request uses the same persistent transient-failure policy: retry after 5, 10,
+   20, and 40 seconds; after the fifth consecutive failure, continue retrying every 60 seconds
+   without a terminal attempt limit. A successful call resets the count for the next request.
+   Non-retryable 4xx validation or authorization errors still return immediately because the
+   request must change before it can succeed. Terminal job results such as compilation or
    correctness failure are results, not transport errors, and are not resubmitted by this policy.
+   The periodic health observation remains a bounded one-shot probe; it never owns Campaign work.
 6. Keep Runtime, Gateway, and optional Wiki available while running Campaign schema-v3 bootstrap;
    Core baseline sessions call back through Runtime.
 7. Schedule a Campaign by absolute target epoch. Run the Wiki drainer independently.

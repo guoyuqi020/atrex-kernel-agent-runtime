@@ -6,8 +6,8 @@
 服务、Bootstrap、Campaign、Lineage、Epoch、Optimizer 或 Evolver。
 
 Runtime 会把固定 Commit 的 Core 基线导入为合成的 `agent-v0`，封装配置中的初始 Evidence，
-再构造正常的 Evolver 目录。示例不会运行或伪造 Kernel 评测，因此 Runtime Tools 中的临时
-Kernel Catalog 有意保持为空；Agent Catalog 仅包含 Active 的 `agent-v0` 父版本。
+再构造正常的 Evolver 目录。示例不会运行或伪造 Kernel 评测；当前 Agent 池仅包含合成的
+Active `agent-v0` 父版本。
 
 ## 运行
 
@@ -23,12 +23,14 @@ bash examples/evolver-dev-shell/run.sh bash codex
 Backend 参数只决定合成输入里的 Evolver 元数据，不会启动 Backend 进程。示例不需要 Agate
 凭据；如果设置了 `AGATE_GPU`，它会被用作硬件标签，否则使用 `nvidia-h100`。
 
-进入 Shell 后可以检查 `evolution-input.json`、`input/parent/`、`input/agents/`、
-`input/evidence/`、`runtime-tools/` 以及可写的 `candidate/` 与 `scratch/` 目录。
+进入 Shell 后可以检查 `input/agents/` 中的当前参赛池、`input/evidence/<role>/` 中对应的 Session
+与实测效果、`input/historical/agent-vN/` 中的历史版本，以及可写的
+`candidate/` 与 `scratch/` 目录。Evolution
+Manifest 位于 Runtime-private `.runtime/`，不属于 Agent-facing Workspace Contract。
 
 ```bash
-python runtime-tools/evolver_tools.py inspect-agents
-python runtime-tools/evolver_tools.py inspect-kernels
+find input/agents input/evidence input/historical -maxdepth 3 -type f -print
+cat input/evidence/active/optimization-summary.json
 ```
 
 退出后，内部 Evolution Workspace 与外层临时目录都会被销毁。JSON 摘要会报告

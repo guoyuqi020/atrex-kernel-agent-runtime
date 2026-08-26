@@ -38,12 +38,12 @@ def _repository(tmp_path: Path) -> tuple[Path, str]:
     repository.mkdir()
     _run(repository, "init")
     prompt = repository / "prompts/episode.md"
-    skill = repository / "skills/episode/SKILL.md"
+    design = repository / "docs/design.md"
     prompt.parent.mkdir(parents=True)
-    skill.parent.mkdir(parents=True)
+    design.parent.mkdir(parents=True)
     (repository / "src").mkdir()
     prompt.write_text("Optimize through Runtime.\n", encoding="utf-8")
-    skill.write_text("# Episode loop\n", encoding="utf-8")
+    design.write_text("# Agent design\n", encoding="utf-8")
     (repository / "atrex-bundle.json").write_text(
         json.dumps(
             {

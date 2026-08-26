@@ -148,9 +148,7 @@ def test_prepare_can_attach_task_to_existing_service_workspace(tmp_path: Path) -
     )
     assert service_manifest["layout"] == "production-control-plane"
     assert "backend" not in service_manifest
-    service_runtime_text = service_workspace.joinpath("runtime.json").read_text(
-        encoding="utf-8"
-    )
+    service_runtime_text = service_workspace.joinpath("runtime.json").read_text(encoding="utf-8")
     assert "agent_backend" not in service_runtime_text
     assert task.server == service.server
     assert task.storage == service.storage
@@ -299,17 +297,12 @@ def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
             capture_output=True,
             text=True,
         )
-        summary = json.loads(
-            (workspace / f"{phase}-results.json").read_text(encoding="utf-8")
-        )
+        summary = json.loads((workspace / f"{phase}-results.json").read_text(encoding="utf-8"))
         assert tuple(summary["dsls"]) == ("cuda", "cutedsl", "triton")
         result_dsls = {
-            entry["result"]["lineages"][0].get("dsl")
-            for entry in summary["dsls"].values()
+            entry["result"]["lineages"][0].get("dsl") for entry in summary["dsls"].values()
         }
-        assert result_dsls == (
-            {None} if phase == "bootstrap" else {"cuda", "triton", "cutedsl"}
-        )
+        assert result_dsls == ({None} if phase == "bootstrap" else {"cuda", "triton", "cutedsl"})
 
 
 def test_summarize_preserves_successful_dsl_results_when_one_is_missing(
@@ -369,7 +362,7 @@ def test_campaign_entrypoint_uses_external_services_mode() -> None:
 
     assert "--external-services" in campaign
     assert "services.sh" not in campaign
-    assert 'start|stop|status|restart|__run' in campaign
+    assert "start|stop|status|restart|__run" in campaign
     assert 'campaign_control="${atrex_prod_workspace}/campaign-run"' in campaign
     assert "workspace_process_pids" in campaign
     assert 'write_state "succeeded"' in campaign

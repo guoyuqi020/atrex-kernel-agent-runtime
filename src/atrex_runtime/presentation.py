@@ -160,9 +160,9 @@ def evaluation_value(evaluation: GatewayEvaluationRecord) -> dict[str, object]:
         "ordinal": evaluation.ordinal,
         "source": evaluation.source.value,
         "idempotency_key": evaluation.idempotency_key,
-        "candidate_artifact_digest": evaluation.candidate_artifact_digest,
+        "kernel_artifact_digest": evaluation.kernel_artifact_digest,
         "candidate_artifact": {
-            "digest": evaluation.candidate_artifact_digest,
+            "digest": evaluation.kernel_artifact_digest,
             "kind": ArtifactKind.KERNEL,
             "referenced_at": evaluation.created_at,
         },
@@ -191,9 +191,9 @@ def kernel_trial_value(trial: object) -> dict[str, object]:
         "recovery_generation": trial.recovery_generation,
         "ordinal": trial.ordinal,
         "trial_label": f"g{trial.recovery_generation}-t{trial.ordinal}",
-        "candidate_artifact_digest": trial.candidate_artifact_digest,
+        "kernel_artifact_digest": trial.kernel_artifact_digest,
         "candidate_artifact": {
-            "digest": trial.candidate_artifact_digest,
+            "digest": trial.kernel_artifact_digest,
             "kind": ArtifactKind.KERNEL,
             "referenced_at": trial.created_at,
         },
@@ -203,6 +203,7 @@ def kernel_trial_value(trial: object) -> dict[str, object]:
                 "idempotency_key": item.idempotency_key,
                 "operation": item.operation.value,
                 "request_digest": item.request_digest,
+                "gateway_result_digest": item.gateway_result_digest,
                 "result_artifact_digest": item.result_artifact_digest,
                 "created_at": item.created_at,
             }
@@ -211,7 +212,7 @@ def kernel_trial_value(trial: object) -> dict[str, object]:
         "annotations": [
             {
                 "sequence": item.sequence,
-                "decision": item.decision,
+                "disposition": item.disposition,
                 "experiment": item.experiment,
                 "recorded_at": item.recorded_at,
             }
@@ -345,6 +346,8 @@ def attempt_value(registry: Registry, attempt: Attempt) -> dict[str, object]:
         "recovery_generation": attempt.recovery_generation,
         "attempt_evidence_digest": attempt.attempt_evidence_digest,
         "attempt_report_digest": attempt.attempt_report_digest,
+        "input_runtime_state_digest": attempt.input_runtime_state_digest,
+        "runtime_state_digest": attempt.runtime_state_digest,
         "authority_started_at": attempt.authority_started_at,
         "created_at": attempt.created_at,
         "completed_at": attempt.completed_at,
@@ -498,6 +501,7 @@ def agent_revision_value(entry: KernelAgentCatalogEntry) -> dict[str, object]:
         },
         "source_provenance_digest": revision.source_provenance_digest,
         "evolution_trace_digest": revision.evolution_trace_digest,
+        "runtime_state_digest": revision.runtime_state_digest,
     }
 
 

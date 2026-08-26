@@ -26,7 +26,8 @@ from ..domain.ids import (
 from ..domain.models import Dsl
 from ..serialization import canonical_json_bytes
 
-ATTEMPT_MANIFEST_VERSION: Literal[8] = 8
+ATTEMPT_MANIFEST_VERSION: Literal[9] = 9
+ATTEMPT_MANIFEST_RELATIVE_PATH = ".runtime/attempt.json"
 
 
 @dataclass(frozen=True, slots=True)
@@ -41,7 +42,7 @@ class AttemptWorkspaceLayout:
     input_kernel: str = "input/kernel"
     working_kernel: str = "work/kernel"
     evidence: str = "input/evidence"
-    agent_problem: str = "input/agent-problem"
+    agent_problem: str = ".runtime/agent-problem.json"
     optimizer: str = "agent/optimizer"
     reference: str = "reference"
 
@@ -114,7 +115,7 @@ class AttemptTaskContextV5(BaseModel):
         return value
 
 
-class AttemptInputManifestV8(BaseModel):
+class AttemptInputManifestV9(BaseModel):
     """Immutable inputs for exactly one fresh Optimizer session.
 
     Evolver implementation details are deliberately absent: this protocol does
@@ -123,7 +124,7 @@ class AttemptInputManifestV8(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[8] = ATTEMPT_MANIFEST_VERSION
+    schema_version: Literal[9] = ATTEMPT_MANIFEST_VERSION
     attempt_id: AttemptId
     kernel_agent_revision_id: KernelAgentRevisionId
     input_kernel_revision_id: KernelRevisionId

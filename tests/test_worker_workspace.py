@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+from unittest.mock import Mock
 
 from conftest import NOW, digest
 
@@ -36,7 +37,7 @@ from atrex_runtime.ports import RunAttemptRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
 from atrex_runtime.workers.manifest import (
     ATTEMPT_WORKSPACE_LAYOUT,
-    AttemptInputManifestV8,
+    AttemptInputManifestV9,
 )
 from atrex_runtime.workers.workspace import LocalAttemptWorkspaceAssembler
 
@@ -51,6 +52,140 @@ def _put_text_artifact(
     source.mkdir()
     (source / f"{name}.txt").write_text(name)
     return store.put_directory(source, kind)
+
+
+def test_next_active_and_evolver_share_winning_trajectory_terminal_state(
+    tmp_path: Path,
+) -> None:
+    """Active selection uses the same terminal checkpoint exercised by Evolver tests."""
+    winner_id = new_kernel_agent_revision_id()
+    lineage_id = new_lineage_id()
+    previous_epoch_id = new_epoch_id()
+    next_epoch_id = new_epoch_id()
+    starting_kernel_id = new_kernel_revision_id()
+    best_kernel_id = new_kernel_revision_id()
+    later_kernel_id = new_kernel_revision_id()
+    best_attempt_id = new_attempt_id()
+    final_attempt_id = new_attempt_id()
+    start_state = digest("winning-trajectory-start")
+    best_state = digest("winning-trajectory-best")
+    terminal_state = digest("winning-trajectory-terminal")
+    evidence = digest("evidence")
+
+    previous = Epoch(
+        id=previous_epoch_id,
+        lineage_id=lineage_id,
+        number=1,
+        active_kernel_agent_revision_id=winner_id,
+        challenger_kernel_agent_revision_ids=(),
+        starting_kernel_revision_id=starting_kernel_id,
+        evidence_checkpoint=evidence,
+        challenger_count=0,
+        trajectories_per_branch=1,
+        attempts_per_trajectory=2,
+        status=EpochStatus.COMPLETED,
+        winner_kernel_agent_revision_id=winner_id,
+        best_kernel_revision_id=best_kernel_id,
+        created_at=NOW,
+        completed_at=NOW,
+    )
+    next_epoch = Epoch(
+        id=next_epoch_id,
+        lineage_id=lineage_id,
+        number=2,
+        active_kernel_agent_revision_id=winner_id,
+        challenger_kernel_agent_revision_ids=(),
+        starting_kernel_revision_id=best_kernel_id,
+        evidence_checkpoint=evidence,
+        challenger_count=0,
+        trajectories_per_branch=1,
+        attempts_per_trajectory=1,
+        status=EpochStatus.RUNNING,
+        winner_kernel_agent_revision_id=None,
+        best_kernel_revision_id=None,
+        created_at=NOW,
+        completed_at=None,
+    )
+
+    def attempt(
+        attempt_id: object,
+        ordinal: int,
+        output_kernel_id: object,
+        input_state: ArtifactDigest,
+        terminal: ArtifactDigest,
+        *,
+        retained: bool,
+    ) -> Attempt:
+        return Attempt(
+            id=attempt_id,
+            epoch_id=previous_epoch_id,
+            branch=BranchRole.ACTIVE,
+            challenger_ordinal=0,
+            trajectory_ordinal=1,
+            ordinal=ordinal,
+            kernel_agent_revision_id=winner_id,
+            input_kernel_revision_id=starting_kernel_id,
+            attempt_evidence_digest=digest(f"attempt-evidence-{ordinal}"),
+            output_kernel_revision_id=output_kernel_id,
+            accepted_as_branch_best=retained,
+            status=AttemptStatus.COMPLETED,
+            infrastructure_failures=0,
+            recovery_generation=0,
+            authority_started_at=NOW,
+            failure_reason=None,
+            created_at=NOW,
+            completed_at=NOW,
+            runtime_state_digest=terminal,
+            input_runtime_state_digest=input_state,
+        )
+
+    attempts = (
+        attempt(
+            best_attempt_id,
+            1,
+            best_kernel_id,
+            start_state,
+            best_state,
+            retained=True,
+        ),
+        attempt(
+            final_attempt_id,
+            2,
+            later_kernel_id,
+            best_state,
+            terminal_state,
+            retained=False,
+        ),
+    )
+    kernels = {
+        best_kernel_id: KernelRevision(
+            best_kernel_id,
+            starting_kernel_id,
+            digest("best-kernel"),
+            best_attempt_id,
+            KernelEvaluation(True, 10.0, digest("best-result")),
+            NOW,
+        ),
+        later_kernel_id: KernelRevision(
+            later_kernel_id,
+            best_kernel_id,
+            digest("later-kernel"),
+            final_attempt_id,
+            KernelEvaluation(True, 12.0, digest("later-result")),
+            NOW,
+        ),
+    }
+    registry = Mock()
+    registry.find_epoch.return_value = previous
+    registry.list_attempts.return_value = list(attempts)
+    registry.get_kernel_revision.side_effect = kernels.__getitem__
+    assembler = LocalAttemptWorkspaceAssembler(
+        tmp_path / "workspaces",
+        registry,
+        LocalArtifactStore(tmp_path / "artifacts"),
+    )
+
+    assert assembler._active_branch_seed(next_epoch) == terminal_state
 
 
 def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) -> None:
@@ -75,10 +210,10 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     attempt_id = new_attempt_id()
     evidence_source = tmp_path / "source-evidence"
     (evidence_source / "bootstrap").mkdir(parents=True)
-    (evidence_source / "bootstrap/seed.txt").write_text("seed")
-    (evidence_source / "bootstrap-metadata.json").write_text(
-        json.dumps({"schema_version": 1, "source": "test"})
+    (evidence_source / "bootstrap/report.json").write_text(
+        json.dumps({"status": "baseline_ready"})
     )
+    (evidence_source / "bootstrap/conversation.jsonl").write_text("{}\n")
     (evidence_source / "checkpoint.json").write_text(
         json.dumps(
             {
@@ -204,23 +339,80 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
         Dsl.TRITON,
     )
     assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, store)
+    bootstrap_state = (
+        tmp_path
+        / "workspaces/.reusable"
+        / str(lineage_id)
+        / str(agent_id)
+        / "bootstrap"
+    )
+    (bootstrap_state / "skills").mkdir(parents=True)
+    (bootstrap_state / "tools").mkdir()
+    (bootstrap_state / "skills/bootstrap.md").write_text("baseline lesson\n")
+    (bootstrap_state / "tools/README.md").write_text("# Bootstrap tools\n")
 
     first = assembler.prepare(request)
+    recorded_input_state = registry.get_attempt(attempt_id).input_runtime_state_digest
+    assert recorded_input_state is not None
+    assert store.verify(recorded_input_state).kind is ArtifactKind.KERNEL_AGENT_RUNTIME_STATE
+    assert (first.root / "skills/bootstrap.md").read_text() == "baseline lesson\n"
+    assert (first.root / "tools/README.md").read_text() == "# Bootstrap tools\n"
+    (first.root / "skills/vector-load.md").write_text("reuse aligned loads\n")
+    (first.root / "tools/inspect_kernel.py").write_text("print('inspect')\n")
+    (first.root / "tools/README.md").write_text(
+        "# Reusable tools\n\n## inspect_kernel.py\n\nRun with Python.\n"
+    )
+    first.persist_reusable_directories()
     second = assembler.prepare(request)
-    manifest = AttemptInputManifestV8.from_json_bytes(first.manifest_path.read_bytes())
+    manifest = AttemptInputManifestV9.from_json_bytes(first.manifest_path.read_bytes())
 
     assert first.root != second.root
     assert first.session_id != second.session_id
     assert first.session_root != second.session_root
+    assert (second.root / "skills/vector-load.md").read_text() == "reuse aligned loads\n"
+    assert (second.root / "tools/inspect_kernel.py").read_text() == "print('inspect')\n"
+    assert "inspect_kernel.py" in (second.root / "tools/README.md").read_text()
+    child_id = new_kernel_agent_revision_id()
+    child_revision = KernelAgentRevision(
+        child_id,
+        agent_id,
+        "epoch:test:challenger:1",
+        Dsl.TRITON,
+        optimizer,
+        "evolver",
+        NOW,
+        evolution_trace_digest=digest("legacy-evolution"),
+    )
+    child_skills, child_tools, _lock = assembler._persistent_roots(
+        lineage_id=lineage_id,
+        revision=child_revision,
+        trajectory_ordinal=1,
+    )
+    assert (child_skills / "vector-load.md").read_text() == "reuse aligned loads\n"
+    assert (child_tools / "inspect_kernel.py").is_file()
     assert manifest.attempt_id == request.attempt_id
     assert manifest.context.operator == "vector_add"
     assert manifest.context.hardware_target == "h100"
-    assert (first.root / "input/agent-problem/value.json").is_file()
+    assert first.manifest_path == first.root / ".runtime/attempt.json"
+    assert first.manifest_path.is_file()
+    assert not (first.root / "attempt.json").exists()
+    assert (first.root / ".runtime/agent-problem.json").is_file()
+    assert not (first.root / "input/agent-problem").exists()
     assert (first.root / "agent/optimizer/optimizer.txt").read_text() == "optimizer"
     evidence_view = first.root / "input/evidence"
-    assert json.loads((evidence_view / "manifest.json").read_text())["role"] == "optimizer"
-    assert (evidence_view / "bootstrap/seed.txt").read_text() == "seed"
-    assert (evidence_view / "epochs/00000001/attempts").is_dir()
+    assert json.loads((first.root / ".runtime/evidence-manifest.json").read_text())["role"] == (
+        "optimizer"
+    )
+    assert not (evidence_view / "manifest.json").exists()
+    assert not (evidence_view / "instructions.md").exists()
+    assert json.loads((evidence_view / "bootstrap/report.json").read_text()) == {
+        "status": "baseline_ready"
+    }
+    assert (evidence_view / "bootstrap/conversation.jsonl").read_text() == "{}\n"
+    assert (
+        evidence_view / "epochs/00000001/trajectories/00000001/attempts"
+    ).is_dir()
+    assert not (evidence_view / "epochs/00000001/attempts").exists()
     assert not (first.root / "input/attempt-evidence").exists()
     assert list((first.root / "agent").iterdir()) == [first.root / "agent/optimizer"]
     working_file = first.root / "work/kernel/kernel.txt"
@@ -230,4 +422,152 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     assert reference.is_dir()
     assert list(reference.iterdir()) == []
     assert not (os.stat(reference).st_mode & 0o200)
+    registry.close()
+
+
+def test_evolved_revision_seeds_trajectory_from_candidate_runtime_state(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    state = tmp_path / "candidate-state"
+    (state / "skills").mkdir(parents=True)
+    (state / "tools").mkdir()
+    (state / "skills/evolved.md").write_text(
+        "candidate-selected lesson\n"
+    )
+    (state / "tools/README.md").write_text(
+        "# Candidate tools\n"
+    )
+    state_digest = artifacts.put_directory(
+        state,
+        ArtifactKind.KERNEL_AGENT_RUNTIME_STATE,
+    )
+    trace_digest = artifacts.put_json(
+        {
+            "schema_version": 9,
+            "candidate": {
+                "optimizer_digest": digest("optimizer"),
+                "runtime_state_digest": state_digest,
+            },
+        },
+        ArtifactKind.EVOLUTION,
+    )
+    revision = KernelAgentRevision(
+        new_kernel_agent_revision_id(),
+        new_kernel_agent_revision_id(),
+        "epoch:test:challenger:1",
+        Dsl.TRITON,
+        digest("optimizer"),
+        "evolver",
+        NOW,
+        evolution_trace_digest=trace_digest,
+        runtime_state_digest=state_digest,
+    )
+    assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, artifacts)
+    lineage_id = new_lineage_id()
+
+    skills, tools, _lock = assembler._persistent_roots(
+        lineage_id=lineage_id,
+        revision=revision,
+        trajectory_ordinal=1,
+    )
+    second_skills, second_tools, _second_lock = assembler._persistent_roots(
+        lineage_id=lineage_id,
+        revision=revision,
+        trajectory_ordinal=2,
+    )
+
+    assert (skills / "evolved.md").read_text() == "candidate-selected lesson\n"
+    assert (tools / "README.md").read_text() == "# Candidate tools\n"
+    assert (second_skills / "evolved.md").read_text() == "candidate-selected lesson\n"
+    assert (second_tools / "README.md").read_text() == "# Candidate tools\n"
+    registry.close()
+
+
+def test_source_only_evolution_preserves_parent_trajectory_state(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, artifacts)
+    lineage_id = new_lineage_id()
+    parent = KernelAgentRevision(
+        new_kernel_agent_revision_id(),
+        None,
+        "bootstrap:test",
+        Dsl.TRITON,
+        digest("parent-optimizer"),
+        "bootstrap",
+        NOW,
+        source_provenance_digest=digest("parent-provenance"),
+    )
+    parent_skills, _parent_tools, _parent_lock = assembler._persistent_roots(
+        lineage_id=lineage_id,
+        revision=parent,
+        trajectory_ordinal=1,
+    )
+    (parent_skills / "retained.md").write_text("parent trajectory lesson\n")
+    trace_digest = artifacts.put_json(
+        {
+            "schema_version": 9,
+            "candidate": {
+                "optimizer_digest": digest("child-optimizer"),
+                "runtime_state_digest": None,
+            },
+        },
+        ArtifactKind.EVOLUTION,
+    )
+    child = KernelAgentRevision(
+        new_kernel_agent_revision_id(),
+        parent.id,
+        "epoch:test:challenger:1",
+        Dsl.TRITON,
+        digest("child-optimizer"),
+        "evolver",
+        NOW,
+        evolution_trace_digest=trace_digest,
+    )
+
+    child_skills, _child_tools, _child_lock = assembler._persistent_roots(
+        lineage_id=lineage_id,
+        revision=child,
+        trajectory_ordinal=1,
+    )
+
+    assert (child_skills / "retained.md").read_text() == "parent trajectory lesson\n"
+    registry.close()
+
+
+def test_missing_trajectory_scope_restores_previous_attempt_runtime_state(
+    tmp_path: Path,
+) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    checkpoint = tmp_path / "previous-attempt-state"
+    (checkpoint / "skills").mkdir(parents=True)
+    (checkpoint / "tools").mkdir()
+    (checkpoint / "skills/learned.md").write_text("terminal Attempt lesson\n")
+    (checkpoint / "tools/README.md").write_text("# Terminal tools\n")
+    state_digest = artifacts.put_directory(
+        checkpoint,
+        ArtifactKind.KERNEL_AGENT_RUNTIME_STATE,
+    )
+    revision = KernelAgentRevision(
+        new_kernel_agent_revision_id(),
+        None,
+        "bootstrap:test",
+        Dsl.TRITON,
+        digest("optimizer"),
+        "bootstrap",
+        NOW,
+        source_provenance_digest=digest("source"),
+    )
+    assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, artifacts)
+
+    skills, tools, _lock = assembler._persistent_roots(
+        lineage_id=new_lineage_id(),
+        revision=revision,
+        trajectory_ordinal=1,
+        previous_runtime_state_digest=state_digest,
+    )
+
+    assert (skills / "learned.md").read_text() == "terminal Attempt lesson\n"
+    assert (tools / "README.md").read_text() == "# Terminal tools\n"
     registry.close()

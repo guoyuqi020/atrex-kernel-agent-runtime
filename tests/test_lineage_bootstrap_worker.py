@@ -15,11 +15,11 @@ from atrex_runtime.workers import (
     CleanEnvironmentLauncher,
     CoreLineageBootstrapSessionDriver,
     CoreOptimizerProcessConfig,
-    LineageBootstrapManifestV1,
-    LineageBootstrapReportV1,
+    LineageBootstrapManifestV2,
     LineageBootstrapSessionConfig,
     LineageBootstrapWorkspaceAssembler,
 )
+from atrex_runtime.workers.attempt_report import AttemptReportV12
 
 
 def _write_agent(root: Path) -> None:
@@ -67,20 +67,86 @@ Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
     "model_request_count": 1,
     "usage_complete": True
 }))
-Path(os.environ["ATREX_LINEAGE_BOOTSTRAP_REPORT_PATH"]).write_text(json.dumps({
-    "schema_version": 1,
-    "bootstrap_attempt_id": manifest["bootstrap_attempt_id"],
-    "status": "baseline_ready",
-    "approach": "plain DSL baseline",
-    "change_summary": "implemented the operator",
-    "correctness_evidence": "full evaluation passed",
-    "latency_us": 12.5,
-    "candidate_artifact_digest": "sha256:" + "a" * 64,
-    "gateway_result_digest": "sha256:" + "b" * 64,
-    "research_sources": ["wiki:snapshot"],
-    "lessons": "simple baseline is correct",
-    "next_directions": ["profile memory traffic"],
+experiment_id = "experiment_" + "4" * 32
+direction_id = "direction_" + "5" * 32
+subject = {
+    "kernel_artifact_digest": "sha256:" + "a" * 64,
+    "kernel_trial_id": "gtrial_" + "c" * 32,
+    "gateway_result_digests": ["sha256:" + "b" * 64],
+}
+Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
+    "schema_version": 12,
+    "attempt_id": manifest["bootstrap_attempt_id"],
+    "status": "candidate_ready",
+    "hypothesis": "a direct implementation establishes the baseline",
+    "diagnosis": {"bottleneck": "framework bring-up", "evidence": "seed inspection"},
+    "approach": {
+        "summary": "plain DSL baseline",
+        "steps": ["implement the operator"],
+        "expected_impact": "full correctness",
+        "risks": [],
+    },
+    "final_candidate": {"change_summary": "implemented the operator"},
+    "evidence_summary": {
+        "correctness": "full evaluation passed",
+        "performance": "positive measured latency",
+    },
+    "profile_evidence": None,
+    "analysis": "the candidate is a valid first baseline",
+    "knowledge_used": [],
+    "findings": [{
+        "category": "correctness",
+        "observation": "the full evaluation passed",
+        "root_cause": "the direct mapping preserves semantics",
+        "resolution": "retain the implementation",
+        "lesson": "simple baseline is correct",
+        "supporting_experiment_ids": [experiment_id],
+    }],
     "blocker": None
+    ,"experiments": [{
+        "experiment_id": experiment_id,
+        "direction_id": direction_id,
+        "sequence": 1,
+        "recorded_at": "2026-08-25T00:00:00+00:00",
+        "name": "establish baseline",
+        "hypothesis": "the direct implementation is correct",
+        "change": "implemented the operator",
+        "before": None,
+        "after": subject,
+        "evidence": "full evaluation passed",
+        "analysis": "the hypothesis held",
+        "action": "baseline",
+    }],
+    "direction_events": [
+        {
+            "direction_event_id": "directionevent_" + "6" * 32,
+            "direction_id": direction_id,
+            "recorded_at": "2026-08-25T00:00:00+00:00",
+            "action": "propose",
+            "name": "establish a correct baseline",
+            "hypothesis": "a direct implementation is sufficient",
+            "rationale": "bootstrap prioritizes correctness",
+            "plan": ["implement and evaluate"],
+            "success_criteria": "full correctness passes",
+            "stop_conditions": "the DSL cannot express the operator",
+            "analysis": None,
+            "supporting_experiment_ids": [],
+        },
+        {
+            "direction_event_id": "directionevent_" + "7" * 32,
+            "direction_id": direction_id,
+            "recorded_at": "2026-08-25T00:01:00+00:00",
+            "action": "complete",
+            "name": None,
+            "hypothesis": None,
+            "rationale": None,
+            "plan": [],
+            "success_criteria": None,
+            "stop_conditions": None,
+            "analysis": "the full evaluation passed",
+            "supporting_experiment_ids": [experiment_id],
+        },
+    ],
 }))
 print("framework baseline finished")
 """,
@@ -106,8 +172,9 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
         {"schema_version": "atrex.agent_problem.v1", "objective": "vector add"},
         ArtifactKind.AGENT_PROBLEM,
     )
-    manifest = LineageBootstrapManifestV1(
+    manifest = LineageBootstrapManifestV2(
         bootstrap_attempt_id="attempt_" + "1" * 32,
+        lineage_id="lineage_" + "2" * 32,
         kernel_agent_revision_id="agentrev_" + "2" * 32,
         input_kernel_digest=kernel_digest,
         optimizer_digest=agent_digest,
@@ -117,13 +184,21 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
         operator="vector_add",
         hardware_target="nvidia-h100",
     )
-    prepared = LineageBootstrapWorkspaceAssembler(tmp_path / "workspaces", artifacts).prepare(
-        manifest
+    attempt_workspaces = tmp_path / "attempt-workspaces"
+    assembler = LineageBootstrapWorkspaceAssembler(
+        tmp_path / "workspaces",
+        artifacts,
+        attempt_workspaces_root=attempt_workspaces,
     )
+    prepared = assembler.prepare(manifest)
     assert (prepared.root / "input/kernel/kernel.py").is_file()
-    assert (prepared.root / "input/agent-problem/value.json").is_file()
+    assert (prepared.root / ".runtime/agent-problem.json").is_file()
+    assert prepared.manifest_path == prepared.root / ".runtime/lineage-bootstrap.json"
+    assert not (prepared.root / "input/agent-problem").exists()
     assert not (prepared.root / "input/evaluation-contract").exists()
     assert (prepared.root / "work/kernel/kernel.py").is_file()
+    (prepared.root / "skills/baseline.md").write_text("reuse this lesson\n")
+    (prepared.root / "tools/probe.py").write_text("print('probe')\n")
 
     driver = CoreLineageBootstrapSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
@@ -157,28 +232,32 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert result.final_response == "framework baseline finished\n"
     assert result.token_usage == TokenUsage(10, 5, 2, 1)
     assert result.report is not None
-    assert result.report.status == "baseline_ready"
+    assert result.report.status == "candidate_ready"
     assert result.report_digest is not None
     assert result.session_trace_digest is not None
     assert artifacts.verify(result.report_digest).kind is ArtifactKind.ATTEMPT_REPORT
     assert artifacts.verify(result.session_trace_digest).kind is ArtifactKind.SESSION_LOG
+    resumed = assembler.prepare(manifest)
+    assert (resumed.root / "skills/baseline.md").read_text() == "reuse this lesson\n"
+    assert (resumed.root / "tools/probe.py").read_text() == "print('probe')\n"
 
 
-def test_lineage_bootstrap_report_rejects_incomplete_ready_result() -> None:
+def test_lineage_bootstrap_rejects_the_legacy_terminal_report() -> None:
     value = {
-        "schema_version": 1,
+        "schema_version": 3,
         "bootstrap_attempt_id": "attempt_" + "1" * 32,
         "status": "baseline_ready",
         "approach": "approach",
         "change_summary": "change",
         "correctness_evidence": "evidence",
         "latency_us": None,
-        "candidate_artifact_digest": None,
+        "kernel_artifact_digest": None,
+        "kernel_trial_id": None,
         "gateway_result_digest": None,
         "research_sources": [],
         "lessons": "lesson",
         "next_directions": [],
         "blocker": None,
     }
-    with pytest.raises(ValidationError, match="complete result"):
-        LineageBootstrapReportV1.model_validate(value)
+    with pytest.raises(ValidationError):
+        AttemptReportV12.model_validate(value)

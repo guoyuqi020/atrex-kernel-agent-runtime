@@ -5,7 +5,7 @@
 ## 从这里开始
 
 - [使用说明](user-guide.zh.md)：安装、配置、Bootstrap、运行、检查、恢复和维护。
-- [接口说明](interfaces.zh.md)：CLI、HTTP API、Optimizer Runtime Tools、Evolver Tools 和外部服务
+- [接口说明](interfaces.zh.md)：CLI、HTTP API、Optimizer Runtime Tools、Evolver 文件系统输入和外部服务
   Contract。
 - [配置说明](configuration.zh.md)：Runtime schema v1 和 Campaign schema v3。
 - [可运行样例](../examples/README.zh.md)：远端 Agate、Bootstrap、Lineage、Evolution、开发 Shell 和

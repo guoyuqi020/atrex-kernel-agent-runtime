@@ -212,10 +212,7 @@ async def test_abba_runner_uses_one_dev_allocation_per_shape_batch_and_records_r
         input_py="def _make_inputs(): return ()",
         shapes={f"shape-{index}": [index] for index in range(5)},
         roofline={
-            "shapes": {
-                f"shape-{index}": {"SOL_time_ms": {"Test GPU": 0.045}}
-                for index in range(5)
-            }
+            "shapes": {f"shape-{index}": {"SOL_time_ms": {"Test GPU": 0.045}} for index in range(5)}
         },
         options=AgateEvaluationOptionsV1(
             num_correctness_cases=1,

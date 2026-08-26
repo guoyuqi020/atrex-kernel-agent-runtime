@@ -53,12 +53,13 @@ from .workers.evolution import (
     SubprocessEvolutionSessionDriver,
 )
 from .workers.manifest import (
+    ATTEMPT_MANIFEST_RELATIVE_PATH,
     ATTEMPT_WORKSPACE_LAYOUT,
-    AttemptInputManifestV8,
+    AttemptInputManifestV9,
     AttemptTaskContextV5,
 )
 from .workers.optimizer import OptimizerSessionConfig
-from .workers.workspace import LocalAttemptWorkspaceAssembler, PreparedAttempt
+from .workers.workspace import TOOLS_README, LocalAttemptWorkspaceAssembler, PreparedAttempt
 
 
 @dataclass(frozen=True, slots=True)
@@ -306,7 +307,7 @@ class TemporaryOptimizerDevShell:
         root: Path,
         request: TemporaryOptimizerDevShellRequest,
     ) -> PreparedAttempt:
-        manifest = AttemptInputManifestV8(
+        manifest = AttemptInputManifestV9(
             attempt_id=request.attempt_id,
             kernel_agent_revision_id=request.kernel_agent_revision_id,
             input_kernel_revision_id=request.input_kernel_revision_id,
@@ -337,6 +338,7 @@ class TemporaryOptimizerDevShell:
             raise ValueError("temporary dev-shell Attempt Evidence has the wrong Artifact kind")
         assemble_optimizer_evidence_view(
             root / paths.evidence,
+            control_root=root / ".runtime",
             lineage_payload=checkpoint.payload_path,
             lineage_checkpoint=request.epoch_evidence_checkpoint,
             attempt_payload=attempt_evidence.payload_path,
@@ -349,17 +351,26 @@ class TemporaryOptimizerDevShell:
             attempt_ordinal=1,
             artifacts=self._artifacts,
         )
-        self._artifacts.materialize(request.agent_problem_digest, root / paths.agent_problem)
+        self._artifacts.materialize_file(
+            request.agent_problem_digest,
+            "value.json",
+            root / paths.agent_problem,
+        )
         self._artifacts.materialize(request.optimizer_digest, root / paths.optimizer)
         working_kernel = root / paths.working_kernel
         shutil.copytree(root / paths.input_kernel, working_kernel)
         make_tree_owner_writable(working_kernel)
-        manifest_path = root / "attempt.json"
+        manifest_path = root / ATTEMPT_MANIFEST_RELATIVE_PATH
+        manifest_path.parent.mkdir(mode=0o700, exist_ok=True)
         manifest_path.write_bytes(manifest.canonical_json_bytes())
         os.chmod(manifest_path, 0o400)
         session_root = root / "sessions"
         session_root.mkdir(mode=0o700)
         (root / "scratch").mkdir(mode=0o700)
+        (root / "skills").mkdir(mode=0o700)
+        tools = root / "tools"
+        tools.mkdir(mode=0o700)
+        (tools / "README.md").write_text(TOOLS_README, encoding="utf-8")
         # Stays empty on the host; the Sandbox binds the pinned reference tree over it.
         (root / paths.reference).mkdir(mode=0o500)
         return PreparedAttempt(
@@ -548,6 +559,8 @@ class OptimizerDevShell:
                     {**event, "error_type": type(error).__name__},
                 )
                 raise
+            finally:
+                prepared.persist_reusable_directories()
             self._registry.record_runtime_event(
                 "dev_shell.exited",
                 attempt.id,

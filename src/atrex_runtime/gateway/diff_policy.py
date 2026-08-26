@@ -48,7 +48,8 @@ class RegistryCandidateDiffValidator:
         self._bootstrap_subjects = bootstrap_subjects
 
     def validate(self, attempt_id: AttemptId, candidate_digest: ArtifactDigest) -> None:
-        """Reject an unchanged candidate or any change outside its DSL allowlist."""
+        """Validate one candidate against its ordinary Attempt or Bootstrap input."""
+        is_bootstrap = False
         try:
             attempt = self._registry.get_attempt(attempt_id)
         except KeyError:
@@ -57,6 +58,7 @@ class RegistryCandidateDiffValidator:
             subject = self._bootstrap_subjects.get_bootstrap_subject(attempt_id)
             input_digest = subject.input_kernel_digest
             dsl = subject.dsl
+            is_bootstrap = True
         else:
             epoch = self._registry.get_epoch(attempt.epoch_id)
             lineage = self._registry.get_lineage(epoch.lineage_id)
@@ -74,7 +76,12 @@ class RegistryCandidateDiffValidator:
             for path in set(before_files).union(after_files)
             if self._bytes(before_files.get(path)) != self._bytes(after_files.get(path))
         }
-        if self._policy.require_change and not changed:
+        # Bootstrap is framework bring-up: its immutable seed may already be a
+        # correct self-contained Kernel in the bound DSL. Allow evaluating that
+        # exact seed so it can become the measured baseline. Ordinary
+        # optimization Attempts still have to submit a real change when the
+        # deployment enables require_change.
+        if self._policy.require_change and not is_bootstrap and not changed:
             raise ValueError("candidate does not change the input Kernel")
         patterns = self._policy.allowed_paths[dsl]
         rejected = sorted(

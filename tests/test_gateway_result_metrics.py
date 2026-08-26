@@ -73,20 +73,8 @@ def test_bootstrap_staged_evaluate_uses_latency_source_stage_sol(tmp_path: Path)
             "operation": "bootstrap_staged_evaluate",
             "latency_source_stage": 1,
             "completed_stages": [
-                {
-                    "job": {
-                        "result": {
-                            "performance": {"shapes": {"0": {"sol": {"pct": 10.0}}}}
-                        }
-                    }
-                },
-                {
-                    "job": {
-                        "result": {
-                            "performance": {"shapes": {"0": {"sol": {"pct": 65.25}}}}
-                        }
-                    }
-                },
+                {"job": {"result": {"performance": {"shapes": {"0": {"sol": {"pct": 10.0}}}}}}},
+                {"job": {"result": {"performance": {"shapes": {"0": {"sol": {"pct": 65.25}}}}}}},
             ],
         },
         ArtifactKind.GATEWAY_RESULT,

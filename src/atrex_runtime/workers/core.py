@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
 import anyio
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
-from .attempt_report import AttemptReportV3
+from .attempt_report import AttemptReportV12
 from .core_phase import CorePhaseRunner, PreparedCorePhase
-from .evidence_view import EVIDENCE_PROMPT_FILENAME
+from .evidence_view import EVIDENCE_PROMPT_RELATIVE_PATH
 from .launcher import WorkerLauncher, validate_worker_environment
-from .manifest import AttemptInputManifestV8
+from .manifest import AttemptInputManifestV9
 from .optimizer import OptimizerSessionConfig, OptimizerSessionResult
 from .process import BoundedProcessConfig
 from .workspace import PreparedAttempt
@@ -141,25 +141,44 @@ class CoreOptimizerSessionDriver:
         prepared: PreparedAttempt,
         config: OptimizerSessionConfig,
     ) -> OptimizerSessionResult:
+        result: OptimizerSessionResult | None = None
+        try:
+            result = self._run_sync_once(prepared, config)
+        finally:
+            prepared.persist_reusable_directories()
+        return replace(
+            result,
+            runtime_state_digest=prepared.seal_runtime_state(self._artifacts),
+        )
+
+    def _run_sync_once(
+        self,
+        prepared: PreparedAttempt,
+        config: OptimizerSessionConfig,
+    ) -> OptimizerSessionResult:
         launch = self.prepare_launch(prepared, config)
         result = self._phases.run(
             launch.phase,
             launch.environment,
             label="Optimizer repository",
         )
-        report: AttemptReportV3 | None = None
+        report: AttemptReportV12 | None = None
         report_digest = None
         report_error: str | None = None
         candidate_digest = None
         if launch.attempt_report_path.exists() or launch.attempt_report_path.is_symlink():
             try:
-                report = AttemptReportV3.from_file(
+                report = AttemptReportV12.from_file(
                     launch.attempt_report_path,
-                    expected_attempt_id=AttemptInputManifestV8.from_json_bytes(
+                    expected_attempt_id=AttemptInputManifestV9.from_json_bytes(
                         prepared.manifest_path.read_bytes()
                     ).attempt_id,
                     max_bytes=self._config.max_attempt_report_bytes,
                 )
+                if any(experiment.action == "baseline" for experiment in report.experiments):
+                    raise ValueError(
+                        "Experiment action baseline is only valid during Bootstrap"
+                    )
             except ValueError as error:
                 report_error = str(error)
             else:
@@ -181,7 +200,7 @@ class CoreOptimizerSessionDriver:
             attempt_report=report,
             attempt_report_digest=report_digest,
             attempt_report_error=report_error,
-            candidate_artifact_digest=candidate_digest,
+            kernel_artifact_digest=candidate_digest,
         )
 
     def prepare_launch(
@@ -243,7 +262,7 @@ class CoreOptimizerSessionDriver:
                 "ATREX_ATTEMPT_MANIFEST": str(prepared.manifest_path),
                 "ATREX_ATTEMPT_REPORT_PATH": str(attempt_report_path),
                 "ATREX_EVIDENCE_PROMPT_PATH": str(
-                    prepared.root / "input/evidence" / EVIDENCE_PROMPT_FILENAME
+                    prepared.root / EVIDENCE_PROMPT_RELATIVE_PATH
                 ),
                 "ATREX_GATEWAY_CAPABILITY": config.gateway_capability,
                 "ATREX_GATEWAY_PROXY_URL": config.gateway_endpoint,

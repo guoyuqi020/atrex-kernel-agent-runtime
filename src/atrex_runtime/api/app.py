@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable, Mapping
-from typing import Protocol
+from typing import Protocol, cast
 
 from ..artifacts.local import LocalArtifactStore
 from ..asgi import AsgiReceive, AsgiSend, json_response
@@ -33,6 +33,7 @@ from ..gateway.proxy import (
     GatewayProxyLimits,
     GatewayProxyService,
 )
+from ..gateway.retrying_client import RetryingAgateClient
 from ..knowledge.client import HttpGpuWikiClient, HttpxGpuWikiTransport
 from ..knowledge.proxy import WikiProxyAsgiApp, WikiProxyLimits, WikiProxyService
 from ..registry.sqlite import SqliteRegistry
@@ -46,6 +47,16 @@ class AgateSdkLoader(Protocol):
     def __call__(self, config: AgateConnectionConfig) -> tuple[AgateClient, AgateRequestBuilder]:
         """Load one configured SDK client."""
         ...
+
+
+def _bounded_agate_health_probe(client: AgateClient) -> Callable[[], bool]:
+    """Keep periodic observation bounded while operational calls retry persistently."""
+    raw = (
+        cast(AgateClient, client.wrapped_client)
+        if isinstance(client, RetryingAgateClient)
+        else client
+    )
+    return raw.health
 
 
 class RuntimeApplication:
@@ -179,9 +190,7 @@ def build_runtime_application(
             signing_key=signing_key,
         )
         campaign = settings.campaign
-        gate_policy = settings.gate_policy or (
-            None if campaign is None else campaign.gate_policy
-        )
+        gate_policy = settings.gate_policy or (None if campaign is None else campaign.gate_policy)
         jobs = SqliteAgateJobStore(settings.storage.agate_jobs_database)
         client, request_builder = sdk_loader(connection)
         contexts = RegistryAgateEvaluationContextResolver(registry, artifacts, control)
@@ -328,7 +337,7 @@ def build_runtime_application(
             (
                 PeriodicHealthMonitor(
                     "Agate",
-                    client.health,
+                    _bounded_agate_health_probe(client),
                     interval_seconds=settings.agate.health_check_interval_s,
                     logger=logging.getLogger("uvicorn.error"),
                 ),

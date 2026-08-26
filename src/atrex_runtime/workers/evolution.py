@@ -11,11 +11,11 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
-from typing import Annotated, Literal, Protocol, Self, cast
+from typing import Literal, Protocol, Self, cast
 from uuid import uuid4
 
 import anyio
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.errors import InfrastructureError
@@ -28,15 +28,12 @@ from ..domain.ids import (
 )
 from ..domain.models import (
     Dsl,
-    KernelAgentCatalogEntry,
     KernelAgentRevision,
-    KernelCatalogEntry,
     WorkerSession,
     WorkerSessionRole,
     WorkerSessionStatus,
 )
 from ..filesystem import make_tree_owner_writable, make_tree_read_only
-from ..gateway.result_metrics import gateway_result_sol_percent
 from ..kernel_agents import (
     KernelAgentBundleLimits,
     KernelAgentRevisionBuilder,
@@ -46,50 +43,166 @@ from ..ports import (
     BuildChallengerRequest,
     BuildChallengerResult,
     EvolverRunner,
+    KernelAgentCandidate,
     KernelAgentCandidateProposal,
     KernelAgentReuseProposal,
     RuntimeEventRecorder,
     WorkerSessionRecorder,
 )
 from ..serialization import canonical_json_bytes
-from .evidence_view import EVIDENCE_PROMPT_FILENAME, assemble_evolver_evidence_view
+from .evidence_view import (
+    EVOLVER_EVIDENCE_PROMPT_TEXT,
+    assemble_evolver_evidence_view,
+)
 from .launcher import WorkerLauncher, validate_worker_environment
 from .process import BoundedProcessConfig, BoundedProcessRunner
 from .session_trace import enforce_session_trace_retention
+from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 from .token_usage import ProviderUsageReportV2, UsageUnit
+from .workspace import (
+    TOOLS_README,
+    materialize_reusable_agent_state_snapshot,
+    resolve_revision_runtime_state_seed,
+    validate_reusable_agent_state_seed,
+)
 
-EVOLUTION_INPUT_VERSION: Literal[4] = 4
-EVOLUTION_OUTPUT_VERSION: Literal[3] = 3
-EVOLUTION_TRACE_VERSION: Literal[7] = 7
-EVOLUTION_FAILURE_VERSION: Literal[3] = 3
+EVOLUTION_INPUT_VERSION: Literal[10] = 10
+EVOLUTION_TRACE_VERSION: Literal[9] = 9
+EVOLUTION_FAILURE_VERSION: Literal[5] = 5
 EVOLVER_LAUNCH_INSTRUCTION = "Run the versioned Evolver Bundle once."
 EVOLVER_TIMEOUT_EXIT_STATUS = 124
-CANDIDATE_BASE_RECORD_MAX_BYTES = 4096
 EVOLVER_WORKSPACE_RELATIVE_PATH = PurePosixPath("input/evolver")
 
 
-class EvolutionPathsV1(BaseModel):
+def _active_next_epoch_runtime_state_seed(
+    evidence_root: Path,
+    active_revision_id: KernelAgentRevisionId,
+    artifacts: LocalArtifactStore,
+) -> Path | None:
+    """Resolve the winning best-Kernel Trajectory's terminal State."""
+    epochs = evidence_root / "epochs"
+    if epochs.is_symlink() or not epochs.is_dir():
+        return None
+    for epoch_path in sorted(epochs.glob("*.json"), reverse=True):
+        raw: object = json.loads(epoch_path.read_bytes())
+        if not isinstance(raw, dict) or raw.get("winner_kernel_agent_revision_id") != str(
+            active_revision_id
+        ):
+            continue
+        raw_attempts = raw.get("attempts")
+        raw_active = raw.get("active_kernel_agent_revision_id")
+        raw_challengers = raw.get("challenger_kernel_agent_revision_ids")
+        if (
+            not isinstance(raw_attempts, list)
+            or not isinstance(raw_active, str)
+            or not isinstance(raw_challengers, list)
+            or not all(isinstance(item, str) for item in raw_challengers)
+        ):
+            raise ValueError("Completed Epoch Runtime State catalog is invalid")
+        attempts: list[RuntimeStateAttempt] = []
+        for item in raw_attempts:
+            if not isinstance(item, dict):
+                raise ValueError("Completed Epoch Attempt State is invalid")
+            required = (
+                item.get("attempt_id"),
+                item.get("branch"),
+                item.get("challenger_ordinal"),
+                item.get("trajectory_ordinal"),
+                item.get("ordinal"),
+                item.get("kernel_agent_revision_id"),
+            )
+            if (
+                not isinstance(required[0], str)
+                or required[1] not in {"active", "challenger"}
+                or not isinstance(required[2], int)
+                or isinstance(required[2], bool)
+                or not isinstance(required[3], int)
+                or isinstance(required[3], bool)
+                or not isinstance(required[4], int)
+                or isinstance(required[4], bool)
+                or not isinstance(required[5], str)
+            ):
+                raise ValueError("Completed Epoch Attempt identity is invalid")
+            output = item.get("output")
+            latency: float | None = None
+            if isinstance(output, dict):
+                raw_latency = output.get("latency_us")
+                if isinstance(raw_latency, (int, float)) and not isinstance(raw_latency, bool):
+                    latency = float(raw_latency)
+            raw_input_state = item.get("input_runtime_state_digest")
+            raw_terminal_state = item.get("runtime_state_digest")
+            attempts.append(
+                RuntimeStateAttempt(
+                    attempt_id=required[0],
+                    branch=cast(str, required[1]),
+                    challenger_ordinal=required[2],
+                    trajectory_ordinal=required[3],
+                    ordinal=required[4],
+                    kernel_agent_revision_id=required[5],
+                    accepted_as_branch_best=item.get("accepted_as_branch_best") is True,
+                    output_latency_us=latency,
+                    input_runtime_state_digest=(
+                        None
+                        if not isinstance(raw_input_state, str)
+                        else parse_artifact_digest(raw_input_state)
+                    ),
+                    runtime_state_digest=(
+                        None
+                        if not isinstance(raw_terminal_state, str)
+                        else parse_artifact_digest(raw_terminal_state)
+                    ),
+                )
+            )
+        producer_attempt_id: str | None = None
+        best_kernel = raw.get("best_kernel")
+        if isinstance(best_kernel, dict):
+            raw_producer = best_kernel.get("produced_by_attempt_id")
+            if isinstance(raw_producer, str):
+                producer_attempt_id = raw_producer
+        digest = select_winning_trajectory_terminal_state(
+            attempts=tuple(attempts),
+            winner_revision_id=active_revision_id,
+            active_revision_id=parse_kernel_agent_revision_id(raw_active),
+            challenger_revision_ids=tuple(
+                parse_kernel_agent_revision_id(cast(str, item)) for item in raw_challengers
+            ),
+            best_kernel_producer_attempt_id=producer_attempt_id,
+        )
+        if digest is None:
+            return None
+        state = artifacts.verify(digest)
+        if state.kind is not ArtifactKind.KERNEL_AGENT_RUNTIME_STATE:
+            raise ValueError("Attempt Runtime State has the wrong Artifact kind")
+        validate_reusable_agent_state_seed(state.payload_path)
+        return state.payload_path
+    return None
+
+
+class EvolutionPathsV2(BaseModel):
     """Fixed paths exposed to an Evolver process."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    parent: Literal["input/parent"] = "input/parent"
     agents: Literal["input/agents"] = "input/agents"
+    historical: Literal["input/historical"] = "input/historical"
     evidence: Literal["input/evidence"] = "input/evidence"
-    runtime_tools: Literal["runtime-tools"] = "runtime-tools"
     candidate: Literal["candidate"] = "candidate"
     scratch: Literal["scratch"] = "scratch"
-    output: Literal["scratch/evolution-output.json"] = "scratch/evolution-output.json"
+    output: Literal["scratch/evolution-report.json"] = "scratch/evolution-report.json"
 
 
-class VisibleAgentRevisionV1(BaseModel):
+class VisibleAgentRevisionV2(BaseModel):
     """One read-only Agent design exposed to an Evolver invocation."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     revision_id: KernelAgentRevisionId
+    version: str | None = Field(default=None, pattern=r"^agent-v[0-9]+$")
     optimizer_digest: ArtifactDigest
-    path: str = Field(pattern=r"^input/agents/agentrev_[0-9a-f]{32}$")
+    path: str = Field(min_length=1, max_length=300)
+    optimization_summary_path: str = Field(min_length=1, max_length=300)
+    sessions_path: str | None = Field(default=None, min_length=1, max_length=300)
+    runtime_state_path: str = Field(min_length=1, max_length=300)
     parent: bool
     relationship: Literal["active", "current_epoch_challenger", "lineage_history"]
     challenger_ordinal: int | None = Field(default=None, gt=0)
@@ -133,19 +246,19 @@ class VisibleAgentRevisionV1(BaseModel):
         return self
 
 
-class EvolutionInputManifestV4(BaseModel):
+class EvolutionInputManifestV10(BaseModel):
     """Immutable parent, Agent pool, and lineage evidence for one Evolution session."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[4] = EVOLUTION_INPUT_VERSION
+    schema_version: Literal[10] = EVOLUTION_INPUT_VERSION
     parent_revision_id: KernelAgentRevisionId
     evidence_checkpoint: ArtifactDigest
     idempotency_key: str = Field(min_length=1, max_length=300)
     dsl: Dsl
     optimizer_digest: ArtifactDigest
-    visible_agents: tuple[VisibleAgentRevisionV1, ...]
-    paths: EvolutionPathsV1 = EvolutionPathsV1()
+    visible_agents: tuple[VisibleAgentRevisionV2, ...]
+    paths: EvolutionPathsV2 = EvolutionPathsV2()
 
     @field_validator("parent_revision_id", mode="before")
     @classmethod
@@ -188,40 +301,6 @@ class EvolutionInputManifestV4(BaseModel):
         return canonical_json_bytes(self.model_dump(mode="json"))
 
 
-class CandidateBaseRecordV1(BaseModel):
-    """Runtime-seeded or Runtime-tool-selected Candidate repository base."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    schema_version: Literal[1] = 1
-    base_revision_id: KernelAgentRevisionId
-    selection: Literal["active_seed", "candidate_reset"]
-
-    @field_validator("base_revision_id", mode="before")
-    @classmethod
-    def _validate_base_id(cls, value: object) -> KernelAgentRevisionId:
-        if not isinstance(value, str):
-            raise ValueError("Candidate base_revision_id must be a string")
-        return parse_kernel_agent_revision_id(value)
-
-    def canonical_json_bytes(self) -> bytes:
-        """Serialize the stable Candidate-base record."""
-        return canonical_json_bytes(self.model_dump(mode="json"))
-
-
-def read_candidate_base_record(path: Path) -> CandidateBaseRecordV1:
-    """Read the bounded regular Candidate-base record after Evolver exit."""
-    try:
-        metadata = path.lstat()
-    except FileNotFoundError as error:
-        raise ValueError("Evolver Candidate base record is missing") from error
-    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
-        raise ValueError("Evolver Candidate base record must be a regular file")
-    if metadata.st_size > CANDIDATE_BASE_RECORD_MAX_BYTES:
-        raise ValueError("Evolver Candidate base record exceeds byte limit")
-    return CandidateBaseRecordV1.model_validate_json(path.read_bytes())
-
-
 class UnimplementedCapabilityV1(BaseModel):
     """Advisory Agent capability the Evolver could not add to this Candidate."""
 
@@ -232,31 +311,23 @@ class UnimplementedCapabilityV1(BaseModel):
     reason_unimplemented: str = Field(min_length=1, max_length=2000)
 
 
-class _EvolutionOutputBaseV3(BaseModel):
-    """Fields common to every Agent-authored Challenger proposal."""
+class EvolutionOutput(BaseModel):
+    """One uniform Agent-authored Challenger proposal."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[3] = EVOLUTION_OUTPUT_VERSION
+    proposal_type: Literal["evolved", "evolve_from_history", "reuse"]
+    kernel_agent_revision_id: KernelAgentRevisionId
     hypothesis: str = Field(min_length=1, max_length=4000)
     expected_effect: str = Field(min_length=1, max_length=4000)
-    unimplemented_capabilities: tuple[UnimplementedCapabilityV1, ...] = Field(
-        default=(), max_length=64
-    )
+    changed_paths: tuple[str, ...] = Field(max_length=512)
+    unimplemented_capabilities: tuple[UnimplementedCapabilityV1, ...] = Field(max_length=64)
 
-
-class EvolutionCandidateOutputV3(_EvolutionOutputBaseV3):
-    """A new revision derived from the Active or a historical revision."""
-
-    proposal_type: Literal["evolved", "evolve_from_history"]
-    base_revision_id: KernelAgentRevisionId
-    changed_paths: tuple[str, ...] = Field(min_length=1, max_length=512)
-
-    @field_validator("base_revision_id", mode="before")
+    @field_validator("kernel_agent_revision_id", mode="before")
     @classmethod
-    def _validate_base_id(cls, value: object) -> KernelAgentRevisionId:
+    def _validate_source_reference(cls, value: object) -> KernelAgentRevisionId:
         if not isinstance(value, str):
-            raise ValueError("base_revision_id must be a string")
+            raise ValueError("kernel_agent_revision_id must be a string")
         return parse_kernel_agent_revision_id(value)
 
     @field_validator("changed_paths")
@@ -269,35 +340,22 @@ class EvolutionCandidateOutputV3(_EvolutionOutputBaseV3):
         for item in value:
             relative = PurePosixPath(item)
             if relative.is_absolute() or relative.as_posix() == "." or ".." in relative.parts:
-                raise ValueError("changed_paths must contain safe repository-relative paths")
+                raise ValueError("changed_paths must contain safe Source-root-relative paths")
             normalized.append(relative.as_posix())
         if len(set(normalized)) != len(normalized):
             raise ValueError("changed_paths cannot contain duplicates")
+        if normalized != sorted(normalized):
+            raise ValueError("changed_paths must be sorted")
         return tuple(normalized)
 
-
-class EvolutionReuseOutputV3(_EvolutionOutputBaseV3):
-    """Selection of one existing historical revision without repository changes."""
-
-    proposal_type: Literal["reuse"]
-    candidate_revision_id: KernelAgentRevisionId
-
-    @field_validator("candidate_revision_id", mode="before")
-    @classmethod
-    def _validate_candidate_id(cls, value: object) -> KernelAgentRevisionId:
-        if not isinstance(value, str):
-            raise ValueError("candidate_revision_id must be a string")
-        return parse_kernel_agent_revision_id(value)
+    @model_validator(mode="after")
+    def _validate_mode_fields(self) -> Self:
+        if self.proposal_type == "reuse" and self.changed_paths:
+            raise ValueError("reuse requires changed_paths to be empty")
+        return self
 
 
-EvolutionOutputV3 = Annotated[
-    EvolutionCandidateOutputV3 | EvolutionReuseOutputV3,
-    Field(discriminator="proposal_type"),
-]
-_EVOLUTION_OUTPUT_ADAPTER: TypeAdapter[EvolutionOutputV3] = TypeAdapter(EvolutionOutputV3)
-
-
-def read_evolution_output(path: Path, *, max_bytes: int) -> EvolutionOutputV3:
+def read_evolution_output(path: Path, *, max_bytes: int) -> EvolutionOutput:
     """Parse a bounded regular output manifest after the Evolver is reaped."""
     try:
         path_stat = path.lstat()
@@ -307,7 +365,7 @@ def read_evolution_output(path: Path, *, max_bytes: int) -> EvolutionOutputV3:
         raise ValueError("Evolution output manifest must be a regular file")
     if path_stat.st_size > max_bytes:
         raise ValueError("Evolution output manifest exceeds byte limit")
-    return _EVOLUTION_OUTPUT_ADAPTER.validate_json(path.read_bytes())
+    return EvolutionOutput.model_validate_json(path.read_bytes())
 
 
 class EvolutionAgentDescriptorV3(BaseModel):
@@ -335,36 +393,46 @@ class EvolutionAgentDescriptorV3(BaseModel):
         return parse_artifact_digest(value)
 
 
-class EvolutionCandidateTraceV2(BaseModel):
-    """Sealed repository digest produced by one successful Evolution run."""
+class EvolutionCandidateTraceV3(BaseModel):
+    """Sealed source and runtime-state digests from one successful Evolution run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     optimizer_digest: ArtifactDigest
+    runtime_state_digest: ArtifactDigest | None
 
-    @field_validator("*", mode="before")
+    @field_validator("optimizer_digest", mode="before")
     @classmethod
     def _validate_digest(cls, value: object) -> ArtifactDigest:
         if not isinstance(value, str):
             raise ValueError("Evolution Candidate digest must be a string")
         return parse_artifact_digest(value)
 
+    @field_validator("runtime_state_digest", mode="before")
+    @classmethod
+    def _validate_optional_state_digest(cls, value: object) -> ArtifactDigest | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Evolution Candidate runtime-state digest must be a string")
+        return parse_artifact_digest(value)
 
-class EvolutionTraceV7(BaseModel):
+
+class EvolutionTraceV9(BaseModel):
     """Immutable provenance for one successful Kernel Agent Evolution run."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[7] = EVOLUTION_TRACE_VERSION
-    input: EvolutionInputManifestV4
+    schema_version: Literal[9] = EVOLUTION_TRACE_VERSION
+    input: EvolutionInputManifestV10
     agent: EvolutionAgentDescriptorV3
     process_returncode: Literal[0]
     stdout: str
     stderr: str
     session_trace_digest: ArtifactDigest | None
     token_usage: ProviderUsageReportV2
-    output: EvolutionCandidateOutputV3 | EvolutionReuseOutputV3
-    candidate: EvolutionCandidateTraceV2 | None
+    output: EvolutionOutput
+    candidate: EvolutionCandidateTraceV3 | None
 
     @field_validator("session_trace_digest", mode="before")
     @classmethod
@@ -374,6 +442,38 @@ class EvolutionTraceV7(BaseModel):
         if not isinstance(value, str):
             raise ValueError("Evolution session trace digest must be a string")
         return parse_artifact_digest(value)
+
+
+def _previous_evolution_output(
+    artifacts: LocalArtifactStore,
+    revision: KernelAgentRevision,
+) -> EvolutionOutput | None:
+    """Load only the Agent-authored report that created one visible revision."""
+    if revision.evolution_trace_digest is None:
+        return None
+    try:
+        stored = artifacts.verify(revision.evolution_trace_digest)
+    except FileNotFoundError:
+        # Old or externally imported catalogs may retain provenance whose Artifact
+        # is unavailable locally. Absence is represented by no projected report.
+        return None
+    if stored.kind is not ArtifactKind.EVOLUTION:
+        raise ValueError("Agent revision Evolution trace has the wrong Artifact kind")
+    raw: object = json.loads((stored.payload_path / "value.json").read_bytes())
+    if not isinstance(raw, dict):
+        raise ValueError("Agent revision Evolution trace must be a JSON object")
+    raw_output = raw.get("output")
+    raw_candidate = raw.get("candidate")
+    if raw_output is None:
+        # Some imported or old traces retain only Candidate provenance.
+        return None
+    output = EvolutionOutput.model_validate(raw_output)
+    if (
+        not isinstance(raw_candidate, dict)
+        or raw_candidate.get("optimizer_digest") != revision.optimizer_digest
+    ):
+        raise ValueError("Agent revision Evolution report does not produce its Source")
+    return output
 
 
 class EvolutionFailureProcessV2(BaseModel):
@@ -399,14 +499,14 @@ class EvolutionFailureProcessV2(BaseModel):
         return parse_artifact_digest(value)
 
 
-class EvolutionFailureTraceV3(BaseModel):
+class EvolutionFailureTraceV5(BaseModel):
     """Immutable bounded evidence for an Evolution run that produced no Challenger."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[3] = EVOLUTION_FAILURE_VERSION
+    schema_version: Literal[5] = EVOLUTION_FAILURE_VERSION
     status: Literal["failed"] = "failed"
-    input: EvolutionInputManifestV4
+    input: EvolutionInputManifestV10
     phase: Literal["session", "candidate_validation"]
     error_type: str = Field(min_length=1, max_length=200)
     process: EvolutionFailureProcessV2 | None
@@ -417,15 +517,17 @@ class PreparedEvolution:
     """One private, append-only Evolution process allocation."""
 
     root: Path
+    control_root: Path
     manifest_path: Path
     candidate_root: Path
+    candidate_runtime_state_base_root: Path
     output_path: Path
     parent_revision: KernelAgentRevision
     model: str | None = None
 
 
 class EvolutionWorkspaceAssembler:
-    """Materialize a parent Optimizer repository and seed one writable full copy."""
+    """Materialize frozen Agents and seed one writable source/runtime-state Candidate."""
 
     def __init__(
         self,
@@ -433,26 +535,31 @@ class EvolutionWorkspaceAssembler:
         artifacts: LocalArtifactStore,
         *,
         evolver_bundle_digest: ArtifactDigest | None = None,
+        attempt_workspaces_root: str | Path | None = None,
     ) -> None:
         self._root = Path(root).resolve()
         self._artifacts = artifacts
         self._evolver_bundle_digest = evolver_bundle_digest
+        self._attempt_workspaces_root = attempt_workspaces_root
         if evolver_bundle_digest is not None:
             parse_artifact_digest(evolver_bundle_digest)
         self._root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     def prepare(self, request: BuildChallengerRequest) -> PreparedEvolution:
-        """Create a fresh workspace containing one complete writable repository Candidate."""
-        run_root = self._root / request.parent_revision.id / f"run-{uuid4().hex}"
+        """Create a fresh workspace containing one complete writable Agent Candidate."""
+        run_id = f"run-{uuid4().hex}"
+        run_root = self._root / request.parent_revision.id / run_id
+        control_root = self._root / ".control" / request.parent_revision.id / run_id
         run_root.mkdir(parents=True, mode=0o700)
-        parent_root = run_root / "input/parent"
+        control_root.mkdir(parents=True, mode=0o700)
         agents_root = run_root / "input/agents"
+        historical_root = run_root / "input/historical"
         evidence_root = run_root / "input/evidence"
-        runtime_tools_root = run_root / "runtime-tools"
+        evolution_reports_root = run_root / "input/evolution-reports"
         candidate_root = run_root / "candidate"
         scratch_root = run_root / "scratch"
         scratch_root.mkdir(mode=0o700)
-        output_path = scratch_root / "evolution-output.json"
+        output_path = scratch_root / "evolution-report.json"
 
         if self._evolver_bundle_digest is not None:
             evolver = self._artifacts.verify(self._evolver_bundle_digest)
@@ -463,15 +570,21 @@ class EvolutionWorkspaceAssembler:
             make_tree_read_only(evolver_root)
 
         revision = request.parent_revision
-        self._artifacts.materialize(revision.optimizer_digest, parent_root)
         agents_root.mkdir(parents=True, mode=0o700)
-        visible_by_id = {entry.revision.id: entry.revision for entry in request.agent_catalog}
+        historical_root.mkdir(parents=True, mode=0o700)
+        evolution_reports_root.mkdir(parents=True, mode=0o700)
+        catalog_by_id = {entry.revision.id: entry for entry in request.agent_catalog}
+        visible_by_id = {
+            revision_id: entry.revision for revision_id, entry in catalog_by_id.items()
+        }
         visible_by_id[revision.id] = revision
-        visible_agents: list[VisibleAgentRevisionV1] = []
+        visible_agents: list[VisibleAgentRevisionV2] = []
+        visible_paths: dict[KernelAgentRevisionId, tuple[str, str]] = {}
+        previous_reports: list[tuple[KernelAgentRevision, EvolutionOutput, int | None]] = []
+        participant_agents: dict[str, str] = {}
+        historical_agents: dict[str, tuple[str, Path]] = {}
         challenger_prefix = f"epoch:{request.epoch_id}:challenger:"
         for visible in visible_by_id.values():
-            relative = f"input/agents/{visible.id}"
-            self._artifacts.materialize(visible.optimizer_digest, run_root / relative)
             challenger_ordinal: int | None = None
             relationship: Literal["active", "current_epoch_challenger", "lineage_history"] = (
                 "lineage_history"
@@ -483,11 +596,51 @@ class EvolutionWorkspaceAssembler:
                 if suffix.isdigit() and int(suffix) > 0:
                     relationship = "current_epoch_challenger"
                     challenger_ordinal = int(suffix)
+            catalog_entry = catalog_by_id.get(visible.id)
+            version = None if catalog_entry is None else f"agent-v{catalog_entry.revision_number}"
+            if relationship == "active":
+                role_label = "active"
+                relative = "input/agents/active/source"
+                optimization_summary_path = "input/evidence/active/optimization-summary.json"
+                sessions_path = "input/evidence/active/sessions"
+                runtime_state_path = "input/agents/active/runtime-state"
+                participant_agents[role_label] = visible.id
+            elif relationship == "current_epoch_challenger":
+                assert challenger_ordinal is not None
+                role_label = f"challenger-{challenger_ordinal:04d}"
+                relative = f"input/agents/{role_label}/source"
+                optimization_summary_path = f"input/evidence/{role_label}/optimization-summary.json"
+                sessions_path = f"input/evidence/{role_label}/sessions"
+                runtime_state_path = f"input/agents/{role_label}/runtime-state"
+                participant_agents[role_label] = visible.id
+            else:
+                if version is None:
+                    raise ValueError("historical Agent revision has no lineage version")
+                relative = f"input/historical/{version}/source"
+                optimization_summary_path = f"input/historical/{version}/optimization-summary.json"
+                sessions_path = None
+                runtime_state_path = f"input/historical/{version}/runtime-state"
+                historical_agents[visible.id] = (version, run_root / f"input/historical/{version}")
+            self._artifacts.materialize(visible.optimizer_digest, run_root / relative)
+            visible_paths[visible.id] = (relative, runtime_state_path)
+            previous_output = _previous_evolution_output(self._artifacts, visible)
+            if previous_output is not None:
+                previous_reports.append(
+                    (
+                        visible,
+                        previous_output,
+                        None if catalog_entry is None else catalog_entry.revision_number,
+                    )
+                )
             visible_agents.append(
-                VisibleAgentRevisionV1(
+                VisibleAgentRevisionV2(
                     revision_id=visible.id,
+                    version=version,
                     optimizer_digest=visible.optimizer_digest,
                     path=relative,
+                    optimization_summary_path=optimization_summary_path,
+                    sessions_path=sessions_path,
+                    runtime_state_path=runtime_state_path,
                     parent=visible.id == revision.id,
                     relationship=relationship,
                     challenger_ordinal=challenger_ordinal,
@@ -495,22 +648,129 @@ class EvolutionWorkspaceAssembler:
                     created_by=visible.created_by,
                 )
             )
+        used_evolution_numbers = {
+            revision_number
+            for _revision, _output, revision_number in previous_reports
+            if revision_number is not None and revision_number > 0
+        }
+        next_evolution_number = 1
+        for produced, previous_output, revision_number in sorted(
+            previous_reports,
+            key=lambda item: (item[0].created_at, item[0].id),
+        ):
+            evolution_number = revision_number
+            if evolution_number is None or evolution_number <= 0:
+                while next_evolution_number in used_evolution_numbers:
+                    next_evolution_number += 1
+                evolution_number = next_evolution_number
+                used_evolution_numbers.add(evolution_number)
+                next_evolution_number += 1
+            base_paths = visible_paths.get(previous_output.kernel_agent_revision_id)
+            produced_paths = visible_paths.get(produced.id)
+            if base_paths is None or produced_paths is None:
+                raise ValueError("Evolution report Agent paths are outside visible history")
+            report_path = evolution_reports_root / f"evo-{evolution_number}.json"
+            if report_path.exists() or report_path.is_symlink():
+                raise ValueError("Evolution report number is duplicated")
+            report_path.write_bytes(
+                canonical_json_bytes(
+                    {
+                        "evolution_number": evolution_number,
+                        "parent": {
+                            "source_path": base_paths[0],
+                            "runtime_state_path": base_paths[1],
+                        },
+                        "generated_agent": {
+                            "source_path": produced_paths[0],
+                            "runtime_state_path": produced_paths[1],
+                        },
+                        "report": {
+                            "proposal_type": previous_output.proposal_type,
+                            "hypothesis": previous_output.hypothesis,
+                            "expected_effect": previous_output.expected_effect,
+                            "unimplemented_capabilities": [
+                                item.model_dump(mode="json")
+                                for item in previous_output.unimplemented_capabilities
+                            ],
+                        },
+                    }
+                )
+            )
+        control_state_root = control_root / ".runtime"
+        reusable_state_staging = control_root / "agent-state-staging"
+        materialize_reusable_agent_state_snapshot(
+            self._attempt_workspaces_root,
+            reusable_state_staging,
+            agent_lineages={
+                revision_id: (
+                    None
+                    if revision_id not in catalog_by_id
+                    else catalog_by_id[revision_id].lineage_id
+                )
+                for revision_id in visible_by_id
+            },
+            read_only=False,
+        )
         evidence = self._artifacts.verify(request.evidence_checkpoint)
         if evidence.kind is not ArtifactKind.EVIDENCE:
             raise ValueError("Evolution Evidence checkpoint has the wrong Artifact kind")
         assemble_evolver_evidence_view(
             evidence_root,
+            control_root=control_state_root,
             lineage_payload=evidence.payload_path,
             lineage_checkpoint=request.evidence_checkpoint,
             artifacts=self._artifacts,
+            participant_agents=participant_agents,
+            historical_agents={
+                version: revision_id
+                for revision_id, (version, _destination) in historical_agents.items()
+            },
+            historical_root=historical_root,
         )
-        self._materialize_runtime_tools(runtime_tools_root, request)
-        shutil.copytree(parent_root, candidate_root)
+        for role, revision_id in participant_agents.items():
+            source_state = reusable_state_staging / revision_id
+            target_state = agents_root / role / "runtime-state"
+            if not source_state.is_dir() or source_state.is_symlink():
+                raise ValueError(f"participant Agent runtime state is unavailable: {role}")
+            shutil.move(source_state, target_state)
+        for revision_id, (version, destination) in historical_agents.items():
+            source_state = reusable_state_staging / revision_id
+            target_state = destination / "runtime-state"
+            if not source_state.is_dir() or source_state.is_symlink():
+                raise ValueError(f"historical Agent runtime state is unavailable: {version}")
+            shutil.move(source_state, target_state)
+            make_tree_read_only(destination)
+        if reusable_state_staging.exists():
+            if any(reusable_state_staging.iterdir()):
+                raise ValueError(
+                    "unclassified Agent runtime state remains after Evolution assembly"
+                )
+            reusable_state_staging.rmdir()
+        candidate_root.mkdir(mode=0o700)
+        shutil.copytree(agents_root / "active/source", candidate_root / "source")
+        candidate_runtime_state = candidate_root / "runtime-state"
+        active_runtime_state_seed = _active_next_epoch_runtime_state_seed(
+            evidence.payload_path,
+            revision.id,
+            self._artifacts,
+        ) or resolve_revision_runtime_state_seed(self._artifacts, revision)
+        if active_runtime_state_seed is None:
+            (candidate_runtime_state / "skills").mkdir(parents=True)
+            (candidate_runtime_state / "tools").mkdir()
+            (candidate_runtime_state / "tools/README.md").write_text(
+                TOOLS_README,
+                encoding="utf-8",
+            )
+        else:
+            shutil.copytree(active_runtime_state_seed, candidate_runtime_state)
+        candidate_runtime_state_base = control_state_root / "candidate-runtime-state-base"
+        shutil.copytree(candidate_runtime_state, candidate_runtime_state_base)
+        make_tree_read_only(candidate_runtime_state_base)
         make_tree_owner_writable(candidate_root)
-        make_tree_read_only(parent_root)
         make_tree_read_only(agents_root)
+        make_tree_read_only(evolution_reports_root)
 
-        manifest = EvolutionInputManifestV4(
+        manifest = EvolutionInputManifestV10(
             parent_revision_id=revision.id,
             evidence_checkpoint=request.evidence_checkpoint,
             idempotency_key=request.idempotency_key,
@@ -518,137 +778,20 @@ class EvolutionWorkspaceAssembler:
             optimizer_digest=revision.optimizer_digest,
             visible_agents=tuple(visible_agents),
         )
-        manifest_path = run_root / "evolution-input.json"
+        manifest_path = control_state_root / "evolution-input.json"
+        manifest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         manifest_path.write_bytes(manifest.canonical_json_bytes())
         os.chmod(manifest_path, 0o400)
-        candidate_base_path = scratch_root / "candidate-base.json"
-        candidate_base_path.write_bytes(
-            CandidateBaseRecordV1(
-                base_revision_id=revision.id,
-                selection="active_seed",
-            ).canonical_json_bytes()
-        )
-        os.chmod(candidate_base_path, 0o600)
         return PreparedEvolution(
             run_root,
+            control_root,
             manifest_path,
             candidate_root,
+            candidate_runtime_state_base,
             output_path,
             revision,
             request.model,
         )
-
-    def _materialize_runtime_tools(
-        self,
-        destination: Path,
-        request: BuildChallengerRequest,
-    ) -> None:
-        """Freeze Evolver inspection/Candidate tools and their exact lineage catalog."""
-        destination.mkdir(mode=0o700)
-        source = Path(__file__).with_name("evolver_tools.py")
-        if source.is_symlink() or not source.is_file():
-            raise RuntimeError("Runtime Evolver tools implementation is unavailable")
-        shutil.copyfile(source, destination / "evolver_tools.py")
-        agents: tuple[KernelAgentCatalogEntry | KernelAgentRevision, ...] = (
-            request.agent_catalog or (request.parent_revision,)
-        )
-        catalog = {
-            "schema_version": 1,
-            "evidence_checkpoint": request.evidence_checkpoint,
-            "agents": [
-                self._agent_catalog_value(
-                    entry,
-                    active_revision_id=request.parent_revision.id,
-                )
-                for entry in agents
-            ],
-            "kernels": [self._kernel_catalog_value(entry) for entry in request.kernel_catalog],
-        }
-        (destination / "catalog.json").write_bytes(canonical_json_bytes(catalog))
-        kernels_root = destination / "kernels"
-        kernels_root.mkdir(mode=0o700)
-        for entry in request.kernel_catalog:
-            artifact = self._artifacts.verify(entry.revision.artifact_digest)
-            if artifact.kind is not ArtifactKind.KERNEL:
-                raise ValueError("Evolver Runtime Tools Kernel has the wrong Artifact kind")
-            self._artifacts.materialize(
-                entry.revision.artifact_digest,
-                kernels_root / str(entry.revision.id),
-            )
-        make_tree_read_only(destination)
-
-    @staticmethod
-    def _agent_catalog_value(
-        entry: KernelAgentCatalogEntry | KernelAgentRevision,
-        *,
-        active_revision_id: KernelAgentRevisionId,
-    ) -> dict[str, JsonValue]:
-        if isinstance(entry, KernelAgentCatalogEntry):
-            revision = entry.revision
-            return {
-                "revision_id": revision.id,
-                "version": f"agent-v{entry.revision_number}",
-                "revision_number": entry.revision_number,
-                "parent_revision_id": revision.parent_id,
-                "parent_version": (
-                    None
-                    if entry.parent_revision_number is None
-                    else f"agent-v{entry.parent_revision_number}"
-                ),
-                "introduced_epoch_number": entry.introduced_epoch_number,
-                "disposition": entry.disposition,
-                "active": entry.active,
-                "created_by": revision.created_by,
-                "created_at": revision.created_at,
-                "optimizer_digest": revision.optimizer_digest,
-                "repository_path": f"input/agents/{revision.id}",
-            }
-        return {
-            "revision_id": entry.id,
-            "version": None,
-            "revision_number": None,
-            "parent_revision_id": entry.parent_id,
-            "parent_version": None,
-            "introduced_epoch_number": None,
-            "disposition": "unknown",
-            "active": entry.id == active_revision_id,
-            "created_by": entry.created_by,
-            "created_at": entry.created_at,
-            "optimizer_digest": entry.optimizer_digest,
-            "repository_path": f"input/agents/{entry.id}",
-        }
-
-    def _kernel_catalog_value(self, entry: KernelCatalogEntry) -> dict[str, JsonValue]:
-        revision = entry.revision
-        return {
-            "revision_id": revision.id,
-            "version": f"v{entry.revision_number}",
-            "revision_number": entry.revision_number,
-            "parent_revision_id": revision.parent_id,
-            "parent_version": (
-                None if entry.parent_revision_number is None else f"v{entry.parent_revision_number}"
-            ),
-            "artifact_digest": revision.artifact_digest,
-            "correct": revision.evaluation.correct,
-            "latency_us": revision.evaluation.latency_us,
-            "sol_percent": gateway_result_sol_percent(
-                self._artifacts,
-                revision.evaluation.gateway_result_digest,
-            ),
-            "gateway_result_digest": revision.evaluation.gateway_result_digest,
-            "created_at": revision.created_at,
-            "kernel_agent_revision_id": entry.kernel_agent_revision_id,
-            "kernel_agent_version": f"agent-v{entry.kernel_agent_revision_number}",
-            "epoch_number": entry.epoch_number,
-            "attempt_id": entry.attempt_id,
-            "branch": None if entry.branch is None else entry.branch.value,
-            "challenger_ordinal": entry.challenger_ordinal,
-            "trajectory_ordinal": entry.trajectory_ordinal,
-            "attempt_ordinal": entry.attempt_ordinal,
-            "accepted_as_branch_best": entry.accepted_as_branch_best,
-            "improvement_over_parent_percent": entry.improvement_over_parent_percent,
-            "artifact_path": f"runtime-tools/kernels/{revision.id}",
-        }
 
 
 @dataclass(frozen=True, slots=True)
@@ -738,8 +881,11 @@ class EvolutionProcessConfig:
             "ATREX_AGENT_SESSION_SETTINGS",
             "ATREX_AGENT_MODEL",
             "ATREX_EVOLUTION_INPUT",
+            "ATREX_EVOLUTION_INPUT_JSON",
+            "ATREX_EVOLUTION_WORKSPACE",
             "ATREX_EVOLUTION_CANDIDATE",
             "ATREX_EVIDENCE_PROMPT_PATH",
+            "ATREX_EVIDENCE_PROMPT",
             "ATREX_EVOLUTION_OUTPUT",
             "ATREX_SESSION_TIMEOUT_SECONDS",
             "ATREX_USAGE_BUDGET",
@@ -869,11 +1015,10 @@ class SubprocessEvolutionSessionDriver:
                 "ATREX_AGENT_REASONING_EFFORT": self._config.reasoning_effort,
                 "ATREX_AGENT_SESSION_SETTINGS": self._config.session_settings,
                 "ATREX_AGENT_MODEL": prepared.model or "",
-                "ATREX_EVOLUTION_INPUT": str(prepared.manifest_path),
+                "ATREX_EVOLUTION_INPUT_JSON": prepared.manifest_path.read_text(encoding="utf-8"),
+                "ATREX_EVOLUTION_WORKSPACE": str(prepared.root),
                 "ATREX_EVOLUTION_CANDIDATE": str(prepared.candidate_root),
-                "ATREX_EVIDENCE_PROMPT_PATH": str(
-                    prepared.root / "input/evidence" / EVIDENCE_PROMPT_FILENAME
-                ),
+                "ATREX_EVIDENCE_PROMPT": EVOLVER_EVIDENCE_PROMPT_TEXT,
                 "ATREX_EVOLUTION_OUTPUT": str(prepared.output_path),
                 "ATREX_SESSION_TIMEOUT_SECONDS": str(self._config.timeout_seconds),
             }
@@ -931,9 +1076,12 @@ class EvolverBundleRunner(EvolverRunner):
         max_output_manifest_bytes: int,
         worker_sessions: WorkerSessionRecorder | None = None,
         backend: str | None = None,
+        max_infrastructure_retries: int = 0,
     ) -> None:
         if max_output_manifest_bytes <= 0:
             raise ValueError("max_output_manifest_bytes must be positive")
+        if max_infrastructure_retries < 0:
+            raise ValueError("Evolver infrastructure retries cannot be negative")
         self._workspaces = workspaces
         self._sessions = sessions
         self._artifacts = artifacts
@@ -942,11 +1090,45 @@ class EvolverBundleRunner(EvolverRunner):
             artifacts,
             limits=kernel_agent_limits,
         )
+        self._kernel_agent_limits = kernel_agent_limits
         self._max_output_manifest_bytes = max_output_manifest_bytes
         self._worker_sessions = worker_sessions
         self._backend = backend
+        self._max_infrastructure_retries = max_infrastructure_retries
 
     async def build_challenger(self, request: BuildChallengerRequest) -> BuildChallengerResult:
+        """Retry transient Evolver infrastructure failures in fresh Sessions."""
+        failures = 0
+        while True:
+            try:
+                return await self._build_challenger_once(request)
+            except InfrastructureError as error:
+                failures += 1
+                if failures > self._max_infrastructure_retries:
+                    if self._max_infrastructure_retries:
+                        error.add_note(
+                            "Evolver infrastructure retry budget exhausted: "
+                            f"failures={failures}, "
+                            f"max_retries={self._max_infrastructure_retries}"
+                        )
+                    raise
+                self._events.record_runtime_event(
+                    "evolution.retrying",
+                    request.epoch_id,
+                    {
+                        "parent_revision_id": request.parent_revision.id,
+                        "dsl": request.parent_revision.dsl.value,
+                        "retry_number": failures,
+                        "max_infrastructure_retries": self._max_infrastructure_retries,
+                        "error_type": type(error).__name__,
+                        "error_message": str(error),
+                    },
+                )
+
+    async def _build_challenger_once(
+        self,
+        request: BuildChallengerRequest,
+    ) -> BuildChallengerResult:
         """Run, validate, and seal one complete Challenger proposal."""
         prepared = self._workspaces.prepare(request)
         worker_session_id = new_worker_session_id()
@@ -1038,6 +1220,42 @@ class EvolverBundleRunner(EvolverRunner):
             )
             raise
         else:
+            if result.returncode != 0:
+                exit_kind = "infrastructure_failed"
+                diagnostic = result.stderr.strip() or result.stdout.strip() or "no diagnostics"
+                process_error = InfrastructureError(
+                    f"Evolution process exited with {result.returncode}: {diagnostic[:1000]}"
+                )
+                failure_digest, retention_error_type = self._seal_failure_trace(
+                    prepared,
+                    process_error,
+                    phase="session",
+                    result=result,
+                )
+                session_trace_digest = self._session_trace_from_failure(failure_digest)
+                if self._worker_sessions is not None:
+                    self._worker_sessions.finish_worker_session(
+                        worker_session_id,
+                        status=WorkerSessionStatus.FAILED,
+                        finish_reason=f"process-exit-{result.returncode}",
+                        trace_digest=session_trace_digest,
+                        token_usage=result.token_usage.to_domain(),
+                        process_returncode=result.returncode,
+                        error_type=type(process_error).__name__,
+                        error_message=str(process_error),
+                    )
+                self._events.record_runtime_event(
+                    "worker.infrastructure_failed",
+                    request.epoch_id,
+                    {
+                        **event_base,
+                        "process_returncode": result.returncode,
+                        "error_type": type(process_error).__name__,
+                        "failure_artifact_digest": failure_digest,
+                        "failure_retention_error_type": retention_error_type,
+                    },
+                )
+                raise process_error
             exit_kind = "exited"
             self._events.record_runtime_event(
                 "worker.exited",
@@ -1148,8 +1366,8 @@ class EvolverBundleRunner(EvolverRunner):
                     session_trace_retention_error_type=session_trace_retention_error_type,
                     token_usage=result.token_usage,
                 )
-            trace = EvolutionFailureTraceV3(
-                input=EvolutionInputManifestV4.model_validate_json(
+            trace = EvolutionFailureTraceV5(
+                input=EvolutionInputManifestV10.model_validate_json(
                     prepared.manifest_path.read_bytes()
                 ),
                 phase=phase,
@@ -1170,28 +1388,24 @@ class EvolverBundleRunner(EvolverRunner):
         prepared: PreparedEvolution,
         result: EvolutionSessionResult,
     ) -> tuple[BuildChallengerResult, ArtifactDigest | None]:
-        if result.returncode != 0:
-            diagnostic = result.stderr.strip() or result.stdout.strip() or "no diagnostics"
-            raise RuntimeError(
-                f"Evolution process exited with {result.returncode}: {diagnostic[:1000]}"
-            )
         output = read_evolution_output(
             prepared.output_path,
             max_bytes=self._max_output_manifest_bytes,
         )
-        candidate_base = read_candidate_base_record(prepared.root / "scratch/candidate-base.json")
+        manifest = EvolutionInputManifestV10.model_validate_json(
+            prepared.manifest_path.read_bytes()
+        )
+        repository_by_revision = {
+            item.revision_id: prepared.root / item.path for item in manifest.visible_agents
+        }
         visible = {entry.revision.id: entry.revision for entry in request.agent_catalog}
         visible[request.parent_revision.id] = request.parent_revision
         current_challenger_prefix = f"epoch:{request.epoch_id}:challenger:"
-        candidate_trace: EvolutionCandidateTraceV2 | None = None
+        candidate_trace: EvolutionCandidateTraceV3 | None = None
         proposal: KernelAgentCandidateProposal | KernelAgentReuseProposal
-        if isinstance(output, EvolutionReuseOutputV3):
-            if (
-                candidate_base.base_revision_id != request.parent_revision.id
-                or candidate_base.selection != "active_seed"
-            ):
-                raise ValueError("Evolution reuse changed the Candidate base")
-            reused = visible.get(output.candidate_revision_id)
+        runtime_state_changed_paths: set[str] = set()
+        if output.proposal_type == "reuse":
+            reused = visible.get(output.kernel_agent_revision_id)
             if reused is None:
                 raise ValueError("Evolution reuse names an Agent revision outside frozen Evidence")
             if reused.id == request.parent_revision.id:
@@ -1200,22 +1414,24 @@ class EvolverBundleRunner(EvolverRunner):
                 raise ValueError("Evolution reuse must select Lineage history, not this Epoch")
             if reused.dsl is not request.parent_revision.dsl:
                 raise ValueError("Evolution reuse changed the lineage DSL")
-            if self._changed_paths(prepared.root / "input/parent", prepared.candidate_root):
+            active_root = repository_by_revision[request.parent_revision.id]
+            if self._changed_paths(
+                active_root,
+                prepared.candidate_root / "source",
+            ) or self._changed_paths(
+                prepared.candidate_runtime_state_base_root,
+                prepared.candidate_root / "runtime-state",
+            ):
                 raise ValueError("Evolution reuse must leave the writable Candidate unchanged")
             proposal = KernelAgentReuseProposal("reuse", reused.id)
             changed_paths: set[str] = set()
             base_revision_id = reused.id
         else:
-            base = visible.get(output.base_revision_id)
+            base = visible.get(output.kernel_agent_revision_id)
             if base is None:
                 raise ValueError("Evolution base names an Agent revision outside frozen Evidence")
             if output.proposal_type == "evolved" and base.id != request.parent_revision.id:
                 raise ValueError("An evolved proposal must derive from the current Active revision")
-            if output.proposal_type == "evolved" and (
-                candidate_base.base_revision_id != base.id
-                or candidate_base.selection != "active_seed"
-            ):
-                raise ValueError("An evolved proposal changed the Candidate base")
             if (
                 output.proposal_type == "evolve_from_history"
                 and base.id == request.parent_revision.id
@@ -1227,37 +1443,44 @@ class EvolverBundleRunner(EvolverRunner):
                 raise ValueError(
                     "An evolve_from_history proposal must select completed Lineage history"
                 )
-            if output.proposal_type == "evolve_from_history" and (
-                candidate_base.base_revision_id != base.id
-                or candidate_base.selection != "candidate_reset"
-            ):
-                raise ValueError(
-                    "An evolve_from_history proposal did not use candidate-reset for its base"
-                )
             if base.dsl is not request.parent_revision.dsl:
                 raise ValueError("Evolution base changed the lineage DSL")
             candidate = self._builder.build_candidate(
-                prepared.candidate_root,
+                prepared.candidate_root / "source",
                 request.parent_revision.dsl,
             )
-            self._builder.validate_challenger(base, candidate)
-            base_root = (
-                prepared.root / "input/parent"
-                if base.id == request.parent_revision.id
-                else prepared.root / "input/agents" / base.id
+            base_root = repository_by_revision[base.id]
+            changed_paths = self._changed_paths(
+                base_root,
+                prepared.candidate_root / "source",
             )
-            changed_paths = self._changed_paths(base_root, prepared.candidate_root)
-            if not changed_paths:
-                raise ValueError("Evolver produced no repository changes")
+            runtime_state_changed_paths = self._changed_paths(
+                prepared.candidate_runtime_state_base_root,
+                prepared.candidate_root / "runtime-state",
+            )
+            if not changed_paths and not runtime_state_changed_paths:
+                raise ValueError("Evolver produced no Agent source or runtime-state changes")
             if set(output.changed_paths) != changed_paths:
-                raise ValueError("Evolution changed_paths disagrees with sealed content")
+                raise ValueError("Evolution changed_paths disagrees with sealed Agent Source")
+            # Every new Agent revision is a complete logical Bundle. Even when
+            # Evolver changes Source only, retain the exact Candidate State that
+            # was paired with that Source in the writable workspace.
+            runtime_state_digest = self._seal_runtime_state(
+                prepared.candidate_root / "runtime-state"
+            )
+            candidate = KernelAgentCandidate(
+                dsl=candidate.dsl,
+                optimizer_digest=candidate.optimizer_digest,
+                runtime_state_digest=runtime_state_digest,
+            )
             proposal = KernelAgentCandidateProposal(
                 output.proposal_type,
                 base.id,
                 candidate,
             )
-            candidate_trace = EvolutionCandidateTraceV2(
+            candidate_trace = EvolutionCandidateTraceV3(
                 optimizer_digest=candidate.optimizer_digest,
+                runtime_state_digest=runtime_state_digest,
             )
             base_revision_id = base.id
         session_trace_digest = (
@@ -1265,8 +1488,10 @@ class EvolverBundleRunner(EvolverRunner):
             if result.session_trace_path is None
             else self._seal_session_trace(result.session_trace_path)
         )
-        trace = EvolutionTraceV7(
-            input=EvolutionInputManifestV4.model_validate_json(prepared.manifest_path.read_bytes()),
+        trace = EvolutionTraceV9(
+            input=EvolutionInputManifestV10.model_validate_json(
+                prepared.manifest_path.read_bytes()
+            ),
             agent=result.agent,
             process_returncode=0,
             stdout=result.stdout,
@@ -1289,6 +1514,7 @@ class EvolverBundleRunner(EvolverRunner):
                 "base_revision_id": base_revision_id,
                 "evolution_trace_digest": evolution_trace_digest,
                 "changed_paths": sorted(changed_paths),
+                "runtime_state_changed": bool(runtime_state_changed_paths),
                 "unimplemented_capabilities": [
                     item.model_dump(mode="json") for item in output.unimplemented_capabilities
                 ],
@@ -1300,6 +1526,17 @@ class EvolverBundleRunner(EvolverRunner):
     def _seal_session_trace(self, path: Path) -> ArtifactDigest:
         enforce_session_trace_retention(path)
         return self._artifacts.put_directory(path, ArtifactKind.SESSION_LOG)
+
+    def _seal_runtime_state(self, path: Path) -> ArtifactDigest:
+        validate_reusable_agent_state_seed(
+            path,
+            max_files=self._kernel_agent_limits.max_bundle_files,
+            max_bytes=self._kernel_agent_limits.max_bundle_bytes,
+        )
+        return self._artifacts.put_directory(
+            path,
+            ArtifactKind.KERNEL_AGENT_RUNTIME_STATE,
+        )
 
     @staticmethod
     def _changed_paths(parent: Path, candidate: Path) -> set[str]:

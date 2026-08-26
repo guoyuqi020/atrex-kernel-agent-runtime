@@ -53,5 +53,5 @@ codex exec --ephemeral --skip-git-repo-check "Reply with exactly: hello"
 `scratch/`。例如，可继续通过下面的方式调用 Runtime Tool：
 
 ```bash
-python agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/request.json
+python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/request.json
 ```

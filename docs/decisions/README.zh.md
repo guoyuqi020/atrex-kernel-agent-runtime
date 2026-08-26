@@ -29,7 +29,7 @@
 - [0028](0028-commit-only-runtime-boundary.zh.md)：仅 Commit 的 Runtime/Agent 边界
 - [0031](0031-unbounded-evolver-token-accounting.zh.md)：无截止 Evolver Token 统计
 - [0035](0035-role-scoped-evolver-evidence.zh.md)：按角色隔离 Evolver Evidence
-- [0036](0036-frozen-evolver-runtime-tools.zh.md)：冻结的 Evolver 检查工具
+- [0036](0036-frozen-evolver-runtime-tools.zh.md)：Evolver 仅使用文件系统 Evidence
 - [0037](0037-runtime-bound-agent-backends.zh.md)：Runtime 绑定 Backend 策略
 - [0039](0039-three-form-challenger-proposals.zh.md)：三种 Challenger 提案
 - [0041](0041-lineage-bound-model-selection.zh.md)：Lineage 绑定模型

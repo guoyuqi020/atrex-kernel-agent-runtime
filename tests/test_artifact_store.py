@@ -32,6 +32,20 @@ def test_directory_artifacts_are_deduplicated_and_materialized(tmp_path: Path) -
     assert (destination / "nested" / "metadata.json").read_text() == '{"dsl":"triton"}'
 
 
+def test_one_artifact_file_can_be_materialized_to_a_flat_path(tmp_path: Path) -> None:
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    digest = store.put_json({"objective": "vector add"}, ArtifactKind.AGENT_PROBLEM)
+
+    destination = store.materialize_file(
+        digest,
+        "value.json",
+        tmp_path / "workspace/.runtime/agent-problem.json",
+    )
+
+    assert destination.read_text() == '{"objective":"vector add"}'
+    assert destination.stat().st_mode & 0o222 == 0
+
+
 def test_artifact_store_rejects_symlinks(tmp_path: Path) -> None:
     source = tmp_path / "source"
     source.mkdir()

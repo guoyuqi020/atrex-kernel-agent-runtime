@@ -15,6 +15,7 @@ from conftest import NOW, digest, seed_lineage
 from pydantic import TypeAdapter, ValidationError
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
+from atrex_runtime.domain.errors import DirectionConcurrencyError, InvalidTransitionError
 from atrex_runtime.domain.ids import new_attempt_id, new_epoch_id
 from atrex_runtime.domain.models import Attempt, AttemptStatus, BranchRole, Dsl, Epoch, EpochStatus
 from atrex_runtime.gateway import (
@@ -33,7 +34,11 @@ from atrex_runtime.gateway.protocol import (
     GatewayProxyRequestV2,
     gateway_agent_request_schema,
 )
-from atrex_runtime.gateway.proxy import GatewayAdapterRequest, GatewayAdapterResult
+from atrex_runtime.gateway.proxy import (
+    GatewayAdapterRequest,
+    GatewayAdapterResult,
+    _invalid_request_response,
+)
 from atrex_runtime.gateway.result_metrics import gateway_result_sol_summary
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
@@ -123,6 +128,35 @@ def _request(attempt: Attempt, *, path: str = "kernel.py") -> bytes:
     ).encode()
 
 
+def test_attempt_runtime_state_checkpoint_tracks_latest_physical_session(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "runtime.db")
+    attempt = _insert_attempt(registry)
+    state = digest("attempt-runtime-state")
+
+    registry.record_attempt_runtime_state(attempt.id, state)
+    registry.record_attempt_runtime_state(attempt.id, state)
+
+    assert registry.get_attempt(attempt.id).runtime_state_digest == state
+    replacement = digest("other-runtime-state")
+    registry.record_attempt_runtime_state(attempt.id, replacement)
+    assert registry.get_attempt(attempt.id).runtime_state_digest == replacement
+    registry.close()
+
+
+def test_attempt_input_runtime_state_is_recorded_once(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "runtime.db")
+    attempt = _insert_attempt(registry)
+    input_state = digest("attempt-input-runtime-state")
+
+    registry.record_attempt_input_runtime_state(attempt.id, input_state)
+    registry.record_attempt_input_runtime_state(attempt.id, input_state)
+
+    assert registry.get_attempt(attempt.id).input_runtime_state_digest == input_state
+    with pytest.raises(InvalidTransitionError, match="cannot record Input Runtime State"):
+        registry.record_attempt_input_runtime_state(attempt.id, digest("different-input-state"))
+    registry.close()
+
+
 @pytest.mark.parametrize(
     ("operation", "fields", "needs_candidate"),
     [
@@ -138,13 +172,23 @@ def _request(attempt: Attempt, *, path: str = "kernel.py") -> bytes:
         ("env", {"gpu": "H20", "capabilities": True}, False),
         ("health", {}, False),
         ("config", {}, False),
-        ("measurements", {"kind": "profile", "metric": "occupancy_pct"}, False),
-        ("kernel_trials", {"decision": "revert", "limit": 10}, False),
         (
-            "kernel_trial_read",
-            {"kernel_trial_id": "gtrial_0123456789abcdef0123456789abcdef", "file": "kernel.py"},
+            "kernel_trial_show",
+            {"kernel_trial_id": "gtrial_0123456789abcdef0123456789abcdef"},
             False,
         ),
+        (
+            "kernel_artifact_read",
+            {"kernel_artifact_digest": "sha256:" + "a" * 64, "file": "kernel.py"},
+            False,
+        ),
+        (
+            "gateway_result_read",
+            {"gateway_result_digest": "sha256:" + "b" * 64},
+            False,
+        ),
+        ("direction_history", {}, False),
+        ("experiment_history", {}, False),
     ],
 )
 def test_protocol_v2_parses_every_additional_agate_command(
@@ -183,14 +227,35 @@ def test_agent_request_schema_is_projected_from_live_gateway_model() -> None:
 
     assert document["gateway_protocol_version"] == 2
     assert document["runtime_owned_fields"] == ["attempt_id", "candidate", "schema_version"]
-    assert document["runtime_defaulted_fields"] == ["idempotency_key"]
+    assert "runtime_defaulted_fields" not in document
     assert properties["operation"]["const"] == "profile"
     assert properties["level"]["enum"] == ["survey", "sol", "deep"]
     assert properties["kernel_name"]["anyOf"][0]["type"] == "string"
     assert "candidate" not in properties
     assert "attempt_id" not in properties
-    assert "idempotency_key" not in schema["required"]
+    assert "idempotency_key" not in properties
     assert schema["additionalProperties"] is False
+
+    runtime_document = gateway_agent_request_schema("kernel_trial_show")
+    runtime_schema = cast(dict[str, Any], runtime_document["operations"])["kernel_trial_show"]
+    assert runtime_document["request_contract"] == "runtime-query"
+    assert runtime_document["runtime_owned_fields"] == [
+        "attempt_id",
+        "candidate",
+        "operation",
+        "schema_version",
+    ]
+    assert "operation" not in runtime_schema["properties"]
+    journal_document = gateway_agent_request_schema("direction_update")
+    journal_schema = cast(dict[str, Any], journal_document["operations"])["direction_update"]
+    assert journal_document["request_contract"] == "runtime-journal"
+    assert "operation" not in journal_schema["properties"]
+    assert "request" in journal_schema["required"]
+    all_operations = cast(dict[str, Any], gateway_agent_request_schema()["operations"])
+    assert "submit" not in all_operations
+    assert "sol" not in all_operations
+    assert "measurements" not in all_operations
+    assert "kernel_trials" not in all_operations
 
 
 def _service(
@@ -279,7 +344,8 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
     assert response.status == "completed"
     assert response.evaluation == EvaluationV2(correct=True, latency_us=12.0)
     assert response.result == {"correct": True, "latency_us": 12.0, "backend": "fake"}
-    assert response.candidate_artifact_digest is not None
+    assert response.kernel_artifact_digest is not None
+    assert response.kernel_trial_id is not None
     assert len(adapter.requests) == 1
     adapter_request = adapter.requests[0]
     assert adapter_request.candidate_path is not None
@@ -287,7 +353,7 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
     assert await control.get_outcome(attempt.id) is None
     evaluations = control.list_evaluations(attempt.id)
     assert len(evaluations) == 1
-    assert str(evaluations[0].candidate_artifact_digest) == response.candidate_artifact_digest
+    assert str(evaluations[0].kernel_artifact_digest) == response.kernel_artifact_digest
     assert evaluations[0].source.value == "agent"
     assert evaluations[0].correct is True
     assert evaluations[0].latency_us == 12.0
@@ -346,6 +412,35 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
     raw = artifacts.verify(response.gateway_result_digest).payload_path / "value.json"
     assert "secret_size" in raw.read_text(encoding="utf-8")
     assert "secret_size" not in json.dumps(response.model_dump(mode="json"))
+    reread = await service.execute(
+        capability_value.token,
+        json.dumps(
+            {
+                "schema_version": 2,
+                "attempt_id": attempt.id,
+                "idempotency_key": "private-result-read-1",
+                "operation": "gateway_result_read",
+                "gateway_result_digest": response.gateway_result_digest,
+            }
+        ).encode(),
+    )
+    assert "secret_size" not in json.dumps(reread.result)
+    assert reread.result == {
+        "operation": "evaluate",
+        "status": "completed",
+        "result": {
+            "correct": True,
+            "correctness": {
+                "status": "PASS",
+                "rel_err": None,
+                "max_abs_err": None,
+                "max_rel_err": None,
+            },
+            "latency_us_geomean": 12.0,
+            "latency_us_arith_mean": None,
+            "latency_us_by_shape": {},
+        },
+    }
     control.close()
     registry.close()
 
@@ -521,6 +616,48 @@ def test_candidate_diff_policy_rejects_disallowed_or_unchanged_files(tmp_path: P
         validator.validate(attempt_id, disallowed_digest)
 
 
+def test_candidate_diff_policy_allows_unchanged_bootstrap_candidate(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    before = tmp_path / "before"
+    disallowed = tmp_path / "disallowed"
+    before.mkdir()
+    disallowed.mkdir()
+    (before / "kernel.py").write_text("BLOCK = 64\n", encoding="utf-8")
+    (disallowed / "kernel.py").write_text("BLOCK = 64\n", encoding="utf-8")
+    (disallowed / "notes.md").write_text("not a Kernel source\n", encoding="utf-8")
+    before_digest = artifacts.put_directory(before, ArtifactKind.KERNEL)
+    disallowed_digest = artifacts.put_directory(disallowed, ArtifactKind.KERNEL)
+    attempt_id = new_attempt_id()
+
+    def missing_attempt(_value: object) -> object:
+        raise KeyError(attempt_id)
+
+    registry = SimpleNamespace(get_attempt=missing_attempt)
+    bootstrap_subjects = SimpleNamespace(
+        get_bootstrap_subject=lambda value: SimpleNamespace(
+            input_kernel_digest=before_digest,
+            dsl=Dsl.TRITON,
+        )
+    )
+    validator = RegistryCandidateDiffValidator(
+        cast(Any, registry),
+        artifacts,
+        CandidateDiffPolicy(
+            {
+                Dsl.CUDA: ("*.cu",),
+                Dsl.TRITON: ("*.py",),
+                Dsl.CUTEDSL: ("*.py",),
+            },
+            True,
+        ),
+        cast(Any, bootstrap_subjects),
+    )
+
+    validator.validate(attempt_id, before_digest)
+    with pytest.raises(ValueError, match=r"notes\.md"):
+        validator.validate(attempt_id, disallowed_digest)
+
+
 @pytest.mark.anyio
 async def test_asgi_endpoint_requires_bearer_and_returns_canonical_json(tmp_path: Path) -> None:
     registry, control, attempt, capability_value, service, _adapter = _service(tmp_path)
@@ -553,6 +690,444 @@ async def test_asgi_endpoint_requires_bearer_and_returns_canonical_json(tmp_path
     body = sent[1]["body"]
     assert isinstance(body, bytes)
     assert json.loads(body)["operation"] == "evaluate"
+    control.close()
+    registry.close()
+
+
+@pytest.mark.anyio
+async def test_runtime_queries_use_the_dedicated_http_endpoint(tmp_path: Path) -> None:
+    registry, control, attempt, capability_value, service, adapter = _service(tmp_path)
+    evaluated = await service.execute(capability_value.token, _request(attempt))
+    assert evaluated.kernel_trial_id is not None
+    payload = json.dumps(
+        {
+            "schema_version": 2,
+            "attempt_id": attempt.id,
+            "idempotency_key": "runtime-query-route",
+            "operation": "kernel_trial_show",
+            "kernel_trial_id": evaluated.kernel_trial_id,
+        }
+    ).encode()
+
+    with pytest.raises(ValueError, match="requires /v1/runtime/queries"):
+        await service.execute(
+            capability_value.token,
+            payload,
+            operation_scope="gateway",
+        )
+    response = await service.execute(
+        capability_value.token,
+        payload,
+        operation_scope="runtime",
+    )
+
+    assert response.operation == "kernel_trial_show"
+    assert len(adapter.requests) == 1
+
+    app = GatewayProxyAsgiApp(service, GatewayProxyLimits(64 * 1024, 8, 16 * 1024))
+    routed_payload = payload.replace(b"runtime-query-route", b"runtime-query-http")
+    sent: list[dict[str, object]] = []
+
+    async def receive() -> dict[str, object]:
+        return {"type": "http.request", "body": routed_payload, "more_body": False}
+
+    async def send(message: dict[str, object]) -> None:
+        sent.append(message)
+
+    await app(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/v1/runtime/queries",
+            "headers": [(b"authorization", f"Bearer {capability_value.token}".encode())],
+        },
+        receive,
+        send,
+    )
+    assert sent[0]["status"] == 200
+    assert json.loads(cast(bytes, sent[1]["body"]))["operation"] == "kernel_trial_show"
+    control.close()
+    registry.close()
+
+
+@pytest.mark.anyio
+async def test_runtime_journal_history_reads_terminal_report_artifacts(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    registry, control, attempt, capability, service, adapter = _service(tmp_path)
+    report_attempt_id = new_attempt_id()
+    direction_events = [{"direction_event_id": "directionevent_" + "a" * 32}]
+    experiments = [{"experiment_id": "experiment_" + "b" * 32}]
+    report_digest = LocalArtifactStore(tmp_path / "artifacts").put_json(
+        {
+            "attempt_id": report_attempt_id,
+            "direction_events": direction_events,
+            "experiments": experiments,
+        },
+        ArtifactKind.ATTEMPT_REPORT,
+    )
+    monkeypatch.setattr(
+        control,
+        "visible_attempt_report_artifacts",
+        lambda _attempt_id: ((report_attempt_id, report_digest),),
+    )
+
+    async def query(operation: str) -> Any:
+        return await service.execute(
+            capability.token,
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "idempotency_key": f"{operation}-1",
+                    "operation": operation,
+                }
+            ).encode(),
+            operation_scope="runtime",
+        )
+
+    directions = await query("direction_history")
+    experiment_history = await query("experiment_history")
+
+    assert directions.result == {"journals": [direction_events]}
+    assert experiment_history.result == {"journals": [experiments]}
+    assert adapter.requests == []
+    control.close()
+    registry.close()
+
+
+@pytest.mark.anyio
+async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
+    tmp_path: Path,
+) -> None:
+    registry, control, attempt, capability, service, adapter = _service(tmp_path)
+
+    async def journal(
+        operation: str,
+        idempotency_key: str,
+        **fields: object,
+    ) -> Any:
+        return await service.execute(
+            capability.token,
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "idempotency_key": idempotency_key,
+                    "operation": operation,
+                    **fields,
+                }
+            ).encode(),
+            operation_scope="journal",
+        )
+
+    proposed = await journal(
+        "direction_update",
+        "direction-propose-1",
+        request={
+            "action": "propose",
+            "name": "vectorize loads",
+            "hypothesis": "one transaction replaces two",
+            "rationale": "profile indicates excess memory transactions",
+            "plan": ["replace scalar loads"],
+            "success_criteria": "latency improves",
+            "stop_conditions": "alignment cannot be preserved",
+        },
+    )
+    direction_id = cast(dict[str, Any], proposed.result)["direction_id"]
+    await journal(
+        "direction_update",
+        "direction-start-1",
+        request={
+            "action": "start",
+            "direction_id": direction_id,
+            "analysis": "begin the planned experiment",
+        },
+    )
+    evaluated = await service.execute(capability.token, _request(attempt))
+    assert evaluated.kernel_trial_id is not None
+    assert evaluated.kernel_artifact_digest is not None
+    assert evaluated.gateway_result_digest is not None
+    subject = {
+        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+        "kernel_trial_id": evaluated.kernel_trial_id,
+        "gateway_result_digests": [evaluated.gateway_result_digest],
+    }
+    recorded = await journal(
+        "experiment_record",
+        "experiment-record-1",
+        request={
+            "direction_id": direction_id,
+            "name": "vectorize load",
+            "hypothesis": "one transaction replaces two",
+            "change": "use a vector load",
+            "before": subject,
+            "after": subject,
+            "evidence": "the authoritative Evaluate result",
+            "analysis": "the candidate remained correct",
+            "action": "keep_after",
+        },
+    )
+    experiment_id = cast(dict[str, Any], recorded.result)["experiment_id"]
+    await journal(
+        "direction_update",
+        "direction-complete-1",
+        request={
+            "action": "complete",
+            "direction_id": direction_id,
+            "analysis": "the measured experiment completed",
+        },
+    )
+
+    directions = await journal("directions_list", "directions-list-1")
+    loaded_direction = await journal(
+        "direction_load",
+        "direction-load-1",
+        direction_id=direction_id,
+    )
+    experiments = await journal("experiments_list", "experiments-list-1")
+    loaded_experiment = await journal(
+        "experiment_load",
+        "experiment-load-1",
+        experiment_id=experiment_id,
+    )
+    snapshot = await journal("journal_snapshot", "journal-snapshot-1")
+
+    assert cast(dict[str, Any], directions.result)["directions"] == [
+        {"direction_id": direction_id, "name": "vectorize loads", "status": "completed"}
+    ]
+    assert cast(dict[str, Any], loaded_direction.result)["supporting_experiment_ids"] == [
+        experiment_id
+    ]
+    assert cast(dict[str, Any], experiments.result)["experiments"] == [
+        {
+            "experiment_id": experiment_id,
+            "sequence": 1,
+            "name": "vectorize load",
+            "action": "keep_after",
+        }
+    ]
+    assert cast(dict[str, Any], loaded_experiment.result)["after"] == subject
+    assert len(cast(dict[str, Any], snapshot.result)["direction_events"]) == 3
+    assert len(cast(dict[str, Any], snapshot.result)["experiments"]) == 1
+    assert len(adapter.requests) == 1
+
+    control.close()
+    reopened = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"p" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    assert len(reopened.list_direction_events(attempt.id)) == 3
+    assert reopened.list_experiments(attempt.id)[0]["experiment_id"] == experiment_id
+    reopened.close()
+    registry.close()
+
+
+@pytest.mark.anyio
+async def test_runtime_rejects_concurrent_in_progress_directions(tmp_path: Path) -> None:
+    registry, control, attempt, capability, service, _adapter = _service(tmp_path)
+
+    async def update(idempotency_key: str, request: dict[str, object]) -> Any:
+        return await service.execute(
+            capability.token,
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "idempotency_key": idempotency_key,
+                    "operation": "direction_update",
+                    "request": request,
+                }
+            ).encode(),
+            operation_scope="journal",
+        )
+
+    async def propose(idempotency_key: str, name: str) -> str:
+        response = await update(
+            idempotency_key,
+            {
+                "action": "propose",
+                "name": name,
+                "hypothesis": f"{name} may improve latency",
+                "rationale": "the mechanism is worth testing",
+                "plan": ["test the mechanism"],
+                "success_criteria": "latency improves",
+                "stop_conditions": "the mechanism is falsified",
+            },
+        )
+        return str(cast(dict[str, Any], response.result)["direction_id"])
+
+    first = await propose("direction-propose-first", "first direction")
+    second = await propose("direction-propose-second", "second direction")
+    await update(
+        "direction-start-first",
+        {"action": "start", "direction_id": first, "analysis": "begin first"},
+    )
+
+    with pytest.raises(DirectionConcurrencyError) as raised:
+        await update(
+            "direction-start-second",
+            {"action": "start", "direction_id": second, "analysis": "begin second"},
+        )
+    assert raised.value.requested_direction_id == second
+    assert raised.value.in_progress_direction_ids == (first,)
+    assert len(control.list_direction_events(attempt.id)) == 3
+
+    await update(
+        "direction-defer-first",
+        {"action": "defer", "direction_id": first, "analysis": "pause first"},
+    )
+    await update(
+        "direction-start-second-after-close",
+        {"action": "start", "direction_id": second, "analysis": "begin second alone"},
+    )
+    assert len(control.list_direction_events(attempt.id)) == 5
+    control.close()
+    registry.close()
+
+
+def test_direction_concurrency_error_is_machine_readable_and_actionable() -> None:
+    requested = "direction_" + "b" * 32
+    active = "direction_" + "a" * 32
+    payload = json.dumps(
+        {
+            "schema_version": 2,
+            "attempt_id": "attempt_" + "c" * 32,
+            "idempotency_key": "direction-start-second",
+            "operation": "direction_update",
+            "request": {
+                "action": "start",
+                "direction_id": requested,
+                "analysis": "begin second",
+            },
+        }
+    ).encode()
+
+    response = _invalid_request_response(
+        payload,
+        DirectionConcurrencyError(requested, (active,)),
+        operation_scope="journal",
+    )
+
+    assert response["issues"] == [
+        {
+            "path": "direction_id",
+            "code": "direction_concurrency_conflict",
+            "message": response["detail"],
+        }
+    ]
+    assert response["conflict"] == {
+        "requested_direction_id": requested,
+        "in_progress_direction_ids": [active],
+    }
+    recovery = cast(list[dict[str, Any]], response["recovery"])
+    assert recovery[0]["tool"] == "list-directions"
+    assert "close it with update-direction" in recovery[1]["instruction"]
+    assert "Retry start only after no other Direction is in progress" in recovery[2][
+        "instruction"
+    ]
+    assert "request_schema" in response
+
+
+@pytest.mark.anyio
+async def test_runtime_journal_survives_attempt_recovery_generation(
+    tmp_path: Path,
+) -> None:
+    registry, control, attempt, capability, service, _adapter = _service(tmp_path)
+
+    async def journal(
+        token: str,
+        operation: str,
+        idempotency_key: str,
+        **fields: object,
+    ) -> Any:
+        return await service.execute(
+            token,
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "idempotency_key": idempotency_key,
+                    "operation": operation,
+                    **fields,
+                }
+            ).encode(),
+            operation_scope="journal",
+        )
+
+    proposed = await journal(
+        capability.token,
+        "direction_update",
+        "recovery-direction-propose",
+        request={
+            "action": "propose",
+            "name": "reuse recovered measurement",
+            "hypothesis": "the measured candidate remains valid",
+            "rationale": "Gateway evidence is already authoritative",
+            "plan": ["reuse the exact measured Trial"],
+            "success_criteria": "the Journal accepts the recovered evidence",
+            "stop_conditions": "the Artifact is unavailable",
+        },
+    )
+    direction_id = cast(dict[str, Any], proposed.result)["direction_id"]
+    await journal(
+        capability.token,
+        "direction_update",
+        "recovery-direction-start",
+        request={
+            "action": "start",
+            "direction_id": direction_id,
+            "analysis": "start before the infrastructure interruption",
+        },
+    )
+    evaluated = await service.execute(capability.token, _request(attempt))
+
+    registry.record_infrastructure_failure(attempt.id, "simulated worker interruption")
+    registry.retry_attempt(attempt.id)
+    recovered_capability = control.issue(
+        attempt.id,
+        GatewayCapabilityPolicy(
+            frozenset(GatewayOperation),
+            4,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+    assert recovered_capability.recovery_generation == 1
+    subject = {
+        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+        "kernel_trial_id": evaluated.kernel_trial_id,
+        "gateway_result_digests": [evaluated.gateway_result_digest],
+    }
+    recorded = await journal(
+        recovered_capability.token,
+        "experiment_record",
+        "recovery-experiment-record",
+        request={
+            "direction_id": direction_id,
+            "name": "preserve recovered evidence",
+            "hypothesis": "the measured candidate remains valid",
+            "change": "no source change after Runtime recovery",
+            "before": subject,
+            "after": subject,
+            "evidence": "the generation-zero authoritative Evaluate result",
+            "analysis": "the exact Trial remains visible to the logical Attempt",
+            "action": "keep_after",
+        },
+    )
+
+    assert str(cast(dict[str, Any], recorded.result)["experiment_id"]).startswith("experiment_")
+    assert len(control.list_direction_events(attempt.id)) == 2
+    assert len(control.list_experiments(attempt.id)) == 1
+    trial = next(
+        trial
+        for trial in control.list_kernel_trials((attempt.id,))
+        if trial.id == evaluated.kernel_trial_id
+    )
+    assert trial.recovery_generation == 0
+    assert trial.annotations[0].experiment["name"] == "preserve recovered evidence"
     control.close()
     registry.close()
 
@@ -591,6 +1166,9 @@ async def test_invalid_request_returns_corresponding_machine_readable_schema(
     assert isinstance(response_body, bytes)
     response = json.loads(response_body)
     assert response["error"] == "invalid_request"
+    assert response["issues"] == [
+        {"path": "command", "code": "missing", "message": "Field required"}
+    ]
     assert set(response["request_schema"]["operations"]) == {"dev"}
     dev_schema = response["request_schema"]["operations"]["dev"]
     assert "command" in dev_schema["required"]
@@ -600,125 +1178,85 @@ async def test_invalid_request_returns_corresponding_machine_readable_schema(
 
 
 @pytest.mark.anyio
-async def test_measurements_query_reuses_prior_same_trajectory_evidence_without_agate(
-    tmp_path: Path,
-) -> None:
-    registry, control, first, first_capability, service, adapter = _service(
-        tmp_path,
-        attempts_per_trajectory=2,
-    )
-    evaluated = await service.execute(first_capability.token, _request(first))
-    assert evaluated.evaluation is not None
-    assert len(adapter.requests) == 1
-    registry.complete_attempt(
-        first.id,
-        None,
-        accepted_as_branch_best=False,
-        failure_reason="test completed without nomination",
-    )
-    second = Attempt(
-        id=new_attempt_id(),
-        epoch_id=first.epoch_id,
-        branch=first.branch,
-        challenger_ordinal=first.challenger_ordinal,
-        trajectory_ordinal=first.trajectory_ordinal,
-        ordinal=2,
-        kernel_agent_revision_id=first.kernel_agent_revision_id,
-        input_kernel_revision_id=first.input_kernel_revision_id,
-        attempt_evidence_digest=digest("attempt-evidence-2"),
-        output_kernel_revision_id=None,
-        accepted_as_branch_best=False,
-        status=AttemptStatus.RUNNING,
-        infrastructure_failures=0,
-        recovery_generation=0,
-        authority_started_at=NOW,
-        failure_reason=None,
-        created_at=NOW,
-        completed_at=None,
-    )
-    registry.insert_attempt(second)
-    second_capability = control.issue(
-        second.id,
-        GatewayCapabilityPolicy(
-            frozenset({GatewayOperation.EVALUATE}),
-            1,
-            NOW_DATETIME + timedelta(hours=1),
-        ),
-    )
-    payload = json.dumps(
-        {
-            "schema_version": 2,
-            "attempt_id": second.id,
-            "idempotency_key": "history-1",
-            "operation": "measurements",
-            "kind": "evaluate",
-            "metric": "latency_us",
-        }
-    ).encode()
-
-    response = await service.execute(second_capability.token, payload)
-
-    assert len(adapter.requests) == 1
-    assert response.operation == "measurements"
-    assert isinstance(response.result, dict)
-    assert response.result["visible_attempt_count"] == 1
-    measurements = response.result["measurements"]
-    assert isinstance(measurements, list) and len(measurements) == 1
-    assert measurements[0]["attempt_id"] == first.id
-    assert measurements[0]["metrics"] == {
-        "aggregate": True,
-        "correct": True,
-        "latency_us": 12.0,
-    }
-    assert measurements[0]["gateway_result_digest"] == evaluated.gateway_result_digest
-    control.close()
-    registry.close()
-
-
-@pytest.mark.anyio
-async def test_optimizer_lists_and_reads_current_kernel_trials_without_agate(
+async def test_optimizer_reads_known_current_kernel_trial_without_agate(
     tmp_path: Path,
 ) -> None:
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
+    adapter.result = GatewayAdapterResult(
+        status="completed",
+        result={
+            "all_pass": True,
+            "latency_us_geomean": 12.0,
+            "latency_us_by_shape": {"0": 10.0, "1": 14.0},
+            "measured_by": "supervisor gateway re-measurement",
+        },
+        evaluation=EvaluationV2(correct=True, latency_us=12.0),
+    )
     evaluated = await service.execute(capability.token, _request(attempt))
-    assert evaluated.candidate_artifact_digest is not None
+    assert evaluated.kernel_artifact_digest is not None
     control.record_kernel_trial_annotations(
         attempt.id,
         (
             {
+                "experiment_id": "experiment_" + "a" * 32,
                 "sequence": 1,
-                "candidate_artifact_digest": evaluated.candidate_artifact_digest,
-                "decision": "revert",
+                "before": {
+                    "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+                    "kernel_trial_id": evaluated.kernel_trial_id,
+                    "gateway_result_digests": [evaluated.gateway_result_digest],
+                },
+                "after": {
+                    "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+                    "kernel_trial_id": evaluated.kernel_trial_id,
+                    "gateway_result_digests": [evaluated.gateway_result_digest],
+                },
+                "action": "restore_before",
                 "hypothesis": "larger tile was slower",
                 "recorded_at": NOW,
             },
         ),
     )
 
-    listed = await service.execute(
+    assert len(adapter.requests) == 1
+    trial_id = evaluated.kernel_trial_id
+    assert isinstance(trial_id, str)
+
+    shown = await service.execute(
         capability.token,
         json.dumps(
             {
                 "schema_version": 2,
                 "attempt_id": attempt.id,
-                "idempotency_key": "kernel-trials-1",
-                "operation": "kernel_trials",
-                "decision": "revert",
+                "idempotency_key": "kernel-trial-show-1",
+                "operation": "kernel_trial_show",
+                "kernel_trial_id": trial_id,
             }
         ).encode(),
     )
 
     assert len(adapter.requests) == 1
-    assert isinstance(listed.result, dict)
-    trials = listed.result["kernel_trials"]
-    assert isinstance(trials, list) and len(trials) == 1
-    trial = trials[0]
-    assert isinstance(trial, dict)
-    assert trial["attempt_id"] == attempt.id
-    assert trial["candidate_artifact_digest"] == evaluated.candidate_artifact_digest
-    assert trial["disposition"] == "revert"
-    trial_id = trial["kernel_trial_id"]
-    assert isinstance(trial_id, str)
+    assert isinstance(shown.result, dict)
+    assert shown.result == {
+        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+        "gateway_results": [
+            {
+                "operation": "evaluate",
+                "status": "completed",
+                "result": {
+                    "correct": True,
+                    "correctness": {
+                        "status": "PASS",
+                        "rel_err": None,
+                        "max_abs_err": None,
+                        "max_rel_err": None,
+                    },
+                    "latency_us_geomean": 12.0,
+                    "latency_us_arith_mean": 12.0,
+                    "latency_us_by_shape": {"0": 10.0, "1": 14.0},
+                },
+            }
+        ],
+    }
 
     source = await service.execute(
         capability.token,
@@ -726,18 +1264,49 @@ async def test_optimizer_lists_and_reads_current_kernel_trials_without_agate(
             {
                 "schema_version": 2,
                 "attempt_id": attempt.id,
-                "idempotency_key": "kernel-trial-read-1",
-                "operation": "kernel_trial_read",
-                "kernel_trial_id": trial_id,
+                "idempotency_key": "kernel-artifact-read-1",
+                "operation": "kernel_artifact_read",
+                "kernel_artifact_digest": evaluated.kernel_artifact_digest,
                 "file": "kernel.py",
             }
         ).encode(),
     )
 
-    assert len(adapter.requests) == 1
     assert isinstance(source.result, dict)
     assert source.result["encoding"] == "utf-8"
     assert source.result["content"] == "def kernel(): pass\n"
-    assert source.result["candidate_artifact_digest"] == evaluated.candidate_artifact_digest
+    assert source.result["kernel_artifact_digest"] == evaluated.kernel_artifact_digest
+    assert source.result["kernel_trial_ids"] == [trial_id]
+
+    gateway_result = await service.execute(
+        capability.token,
+        json.dumps(
+            {
+                "schema_version": 2,
+                "attempt_id": attempt.id,
+                "idempotency_key": "gateway-result-read-1",
+                "operation": "gateway_result_read",
+                "gateway_result_digest": evaluated.gateway_result_digest,
+            }
+        ).encode(),
+    )
+
+    assert gateway_result.result == {
+        "operation": "evaluate",
+        "status": "completed",
+        "result": {
+            "correct": True,
+            "correctness": {
+                "status": "PASS",
+                "rel_err": None,
+                "max_abs_err": None,
+                "max_rel_err": None,
+            },
+            "latency_us_geomean": 12.0,
+            "latency_us_arith_mean": 12.0,
+            "latency_us_by_shape": {"0": 10.0, "1": 14.0},
+        },
+    }
+
     control.close()
     registry.close()

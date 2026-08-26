@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import json
 import os
 import shutil
 import stat
 import tempfile
 from pathlib import Path
-from typing import Literal, Protocol, Self, cast
+from typing import Literal, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
+from ..attempt_reports import RuntimeAttemptReportProjector
 from ..domain.ids import (
     ArtifactDigest,
     AttemptId,
@@ -25,6 +25,7 @@ from ..domain.models import Attempt, EpochStatus, KernelRevision, LineageStatus
 from ..gateway.control_models import GatewayKernelTrialRecord, GatewayMeasurementRecord
 from ..registry.base import Registry
 from ..serialization import write_canonical_json
+from ..workers.session_trace import retained_session_file
 from .projection import EvidenceArtifactProjector
 
 EVIDENCE_CHECKPOINT_VERSION: Literal[1] = 1
@@ -94,6 +95,7 @@ class LocalEvidenceAssembler:
         self._artifacts = artifacts
         self._projector = projector
         self._measurements = measurements
+        self._reports = RuntimeAttemptReportProjector(registry, artifacts)
 
     def create_initial(
         self,
@@ -102,7 +104,7 @@ class LocalEvidenceAssembler:
         *,
         source_label: str = "trusted-bootstrap-input",
     ) -> ArtifactDigest:
-        """Wrap trusted bootstrap evidence in the versioned cumulative layout."""
+        """Create a pre-Bootstrap seed checkpoint with the final two-file shape."""
         source_path = Path(source)
         try:
             source_stat = source_path.lstat()
@@ -112,11 +114,93 @@ class LocalEvidenceAssembler:
             raise ValueError("initial evidence must be a real directory")
         staging = Path(tempfile.mkdtemp(prefix="atrex-initial-evidence-"))
         try:
-            shutil.copytree(source_path, staging / "bootstrap", symlinks=True)
-            write_canonical_json(
-                staging / "bootstrap-metadata.json",
-                {"schema_version": 1, "source": source_label},
+            bootstrap = staging / "bootstrap"
+            bootstrap.mkdir(mode=0o700)
+            source_files = sorted(
+                path.relative_to(source_path).as_posix()
+                for path in source_path.rglob("*")
+                if path.is_file() and not path.is_symlink()
             )
+            write_canonical_json(
+                bootstrap / "report.json",
+                {
+                    "schema_version": 1,
+                    "status": "bootstrap_input",
+                    "source": source_label,
+                    "source_files": source_files,
+                },
+            )
+            (bootstrap / "conversation.jsonl").write_bytes(b"")
+            self._write_checkpoint(
+                staging,
+                EvidenceCheckpointV1(
+                    lineage_id=lineage_id,
+                    through_epoch=0,
+                    previous_checkpoint_digest=None,
+                ),
+            )
+            return self._artifacts.put_directory(staging, ArtifactKind.EVIDENCE)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
+    def create_bootstrap_input(
+        self,
+        lineage_id: LineageId,
+        source: str | Path,
+    ) -> ArtifactDigest:
+        """Seal trusted initialization bytes for the Bootstrap control subject only."""
+        source_path = Path(source)
+        try:
+            source_stat = source_path.lstat()
+        except FileNotFoundError as error:
+            raise ValueError("initial evidence must be a real directory") from error
+        if stat.S_ISLNK(source_stat.st_mode) or not stat.S_ISDIR(source_stat.st_mode):
+            raise ValueError("initial evidence must be a real directory")
+        staging = Path(tempfile.mkdtemp(prefix="atrex-bootstrap-input-"))
+        try:
+            shutil.copytree(source_path, staging / "bootstrap-input", symlinks=True)
+            self._write_checkpoint(
+                staging,
+                EvidenceCheckpointV1(
+                    lineage_id=lineage_id,
+                    through_epoch=0,
+                    previous_checkpoint_digest=None,
+                ),
+            )
+            return self._artifacts.put_directory(staging, ArtifactKind.EVIDENCE)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
+    def create_bootstrap(
+        self,
+        lineage_id: LineageId,
+        *,
+        report_digest: ArtifactDigest,
+        session_trace_digest: ArtifactDigest,
+    ) -> ArtifactDigest:
+        """Seal one completed Bootstrap as report plus backend-neutral conversation."""
+        report = self._artifacts.verify(report_digest)
+        if report.kind is not ArtifactKind.ATTEMPT_REPORT:
+            raise ValueError("Bootstrap report Artifact has the wrong kind")
+        report_value = report.payload_path / "value.json"
+        if report_value.is_symlink() or not report_value.is_file():
+            raise ValueError("Bootstrap report Artifact has no regular value.json")
+        session = self._artifacts.verify(session_trace_digest)
+        if session.kind is not ArtifactKind.SESSION_LOG:
+            raise ValueError("Bootstrap Session Artifact has the wrong kind")
+        conversation = session.payload_path / "conversation.jsonl"
+        if conversation.is_symlink() or not conversation.is_file():
+            raise ValueError("Bootstrap Session Artifact has no regular conversation.jsonl")
+        payload, _removed = retained_session_file(
+            "conversation.jsonl",
+            conversation.read_bytes(),
+        )
+        staging = Path(tempfile.mkdtemp(prefix="atrex-bootstrap-evidence-"))
+        try:
+            bootstrap = staging / "bootstrap"
+            bootstrap.mkdir(mode=0o700)
+            shutil.copyfile(report_value, bootstrap / "report.json")
+            (bootstrap / "conversation.jsonl").write_bytes(payload)
             self._write_checkpoint(
                 staging,
                 EvidenceCheckpointV1(
@@ -148,7 +232,7 @@ class LocalEvidenceAssembler:
         if previous.kind is not ArtifactKind.EVIDENCE:
             raise ValueError("lineage checkpoint has the wrong artifact kind")
         actual_entries = {entry.name for entry in previous.payload_path.iterdir()}
-        required_entries = {"bootstrap-metadata.json", "checkpoint.json"}
+        required_entries = {"bootstrap", "checkpoint.json"}
         if not required_entries.issubset(actual_entries) or not actual_entries.issubset(
             required_entries
             | {
@@ -170,12 +254,18 @@ class LocalEvidenceAssembler:
         staging = Path(tempfile.mkdtemp(prefix="atrex-epoch-evidence-"))
         try:
             previous_bootstrap = previous.payload_path / "bootstrap"
-            if previous_bootstrap.is_dir():
-                shutil.copytree(previous_bootstrap, staging / "bootstrap")
-            shutil.copy2(
-                previous.payload_path / "bootstrap-metadata.json",
-                staging / "bootstrap-metadata.json",
-            )
+            expected_bootstrap = {"report.json", "conversation.jsonl"}
+            if previous_bootstrap.is_symlink() or not previous_bootstrap.is_dir():
+                raise ValueError("lineage checkpoint has no regular bootstrap directory")
+            bootstrap_entries = tuple(previous_bootstrap.iterdir())
+            if {entry.name for entry in bootstrap_entries} != expected_bootstrap or any(
+                entry.is_symlink() or not entry.is_file() for entry in bootstrap_entries
+            ):
+                raise ValueError(
+                    "lineage checkpoint bootstrap must contain only report.json "
+                    "and conversation.jsonl"
+                )
+            shutil.copytree(previous_bootstrap, staging / "bootstrap")
             previous_epochs = previous.payload_path / "epochs"
             if previous_epochs.is_dir():
                 shutil.copytree(previous_epochs, staging / "epochs")
@@ -228,12 +318,12 @@ class LocalEvidenceAssembler:
         diff_files: list[JsonValue] = []
         epoch = self._registry.get_epoch(epoch_id)
         for proposal in self._registry.list_epoch_challengers(epoch.id):
-            from ..workers.evolution import EvolutionTraceV7
+            from ..workers.evolution import EvolutionTraceV9
 
             evolution_artifact = self._artifacts.verify(proposal.evolution_trace_digest)
             if evolution_artifact.kind is not ArtifactKind.EVOLUTION:
                 raise ValueError("Challenger Evolution trace has the wrong artifact kind")
-            evolution = EvolutionTraceV7.model_validate_json(
+            evolution = EvolutionTraceV9.model_validate_json(
                 (evolution_artifact.payload_path / "value.json").read_bytes()
             )
             lessons.append(
@@ -410,7 +500,7 @@ class LocalEvidenceAssembler:
         return {
             "measurement_id": record.id,
             "attempt_id": record.attempt_id,
-            "kernel_artifact_digest": record.candidate_artifact_digest,
+            "kernel_artifact_digest": record.kernel_artifact_digest,
             "operation": record.point.kind.value,
             "source_operation": record.source_operation.value,
             "profile_level": record.point.profile_level,
@@ -428,13 +518,14 @@ class LocalEvidenceAssembler:
             "attempt_id": record.attempt_id,
             "recovery_generation": record.recovery_generation,
             "ordinal": record.ordinal,
-            "candidate_artifact_digest": record.candidate_artifact_digest,
+            "kernel_artifact_digest": record.kernel_artifact_digest,
             "disposition": record.disposition,
             "observations": [
                 {
                     "idempotency_key": item.idempotency_key,
                     "operation": item.operation.value,
                     "request_digest": item.request_digest,
+                    "gateway_result_digest": item.gateway_result_digest,
                     "result_artifact_digest": item.result_artifact_digest,
                     "created_at": item.created_at,
                 }
@@ -443,7 +534,7 @@ class LocalEvidenceAssembler:
             "annotations": [
                 {
                     "sequence": item.sequence,
-                    "decision": item.decision,
+                    "disposition": item.disposition,
                     "experiment": item.experiment,
                     "recorded_at": item.recorded_at,
                 }
@@ -490,6 +581,8 @@ class LocalEvidenceAssembler:
                     "failure_reason": attempt.failure_reason,
                     "attempt_report_digest": attempt.attempt_report_digest,
                     "attempt_report_status": attempt.attempt_report_status,
+                    "input_runtime_state_digest": attempt.input_runtime_state_digest,
+                    "runtime_state_digest": attempt.runtime_state_digest,
                     "output": output,
                 }
             )
@@ -538,22 +631,7 @@ class LocalEvidenceAssembler:
         }
 
     def _attempt_report_value(self, attempt: Attempt) -> dict[str, JsonValue]:
-        if attempt.attempt_report_digest is None:
-            raise AssertionError("Attempt report loader requires a Digest")
-        artifact = self._artifacts.verify(attempt.attempt_report_digest)
-        if artifact.kind is not ArtifactKind.ATTEMPT_REPORT:
-            raise ValueError("Attempt terminal report has the wrong artifact kind")
-        try:
-            value = json.loads((artifact.payload_path / "value.json").read_bytes())
-        except (FileNotFoundError, json.JSONDecodeError) as error:
-            raise ValueError("Attempt terminal report is not valid JSON") from error
-        if (
-            not isinstance(value, dict)
-            or value.get("attempt_id") != attempt.id
-            or value.get("status") != attempt.attempt_report_status
-        ):
-            raise ValueError("Attempt terminal report disagrees with Registry state")
-        return cast(dict[str, JsonValue], value)
+        return self._reports.project(attempt)
 
     @staticmethod
     def _write_checkpoint(root: Path, checkpoint: EvidenceCheckpointV1) -> None:

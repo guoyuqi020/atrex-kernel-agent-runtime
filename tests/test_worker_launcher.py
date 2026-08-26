@@ -414,7 +414,8 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
 ) -> None:
     root = tmp_path / "attempt-workspaces"
     workspace = root / "attempt-1/run-1"
-    workspace.mkdir(parents=True)
+    (workspace / ".runtime").mkdir(parents=True)
+    (workspace / ".runtime/attempt.json").write_text("{}", encoding="utf-8")
     credentials = tmp_path / "credentials"
     credentials.mkdir()
     settings = BwrapSandboxSettings(
@@ -445,7 +446,7 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
         workspace=workspace,
         environment={
             "PATH": "/usr/bin:/bin",
-            "ATREX_ATTEMPT_MANIFEST": str(workspace / "attempt.json"),
+            "ATREX_ATTEMPT_MANIFEST": str(workspace / ".runtime/attempt.json"),
             "ATREX_GATEWAY_PROXY_URL": "http://127.0.0.1:8765",
         },
     )
@@ -479,7 +480,11 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
         "/home/agent/workspace",
     )
     assert "/run/atrex-sandbox-staging" not in bwrap
-    assert "/home/agent/workspace/attempt.json" in "\n".join(bwrap)
+    assert (
+        "--ro-bind",
+        str(workspace / ".runtime"),
+        "/home/agent/workspace/.runtime",
+    ) in set(zip(bwrap, bwrap[1:], bwrap[2:], strict=False))
     assert not any(value.startswith("HTTPS_PROXY=") for value in bwrap)
     assert bwrap[-1] == "/home/agent/workspace/agent/optimizer/run.py"
 

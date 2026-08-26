@@ -32,6 +32,7 @@ from .agate import AgateClient
 from .batched_evaluate import sorted_shape_ids, subset_shape_document
 from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContextResolver
+from .correctness import merge_correctness_summaries
 from .execution import call_agate_json
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
@@ -488,12 +489,19 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                 rows.append(row)
             latency_by_shape: dict[str, float] = {}
             sol_pct_by_shape: dict[str, float] = {}
+            correctness_values: list[object] = []
             passed = True
             for row in rows:
                 if row.get("exit_code") != 0:
                     passed = False
                 result = row.get("result")
-                if not isinstance(result, dict) or result.get("all_pass") is not True:
+                if not isinstance(result, dict):
+                    passed = False
+                    continue
+                correctness_value = result.get("correctness")
+                if isinstance(correctness_value, dict):
+                    correctness_values.append(correctness_value)
+                if result.get("all_pass") is not True:
                     passed = False
                     continue
                 by_shape = result.get("latency_us_by_shape")
@@ -532,6 +540,10 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                 {
                     **step,
                     "correct": passed,
+                    "correctness": merge_correctness_summaries(
+                        correctness_values,
+                        passed=passed,
+                    ),
                     "latency_us": latency,
                     "latency_us_by_shape": latency_by_shape,
                     "sol_pct_by_shape": sol_pct_by_shape,
@@ -586,14 +598,20 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             sol_pct = (
                 0.0
                 if any(value == 0 for value in sol_by_shape.values())
-                else math.exp(
-                    statistics.fmean(math.log(value) for value in sol_by_shape.values())
-                )
+                else math.exp(statistics.fmean(math.log(value) for value in sol_by_shape.values()))
             )
         else:
             sol_pct = None
         return {
             "correct": correct,
+            "correctness": merge_correctness_summaries(
+                [
+                    value
+                    for row in selected
+                    if isinstance((value := row.get("correctness")), dict)
+                ],
+                passed=correct,
+            ),
             "latency_us": latency_us,
             "latency_us_by_shape": latency_by_shape,
             "sol_pct": sol_pct,

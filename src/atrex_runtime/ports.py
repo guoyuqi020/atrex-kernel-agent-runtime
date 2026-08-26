@@ -46,10 +46,11 @@ class BuildChallengerRequest:
 
 @dataclass(frozen=True, slots=True)
 class KernelAgentCandidate:
-    """Candidate full-repository Optimizer returned before registration."""
+    """Candidate Optimizer source plus its per-Trajectory adaptive-state seed."""
 
     dsl: Dsl
     optimizer_digest: ArtifactDigest
+    runtime_state_digest: ArtifactDigest | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -261,7 +262,7 @@ class AuthoritativeCandidateEvaluator(Protocol):
     async def finalize(
         self,
         attempt_id: AttemptId,
-        candidate_artifact_digest: ArtifactDigest,
+        kernel_artifact_digest: ArtifactDigest,
         *,
         nominated_gateway_result_digest: ArtifactDigest | None = None,
         nominated_recovery_generation: int | None = None,
@@ -283,6 +284,14 @@ class AttemptSessionTraceRecorder(Protocol):
         token_usage: TokenUsage,
     ) -> AttemptSessionTrace:
         """Append and return the next run-ordinal trace record."""
+        ...
+
+    def record_attempt_runtime_state(
+        self,
+        attempt_id: AttemptId,
+        runtime_state_digest: ArtifactDigest,
+    ) -> None:
+        """Attach the immutable post-Session state checkpoint to an Attempt."""
         ...
 
 

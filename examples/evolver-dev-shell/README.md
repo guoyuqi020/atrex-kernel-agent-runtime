@@ -6,9 +6,8 @@ This example opens a disposable, sandboxed Evolver-compatible workspace. It does
 Runtime HTTP service, Bootstrap, a Campaign, a Lineage, an Epoch, an Optimizer, or the Evolver.
 
 The Runtime imports the pinned Core base as a synthetic `agent-v0`, wraps the configured initial
-Evidence, and prepares the normal Evolver layout. No Kernel evaluation is run or fabricated, so
-the temporary Runtime Tools Kernel catalog is intentionally empty. The Agent catalog contains the
-single active `agent-v0` parent.
+Evidence, and prepares the normal Evolver layout. No Kernel evaluation is run or fabricated. The
+current Agent pool contains only the synthetic active `agent-v0` parent.
 
 ## Run
 
@@ -25,12 +24,14 @@ The Backend argument controls the Evolver metadata in the synthetic input; no Ba
 started. The example does not require Agate credentials. `AGATE_GPU`, if set, is retained as the
 hardware label; otherwise `nvidia-h100` is used.
 
-Inside the shell, inspect `evolution-input.json`, `input/parent/`, `input/agents/`,
-`input/evidence/`, `runtime-tools/`, and the writable `candidate/` and `scratch/` directories.
+Inside the shell, inspect the current pool in `input/agents/`, its Sessions and measured effect in
+`input/evidence/<role>/`, completed versions in `input/historical/agent-vN/`, and the writable
+`candidate/` and `scratch/` directories. The Evolution
+manifest is Runtime-private under `.runtime/` and is not part of the Agent-facing workspace contract.
 
 ```bash
-python runtime-tools/evolver_tools.py inspect-agents
-python runtime-tools/evolver_tools.py inspect-kernels
+find input/agents input/evidence input/historical -maxdepth 3 -type f -print
+cat input/evidence/active/optimization-summary.json
 ```
 
 Exiting destroys the inner Evolution workspace and the outer temporary state directory. The JSON

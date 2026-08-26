@@ -17,9 +17,7 @@ def test_durable_sqlite_uses_shared_filesystem_safe_journal(tmp_path) -> None:
 
         assert connection.execute("PRAGMA journal_mode").fetchone() == ("delete",)
         assert connection.execute("PRAGMA synchronous").fetchone() == (2,)
-        assert connection.execute("PRAGMA busy_timeout").fetchone() == (
-            SQLITE_BUSY_TIMEOUT_MS,
-        )
+        assert connection.execute("PRAGMA busy_timeout").fetchone() == (SQLITE_BUSY_TIMEOUT_MS,)
         assert connection.execute("SELECT value FROM values_table").fetchone() == (1,)
     finally:
         connection.close()
@@ -30,8 +28,6 @@ def test_durable_sqlite_leaves_memory_journal_unchanged() -> None:
     try:
         configure_durable_sqlite(connection, in_memory=True)
         assert connection.execute("PRAGMA journal_mode").fetchone() == ("memory",)
-        assert connection.execute("PRAGMA busy_timeout").fetchone() == (
-            SQLITE_BUSY_TIMEOUT_MS,
-        )
+        assert connection.execute("PRAGMA busy_timeout").fetchone() == (SQLITE_BUSY_TIMEOUT_MS,)
     finally:
         connection.close()

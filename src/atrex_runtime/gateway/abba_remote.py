@@ -187,6 +187,37 @@ def _compile_passed(value: object, shape_ids: list[str]) -> bool:
     return all(_status_passed(value.get(shape_id)) for shape_id in shape_ids)
 
 
+def _correctness_summary(value: object, *, passed: bool) -> dict[str, object]:
+    aliases = {
+        "rel_err": {"rel_err", "relative_l2"},
+        "max_abs_err": {"max_abs_err", "max_elementwise_abs_diff"},
+        "max_rel_err": {"max_rel_err", "max_elementwise_rel_diff"},
+    }
+    return {
+        "status": "PASS" if passed else "FAIL",
+        **{name: _maximum_metric(value, keys) for name, keys in aliases.items()},
+    }
+
+
+def _maximum_metric(value: object, aliases: set[str]) -> float | None:
+    maximum: float | None = None
+    if isinstance(value, dict):
+        for key, child in value.items():
+            if key in aliases:
+                number = _nonnegative_number(child)
+                if number is not None:
+                    maximum = number if maximum is None else max(maximum, number)
+            nested = _maximum_metric(child, aliases)
+            if nested is not None:
+                maximum = nested if maximum is None else max(maximum, nested)
+    elif isinstance(value, (list, tuple)):
+        for child in value:
+            nested = _maximum_metric(child, aliases)
+            if nested is not None:
+                maximum = nested if maximum is None else max(maximum, nested)
+    return maximum
+
+
 def _summarize(payload: object, shape_ids: list[str]) -> dict[str, object]:
     if not isinstance(payload, dict):
         return {"all_pass": False, "latency_us_by_shape": {}, "error": "invalid result"}
@@ -238,6 +269,7 @@ def _summarize(payload: object, shape_ids: list[str]) -> dict[str, object]:
     ]
     return {
         "all_pass": correct,
+        "correctness": _correctness_summary(correctness, passed=correct),
         "latency_us_geomean": (
             math.exp(statistics.fmean(math.log(value) for value in latencies)) if correct else None
         ),

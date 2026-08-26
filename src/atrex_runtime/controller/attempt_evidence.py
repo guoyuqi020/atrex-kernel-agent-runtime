@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 import tempfile
 from pathlib import Path
@@ -11,6 +10,7 @@ from typing import Literal, Self, cast
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
+from ..attempt_reports import RuntimeAttemptReportProjector
 from ..domain.ids import (
     ArtifactDigest,
     AttemptId,
@@ -86,6 +86,7 @@ class LocalAttemptEvidenceAssembler:
         self._registry = registry
         self._artifacts = artifacts
         self._projector = projector
+        self._reports = RuntimeAttemptReportProjector(registry, artifacts)
 
     def assemble(self, request: BuildAttemptEvidenceRequest) -> ArtifactDigest:
         """Seal authoritative facts and bounded projections before one Attempt starts."""
@@ -220,29 +221,15 @@ class LocalAttemptEvidenceAssembler:
             )
         report_file: str | None = None
         if attempt.attempt_report_digest is not None:
-            report_artifact = self._artifacts.verify(attempt.attempt_report_digest)
-            if report_artifact.kind is not ArtifactKind.ATTEMPT_REPORT:
-                raise ValueError("Attempt terminal report has the wrong artifact kind")
-            try:
-                report_value = json.loads(
-                    (report_artifact.payload_path / "value.json").read_bytes()
-                )
-            except (FileNotFoundError, json.JSONDecodeError) as error:
-                raise ValueError("Attempt terminal report is not valid JSON") from error
-            if (
-                not isinstance(report_value, dict)
-                or report_value.get("attempt_id") != attempt.id
-                or report_value.get("status") != attempt.attempt_report_status
-            ):
-                raise ValueError("Attempt terminal report disagrees with Registry state")
+            report_value = self._reports.project(attempt)
             report_file = f"reports/{attempt.ordinal:08d}.json"
-            write_canonical_json(staging / report_file, cast(JsonValue, report_value))
+            write_canonical_json(staging / report_file, report_value)
             annotations.append(
                 {
                     "trusted": False,
                     "attempt_id": str(attempt.id),
                     "source_attempt_report_digest": str(attempt.attempt_report_digest),
-                    "report": cast(JsonValue, report_value),
+                    "report": report_value,
                 }
             )
         write_canonical_json(

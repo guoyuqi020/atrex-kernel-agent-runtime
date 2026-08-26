@@ -66,6 +66,13 @@ _BANNED_TORCH_COMPUTE = frozenset(
         "topk",
     }
 )
+_CUDA_LOADER_MARKERS = (
+    "load_inline",
+    "cpp_extension",
+    "CUDAExtension",
+    "nvrtc",
+    "cuda.bindings",
+)
 
 
 class CandidateProductionValidator(Protocol):
@@ -110,7 +117,20 @@ class ProductionKernelPolicy:
         policy_source = _code_without_prose(source)
         markers = _framework_markers(policy_source, source)
         if not markers[dsl]:
-            errors.append(f"missing self-authored {dsl.value} implementation marker")
+            if dsl is Dsl.CUDA:
+                detected_loaders = tuple(
+                    marker for marker in _CUDA_LOADER_MARKERS if marker in source
+                )
+                errors.append(
+                    "missing self-authored cuda implementation marker: "
+                    f"{candidate_path} must contain '__global__' CUDA source and reference "
+                    "at least one approved CUDA loader in the same file "
+                    f"({', '.join(_CUDA_LOADER_MARKERS)}); detected __global__="
+                    f"{'yes' if '__global__' in policy_source else 'no'}, approved_loader="
+                    f"{', '.join(detected_loaders) if detected_loaders else 'none'}"
+                )
+            else:
+                errors.append(f"missing self-authored {dsl.value} implementation marker")
         for other, present in markers.items():
             if other is not dsl and present:
                 errors.append(f"mixed/alternate framework marker is forbidden: {other.value}")
@@ -274,12 +294,7 @@ def _framework_markers(source: str, raw_source: str) -> dict[Dsl, bool]:
         Dsl.TRITON: bool(re.search(r"(?:^|\n)\s*(?:import|from)\s+triton\b", source)),
         Dsl.CUTEDSL: "cutlass.cute" in source or "@cute.kernel" in source,
         Dsl.CUDA: "__global__" in source
-        and bool(
-            re.search(
-                r"load_inline|cpp_extension|CUDAExtension|nvrtc|cuda\.bindings",
-                raw_source,
-            )
-        ),
+        and any(marker in raw_source for marker in _CUDA_LOADER_MARKERS),
     }
 
 
