@@ -9,7 +9,11 @@ from pathlib import Path
 import pytest
 
 from atrex_runtime.gateway.contract import AgateEvaluationContractV1
-from atrex_runtime.roofline import AtrexBenchRooflineBuilder, validate_roofline
+from atrex_runtime.roofline import (
+    AtrexBenchRooflineBuilder,
+    strip_roofline_hardware_suffix,
+    validate_roofline,
+)
 
 
 def _contract() -> AgateEvaluationContractV1:
@@ -124,6 +128,34 @@ def test_commit_pinned_atrex_bench_builder_generates_complete_roofline(
 def test_roofline_validation_requires_exact_shape_coverage() -> None:
     with pytest.raises(ValueError, match="exactly match"):
         validate_roofline({"shapes": {}}, expected_shape_ids={"0"})
+
+
+def test_forwarded_roofline_keys_the_bare_device_name() -> None:
+    source = {
+        "shapes": {
+            "0": {
+                "semantic_Q_read_bytes": 8,
+                "SOL_time_ms": {"NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 0.01},
+            }
+        }
+    }
+
+    result = strip_roofline_hardware_suffix(source)
+
+    shape = result["shapes"]["0"]
+    assert isinstance(shape, dict)
+    assert shape["SOL_time_ms"] == {"NVIDIA RTX PRO 5000 72GB Blackwell": 0.01}
+    assert shape["semantic_Q_read_bytes"] == 8
+    assert source["shapes"]["0"]["SOL_time_ms"] == {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 0.01
+    }
+
+
+def test_forwarded_roofline_rejects_colliding_hardware_keys() -> None:
+    with pytest.raises(ValueError, match="two hardware keys"):
+        strip_roofline_hardware_suffix(
+            {"shapes": {"0": {"SOL_time_ms": {"L20N (SM120)": 0.01, "L20N": 0.02}}}}
+        )
 
 
 def test_builder_requires_metadata(tmp_path: Path) -> None:

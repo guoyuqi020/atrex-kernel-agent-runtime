@@ -26,6 +26,7 @@ from ..domain.errors import (
     UpstreamGatewayError,
 )
 from ..domain.ids import AttemptId, parse_attempt_id
+from ..roofline import strip_roofline_hardware_suffix
 from ..sqlite_support import configure_durable_sqlite
 from .batched_evaluate import ShapeBatch, ShapeBatchedEvaluateExecutor, ShapeBatchOutcome
 from .contract import (
@@ -800,7 +801,7 @@ class AgateGatewayAdapter:
         if metadata is not None:
             reference["metadata"] = metadata
         if roofline is not None:
-            reference["roofline"] = roofline
+            reference["roofline"] = strip_roofline_hardware_suffix(roofline)
         options = contract.options
         if request.operation is GatewayOperation.EVALUATE:
             options = options.model_copy(

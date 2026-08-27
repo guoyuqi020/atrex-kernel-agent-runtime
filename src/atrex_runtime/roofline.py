@@ -225,6 +225,33 @@ def validate_roofline(
     return cast(dict[str, JsonValue], value)
 
 
+_HARDWARE_SUFFIX = re.compile(r"\s*\([^()]*\)\s*$")
+
+
+def strip_roofline_hardware_suffix(value: Mapping[str, JsonValue]) -> dict[str, JsonValue]:
+    """Key SOL_time_ms on the bare device name the evaluation job reports."""
+    raw_shapes = value.get("shapes")
+    if not isinstance(raw_shapes, dict):
+        return dict(value)
+    shapes: dict[str, JsonValue] = {}
+    for shape_id, raw_shape in raw_shapes.items():
+        if not isinstance(raw_shape, dict):
+            shapes[shape_id] = raw_shape
+            continue
+        sol = raw_shape.get("SOL_time_ms")
+        if not isinstance(sol, dict):
+            shapes[shape_id] = raw_shape
+            continue
+        rewritten: dict[str, JsonValue] = {}
+        for hardware, duration in sol.items():
+            bare = _HARDWARE_SUFFIX.sub("", hardware) if isinstance(hardware, str) else hardware
+            if bare in rewritten:
+                raise ValueError(f"roofline Shape {shape_id} maps two hardware keys onto {bare!r}")
+            rewritten[bare] = duration
+        shapes[shape_id] = {**raw_shape, "SOL_time_ms": rewritten}
+    return {**value, "shapes": shapes}
+
+
 def _nonnegative_number(value: object) -> bool:
     return (
         isinstance(value, (int, float))
