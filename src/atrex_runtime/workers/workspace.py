@@ -83,9 +83,7 @@ def materialize_reusable_agent_state_snapshot(
             )
             if source_root is not None and source_root.exists():
                 if source_root.is_symlink() or not source_root.is_dir():
-                    raise ValueError(
-                        f"Reusable Agent revision directory is invalid: {source_root}"
-                    )
+                    raise ValueError(f"Reusable Agent revision directory is invalid: {source_root}")
                 for source in sorted(source_root.iterdir()):
                     if source.is_symlink() or not source.is_dir():
                         raise ValueError(f"Reusable trajectory entry is invalid: {source}")
@@ -170,9 +168,7 @@ def validate_reusable_agent_state_snapshot(
                         raise ValueError("Agent runtime-state exceeds byte limit")
         readme = trajectory / "tools/README.md"
         if readme.is_symlink() or not readme.is_file():
-            raise ValueError(
-                f"Runtime-state trajectory tools/ must retain README.md: {trajectory}"
-            )
+            raise ValueError(f"Runtime-state trajectory tools/ must retain README.md: {trajectory}")
 
 
 def validate_reusable_agent_state_seed(
@@ -184,12 +180,18 @@ def validate_reusable_agent_state_seed(
     """Validate one revision-wide Candidate seed copied into every new Trajectory."""
     state_root = Path(root)
     _validate_reusable_tree(state_root)
-    if {child.name for child in state_root.iterdir()} != {"skills", "tools"}:
+    present = {child.name for child in state_root.iterdir()}
+    if not present <= {"skills", "tools"}:
         raise ValueError("Candidate runtime-state must contain only skills/ and tools/")
+    # An Artifact sealed before empty directories were recorded lost a directory the
+    # Agent left empty. Consumers recreate both before use, and the payload is
+    # immutable, so a missing one is accepted rather than repaired.
     files = 0
     total_bytes = 0
     for name in ("skills", "tools"):
         directory = state_root / name
+        if not directory.exists():
+            continue
         _validate_reusable_tree(directory)
         for entry in directory.rglob("*"):
             if entry.is_file():
@@ -519,10 +521,7 @@ class LocalAttemptWorkspaceAssembler:
         persistent = self._root / ".reusable"
         lock_path = persistent / ".lock"
         scope = (
-            persistent
-            / str(lineage_id)
-            / str(revision_id)
-            / f"trajectory-{trajectory_ordinal:08d}"
+            persistent / str(lineage_id) / str(revision_id) / f"trajectory-{trajectory_ordinal:08d}"
         )
         with _exclusive_lock(lock_path):
             if reset_from_seed and scope.exists():
@@ -626,8 +625,10 @@ def _replace_reusable_tree(
     try:
         shutil.copytree(source, staging)
         readme = staging / "README.md"
-        if ensure_tools_readme and readme.exists() and (
-            readme.is_symlink() or not readme.is_file()
+        if (
+            ensure_tools_readme
+            and readme.exists()
+            and (readme.is_symlink() or not readme.is_file())
         ):
             raise ValueError("Reusable tools README must be a regular file")
         if ensure_tools_readme and not readme.exists():

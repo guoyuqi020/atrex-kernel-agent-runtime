@@ -483,6 +483,50 @@ def test_evolved_revision_seeds_trajectory_from_candidate_runtime_state(tmp_path
     registry.close()
 
 
+def test_a_runtime_state_seed_without_skills_still_seeds_a_trajectory(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    # Sealed before empty directories were recorded, so an Agent that saved no Skill
+    # produced a payload holding tools/ alone.
+    state = tmp_path / "legacy-state"
+    (state / "tools").mkdir(parents=True)
+    (state / "tools/README.md").write_text("# Candidate tools\n")
+    state_digest = artifacts.put_directory(state, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE)
+    trace_digest = artifacts.put_json(
+        {
+            "schema_version": 9,
+            "candidate": {
+                "optimizer_digest": digest("optimizer"),
+                "runtime_state_digest": state_digest,
+            },
+        },
+        ArtifactKind.EVOLUTION,
+    )
+    revision = KernelAgentRevision(
+        new_kernel_agent_revision_id(),
+        new_kernel_agent_revision_id(),
+        "epoch:test:challenger:1",
+        Dsl.TRITON,
+        digest("optimizer"),
+        "evolver",
+        NOW,
+        evolution_trace_digest=trace_digest,
+        runtime_state_digest=state_digest,
+    )
+    assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, artifacts)
+
+    skills, tools, _lock = assembler._persistent_roots(
+        lineage_id=new_lineage_id(),
+        revision=revision,
+        trajectory_ordinal=1,
+    )
+
+    assert skills.is_dir()
+    assert list(skills.iterdir()) == []
+    assert (tools / "README.md").read_text() == "# Candidate tools\n"
+    registry.close()
+
+
 def test_source_only_evolution_preserves_parent_trajectory_state(tmp_path: Path) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
