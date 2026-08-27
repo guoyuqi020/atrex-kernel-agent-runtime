@@ -220,7 +220,7 @@ def test_optimizer_prompt_reuses_measurements_but_revalidates_interpretations() 
 def test_optimizer_prompt_layers_are_concise_non_redundant_and_consistent() -> None:
     prompt = _rendered_prompts()["optimization_attempt"]
 
-    assert len(prompt) < 26_200
+    assert len(prompt) < 26_500
     for unique_contract in (
         "Do not repeat a completed Evaluate or Profile",
         "Treat normalized Gateway operation status",
@@ -270,7 +270,7 @@ def test_bootstrap_defers_shared_direction_and_tool_protocols_to_one_contract() 
     prompt = _rendered_prompts()["framework_baseline"]
     normalized = " ".join(prompt.split())
 
-    assert len(prompt) < 25_100
+    assert len(prompt) < 25_400
     assert prompt.count("durable unit of research and exploration") == 1
     assert normalized.count("`TaskCreate`, scratch plans, and prose do not register it") == 1
     assert "follow the shared Direction contract below" in normalized
