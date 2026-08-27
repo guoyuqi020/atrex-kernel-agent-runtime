@@ -160,11 +160,9 @@ def test_attempt_input_runtime_state_is_recorded_once(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("operation", "fields", "needs_candidate"),
     [
-        ("submit", {"payload_path": "payload.json"}, True),
         ("profile", {"level": "deep", "kernel_name": "kernel"}, True),
         ("dev", {"command": "nvidia-smi", "intent": "inspect"}, True),
         ("check", {"sanitize": "memcheck"}, True),
-        ("sol", {"solution_path": "solution.json", "subset": "L1"}, True),
         ("disassemble", {"fmt": "ptx"}, True),
         ("poll", {"job_id": "job-1", "wait": True, "include_spec": True}, False),
         ("jobs", {"kind": "dev", "status": "running", "limit": 10}, False),
@@ -216,8 +214,6 @@ def test_protocol_v2_parses_every_additional_agate_command(
     parsed = _PROTOCOL_ADAPTER.validate_python(payload)
 
     assert parsed.operation == operation
-    if operation == "sol":
-        assert parsed.lock_clocks is True
 
 
 def test_agent_request_schema_is_projected_from_live_gateway_model() -> None:

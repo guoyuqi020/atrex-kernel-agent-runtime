@@ -46,7 +46,6 @@ from atrex_runtime.gateway.control import GatewayOperation
 from atrex_runtime.gateway.protocol import (
     AGATE_MAX_JOB_TIMEOUT_S,
     DevRequestV2,
-    SolRequestV2,
 )
 from atrex_runtime.gateway.proxy import GatewayAdapterRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
@@ -1000,7 +999,7 @@ async def test_check_carries_first_private_shape_init_kwargs(tmp_path: Path) -> 
 
 
 @pytest.mark.anyio
-async def test_check_treats_missing_or_null_init_kwargs_as_empty(tmp_path: Path) -> None:
+async def test_check_uses_the_first_shape_that_declares_init_kwargs(tmp_path: Path) -> None:
     client = FakeAgateClient({"job_id": "ck_test", "status": "succeeded"})
     builder = CapturingBuilder()
     jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
@@ -1034,79 +1033,34 @@ async def test_check_treats_missing_or_null_init_kwargs_as_empty(tmp_path: Path)
         None,
     )
     await adapter.execute(GatewayAdapterRequest(*base))
-    assert client.submitted[0][1]["init_kwargs"] == {}
-    jobs.close()
 
+    assert client.submitted[0][1]["init_kwargs"] == {"width": 2}
 
-@pytest.mark.anyio
-async def test_submit_and_sol_are_non_authoritative_attempt_owned_jobs(tmp_path: Path) -> None:
-    client = FakeAgateClient({"job_id": "job", "status": "succeeded"})
-    adapter, _builder, jobs = _adapter(tmp_path, client)
-    candidate = tmp_path / "candidate"
-    candidate.mkdir()
-    (candidate / "kernel.py").write_text("class Model: pass\n")
-    (candidate / "payload.json").write_text(
-        '{"spec":{"target_hardware":["H20"]},"candidate":"source"}'
+    bare_client = FakeAgateClient({"job_id": "ck_bare", "status": "succeeded"})
+    bare_jobs = SqliteAgateJobStore(tmp_path / "agate-jobs-bare.sqlite")
+    bare = _contract().model_copy(update={"shapes": {"a": {"init_kwargs": None}, "b": {}}})
+    bare_adapter = AgateGatewayAdapter(
+        bare_client,
+        builder,
+        StaticContexts(AgateEvaluationContext("bare", "H20", Dsl.CUDA, bare)),
+        bare_jobs,
+        wait_timeout_s=1200,
     )
-    (candidate / "solution.json").write_text(
-        '{"name":"custom","definition":"problem","sources":[]}'
-    )
-    attempt_id = new_attempt_id()
-
-    client.acceptance_job_id = "ev_raw"
-    client.job = {"job_id": "ev_raw", "status": "succeeded", "result": {"all_pass": True}}
-    submitted = await adapter.execute(
+    await bare_adapter.execute(
         GatewayAdapterRequest(
-            attempt_id,
-            GatewayOperation.SUBMIT,
-            "raw-1",
-            digest("raw-candidate"),
+            new_attempt_id(),
+            GatewayOperation.CHECK,
+            "check-bare",
+            digest("candidate"),
             candidate,
             None,
             None,
             None,
-            {"payload_path": "payload.json"},
         )
-    )
-    assert submitted.evaluation is None
-    assert client.submitted[-1] == (
-        "eval",
-        {
-            "spec": {"target_hardware": ["H20"]},
-            "candidate": "source",
-            "lock_clocks": True,
-            "idempotency_key": "raw-1",
-        },
     )
 
-    client.acceptance_job_id = "sol_raw"
-    client.job = {"job_id": "sol_raw", "status": "succeeded", "result": {"score": 1.0}}
-    solved = await adapter.execute(
-        GatewayAdapterRequest(
-            attempt_id,
-            GatewayOperation.SOL,
-            "sol-1",
-            digest("sol-candidate"),
-            candidate,
-            None,
-            None,
-            None,
-            {
-                "solution_path": "solution.json",
-                "subset": "L1",
-                "iterations": 10,
-                "benchmark_reference": True,
-            },
-        )
-    )
-    assert solved.evaluation is None
-    assert client.submitted[-1][0] == "sol"
-    assert client.submitted[-1][1]["gpu"] == "H20"
-    assert client.submitted[-1][1]["options"] == {
-        "iterations": 10,
-        "lock_clocks": True,
-        "benchmark_reference": True,
-    }
+    assert bare_client.submitted[-1][1]["init_kwargs"] == {}
+    bare_jobs.close()
     jobs.close()
 
 
@@ -1265,11 +1219,10 @@ def test_published_agate_sdk_loads_through_production_factory() -> None:
     ("model", "operation", "extra"),
     [
         (DevRequestV2, "dev", {"command": "python3 kernel.py"}),
-        (SolRequestV2, "sol", {"solution_path": "solution.json"}),
     ],
 )
 def test_job_timeout_is_bounded_by_the_agate_job_limit(
-    model: type[DevRequestV2] | type[SolRequestV2],
+    model: type[DevRequestV2],
     operation: str,
     extra: dict[str, str],
 ) -> None:

@@ -409,11 +409,9 @@ class AgateGatewayAdapter:
         """Execute one capability-authorized Agate command equivalent."""
         if request.operation in {
             GatewayOperation.EVALUATE,
-            GatewayOperation.SUBMIT,
             GatewayOperation.PROFILE,
             GatewayOperation.DEV,
             GatewayOperation.CHECK,
-            GatewayOperation.SOL,
             GatewayOperation.DISASSEMBLE,
         }:
             return await self._submit(request)
@@ -441,11 +439,9 @@ class AgateGatewayAdapter:
             Literal["eval", "profile", "dev", "compile", "sol", "disassemble"],
         ] = {
             GatewayOperation.EVALUATE: "eval",
-            GatewayOperation.SUBMIT: "eval",
             GatewayOperation.PROFILE: "profile",
             GatewayOperation.DEV: "dev",
             GatewayOperation.CHECK: "compile",
-            GatewayOperation.SOL: "sol",
             GatewayOperation.DISASSEMBLE: "disassemble",
         }
         kind = kind_by_operation[request.operation]
@@ -768,10 +764,6 @@ class AgateGatewayAdapter:
     ) -> dict[str, object]:
         if request.candidate_path is None:
             raise ValueError(f"{request.operation.value} requires a candidate")
-        if request.operation is GatewayOperation.SUBMIT:
-            return self._build_raw_submit(request, context)
-        if request.operation is GatewayOperation.SOL:
-            return self._build_sol(request, context)
         if request.operation is GatewayOperation.DEV:
             return self._build_dev(request, context)
         contract = contract_override or context.contract
@@ -913,34 +905,6 @@ class AgateGatewayAdapter:
             subset(contract.roofline, metadata=False),
         )
 
-    def _build_raw_submit(
-        self,
-        request: GatewayAdapterRequest,
-        context: AgateEvaluationContext,
-    ) -> dict[str, object]:
-        payload_path = request.parameters.get("payload_path")
-        if not isinstance(payload_path, str):
-            raise ValueError("submit requires payload_path")
-        payload: dict[str, object] = dict(
-            self._read_json_object(request, payload_path, "submit payload")
-        )
-        spec = payload.get("spec")
-        if not isinstance(spec, dict):
-            raise ValueError("submit payload requires spec")
-        target_hardware = spec.get("target_hardware")
-        if target_hardware is not None and target_hardware != [context.agate_gpu]:
-            raise ValueError("submit payload target_hardware must match the Attempt")
-        spec["target_hardware"] = [context.agate_gpu]
-        existing_key = payload.get("idempotency_key")
-        if existing_key not in {None, request.idempotency_key}:
-            raise ValueError("submit payload idempotency_key conflicts with the proxy request")
-        lock_clocks = payload.get("lock_clocks", context.contract.lock_clocks)
-        if not isinstance(lock_clocks, bool):
-            raise ValueError("submit payload lock_clocks must be a boolean")
-        payload["lock_clocks"] = lock_clocks
-        payload["idempotency_key"] = request.idempotency_key
-        return payload
-
     def _build_dev(
         self,
         request: GatewayAdapterRequest,
@@ -1006,81 +970,24 @@ class AgateGatewayAdapter:
     def _private_check_init_kwargs(
         contract: AgateEvaluationContractV1,
     ) -> dict[str, JsonValue]:
-        """Resolve the first opaque Shape's constructor arguments for Agate Compile."""
-        shape_id = sorted(contract.shapes)[0]
-        shape = contract.shapes[shape_id]
-        if not isinstance(shape, dict):
-            raise ValueError("check Shape must be an object")
-        init_kwargs = shape.get("init_kwargs")
-        if init_kwargs is None:
-            return {}
-        if not isinstance(init_kwargs, dict):
-            raise ValueError("check Shape init_kwargs must be an object or null")
-        return dict(init_kwargs)
+        """Resolve opaque Shape constructor arguments for Agate Compile.
 
-    def _build_sol(
-        self,
-        request: GatewayAdapterRequest,
-        context: AgateEvaluationContext,
-    ) -> dict[str, object]:
-        solution_path = request.parameters.get("solution_path")
-        if not isinstance(solution_path, str):
-            raise ValueError("sol requires solution_path")
-        payload: dict[str, object] = dict(
-            self._read_json_object(request, solution_path, "SOL solution")
-        )
-        payload["gpu"] = context.agate_gpu
-        subset = request.parameters.get("subset")
-        if subset is not None:
-            payload["subset"] = subset
-        definition_path = request.parameters.get("definition_path")
-        workload_path = request.parameters.get("workload_path")
-        if isinstance(definition_path, str) and isinstance(workload_path, str):
-            definition = self._read_json_object(request, definition_path, "SOL definition")
-            if not str(definition.get("reference") or "").strip():
-                raise ValueError("SOL custom problem definition requires inline reference")
-            workloads_file = self._candidate_file(request, workload_path)
-            workloads: list[JsonValue] = []
-            for line_number, line in enumerate(
-                workloads_file.read_text(encoding="utf-8").splitlines(),
-                1,
-            ):
-                if not line.strip():
-                    continue
-                try:
-                    value = json.loads(line)
-                except json.JSONDecodeError as error:
-                    raise ValueError(
-                        f"SOL workload is invalid JSON at line {line_number}"
-                    ) from error
-                workloads.append(_JSON_VALUE_ADAPTER.validate_python(value))
-            if not workloads:
-                raise ValueError("SOL workload file has no workloads")
-            payload["problem"] = {"definition": definition, "workloads": workloads}
-            if not str(payload.get("definition") or "").strip():
-                payload.pop("definition", None)
-        option_names = (
-            "job_timeout_s",
-            "workload_timeout_s",
-            "compile_timeout_s",
-            "iterations",
-            "warmup_runs",
-        )
-        options: dict[str, object] = {}
-        for name in option_names:
-            value = request.parameters.get(name)
-            if value is not None:
-                options["timeout_s" if name == "job_timeout_s" else name] = value
-        lock_clocks = request.parameters.get("lock_clocks", context.contract.lock_clocks)
-        if not isinstance(lock_clocks, bool):
-            raise ValueError("SOL lock_clocks must be a boolean")
-        options["lock_clocks"] = lock_clocks
-        if request.parameters.get("benchmark_reference") is True:
-            options["benchmark_reference"] = True
-        if options:
-            payload["options"] = options
-        self._apply_dependencies(payload, request.parameters)
-        return payload
+        Some operators declare `init_kwargs` on later Shapes only, so the first
+        Shape that carries them wins rather than whichever Shape sorts first.
+        """
+        resolved: dict[str, JsonValue] | None = None
+        for shape_id in sorted(contract.shapes):
+            shape = contract.shapes[shape_id]
+            if not isinstance(shape, dict):
+                raise ValueError("check Shape must be an object")
+            init_kwargs = shape.get("init_kwargs")
+            if init_kwargs is None:
+                continue
+            if not isinstance(init_kwargs, dict):
+                raise ValueError("check Shape init_kwargs must be an object or null")
+            if resolved is None:
+                resolved = dict(init_kwargs)
+        return {} if resolved is None else resolved
 
     @staticmethod
     def _apply_dependencies(

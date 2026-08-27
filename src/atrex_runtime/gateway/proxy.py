@@ -61,19 +61,15 @@ from .protocol import (
     KernelTrialShowRequestV2,
     PollRequestV2,
     ProfileRequestV2,
-    SolRequestV2,
-    SubmitRequestV2,
     gateway_agent_request_schema,
 )
 
 _REQUEST_ADAPTER: TypeAdapter[GatewayProxyRequestV2] = TypeAdapter(GatewayProxyRequestV2)
 _CANDIDATE_REQUEST_TYPES = (
     EvaluateRequestV2,
-    SubmitRequestV2,
     ProfileRequestV2,
     DevRequestV2,
     CheckRequestV2,
-    SolRequestV2,
     DisassembleRequestV2,
 )
 _RUNTIME_LOCAL_OPERATIONS = frozenset(

@@ -194,7 +194,7 @@ Core 要求每组绑定已出现在本 Attempt 的 Experiment Journal；Runtime 
 每个 Finding 必须包含非空且唯一的 `supporting_experiment_ids`；每个 ID 都必须属于同一份随 Report
 附加的 Experiment Journal。这样 Finding 可通过 Experiment 中实际存在的 before/after Subject 追溯到准确
 Kernel Artifact、Trial 和 Gateway Result，而无需在 Finding 中重复这些身份。
-Agent-facing `gateway-execute` 不暴露低层 Agate `submit` 和独立 `sol` 接口。评测只能使用由
+Gateway 不定义低层 Agate `submit` 透传，也不定义独立的 `sol` 操作。评测只能使用由
 Runtime 构造的 `evaluate`；SOL Profile 仍通过 `profile` 的 `level="sol"` 使用。
 
 封存的 schema-v12 内容是 Agent Handoff，并非权威结果。Runtime 为管理接口和后续 Evidence

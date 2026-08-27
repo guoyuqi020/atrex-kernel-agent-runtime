@@ -90,18 +90,6 @@ class EvaluateRequestV2(_CandidateRequestV2):
     operation: Literal["evaluate"]
 
 
-class SubmitRequestV2(_CandidateRequestV2):
-    """Submit a complete EvalRequest document from the candidate bundle."""
-
-    operation: Literal["submit"]
-    payload_path: str
-
-    @field_validator("payload_path")
-    @classmethod
-    def _validate_payload_path(cls, value: str) -> str:
-        return _safe_relative_path(value, "payload_path")
-
-
 class ProfileRequestV2(_DependencyRequestV2):
     """Run an Agate profiler over the current candidate."""
 
@@ -156,36 +144,6 @@ class CheckRequestV2(_DependencyRequestV2):
     operation: Literal["check"]
     arch: str | None = Field(default=None, max_length=100)
     sanitize: Literal["memcheck", "racecheck", "initcheck", "synccheck"] | None = None
-
-
-class SolRequestV2(_DependencyRequestV2):
-    """Evaluate a SOL-ExecBench solution document from the candidate bundle."""
-
-    operation: Literal["sol"]
-    solution_path: str
-    subset: Literal["L1", "L2", "Quant", "FlashInfer-Bench"] | None = None
-    definition_path: str | None = None
-    workload_path: str | None = None
-    job_timeout_s: int | None = Field(default=None, gt=0, le=AGATE_MAX_JOB_TIMEOUT_S)
-    workload_timeout_s: int | None = Field(default=None, gt=0)
-    compile_timeout_s: int | None = Field(default=None, gt=0)
-    iterations: int | None = Field(default=None, gt=0)
-    warmup_runs: int | None = Field(default=None, ge=0)
-    lock_clocks: bool = True
-    benchmark_reference: bool = False
-
-    @field_validator("solution_path", "definition_path", "workload_path")
-    @classmethod
-    def _validate_source_path(cls, value: str | None) -> str | None:
-        return None if value is None else _safe_relative_path(value, "SOL source path")
-
-    @model_validator(mode="after")
-    def _validate_problem(self) -> SolRequestV2:
-        if (self.definition_path is None) is not (self.workload_path is None):
-            raise ValueError("SOL custom problem requires definition_path and workload_path")
-        if self.subset is not None and self.definition_path is not None:
-            raise ValueError("SOL subset cannot be combined with a custom problem")
-        return self
 
 
 class DisassembleRequestV2(_DependencyRequestV2):
@@ -344,11 +302,9 @@ class JournalSnapshotRequestV2(_GatewayRequestV2):
 
 type GatewayProxyRequestV2 = Annotated[
     EvaluateRequestV2
-    | SubmitRequestV2
     | ProfileRequestV2
     | DevRequestV2
     | CheckRequestV2
-    | SolRequestV2
     | DisassembleRequestV2
     | PollRequestV2
     | JobsRequestV2
@@ -525,11 +481,9 @@ class GatewayProxyResponseV2(BaseModel):
     schema_version: Literal[2] = GATEWAY_PROXY_PROTOCOL_VERSION
     operation: Literal[
         "evaluate",
-        "submit",
         "profile",
         "dev",
         "check",
-        "sol",
         "disassemble",
         "poll",
         "jobs",

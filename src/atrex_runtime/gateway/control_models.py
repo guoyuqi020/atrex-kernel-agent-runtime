@@ -23,11 +23,9 @@ class GatewayOperation(StrEnum):
     """Worker operations understood by the trusted Gateway proxy."""
 
     EVALUATE = "evaluate"
-    SUBMIT = "submit"
     PROFILE = "profile"
     DEV = "dev"
     CHECK = "check"
-    SOL = "sol"
     DISASSEMBLE = "disassemble"
     POLL = "poll"
     JOBS = "jobs"

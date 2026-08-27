@@ -223,9 +223,9 @@ Every Finding requires a non-empty unique `supporting_experiment_ids` array. Eac
 Experiment in the same attached Journal, so a Finding resolves through that Experiment's available
 before/after subjects to exact Kernel Artifacts, Trials, and Gateway Results without repeating those
 identities in the Finding itself.
-The Agent-facing `gateway-execute` operation set excludes the low-level Agate `submit` and
-standalone `sol` interfaces. Evaluation uses only Runtime-constructed `evaluate`; SOL profiling
-remains available through `profile` with `level="sol"`.
+The Gateway defines no low-level Agate `submit` passthrough and no standalone `sol` operation.
+Evaluation uses only Runtime-constructed `evaluate`; SOL profiling remains available through
+`profile` with `level="sol"`.
 
 The sealed schema-v12 value is the Agent handoff, not the authoritative outcome. Runtime derives a
 schema-v1 Final Attempt Report for the administration route and later Evidence snapshots. It keeps
