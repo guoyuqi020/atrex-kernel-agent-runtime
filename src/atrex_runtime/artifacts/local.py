@@ -112,8 +112,15 @@ class LocalArtifactStore:
         self,
         source: str | Path,
         kind: ArtifactKind,
+        *,
+        exclude: Callable[[PurePosixPath, bool], bool] | None = None,
     ) -> ArtifactDigest:
-        """Copy and seal a directory while rejecting links and special files."""
+        """Copy and seal a directory while rejecting links and special files.
+
+        `exclude` receives each relative path and whether it is a directory, and
+        drops it from the Artifact. An excluded directory drops its whole subtree,
+        so a caller can seal a live workspace tree without build products.
+        """
         source_path = Path(source)
         source_stat = source_path.lstat()
         if stat.S_ISLNK(source_stat.st_mode) or not stat.S_ISDIR(source_stat.st_mode):
@@ -123,17 +130,24 @@ class LocalArtifactStore:
         payload = staging / "payload"
         payload.mkdir(mode=0o700)
         files: list[JsonValue] = []
+        directories: list[JsonValue] = []
         try:
             for candidate in sorted(source_path.rglob("*")):
                 candidate_stat = candidate.lstat()
                 if stat.S_ISLNK(candidate_stat.st_mode):
                     raise ValueError(f"artifact contains a symbolic link: {candidate}")
-                if stat.S_ISDIR(candidate_stat.st_mode):
+                relative = candidate.relative_to(source_path)
+                relative_posix = PurePosixPath(*relative.parts).as_posix()
+                is_directory = bool(stat.S_ISDIR(candidate_stat.st_mode))
+                if exclude is not None and exclude(PurePosixPath(relative_posix), is_directory):
+                    continue
+                if is_directory:
+                    if next(candidate.iterdir(), None) is None:
+                        payload.joinpath(*relative.parts).mkdir(parents=True, mode=0o700)
+                        directories.append(relative_posix)
                     continue
                 if not stat.S_ISREG(candidate_stat.st_mode):
                     raise ValueError(f"artifact contains a non-regular file: {candidate}")
-                relative = candidate.relative_to(source_path)
-                relative_posix = PurePosixPath(*relative.parts).as_posix()
                 destination = payload.joinpath(*relative.parts)
                 destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 with candidate.open("rb") as reader, destination.open("xb") as writer:
@@ -153,6 +167,10 @@ class LocalArtifactStore:
                 "kind": kind.value,
                 "files": files,
             }
+            # Absent unless the tree really holds an empty directory, so every artifact
+            # sealed before directories were recorded keeps its existing digest.
+            if directories:
+                manifest["directories"] = directories
             manifest_bytes = canonical_json_bytes(manifest)
             hexadecimal = hashlib.sha256(manifest_bytes).hexdigest()
             digest = parse_artifact_digest(f"sha256:{hexadecimal}")
@@ -200,6 +218,25 @@ class LocalArtifactStore:
         entries = manifest_value.get("files")
         if not isinstance(entries, list):
             raise ValueError(f"artifact files must be a list: {digest}")
+        # Absent on every artifact sealed before empty directories were recorded.
+        directory_entries = manifest_value.get("directories", [])
+        if not isinstance(directory_entries, list):
+            raise ValueError(f"artifact directories must be a list: {digest}")
+
+        expected_directories: set[str] = set()
+        for entry in directory_entries:
+            if not isinstance(entry, str):
+                raise ValueError(f"artifact directory entry must be a string: {digest}")
+            relative = PurePosixPath(entry)
+            if relative.is_absolute() or ".." in relative.parts or relative.as_posix() == ".":
+                raise ValueError(f"unsafe artifact path: {entry!r}")
+            expected_directories.add(relative.as_posix())
+            path = payload.joinpath(*relative.parts)
+            path_stat = path.lstat()
+            if not stat.S_ISDIR(path_stat.st_mode):
+                raise ValueError(f"artifact payload is not a directory: {entry}")
+            if next(path.iterdir(), None) is not None:
+                raise ValueError(f"artifact recorded directory is not empty: {entry}")
 
         expected_paths: set[str] = set()
         for entry in entries:
@@ -224,16 +261,24 @@ class LocalArtifactStore:
                 raise ValueError(f"artifact payload mismatch: {relative_value}")
 
         actual_paths: set[str] = set()
+        actual_directories: set[str] = set()
         for path in payload.rglob("*"):
             path_stat = path.lstat()
             if stat.S_ISLNK(path_stat.st_mode):
                 raise ValueError(f"artifact payload contains a symbolic link: {path}")
             if stat.S_ISREG(path_stat.st_mode):
                 actual_paths.add(PurePosixPath(*path.relative_to(payload).parts).as_posix())
-            elif not stat.S_ISDIR(path_stat.st_mode):
+            elif stat.S_ISDIR(path_stat.st_mode):
+                if next(path.iterdir(), None) is None:
+                    actual_directories.add(
+                        PurePosixPath(*path.relative_to(payload).parts).as_posix()
+                    )
+            else:
                 raise ValueError(f"artifact payload contains a non-regular entry: {path}")
         if actual_paths != expected_paths:
             raise ValueError(f"artifact payload file set mismatch: {digest}")
+        if actual_directories != expected_directories:
+            raise ValueError(f"artifact payload directory set mismatch: {digest}")
         return StoredArtifact(digest=digest, kind=kind, payload_path=payload)
 
     def materialize(self, digest: ArtifactDigest, destination: str | Path) -> Path:

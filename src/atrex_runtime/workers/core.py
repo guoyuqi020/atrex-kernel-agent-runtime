@@ -10,6 +10,7 @@ from pathlib import Path, PurePosixPath
 import anyio
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
+from ..kernel_agents import is_ignored_kernel_agent_path
 from .attempt_report import AttemptReportV12
 from .core_phase import CorePhaseRunner, PreparedCorePhase
 from .evidence_view import EVIDENCE_PROMPT_RELATIVE_PATH
@@ -187,9 +188,15 @@ class CoreOptimizerSessionDriver:
                     ArtifactKind.ATTEMPT_REPORT,
                 )
                 if report.status == "candidate_ready":
+                    # The Agent seals only the files it lists in its evaluate request, so
+                    # build products left in the live tree would change this address and
+                    # leave the nomination unmatchable.
                     candidate_digest = self._artifacts.put_directory(
                         prepared.root / "work/kernel",
                         ArtifactKind.KERNEL,
+                        exclude=lambda relative, directory: is_ignored_kernel_agent_path(
+                            relative, directory=directory
+                        ),
                     )
         return OptimizerSessionResult(
             finish_reason=result.finish_reason,
