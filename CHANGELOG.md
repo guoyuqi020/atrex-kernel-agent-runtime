@@ -25,6 +25,17 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   hardcoded table against another while making every layout change a breaking protocol bump. A
   Kernel Agent revision registered against an earlier schema no longer starts, so existing Lineages
   must be re-bootstrapped.
+- Fixed Artifact sealing silently dropping an empty directory. A runtime-state seal validated
+  `skills/` and `tools/` locally, but the manifest recorded only files, so an Agent that saved no
+  Skill produced an Artifact without `skills/` and the Evolver then rejected the winning
+  trajectory's state at the next Epoch. The manifest now records childless directories, and omits
+  the key entirely when there are none so every previously sealed Artifact keeps its digest. A seed
+  missing one of the two directories is accepted rather than rejected, because the payload is
+  immutable and every consumer already recreates both.
+
+- Removed the unreachable Gateway `submit` and `sol` operations. Neither was bound in the Agent
+  request registry nor offered by the deployment operation allowlist, so both were dead protocol
+  surface. SOL profiling is unchanged and still reached through `profile` with `level="sol"`.
 
 ## 0.1.0 - 2026-08-20
 
