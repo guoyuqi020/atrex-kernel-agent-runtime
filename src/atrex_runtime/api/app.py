@@ -242,6 +242,7 @@ def build_runtime_application(
                     artifacts,
                     production_policy,
                 ),
+                contexts=contexts,
             ),
             limits,
         )

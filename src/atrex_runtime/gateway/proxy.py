@@ -29,6 +29,7 @@ from ..domain.errors import (
 from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest
 from ..ports import RuntimeEventRecorder
 from ..serialization import canonical_json_digest
+from .contract import AgateEvaluationContextResolver
 from .control import SqliteGatewayControl
 from .control_models import (
     GatewayCapability,
@@ -163,6 +164,7 @@ class GatewayProxyService:
         candidate_diff: RegistryCandidateDiffValidator | None = None,
         candidate_production: CandidateProductionValidator | None = None,
         *,
+        contexts: AgateEvaluationContextResolver | None = None,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._control = control
@@ -172,6 +174,7 @@ class GatewayProxyService:
         self._events = events
         self._candidate_diff = candidate_diff
         self._candidate_production = candidate_production
+        self._contexts = contexts
         self._clock = clock
         self._journals = RuntimeJournalService(control, artifacts)
 
@@ -227,7 +230,7 @@ class GatewayProxyService:
         candidate_digest: ArtifactDigest | None = None
         candidate_path: Path | None = None
         if isinstance(request, _CANDIDATE_REQUEST_TYPES):
-            candidate_digest = self._seal_candidate(request.candidate)
+            candidate_digest = self._seal_candidate(request.candidate, request.attempt_id)
             self._control.bind_operation_candidate(
                 request.attempt_id,
                 request.idempotency_key,
@@ -639,12 +642,23 @@ class GatewayProxyService:
         except (ValueError, OSError) as error:
             raise InfrastructureError("cached Gateway operation response is invalid") from error
 
-    def _seal_candidate(self, candidate: CandidateBundleV2) -> ArtifactDigest:
+    def _seal_candidate(
+        self,
+        candidate: CandidateBundleV2,
+        attempt_id: AttemptId,
+    ) -> ArtifactDigest:
         if len(candidate.files) > self._limits.max_candidate_files:
             raise ValueError("candidate exceeds file-count limit")
         decoded = [(file.path, file.content()) for file in candidate.files]
         if sum(len(content) for _path, content in decoded) > self._limits.max_candidate_bytes:
             raise ValueError("candidate exceeds decoded byte limit")
+        # Evaluation forwards only the contract's candidate file, so anything else in
+        # the bundle would change this address without changing what was measured.
+        selected = self._contract_candidate_path(attempt_id)
+        if selected is not None:
+            decoded = [(path, content) for path, content in decoded if path == selected]
+            if not decoded:
+                raise ValueError(f"candidate bundle is missing {selected}")
 
         temporary = Path(tempfile.mkdtemp(prefix="gateway-candidate-"))
         try:
@@ -656,6 +670,15 @@ class GatewayProxyService:
             return self._artifacts.put_directory(temporary, ArtifactKind.KERNEL)
         finally:
             shutil.rmtree(temporary, ignore_errors=True)
+
+    def _contract_candidate_path(self, attempt_id: AttemptId) -> str | None:
+        """Return the contract-declared candidate file, or None when unresolvable."""
+        if self._contexts is None:
+            return None
+        try:
+            return self._contexts.resolve(attempt_id).contract.candidate_path
+        except (KeyError, LookupError, ValueError):
+            return None
 
     @staticmethod
     def _adapter_request(

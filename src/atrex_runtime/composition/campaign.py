@@ -29,6 +29,7 @@ from ..gateway.abba import AgateSameAllocationAbbaRunner, CommitPinnedAtrexBench
 from ..gateway.agate import load_agate_sdk
 from ..gateway.configuration import build_agate_connection
 from ..gateway.contract import (
+    RegistryAgateEvaluationContextResolver,
     RegistryKernelEvaluationContextResolver,
 )
 from ..gateway.control import (
@@ -193,6 +194,7 @@ def build_campaign_runtime(
             worker_launcher,
             build_core_process_config(campaign),
             artifacts,
+            contexts=RegistryAgateEvaluationContextResolver(registry, artifacts, control),
         )
         authority = AttemptTimedWorkerGatewayAuthorityProvider(
             control,

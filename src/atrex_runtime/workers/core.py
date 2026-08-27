@@ -10,6 +10,8 @@ from pathlib import Path, PurePosixPath
 import anyio
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
+from ..domain.ids import ArtifactDigest, AttemptId
+from ..gateway.contract import AgateEvaluationContextResolver
 from ..kernel_agents import is_ignored_kernel_agent_path
 from .attempt_report import AttemptReportV12
 from .core_phase import CorePhaseRunner, PreparedCorePhase
@@ -123,10 +125,13 @@ class CoreOptimizerSessionDriver:
         launcher: WorkerLauncher,
         config: CoreOptimizerProcessConfig,
         artifacts: LocalArtifactStore,
+        *,
+        contexts: AgateEvaluationContextResolver | None = None,
     ) -> None:
         self._launcher = launcher
         self._config = config
         self._artifacts = artifacts
+        self._contexts = contexts
         self._phases = CorePhaseRunner(launcher, config, artifacts)
 
     async def run(
@@ -168,12 +173,13 @@ class CoreOptimizerSessionDriver:
         report_error: str | None = None
         candidate_digest = None
         if launch.attempt_report_path.exists() or launch.attempt_report_path.is_symlink():
+            attempt_id = AttemptInputManifestV9.from_json_bytes(
+                prepared.manifest_path.read_bytes()
+            ).attempt_id
             try:
                 report = AttemptReportV12.from_file(
                     launch.attempt_report_path,
-                    expected_attempt_id=AttemptInputManifestV9.from_json_bytes(
-                        prepared.manifest_path.read_bytes()
-                    ).attempt_id,
+                    expected_attempt_id=attempt_id,
                     max_bytes=self._config.max_attempt_report_bytes,
                 )
                 if any(experiment.action == "baseline" for experiment in report.experiments):
@@ -188,16 +194,7 @@ class CoreOptimizerSessionDriver:
                     ArtifactKind.ATTEMPT_REPORT,
                 )
                 if report.status == "candidate_ready":
-                    # The Agent seals only the files it lists in its evaluate request, so
-                    # build products left in the live tree would change this address and
-                    # leave the nomination unmatchable.
-                    candidate_digest = self._artifacts.put_directory(
-                        prepared.root / "work/kernel",
-                        ArtifactKind.KERNEL,
-                        exclude=lambda relative, directory: is_ignored_kernel_agent_path(
-                            relative, directory=directory
-                        ),
-                    )
+                    candidate_digest = self._seal_candidate(prepared, attempt_id)
         return OptimizerSessionResult(
             finish_reason=result.finish_reason,
             final_response=result.process.stdout,
@@ -209,6 +206,42 @@ class CoreOptimizerSessionDriver:
             attempt_report_error=report_error,
             kernel_artifact_digest=candidate_digest,
         )
+
+    def _seal_candidate(self, prepared: PreparedAttempt, attempt_id: AttemptId) -> ArtifactDigest:
+        """Seal the nomination at the address the Agent's own evaluate produced.
+
+        Evaluation forwards only the contract's candidate file, so sealing the whole
+        live tree let scratch files and build products change the address and leave
+        the nomination unmatchable against the Agent's evaluation.
+        """
+        working = prepared.root / "work/kernel"
+        selected = self._contract_candidate_path(attempt_id)
+        if selected is not None:
+            source = working.joinpath(*selected.split("/"))
+            if source.is_symlink() or not source.is_file():
+                raise ValueError(f"nominated candidate is missing {selected}")
+            return self._artifacts.put_directory(
+                working,
+                ArtifactKind.KERNEL,
+                exclude=lambda relative, directory: directory
+                or relative.as_posix() != selected,
+            )
+        return self._artifacts.put_directory(
+            working,
+            ArtifactKind.KERNEL,
+            exclude=lambda relative, directory: is_ignored_kernel_agent_path(
+                relative, directory=directory
+            ),
+        )
+
+    def _contract_candidate_path(self, attempt_id: AttemptId) -> str | None:
+        """Return the contract-declared candidate file, or None when unresolvable."""
+        if self._contexts is None:
+            return None
+        try:
+            return self._contexts.resolve(attempt_id).contract.candidate_path
+        except (KeyError, LookupError, ValueError):
+            return None
 
     def prepare_launch(
         self,

@@ -105,6 +105,31 @@ def test_excluded_paths_are_dropped_so_a_live_tree_matches_its_clean_address(
     assert [path.name for path in payload.rglob("*")] == ["kernel.py"]
 
 
+def test_keeping_one_file_addresses_a_live_tree_like_its_single_file_seal(
+    tmp_path: Path,
+) -> None:
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    declared = tmp_path / "declared"
+    declared.mkdir()
+    (declared / "kernel.py").write_text("KERNEL\n")
+    declared_digest = store.put_directory(declared, ArtifactKind.KERNEL)
+    live = tmp_path / "live"
+    (live / "__pycache__").mkdir(parents=True)
+    (live / "empty").mkdir()
+    (live / "kernel.py").write_text("KERNEL\n")
+    (live / "_devtest.py").write_text("probe\n")
+    (live / "__pycache__/kernel.cpython-312.pyc").write_bytes(b"bytecode")
+
+    sealed = store.put_directory(
+        live,
+        ArtifactKind.KERNEL,
+        exclude=lambda relative, directory: directory or relative.as_posix() != "kernel.py",
+    )
+
+    assert sealed == declared_digest
+    assert [path.name for path in store.verify(sealed).payload_path.rglob("*")] == ["kernel.py"]
+
+
 def test_one_artifact_file_can_be_materialized_to_a_flat_path(tmp_path: Path) -> None:
     store = LocalArtifactStore(tmp_path / "artifacts")
     digest = store.put_json({"objective": "vector add"}, ArtifactKind.AGENT_PROBLEM)
