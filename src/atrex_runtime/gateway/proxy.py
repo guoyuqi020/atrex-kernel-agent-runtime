@@ -48,6 +48,7 @@ from .protocol import (
     GATEWAY_PROXY_PROTOCOL_VERSION,
     CancelRequestV2,
     CandidateBundleV2,
+    CandidateFileV2,
     CheckRequestV2,
     DevRequestV2,
     DirectionHistoryRequestV2,
@@ -97,6 +98,14 @@ _RUNTIME_OWNED_ERROR_FIELDS = frozenset(
     {"schema_version", "attempt_id", "candidate", "idempotency_key"}
 )
 _GATEWAY_OPERATION_NAMES = frozenset(operation.value for operation in GatewayOperation)
+
+
+def _dev_file_text(file: CandidateFileV2) -> str:
+    """Decode one dev file, which the Agate payload carries as text."""
+    try:
+        return str(file.content().decode("utf-8"))
+    except UnicodeDecodeError as error:
+        raise ValueError(f"dev file must be UTF-8 text: {file.path}") from error
 
 
 def _utc_now() -> datetime:
@@ -230,6 +239,8 @@ class GatewayProxyService:
         candidate_digest: ArtifactDigest | None = None
         candidate_path: Path | None = None
         if isinstance(request, _CANDIDATE_REQUEST_TYPES):
+            if isinstance(request, DevRequestV2):
+                self._validate_dev_files(request)
             candidate_digest = self._seal_candidate(request.candidate, request.attempt_id)
             self._control.bind_operation_candidate(
                 request.attempt_id,
@@ -642,6 +653,14 @@ class GatewayProxyService:
         except (ValueError, OSError) as error:
             raise InfrastructureError("cached Gateway operation response is invalid") from error
 
+    def _validate_dev_files(self, request: DevRequestV2) -> None:
+        """Bound extra dev files by the same limits that protect candidate acquisition."""
+        if len(request.files) > self._limits.max_candidate_files:
+            raise ValueError("dev files exceed file-count limit")
+        total = sum(len(file.content()) for file in request.files)
+        if total > self._limits.max_candidate_bytes:
+            raise ValueError("dev files exceed decoded byte limit")
+
     def _seal_candidate(
         self,
         candidate: CandidateBundleV2,
@@ -704,6 +723,11 @@ class GatewayProxyService:
             dict[str, JsonValue],
             request.model_dump(mode="json", exclude=excluded),
         )
+        if isinstance(request, DevRequestV2):
+            parameters["files"] = cast(
+                JsonValue,
+                {file.path: _dev_file_text(file) for file in request.files},
+            )
         return GatewayAdapterRequest(
             attempt_id=request.attempt_id,
             operation=operation,

@@ -924,6 +924,14 @@ class AgateGatewayAdapter:
         command = request.parameters.get("command")
         if not isinstance(command, str) or not command:
             raise ValueError("dev requires command")
+        extra = request.parameters.get("files")
+        if extra is not None:
+            if not isinstance(extra, Mapping):
+                raise ValueError("dev files must be a mapping")
+            for relative, content in extra.items():
+                if not isinstance(relative, str) or not isinstance(content, str):
+                    raise ValueError("dev file paths and contents must be strings")
+                files.setdefault(relative, content)
         payload: dict[str, object] = {
             "spec": {"target_hardware": [context.agate_gpu]},
             "command": command,

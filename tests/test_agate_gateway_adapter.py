@@ -1250,6 +1250,40 @@ def test_job_timeout_is_bounded_by_the_agate_job_limit(
 
 
 @pytest.mark.anyio
+async def test_dev_extra_files_reach_the_pod_beside_the_candidate(tmp_path: Path) -> None:
+    client = FakeAgateClient({"job_id": "dv_files", "status": "succeeded"})
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "kernel.py").write_text("class Model: pass\n")
+
+    await adapter.execute(
+        GatewayAdapterRequest(
+            new_attempt_id(),
+            GatewayOperation.DEV,
+            "dev-files",
+            digest("candidate"),
+            candidate,
+            None,
+            None,
+            None,
+            {
+                "command": "python3 probe.py",
+                "files": {"probe.py": "import torch\nprint('probe')\n"},
+            },
+        )
+    )
+
+    kind, payload = client.submitted[-1]
+    assert kind == "dev"
+    assert payload["files"] == {
+        "kernel.py": "class Model: pass\n",
+        "probe.py": "import torch\nprint('probe')\n",
+    }
+    jobs.close()
+
+
+@pytest.mark.anyio
 async def test_dev_permanent_rejection_reaches_the_agent_as_structured_candidate_validation(
     tmp_path: Path,
 ) -> None:

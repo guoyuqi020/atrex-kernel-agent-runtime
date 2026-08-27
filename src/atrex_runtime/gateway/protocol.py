@@ -119,6 +119,7 @@ class DevRequestV2(_CandidateRequestV2):
 
     operation: Literal["dev"]
     command: str = Field(min_length=1, max_length=16_384)
+    files: tuple[CandidateFileV2, ...] = ()
     env_vars: dict[str, str] = Field(default_factory=dict)
     job_timeout_s: int | None = Field(default=None, gt=0, le=AGATE_MAX_JOB_TIMEOUT_S)
     recycle: bool = True
@@ -136,6 +137,16 @@ class DevRequestV2(_CandidateRequestV2):
         | None
     ) = None
     note: str | None = Field(default=None, max_length=200)
+
+    @model_validator(mode="after")
+    def _validate_files(self) -> DevRequestV2:
+        paths = [file.path for file in self.files]
+        if len(paths) != len(set(paths)):
+            raise ValueError("dev files contain duplicate paths")
+        collisions = sorted({file.path for file in self.candidate.files}.intersection(paths))
+        if collisions:
+            raise ValueError(f"dev files cannot replace candidate paths: {collisions}")
+        return self
 
 
 class CheckRequestV2(_DependencyRequestV2):
