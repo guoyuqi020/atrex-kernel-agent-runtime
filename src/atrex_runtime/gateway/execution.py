@@ -15,6 +15,7 @@ from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest
 from ..domain.models import Dsl
+from ..roofline import strip_roofline_hardware_suffix
 from .agate import AgateCandidateRejection, AgateClient, AgateRequestBuilder
 from .contract import AgateEvaluationContractV1
 
@@ -42,7 +43,7 @@ def build_evaluation_request(
     if contract.metadata is not None:
         reference["metadata"] = contract.metadata
     if contract.roofline is not None:
-        reference["roofline"] = contract.roofline
+        reference["roofline"] = strip_roofline_hardware_suffix(contract.roofline)
     return request_builder(
         candidate_source,
         reference,

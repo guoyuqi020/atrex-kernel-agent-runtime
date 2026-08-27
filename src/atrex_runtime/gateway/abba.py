@@ -27,6 +27,7 @@ from ..ports import (
     KernelPairMeasurementResult,
     KernelPairMeasurementRunner,
 )
+from ..roofline import strip_roofline_hardware_suffix
 from . import abba_remote
 from .agate import AgateClient
 from .batched_evaluate import sorted_shape_ids, subset_shape_document
@@ -377,7 +378,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         if metadata is not None:
             files["reference/metadata.json"] = _json_text(metadata)
         if roofline is not None:
-            files["reference/roofline.json"] = _json_text(roofline)
+            files["reference/roofline.json"] = _json_text(strip_roofline_hardware_suffix(roofline))
         evaluator = dict(contract.runner_overrides)
         if _PROTECTED_RUNNER_KEYS.intersection(evaluator):
             raise ValueError("evaluation runner_overrides cannot replace ABBA-owned paths")
