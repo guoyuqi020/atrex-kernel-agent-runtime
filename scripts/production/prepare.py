@@ -164,6 +164,20 @@ def _slug(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", value.lower()).strip("-") or "kernel"
 
 
+def _private_shapes_path(operator_root: Path) -> Path:
+    """Resolve the evaluator-owned exact Shape contract using Atrex-Bench precedence."""
+    preferred = operator_root / "shape_valid.json"
+    if preferred.is_file() and not preferred.is_symlink():
+        return preferred
+    legacy = operator_root / "shapes.json"
+    if legacy.is_file() and not legacy.is_symlink():
+        return legacy
+    raise SystemExit(
+        "Atrex-Bench kernel requires a regular shape_valid.json "
+        f"(or migration shapes.json): {operator_root}"
+    )
+
+
 def _resolve_kernel(data_root: Path, raw: str) -> tuple[Path, str | None]:
     direct = Path(raw).expanduser()
     candidates: list[tuple[Path, str | None]] = []
@@ -189,10 +203,11 @@ def _resolve_kernel(data_root: Path, raw: str) -> tuple[Path, str | None]:
         choices = "\n  ".join(str(path) for path, _seed in unique[:20])
         raise SystemExit(f"kernel name is ambiguous; use suite/operator:\n  {choices}")
     operator_root, selected_seed = unique[0]
-    for name in ("reference.py", "input.py", "shapes.json"):
+    for name in ("reference.py", "input.py"):
         path = operator_root / name
         if path.is_symlink() or not path.is_file():
             raise SystemExit(f"Atrex-Bench kernel requires a regular {name}: {operator_root}")
+    _private_shapes_path(operator_root)
     return operator_root, selected_seed
 
 
@@ -392,7 +407,20 @@ def _prepare_service_workspace(
 
 
 def _evaluation_contract(operator_root: Path) -> dict[str, Any]:
-    shapes = _load_object(operator_root / "shapes.json", "shapes.json")
+    shapes_path = _private_shapes_path(operator_root)
+    shapes = _load_object(shapes_path, shapes_path.name)
+    invalid_shapes = [
+        shape_id
+        for shape_id, shape in shapes.items()
+        if not isinstance(shape, dict)
+        or not isinstance(shape.get("init_kwargs"), (dict, type(None)))
+        or not isinstance(shape.get("input_kwargs"), dict)
+    ]
+    if invalid_shapes:
+        raise SystemExit(
+            f"{shapes_path} entries require optional init_kwargs and object input_kwargs: "
+            + ", ".join(invalid_shapes[:8])
+        )
     metadata_path = operator_root / "metadata.json"
     roofline_path = operator_root / "roofline.json"
     metadata = _load_object(metadata_path, "metadata.json") if metadata_path.is_file() else None
@@ -722,6 +750,7 @@ def _campaign(
             "initial_evidence": str(workspace / "inputs" / "initial-evidence"),
         }
     }
+    shape_train = operator_root / "shape_train.json"
     agent_problem = operator_root / "agent_problem.json"
     return {
         "schema_version": 3,
@@ -729,7 +758,12 @@ def _campaign(
         "operator": operator,
         "hardware_target": hardware_target,
         "evaluation_contract": str(workspace / "evaluation-contract.json"),
-        "agent_problem": str(agent_problem) if agent_problem.is_file() else None,
+        "shape_train": str(shape_train) if shape_train.is_file() else None,
+        "agent_problem": (
+            str(agent_problem)
+            if not shape_train.is_file() and agent_problem.is_file()
+            else None
+        ),
         "problem_generalization_model": None,
         "base_revision": {"commit": core_commit},
         "challenger_count": int(schedule["challenger_count"]),

@@ -44,7 +44,7 @@ from .kernel_agents import GitOptimizerBaseLoader
 from .ports import KernelAgentCandidate
 from .registry.base import Registry
 from .roofline import RooflineBuilder
-from .workers.problem_generalization import AgentProblemV1
+from .workers.problem_generalization import validate_public_operator_contract
 
 CAMPAIGN_SPEC_VERSION: Literal[3] = 3
 _JSON_VALUE_ADAPTER: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
@@ -182,6 +182,7 @@ class CampaignSpecV3(BaseModel):
     operator: str = Field(min_length=1)
     hardware_target: str = Field(min_length=1)
     evaluation_contract: Path
+    shape_train: Path | None = None
     agent_problem: Path | None = None
     problem_generalization_model: str | None = Field(
         default=None,
@@ -209,7 +210,12 @@ class CampaignSpecV3(BaseModel):
     def _validate_campaign(self) -> CampaignSpecV3:
         if not self.lineages:
             raise ValueError("Campaign requires at least one DSL Lineage")
-        if self.agent_problem is not None and self.problem_generalization_model is not None:
+        supplied_contracts = sum(
+            value is not None for value in (self.shape_train, self.agent_problem)
+        )
+        if supplied_contracts > 1:
+            raise ValueError("shape_train and agent_problem are mutually exclusive")
+        if supplied_contracts and self.problem_generalization_model is not None:
             raise ValueError("problem_generalization_model requires generated Agent Problem")
         return self
 
@@ -262,6 +268,9 @@ class CampaignSpecV3(BaseModel):
         return spec.model_copy(
             update={
                 "evaluation_contract": resolve(spec.evaluation_contract),
+                "shape_train": (
+                    None if spec.shape_train is None else resolve(spec.shape_train)
+                ),
                 "agent_problem": (
                     None if spec.agent_problem is None else resolve(spec.agent_problem)
                 ),
@@ -407,9 +416,20 @@ class CampaignBootstrapper:
             raise ValueError(
                 "evaluation contract Agate GPU disagrees with the resolved environment"
             )
-        input_contract = input_contract.model_copy(update={"agate_gpu": environment.gpu})
+        input_contract = input_contract.model_copy(
+            update={
+                "agate_gpu": environment.gpu,
+                "accelerator_backend": environment.accelerator_backend,
+                "device_slug": environment.device_slug,
+                "lock_clocks": input_contract.lock_clocks
+                and environment.supports_clock_lock,
+            }
+        )
         if self._gate_contract_policy is not None:
-            input_contract = self._gate_contract_policy.apply(input_contract)
+            input_contract = self._gate_contract_policy.apply(
+                input_contract,
+                accelerator_backend=environment.accelerator_backend,
+            )
         contract, roofline_mode, roofline_detail = self._resolve_evaluation_contract(
             input_contract,
             existing_contract_digest=(
@@ -427,13 +447,14 @@ class CampaignBootstrapper:
             contract.model_dump(mode="json"),
             ArtifactKind.EVALUATION_CONTRACT,
         )
-        if spec.agent_problem is not None:
-            public_problem = AgentProblemV1.from_value(
-                self._read_json(spec.agent_problem, "agent problem"),
+        supplied_public_contract = spec.shape_train or spec.agent_problem
+        if supplied_public_contract is not None:
+            public_problem = validate_public_operator_contract(
+                self._read_json(supplied_public_contract, "public operator contract"),
                 private_shapes=contract.shapes,
             )
             shared_problem = self._artifacts.put_json(
-                public_problem.model_dump(mode="json"),
+                public_problem,
                 ArtifactKind.AGENT_PROBLEM,
             )
         elif self._problem_generator is not None:
@@ -447,7 +468,9 @@ class CampaignBootstrapper:
                 model=spec.problem_generalization_model,
             )
         else:
-            raise ValueError("campaign bootstrap requires an Agent Problem or Core generator")
+            raise ValueError(
+                "campaign bootstrap requires a Shape Train, Agent Problem, or Core generator"
+            )
         if self._artifacts.verify(shared_problem).kind is not ArtifactKind.AGENT_PROBLEM:
             raise ValueError("bootstrap Agent Problem generator returned the wrong Artifact kind")
         results: list[BootstrapResult] = []
@@ -521,7 +544,7 @@ class CampaignBootstrapper:
         str | None,
     ]:
         """Build a missing Roofline once or recover the Campaign-sealed result."""
-        if existing_contract_digest is not None and contract.roofline is None:
+        if existing_contract_digest is not None:
             stored = self._artifacts.verify(existing_contract_digest)
             if stored.kind is not ArtifactKind.EVALUATION_CONTRACT:
                 raise ValueError("Campaign Evaluation Contract Artifact has the wrong kind")
@@ -529,7 +552,23 @@ class CampaignBootstrapper:
                 self._read_json(stored.payload_path / "value.json", "stored evaluation contract")
             )
             without_roofline = {"roofline": None}
-            if contract == stored_contract.model_copy(update=without_roofline):
+            comparable_contract = contract
+            if (
+                stored_contract.accelerator_backend is None
+                and stored_contract.device_slug is None
+            ):
+                # Campaigns sealed before accelerator metadata was introduced remain
+                # resumable as long as no other trusted Gate field changes. A PPU
+                # clock-policy correction still differs and therefore fails closed.
+                comparable_contract = contract.model_copy(
+                    update={"accelerator_backend": None, "device_slug": None}
+                )
+            expected_stored = (
+                stored_contract.model_copy(update=without_roofline)
+                if contract.roofline is None
+                else stored_contract
+            )
+            if comparable_contract == expected_stored:
                 if stored_contract.roofline is not None:
                     return stored_contract, "sealed-reuse", None
                 return stored_contract, "profile-fallback", "Campaign has no sealed Roofline"

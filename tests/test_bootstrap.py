@@ -37,7 +37,7 @@ from atrex_runtime.gateway.contract import (
     AgateEvaluationOptionsV1,
     RuntimeGateContractPolicy,
 )
-from atrex_runtime.gateway.environment import ResolvedAgateEnvironment
+from atrex_runtime.gateway.environment import AcceleratorBackend, ResolvedAgateEnvironment
 from atrex_runtime.kernel_agents import GitOptimizerBaseResult
 from atrex_runtime.ports import KernelAgentCandidate
 from atrex_runtime.registry.sqlite import SqliteRegistry
@@ -261,6 +261,132 @@ def test_campaign_bootstrap_resolves_agent_arch_from_agate_environment(tmp_path:
     assert lineage.hardware_target == "sm_120"
     assert baseline.hardware_targets == ["sm_120"]
     assert contract["agate_gpu"] == "L20N"
+
+
+def test_campaign_bootstrap_accepts_shape_train_with_private_shape_valid_contract(
+    tmp_path: Path,
+) -> None:
+    spec_path = _campaign_spec(tmp_path, lineage_dsls=(Dsl.TRITON,))
+    value = json.loads(spec_path.read_text(encoding="utf-8"))
+    value.pop("agent_problem")
+    value["shape_train"] = "shape-train.json"
+    _write_json(
+        tmp_path / "shape-train.json",
+        {
+            "schema_version": "atrex.shape_train.v1",
+            "generator": {"name": "test", "version": 1},
+            "objective": "Optimize the operator across hidden exact cases.",
+            "operator_contract": {"operation": "vector add"},
+            "workload_profile": {"phase": "decode"},
+            "shape_domain": {"n": {"type": "integer", "min": 1, "max": 4096}},
+            "invariants": ["n >= 1"],
+            "coverage_regimes": [],
+            "development_cases": [],
+        },
+    )
+    _write_json(spec_path, value)
+    spec = CampaignSpecV3.from_file(spec_path)
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        result = _bootstrapper(
+            registry,
+            artifacts,
+            FakeGitLoader(artifacts),
+            FakeBaselineGenerator(artifacts),
+        ).bootstrap_campaign(spec)
+        campaign = registry.get_campaign(result.campaign_id)
+
+    stored = artifacts.verify(campaign.agent_problem_digest)
+    public_contract = json.loads(
+        (stored.payload_path / "value.json").read_text(encoding="utf-8")
+    )
+    assert public_contract["schema_version"] == "atrex.shape_train.v1"
+    assert "shapes" not in public_contract
+
+
+def test_campaign_bootstrap_disables_managed_clocks_for_ppu(tmp_path: Path) -> None:
+    spec = CampaignSpecV3.from_file(_campaign_spec(tmp_path, lineage_dsls=(Dsl.TRITON,)))
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+
+    class Resolver:
+        def resolve(self, gpu: str) -> ResolvedAgateEnvironment:
+            assert gpu == "nvidia-h100"
+            return ResolvedAgateEnvironment(
+                "ZW-M890P",
+                "zw-m890p",
+                accelerator_backend="ppu",
+                device_slug="zw-m890p",
+            )
+
+    policy = RuntimeGateContractPolicy(
+        options=AgateEvaluationOptionsV1(
+            num_correctness_cases=1,
+            bench_iters=100,
+            atol=0.01,
+            rtol=0.05,
+            timeout_s=600,
+        ),
+        lock_clocks=True,
+        runner_overrides={},
+    )
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        result = _bootstrapper(
+            registry,
+            artifacts,
+            FakeGitLoader(artifacts),
+            FakeBaselineGenerator(artifacts),
+            gate_contract_policy=policy,
+            hardware_target_resolver=Resolver(),
+        ).bootstrap_campaign(spec)
+
+    stored = artifacts.verify(result.lineages[0].evaluation_contract_digest)
+    contract = json.loads((stored.payload_path / "value.json").read_text(encoding="utf-8"))
+    assert contract["lock_clocks"] is False
+    assert contract["agate_gpu"] == "ZW-M890P"
+    assert contract["accelerator_backend"] == "ppu"
+    assert contract["device_slug"] == "zw-m890p"
+
+
+def test_campaign_bootstrap_resumes_contract_sealed_before_accelerator_metadata(
+    tmp_path: Path,
+) -> None:
+    spec = CampaignSpecV3.from_file(_campaign_spec(tmp_path, lineage_dsls=(Dsl.TRITON,)))
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+
+    class Resolver:
+        def __init__(self, backend: AcceleratorBackend | None) -> None:
+            self.backend = backend
+
+        def resolve(self, gpu: str) -> ResolvedAgateEnvironment:
+            assert gpu == "nvidia-h100"
+            return ResolvedAgateEnvironment(
+                "L20N",
+                "sm_120",
+                accelerator_backend=self.backend,
+            )
+
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        first = _bootstrapper(
+            registry,
+            artifacts,
+            FakeGitLoader(artifacts),
+            FakeBaselineGenerator(artifacts),
+            hardware_target_resolver=Resolver(None),
+        ).bootstrap_campaign(spec)
+        second = _bootstrapper(
+            registry,
+            artifacts,
+            FakeGitLoader(artifacts),
+            FakeBaselineGenerator(artifacts),
+            hardware_target_resolver=Resolver("cuda"),
+        ).bootstrap_campaign(spec)
+
+    assert second.campaign_id == first.campaign_id
+    assert (
+        second.lineages[0].evaluation_contract_digest
+        == first.lineages[0].evaluation_contract_digest
+    )
 
 
 class ConcurrentBaselineGenerator(FakeBaselineGenerator):

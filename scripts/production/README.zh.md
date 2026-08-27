@@ -105,6 +105,11 @@ bash scripts/production/run.sh \
 
 默认绝对目标为 Epoch 10；需要继续到其他 Epoch 时可显式传入 `--target-epoch N`。
 
+对于新版 Atrex-Bench 布局，准备流程只把 `shape_train.json` 暴露给 Agent，并将
+`shape_valid.json` 作为精确 Evaluation Contract 封存。旧版 `agent_problem.json` 与
+`shapes.json` 仅用于迁移回退。`metadata.json` 会私下传给评测端，其中的 `mutates_inputs` 与
+`scratch_inputs` 会由远端 Correctness Gate 执行输入副作用检查。
+
 当 `--kernel` 指向算子目录时，默认使用 `reference.py` 作为三个 bootstrap 的语义 Seed；
 当它直接指向目录内的某个 Python 文件时，就使用该文件。若确定希望从 Atrex-Bench 的
 已有实现开始，也可以显式使用：

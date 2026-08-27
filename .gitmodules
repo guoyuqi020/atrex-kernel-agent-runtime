@@ -6,7 +6,8 @@
 	url = git@github.com:guoyuqi020/atrex-kernel-agent-evolver.git
 [submodule "third_party/atrex-bench"]
 	path = third_party/atrex-bench
-	url = git@github.com:guoyuqi020/atrex-bench.git
+	url = https://code.alibaba-inc.com/tre-infra/atrex-bench.git
+	branch = yuxiao_dev
 [submodule "third_party/reference-projects/FlashMLA"]
 	path = third_party/reference-projects/FlashMLA
 	url = https://github.com/deepseek-ai/FlashMLA.git
@@ -71,3 +72,6 @@
 	path = third_party/reference-projects/triton
 	url = https://github.com/triton-lang/triton.git
 	update = none
+[submodule "third_party/atrex-kernel-agent"]
+	path = third_party/atrex-kernel-agent
+	url = git@github.com:alibaba/atrex-kernel-agent.git

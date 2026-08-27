@@ -143,8 +143,20 @@ Campaign schema v3 requires `creation_key`, operator, an Agate GPU environment s
 path, full `base_revision.commit`, `challenger_count`, `challenger_start_epoch`,
 `trajectories_per_branch`, `attempts_per_trajectory`, and per-DSL
 `baseline_kernel`/`initial_evidence`. The keys of `lineages` are the authoritative and complete
-initial Bootstrap DSL selection. Optional `agent_problem` bypasses Core problem generalization. Runtime accepts optional
-`lineages.<dsl>.models.optimizer` and `.evolver` model identities. A null or
+initial Bootstrap DSL selection. Optional `shape_train` is the preferred public train-domain
+contract and is mutually exclusive with the legacy `agent_problem`; either bypasses Core problem
+generalization. Exact `shape_valid.json` cases, `metadata.json`, and `roofline.json` are sealed in the
+Evaluation Contract and never copied into the Agent workspace. The stored public-contract Artifact
+remains complete. Core renders a concise execution view into the Agent Prompt: generator/range
+provenance is omitted and `shape_domain` becomes the sole parameter-domain source. Fixed parameters
+are direct JSON values; variable parameters use range or multi-value Domain objects.
+Operation/category labels are supplied by the objective;
+`operator_contract` remains only when it carries non-Shape ABI semantics such as construction,
+mutation, layout, or return behavior. Directly implied invariants are removed, while cross-field and
+semantic invariants remain visible. For migration-only `atrex.agent_problem.v1`, the legacy flat
+`operator_contract` is normalized entirely into `shape_domain`; private `shapes.json` remains sealed
+as the evaluator-case fallback. Runtime
+accepts optional `lineages.<dsl>.models.optimizer` and `.evolver` model identities. A null or
 missing identity selects the Backend CLI default. Optional top-level
 `problem_generalization_model` is scoped only to generated Agent Problems. Runtime persists these
 identities and binds them to fresh Sessions as `ATREX_AGENT_MODEL`. Runtime imports Core once and
@@ -158,6 +170,10 @@ Before sealing a new Campaign, Runtime calls Agate `get_env(hardware_target)`. T
 canonical returned `gpu` (for example `L20N`) is sealed separately as `agate_gpu` in the Evaluation
 Contract and is used only for Agate scheduling. Bootstrap fails closed if Agate omits either field;
 an Agent-visible hardware target is never inferred from the environment alias.
+When Agate reports an explicit accelerator backend, Runtime preserves it; otherwise Runtime infers
+CUDA, ROCm, or PPU from the canonical GPU and architecture. The backend and optional device slug are
+sealed in the Evaluation Contract. `PPU-*` and `ZW-*` targets automatically
+disable managed clock locking because PPU-SMI does not expose that operation.
 
 Lineage seed schema v1 requires `creation_key`, fixed `dsl`, Epoch topology, and a discriminated
 `seed`. `source_type: "artifacts"` names `agent_artifact_digest` and `kernel_artifact_digest`;

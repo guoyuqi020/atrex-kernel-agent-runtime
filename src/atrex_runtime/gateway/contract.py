@@ -13,6 +13,7 @@ from ..domain.ids import ArtifactDigest, AttemptId
 from ..domain.models import Dsl, KernelRevision
 from ..registry.base import Registry
 from .control import SqliteGatewayControl
+from .environment import AcceleratorBackend
 
 EVALUATION_CONTRACT_VERSION: Literal[1] = 1
 _GATE_OWNED_RUNNER_KEYS = frozenset(
@@ -63,6 +64,8 @@ class AgateEvaluationContractV1(BaseModel):
 
     schema_version: Literal[1] = EVALUATION_CONTRACT_VERSION
     agate_gpu: str | None = Field(default=None, min_length=1)
+    accelerator_backend: AcceleratorBackend | None = None
+    device_slug: str | None = Field(default=None, min_length=1)
     candidate_path: str
     reference_py: str = Field(min_length=1)
     input_py: str = Field(min_length=1)
@@ -114,7 +117,12 @@ class RuntimeGateContractPolicy:
     atrex_bench_version: str | None = None
     production_gate: bool = False
 
-    def apply(self, contract: AgateEvaluationContractV1) -> AgateEvaluationContractV1:
+    def apply(
+        self,
+        contract: AgateEvaluationContractV1,
+        *,
+        accelerator_backend: AcceleratorBackend | None = None,
+    ) -> AgateEvaluationContractV1:
         overrides = {
             key: value
             for key, value in contract.runner_overrides.items()
@@ -126,7 +134,9 @@ class RuntimeGateContractPolicy:
             update={
                 "options": self.options,
                 "mode": "full",
-                "lock_clocks": self.lock_clocks,
+                # PPU exposes a CUDA-compatible execution surface but its PPU-SMI
+                # shim does not implement managed graphics clocks.
+                "lock_clocks": self.lock_clocks and accelerator_backend != "ppu",
                 "harness": "atrex_bench",
                 "atrex_bench_version": self.atrex_bench_version,
                 "runner_overrides": overrides,

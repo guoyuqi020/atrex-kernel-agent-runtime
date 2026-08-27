@@ -36,6 +36,28 @@ def _operator(root: Path) -> Path:
     return root
 
 
+def _shape_train_operator(root: Path) -> Path:
+    operator = _operator(root)
+    operator.joinpath("shapes.json").replace(operator / "shape_valid.json")
+    operator.joinpath("shape_train.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "atrex.shape_train.v1",
+                "generator": {"name": "test", "version": 1},
+                "objective": "Optimize vector add across hidden exact cases.",
+                "operator_contract": {"operation": "vector add"},
+                "workload_profile": {"phase": "decode"},
+                "shape_domain": {"n": {"type": "integer", "min": 1, "max": 4096}},
+                "invariants": ["n >= 1"],
+                "coverage_regimes": [],
+                "development_cases": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return operator
+
+
 def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Path) -> None:
     operator = _operator(tmp_path / "operator")
     workspace = tmp_path / "workspace"
@@ -96,6 +118,42 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Pa
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     subprocess.run(command, check=True, env=environment, capture_output=True, text=True)
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == manifest
+
+
+def test_prepare_prefers_shape_train_and_keeps_shape_valid_private(tmp_path: Path) -> None:
+    operator = _shape_train_operator(tmp_path / "operator")
+    workspace = tmp_path / "workspace"
+    environment = dict(os.environ)
+    environment.update({"AGATE_URL": "https://agate.invalid", "AGATE_GPU": "test-gpu"})
+    subprocess.run(
+        (
+            sys.executable,
+            str(PRODUCTION / "prepare.py"),
+            "--kernel",
+            str(operator),
+            "--backend",
+            "codex",
+            "--workspace",
+            str(workspace),
+        ),
+        check=True,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+
+    for dsl in ("cuda", "triton", "cutedsl"):
+        dsl_workspace = workspace / "dsls" / dsl
+        campaign = CampaignSpecV3.from_file(dsl_workspace / "campaign.json")
+        assert campaign.shape_train == operator / "shape_train.json"
+        assert campaign.agent_problem is None
+        contract = json.loads(
+            dsl_workspace.joinpath("evaluation-contract.json").read_text(encoding="utf-8")
+        )
+        assert contract["shapes"] == {
+            "0": {"init_kwargs": None, "input_kwargs": {"n": 1024}}
+        }
+        assert "shape_valid" not in json.dumps(campaign.model_dump(mode="json"))
 
 
 def test_prepare_can_attach_task_to_existing_service_workspace(tmp_path: Path) -> None:

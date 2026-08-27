@@ -29,7 +29,15 @@ from .launcher import WorkerLauncher
 
 PROBLEM_GENERALIZATION_MANIFEST_VERSION: Literal[1] = 1
 _PRIVATE_KEYS = frozenset(
-    {"reference_py", "input_py", "shapes", "shape_ids", "metadata", "roofline"}
+    {
+        "reference_py",
+        "input_py",
+        "shapes",
+        "shape_valid",
+        "shape_ids",
+        "metadata",
+        "roofline",
+    }
 )
 _RUNTIME_KEYS = {
     "ATREX_AGENT_BACKEND",
@@ -232,6 +240,104 @@ class AgentProblemV1(BaseModel):
                 "input_kwargs": input_kwargs,
             }
         )
+
+
+class ShapeTrainV1(BaseModel):
+    """Atrex-Bench public train-domain contract with private exact Shapes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    schema_version: Literal["atrex.shape_train.v1"]
+    generator: dict[str, JsonValue]
+    objective: str = Field(min_length=1)
+    operator_contract: dict[str, JsonValue]
+    workload_profile: dict[str, JsonValue]
+    shape_domain: dict[str, JsonValue]
+    invariants: tuple[str, ...]
+    coverage_regimes: tuple[dict[str, JsonValue], ...]
+    development_cases: tuple[dict[str, JsonValue], ...] = ()
+
+    @field_validator("invariants")
+    @classmethod
+    def _invariants_are_text(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if any(not item.strip() for item in value):
+            raise ValueError("Shape Train invariants must contain non-empty text")
+        return value
+
+    @field_validator("development_cases")
+    @classmethod
+    def _development_cases_are_synthetic_inputs(
+        cls,
+        value: tuple[dict[str, JsonValue], ...],
+    ) -> tuple[dict[str, JsonValue], ...]:
+        for case in value:
+            if not isinstance(case.get("input_kwargs"), dict) or not isinstance(
+                case.get("init_kwargs"), (dict, type(None))
+            ):
+                raise ValueError(
+                    "Shape Train development cases require input_kwargs and optional init_kwargs"
+                )
+        return value
+
+    @classmethod
+    def from_value(
+        cls,
+        value: object,
+        *,
+        private_shapes: dict[str, JsonValue],
+    ) -> Self:
+        """Validate one supplied public domain without revealing exact evaluator cases."""
+        contract = cls.model_validate(value)
+        visible = contract.model_dump(mode="json")
+        AgentProblemV1._reject_private_keys(visible)
+        private_nodes = {
+            AgentProblemV1._canonical(shape)
+            for shape in private_shapes.values()
+            if isinstance(shape, (dict, list)) and shape
+        }
+        for node in AgentProblemV1._nodes(visible):
+            if (
+                isinstance(node, (dict, list))
+                and node
+                and AgentProblemV1._canonical(node) in private_nodes
+            ):
+                raise ValueError("Shape Train contains an exact private evaluator case")
+        private_cases = {
+            signature
+            for shape in private_shapes.values()
+            if isinstance(shape, dict)
+            and (signature := AgentProblemV1._case_signature(shape)) is not None
+        }
+        for index, case in enumerate(contract.development_cases):
+            signature = AgentProblemV1._case_signature(case)
+            if signature is not None and signature in private_cases:
+                raise ValueError(
+                    f"Shape Train development case {index} duplicates a private evaluator case"
+                )
+        return contract
+
+
+def validate_public_operator_contract(
+    value: object,
+    *,
+    private_shapes: dict[str, JsonValue],
+) -> dict[str, JsonValue]:
+    """Validate either current Shape Train or the migration Agent Problem schema."""
+    if not isinstance(value, dict):
+        raise ValueError("public operator contract must be a JSON object")
+    schema_version = value.get("schema_version")
+    if schema_version == "atrex.shape_train.v1":
+        model: BaseModel = ShapeTrainV1.from_value(value, private_shapes=private_shapes)
+    elif schema_version == "atrex.agent_problem.v1":
+        model = AgentProblemV1.from_value(value, private_shapes=private_shapes)
+    else:
+        raise ValueError(
+            "public operator contract schema_version must be "
+            "'atrex.shape_train.v1' or 'atrex.agent_problem.v1'"
+        )
+    normalized = model.model_dump(mode="json")
+    if not isinstance(normalized, dict):
+        raise AssertionError("public operator contract normalized to a non-object")
+    return normalized
 
 
 @dataclass(frozen=True, slots=True)

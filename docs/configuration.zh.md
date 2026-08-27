@@ -204,14 +204,16 @@ Evidence。`lineages` 的 Key 就是完整的初始 Bootstrap DSL 集合，不�
 部署默认值；之后仍可从已封存 Artifact/Revision 根增加 Lineage。
 每个 `lineages.<dsl>.models` 可以分别指定可选的 `optimizer` 与 `evolver` Model；省略或设为
 `null` 时使用所选 Backend CLI 的默认 Model。Optimizer Model 用于该 Lineage 的 Framework
-Baseline 和全部 Attempt，Evolver Model 用于构建 Challenger。仅当省略 `agent_problem` 时，
-顶层可选 `problem_generalization_model` 才用于问题泛化。这些选择会持久化到 Campaign/Lineage，
+Baseline 和全部 Attempt，Evolver Model 用于构建 Challenger。优先使用可选的 `shape_train`
+作为 Agent 可见的训练域 Contract；它与迁移期兼容字段 `agent_problem` 互斥。精确评测 Case 从
+`shape_valid.json` 加载并封存在 Evaluation Contract 中，仅在迁移期回退到 `shapes.json`。只有两个
+公开 Contract 字段都省略时，顶层可选 `problem_generalization_model` 才用于问题泛化。这些选择会持久化到 Campaign/Lineage，
 恢复已有 `creation_key` 时不允许静默改动。
 `challenger_count` 可以为零，其余拓扑值必须为正数。在
 `challenger_start_epoch` 之前的 Epoch 只运行 Active；默认值 `1` 保持立即进化的原有行为。
 可运行工作流各自持有具体的 `examples/<workflow>/campaign.json`，并可引用
-`examples/shared` 下的公共不可变输入，包括公开的 `agent_problem`；只有配置了 Core 问题泛化时
-才可省略该字段。
+`examples/shared` 下的公共不可变输入，包括公开的 `shape_train` 或旧版 `agent_problem`；只有配置了
+Core 问题泛化时才可同时省略这两个字段。
 本地 `kernel_agent`、预生成 Baseline Gateway Result 和 Baseline Latency 都会被拒绝。
 
 凭据值不得写入 JSON。`inherit` 中缺少任一变量会让组合失败；`inherit_optional` 只转发当前存在的白名单变量，适用于 Claude/Codex 这类互斥凭据集合。Capability 签名密钥必须为 Base64，解码后至少 32 字节。

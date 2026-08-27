@@ -231,14 +231,17 @@ or deployment default. Additional Lineages may later be created from sealed Arti
 Each `lineages.<dsl>.models` object independently selects optional `optimizer` and `evolver` model
 names. Omitted or `null` values use the selected Backend CLI's default model. The Optimizer model is
 used for that Lineage's framework baseline and every Attempt; the Evolver model is used for its
-Challenger construction. The optional top-level `problem_generalization_model` applies only when
-`agent_problem` is omitted. These choices are persisted with Campaign/Lineage state, so resuming an
+Challenger construction. A supplied `shape_train` is the preferred public operator contract and is
+mutually exclusive with the migration-only `agent_problem`. Exact evaluator cases remain sealed in
+the Evaluation Contract loaded from `shape_valid.json` (with `shapes.json` as a legacy fallback).
+The optional top-level `problem_generalization_model` applies only when both public-contract fields
+are omitted. These choices are persisted with Campaign/Lineage state, so resuming an
 existing `creation_key` cannot silently change them.
 `challenger_count` may be zero; the other topology values must be positive. Epochs before
 `challenger_start_epoch` run Active only. Its default value `1` preserves immediate evolution.
 Runnable workflows own their concrete `examples/<workflow>/campaign.json` files and may reference
-common immutable inputs under `examples/shared`, including a public `agent_problem`; that field may be
-omitted only when Core problem generalization is configured. Local `kernel_agent`, precomputed
+common immutable inputs under `examples/shared`, including a public `shape_train` or legacy
+`agent_problem`; both may be omitted only when Core problem generalization is configured. Local `kernel_agent`, precomputed
 baseline Gateway result, and baseline latency fields are rejected.
 
 Credential values never belong in JSON. A missing `inherit` variable fails composition;

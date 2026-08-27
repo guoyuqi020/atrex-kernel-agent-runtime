@@ -127,6 +127,10 @@ bash scripts/production/run.sh \
 `--kernel` accepts an operator directory, a `suite/operator` path relative to Atrex-Bench `data/`,
 or a unique operator name. Bootstrap uses `reference.py` by default; pass
 `--seed-source solution.py` only when intentionally starting from that implementation.
+For current Atrex-Bench layouts, preparation exposes `shape_train.json` to the Agent and seals
+`shape_valid.json` as the exact Evaluation Contract. Legacy `agent_problem.json` and `shapes.json`
+remain fallback-only. `metadata.json` is forwarded privately, including `mutates_inputs` and
+`scratch_inputs`, so the remote correctness gate enforces declared input side effects.
 
 ## Per-DSL inspection
 

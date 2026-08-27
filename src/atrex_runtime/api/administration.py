@@ -84,6 +84,7 @@ def _bootstrap_source_paths(spec: CampaignSpecV3) -> tuple[Path | None, ...]:
     """Return every host path named by the Campaign definition."""
     common: list[Path | None] = [
         spec.evaluation_contract,
+        spec.shape_train,
         spec.agent_problem,
     ]
     for lineage in spec.lineages.values():

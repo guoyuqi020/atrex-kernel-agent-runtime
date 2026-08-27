@@ -29,6 +29,7 @@ _PRIVATE_RESULT_KEYS = frozenset(
         "request",
         "roofline",
         "shape",
+        "shape_valid",
         "shapes",
         "spec",
         "stderr",

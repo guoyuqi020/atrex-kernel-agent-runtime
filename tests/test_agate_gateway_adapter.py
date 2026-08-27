@@ -78,6 +78,12 @@ def _contract() -> AgateEvaluationContractV1:
         reference_py="class Model: pass\n",
         input_py="def get_inputs(): return ()\n",
         shapes={"0": {}, "1": {}},
+        metadata={
+            "benchmark_contract": {
+                "mutates_inputs": ["state"],
+                "scratch_inputs": ["workspace"],
+            }
+        },
         options=AgateEvaluationOptionsV1(
             num_correctness_cases=2,
             bench_iters=50,
@@ -407,6 +413,10 @@ async def test_eval_uses_sealed_context_and_maps_raw_atrex_result(tmp_path: Path
     assert builder.calls[0]["gpu"] == "H20"
     assert builder.calls[0]["idempotency_key"] == "candidate-1"
     assert builder.calls[0]["spec_fields"] == {"languages": ["triton"]}
+    assert builder.calls[0]["reference"]["metadata"]["benchmark_contract"] == {  # type: ignore[index]
+        "mutates_inputs": ["state"],
+        "scratch_inputs": ["workspace"],
+    }
     jobs.close()
 
 

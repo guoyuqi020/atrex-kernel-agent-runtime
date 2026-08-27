@@ -41,6 +41,8 @@ Schedule，也不会把失败 Allocation 的部分结果与重试结果拼接。
 `gate_policy.lock_clocks` 默认为 `true`。当它为 true 时，远端 Driver 会在第一个 A/B Entry 前对整个 Allocation
 加一次锁，将 Atrex Bench 的外部锁频标记传给所有 Evaluator 子进程，并在完整 Schedule 后恢复
 时钟。无法应用或恢复请求的锁频都会让该 Batch 失败关闭；`lock_clocks: false` 不修改时钟。
+对于 `PPU-*` 或 `ZW-*` 目标，即使全局 Policy 请求锁频，Runtime 也会把封存 Contract 强制设为
+`lock_clocks: false`；Correctness 与 Performance 评测仍正常执行。
 
 全部 Batch 完成后，Runtime 根据逐 Shape 延迟重建每次完整 Workload Run，再分别对两个 Kernel
 的各 Repeat 取几何平均。Incumbent 与 Candidate 的所有 Run 都必须通过 Compile、Correctness 与

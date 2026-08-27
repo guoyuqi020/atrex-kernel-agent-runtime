@@ -16,6 +16,7 @@ def test_candidate_source_validation_keeps_actionable_safe_details() -> None:
                 "forbidden_imports": ["os"],
                 "input_py": "hidden evaluator source",
                 "shape": {"m": 4096},
+                "shape_valid": {"0": {"input_kwargs": {"m": 4096}}},
             },
         }
     )

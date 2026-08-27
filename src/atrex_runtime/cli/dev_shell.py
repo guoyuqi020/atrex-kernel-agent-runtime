@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..bootstrap import load_campaign_spec
@@ -51,7 +50,7 @@ from ..secrets import read_capability_signing_key
 from ..workers.core import CoreOptimizerSessionDriver
 from ..workers.evolution import EvolutionWorkspaceAssembler, SubprocessEvolutionSessionDriver
 from ..workers.optimizer import OptimizerSessionConfig
-from ..workers.problem_generalization import AgentProblemV1
+from ..workers.problem_generalization import validate_public_operator_contract
 from ..workers.workspace import LocalAttemptWorkspaceAssembler
 
 
@@ -169,8 +168,11 @@ def open_temporary_optimizer_dev_shell(
     selected = spec.selected_dsls()
     if len(selected) != 1:
         raise ValueError("temporary-dev-shell requires exactly one configured DSL")
-    if spec.agent_problem is None:
-        raise ValueError("temporary-dev-shell requires a supplied public Agent Problem")
+    supplied_public_contract = spec.shape_train or spec.agent_problem
+    if supplied_public_contract is None:
+        raise ValueError(
+            "temporary-dev-shell requires a supplied Shape Train or Agent Problem"
+        )
     dsl = selected[0]
     lineage_spec = spec.lineages[dsl]
 
@@ -192,10 +194,13 @@ def open_temporary_optimizer_dev_shell(
             contract.model_dump(mode="json"),
             ArtifactKind.EVALUATION_CONTRACT,
         )
-        problem_value = json.loads(Path(spec.agent_problem).read_bytes())
-        problem = AgentProblemV1.from_value(problem_value, private_shapes=contract.shapes)
+        problem_value = json.loads(supplied_public_contract.read_bytes())
+        problem = validate_public_operator_contract(
+            problem_value,
+            private_shapes=contract.shapes,
+        )
         problem_digest = artifacts.put_json(
-            problem.model_dump(mode="json"),
+            problem,
             ArtifactKind.AGENT_PROBLEM,
         )
         input_kernel_digest = artifacts.put_directory(

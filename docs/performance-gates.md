@@ -47,6 +47,8 @@ accepts no partial or reordered schedule and never combines runs from a failed a
 the first A/B entry, exports Atrex Bench's external-lock markers to every evaluator subprocess, and
 resets clocks after the complete schedule. Failure to apply or reset the requested lock fails the
 batch closed. `lock_clocks: false` performs no clock mutation.
+For PPU targets (`PPU-*` or `ZW-*`), Runtime forces the sealed Contract to `lock_clocks: false` even
+when the global policy requests locking; correctness and performance still run normally.
 
 After all batches finish, Runtime reconstructs each full-workload run from its per-Shape latencies,
 then computes one geometric mean across repeats for each Kernel. All incumbent and candidate runs

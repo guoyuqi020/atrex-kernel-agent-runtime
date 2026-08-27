@@ -125,8 +125,17 @@ Campaign schema v3 必须提供 `creation_key`、算子、写在 `hardware_targe
 环境选择器、Evaluation Contract
 路径、完整 `base_revision.commit`、`challenger_count`、`challenger_start_epoch`、
 `trajectories_per_branch`、`attempts_per_trajectory` 和各 DSL 的
-`baseline_kernel`/`initial_evidence`。`lineages` 的 Key 是权威且完整的初始 Bootstrap DSL 集合；可选
-`agent_problem` 跳过 Core 问题泛化。可选的 `lineages.<dsl>.models.optimizer` 与
+`baseline_kernel`/`initial_evidence`。`lineages` 的 Key 是权威且完整的初始 Bootstrap DSL 集合；
+优先使用可选的 `shape_train` 作为公开训练域 Contract；它与旧版 `agent_problem` 互斥，二者都可
+跳过 Core 问题泛化。精确的 `shape_valid.json` Case、`metadata.json` 与 `roofline.json` 会封存在
+Evaluation Contract，不会复制进 Agent 工作区。持久化的公开 Contract Artifact 保持完整；Core
+只向 Agent Prompt 投影精简的执行视图：隐藏生成器与范围证据来源，并以 `shape_domain` 作为唯一的
+参数域来源。固定参数直接表示为 JSON 值；可变参数才使用范围或多值 Domain 对象。算子名称与类别由
+objective 表达；只有包含构造参数、输入
+副作用、布局或返回行为等非 Shape ABI 语义时才保留 `operator_contract`。可直接推导的 invariant
+不再重复展示；跨字段和语义 invariant 仍然保留。对于迁移期的 `atrex.agent_problem.v1`，旧版扁平
+`operator_contract` 会全部归一化进 `shape_domain`；私有 `shapes.json` 仍只作为评测 Case 回退来源。
+可选的 `lineages.<dsl>.models.optimizer` 与
 `.evolver` 分别绑定该 Lineage 的两类 Session；缺省或 `null` 表示使用 Backend CLI 默认
 Model。顶层可选 `problem_generalization_model` 只用于生成 Agent Problem。Runtime 持久化这些
 Model 身份，并以 `ATREX_AGENT_MODEL` 注入新 Session。Runtime 只导入一次 Core，并从相同
@@ -138,6 +147,9 @@ Recovery Generation；每个新物理 Session 获得新的 Capability Generation
 `sm_120`）成为 Campaign/Lineage 中保存并传给所有 Agent 的硬件目标；远端返回的规范 `gpu`
 （例如 `L20N`）则作为 `agate_gpu` 单独封存在 Evaluation Contract 中，仅用于 Agate 调度。
 若响应缺少任一字段，Bootstrap 会直接失败，不会再从环境别名猜测 Agent 可见硬件信息。
+Agate 显式返回 Accelerator Backend 时 Runtime 会保留它；否则根据规范 GPU 与 Arch 推断 CUDA、
+ROCm 或 PPU；Backend 与可选 Device Slug 会封存在 Evaluation Contract 中。`PPU-*` 与 `ZW-*`
+设备会自动关闭托管锁频，因为 PPU-SMI 不支持该操作。
 
 Lineage seed schema v1 必须提供 `creation_key`、固定 `dsl`、Epoch 拓扑和带判别字段的
 `seed`。`source_type: "artifacts"` 指定 `agent_artifact_digest` 与

@@ -48,6 +48,7 @@ def _rendered_prompts() -> dict[str, str]:
                 evidence_prompt=RUNTIME_OPTIMIZER_EVIDENCE,
                 agent_problem={
                     "schema_version": "atrex.agent_problem.v1",
+                    "generator": {"name": "private-generator-provenance", "version": 2},
                     "objective": "implement example while exact cases remain private",
                     "invariants": ["preserve semantics"],
                 },
@@ -67,6 +68,7 @@ def _rendered_prompts() -> dict[str, str]:
             SimpleNamespace(
                 agent_problem={
                     "schema_version": "atrex.agent_problem.v1",
+                    "generator": {"name": "private-generator-provenance", "version": 2},
                     "objective": "implement example while exact cases remain private",
                     "invariants": ["preserve semantics"],
                 },
@@ -119,6 +121,7 @@ def test_execution_prompts_embed_the_public_operator_contract() -> None:
     for phase in ("optimization_attempt", "framework_baseline"):
         assert "## Public operator contract" in prompts[phase]
         assert '"objective": "implement example while exact cases remain private"' in prompts[phase]
+        assert "private-generator-provenance" not in prompts[phase]
         assert "input/agent-problem" not in prompts[phase]
 
 
