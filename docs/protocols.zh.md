@@ -77,8 +77,9 @@ Optimizer 可用 Gateway 响应或已保留 Experiment 记录中的已知 Trial 
 Worker 返回与管理面可见的原始 Result 有意不同：私有输入、Request、逐 Case 失败详情和 Evaluator
 Spec 都会被隐藏。`evaluate` 只返回聚合正确性/延迟，以及可选的按不透明数字 `shape_id` 标识的延迟；
 `profile` 可选一个数字 `shape_id`，省略时由评测器选择一个私有 Case，并只用该编号标记脱敏后的
-Profiler 视图。`check` 不暴露 Shape 选择参数：Runtime 确定性选择 Contract 中排序后的第一个不透明
-Shape，并把其私有 `init_kwargs` 传给 Agate Compile，使参数化 `Model` 构造器得到正确检查。
+Profiler 视图。`check` 与 `disassemble` 都不暴露 Shape 选择参数：Runtime 确定性选择 Contract 中排序
+后第一个声明了 `init_kwargs` 的不透明 Shape，并把其私有 `init_kwargs` 传给 Agate 编译作业，使参数化
+`Model` 构造器得到正确构建。
 该协议不依赖 `launcher.mode`。
 
 Runtime 把成功的 `evaluate` 与 `profile` 响应规范化为只追加的内部

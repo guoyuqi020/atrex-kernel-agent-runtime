@@ -162,7 +162,7 @@ class DisassembleRequestV2(_DependencyRequestV2):
     """Compile and return GPU assembly for the current candidate."""
 
     operation: Literal["disassemble"]
-    fmt: Literal["sass", "ptx", "auto"] = "auto"
+    fmt: Literal["sass", "ptx", "isa", "auto"] = "auto"
 
 
 class PollRequestV2(_GatewayRequestV2):

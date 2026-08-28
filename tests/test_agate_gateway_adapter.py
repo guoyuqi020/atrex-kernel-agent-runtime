@@ -1078,6 +1078,47 @@ async def test_check_uses_the_first_shape_that_declares_init_kwargs(tmp_path: Pa
 
 
 @pytest.mark.anyio
+async def test_disassemble_carries_private_init_kwargs_and_isa_format(tmp_path: Path) -> None:
+    client = FakeAgateClient({"job_id": "da_test", "status": "succeeded"})
+    builder = CapturingBuilder()
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    contract = _contract().model_copy(
+        update={"shapes": {"b": {"init_kwargs": {"width": 2}}, "a": {"init_kwargs": None}}}
+    )
+    adapter = AgateGatewayAdapter(
+        client,
+        builder,
+        StaticContexts(AgateEvaluationContext("parameterized", "H20", Dsl.CUDA, contract)),
+        jobs,
+        wait_timeout_s=1200,
+    )
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    candidate.joinpath("kernel.py").write_text("class Model: pass\n")
+
+    result = await adapter.execute(
+        GatewayAdapterRequest(
+            new_attempt_id(),
+            GatewayOperation.DISASSEMBLE,
+            "disassemble-isa",
+            digest("candidate"),
+            candidate,
+            None,
+            None,
+            None,
+            {"fmt": "isa"},
+        )
+    )
+
+    assert result.status == "completed"
+    kind, payload = client.submitted[-1]
+    assert kind == "disassemble"
+    assert payload["init_kwargs"] == {"width": 2}
+    assert payload["fmt"] == "isa"
+    jobs.close()
+
+
+@pytest.mark.anyio
 async def test_agate_query_commands_are_scoped_and_config_is_redacted(tmp_path: Path) -> None:
     client = FakeAgateClient({"job_id": "dv_query", "status": "running", "kind": "dev"})
     builder = CapturingBuilder()

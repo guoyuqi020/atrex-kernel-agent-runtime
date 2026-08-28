@@ -782,10 +782,16 @@ class AgateGatewayAdapter:
                 context,
                 candidate_source,
                 "check",
-                init_kwargs=self._private_check_init_kwargs(context.contract),
+                init_kwargs=self._private_constructor_kwargs(context.contract),
             )
         if request.operation is GatewayOperation.DISASSEMBLE:
-            return self._build_source_job(request, context, candidate_source, "disassemble")
+            return self._build_source_job(
+                request,
+                context,
+                candidate_source,
+                "disassemble",
+                init_kwargs=self._private_constructor_kwargs(context.contract),
+            )
 
         shapes = contract.shapes
         metadata = contract.metadata
@@ -957,7 +963,7 @@ class AgateGatewayAdapter:
         candidate_source: str,
         job: Literal["check", "disassemble"],
         *,
-        init_kwargs: dict[str, JsonValue] | None = None,
+        init_kwargs: dict[str, JsonValue],
     ) -> dict[str, object]:
         payload: dict[str, object] = {
             "spec": {"target_hardware": [context.agate_gpu]},
@@ -965,8 +971,10 @@ class AgateGatewayAdapter:
             "env_vars": request.parameters.get("env_vars", {}),
         }
         self._apply_dependencies(payload, request.parameters)
+        # Both jobs construct Model before compiling, so a parameterized operator needs
+        # its constructor arguments either way.
+        payload["init_kwargs"] = init_kwargs
         if job == "check":
-            payload["init_kwargs"] = init_kwargs or {}
             for key in ("arch", "sanitize"):
                 value = request.parameters.get(key)
                 if value is not None:
@@ -976,10 +984,10 @@ class AgateGatewayAdapter:
         return payload
 
     @staticmethod
-    def _private_check_init_kwargs(
+    def _private_constructor_kwargs(
         contract: AgateEvaluationContractV1,
     ) -> dict[str, JsonValue]:
-        """Resolve opaque Shape constructor arguments for Agate Compile.
+        """Resolve opaque Shape constructor arguments for an Agate compile job.
 
         Some operators declare `init_kwargs` on later Shapes only, so the first
         Shape that carries them wins rather than whichever Shape sorts first.

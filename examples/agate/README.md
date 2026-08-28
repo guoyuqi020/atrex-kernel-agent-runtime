@@ -70,7 +70,7 @@ Useful optional variables are:
 - `AGATE_CORRECTNESS_CASES` and `AGATE_BENCH_ITERS` for evaluation workload size;
 - `AGATE_MODE=correctness` to skip performance measurement;
 - `AGATE_ARCH` and `AGATE_SANITIZE` for `check-kernel.sh`;
-- `AGATE_DISASSEMBLY_FORMAT=auto|sass|ptx` for `disassemble.sh`;
+- `AGATE_DISASSEMBLY_FORMAT=auto|sass|ptx|isa` for `disassemble.sh`;
 - `AGATE_PROFILE_LEVEL=survey|sol|deep`; deep profiling also requires
   `AGATE_KERNEL_NAME`;
 - `AGATE_HTTP_TIMEOUT` for one HTTP request (default `1800` seconds),

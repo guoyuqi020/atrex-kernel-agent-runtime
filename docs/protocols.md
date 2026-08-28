@@ -86,9 +86,9 @@ request, per-case failure, and evaluator-spec fields are withheld. `evaluate` re
 correctness/latency and optional latency keyed by opaque numeric `shape_id`. `profile` accepts an
 optional numeric `shape_id`, defaults to one evaluator-owned case, and returns a sanitized profiler
 view labeled only with that number.
-`check` exposes no Shape selector: Runtime deterministically selects the first opaque Contract
-Shape and supplies its private `init_kwargs` to Agate Compile so parameterized `Model`
-constructors are checked correctly.
+`check` and `disassemble` expose no Shape selector: Runtime deterministically selects the first
+opaque Contract Shape that declares them and supplies its private `init_kwargs` to the Agate compile
+job so parameterized `Model` constructors are built correctly.
 These semantics do not depend on `launcher.mode`.
 
 Runtime normalizes successful `evaluate` and `profile` responses into append-only internal

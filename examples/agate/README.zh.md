@@ -67,7 +67,7 @@ bash examples/agate/dev.sh 'python -c "import torch; print(torch.cuda.get_device
 - `AGATE_CORRECTNESS_CASES` 和 `AGATE_BENCH_ITERS`：控制评测工作量；
 - `AGATE_MODE=correctness`：只检查正确性，不测性能；
 - `AGATE_ARCH` 和 `AGATE_SANITIZE`：配置 `check-kernel.sh`；
-- `AGATE_DISASSEMBLY_FORMAT=auto|sass|ptx`：配置 `disassemble.sh`；
+- `AGATE_DISASSEMBLY_FORMAT=auto|sass|ptx|isa`：配置 `disassemble.sh`；
 - `AGATE_PROFILE_LEVEL=survey|sol|deep`：选择 Profiling 深度；Deep 模式还必须设置
   `AGATE_KERNEL_NAME`；
 - `AGATE_HTTP_TIMEOUT`：单次 HTTP 请求超时，默认 `1800` 秒；
