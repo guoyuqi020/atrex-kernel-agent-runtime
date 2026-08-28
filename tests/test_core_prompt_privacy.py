@@ -40,57 +40,71 @@ _INTERNAL_CONTEXT_FIELDS = {
 }
 
 
-def _rendered_prompts() -> dict[str, str]:
+def _rendered_documents() -> dict[str, tuple[str, str]]:
+    """Return the (user prompt, system prompt) pair delivered for each session phase."""
     config = AgentConfig.load(CORE_ROOT)
+    attempt_context = SimpleNamespace(
+        evidence_prompt=RUNTIME_OPTIMIZER_EVIDENCE,
+        agent_problem={
+            "schema_version": "atrex.agent_problem.v1",
+            "generator": {"name": "private-generator-provenance", "version": 2},
+            "objective": "implement example while exact cases remain private",
+            "invariants": ["preserve semantics"],
+        },
+        manifest={
+            "dsl": "cuda",
+            "context": {
+                "epoch_number": 1,
+                "attempt_ordinal": 1,
+                "operator": "example",
+                "hardware_target": "gpu",
+            },
+        },
+    )
+    baseline_context = SimpleNamespace(
+        agent_problem={
+            "schema_version": "atrex.agent_problem.v1",
+            "generator": {"name": "private-generator-provenance", "version": 2},
+            "objective": "implement example while exact cases remain private",
+            "invariants": ["preserve semantics"],
+        },
+        manifest={
+            "dsl": "cuda",
+            "operator": "example",
+            "hardware_target": "gpu",
+        },
+    )
+    generalization_context = SimpleNamespace(
+        manifest={
+            "dsl": "cuda",
+            "operator": "example",
+            "hardware_target": "gpu",
+        }
+    )
     return {
-        "optimization_attempt": attempt.render_prompt(
-            SimpleNamespace(
-                evidence_prompt=RUNTIME_OPTIMIZER_EVIDENCE,
-                agent_problem={
-                    "schema_version": "atrex.agent_problem.v1",
-                    "generator": {"name": "private-generator-provenance", "version": 2},
-                    "objective": "implement example while exact cases remain private",
-                    "invariants": ["preserve semantics"],
-                },
-                manifest={
-                    "dsl": "cuda",
-                    "context": {
-                        "epoch_number": 1,
-                        "attempt_ordinal": 1,
-                        "operator": "example",
-                        "hardware_target": "gpu",
-                    },
-                },
-            ),
-            config,
+        "optimization_attempt": (
+            attempt.render_prompt(attempt_context, config),
+            attempt.render_system_prompt(attempt_context, config),
         ),
-        "framework_baseline": lineage_bootstrap.render_prompt(
-            SimpleNamespace(
-                agent_problem={
-                    "schema_version": "atrex.agent_problem.v1",
-                    "generator": {"name": "private-generator-provenance", "version": 2},
-                    "objective": "implement example while exact cases remain private",
-                    "invariants": ["preserve semantics"],
-                },
-                manifest={
-                    "dsl": "cuda",
-                    "operator": "example",
-                    "hardware_target": "gpu",
-                },
-            ),
-            config,
+        "framework_baseline": (
+            lineage_bootstrap.render_prompt(baseline_context, config),
+            lineage_bootstrap.render_system_prompt(baseline_context, config),
         ),
-        "problem_generalization": problem_generalization.render_prompt(
-            SimpleNamespace(
-                manifest={
-                    "dsl": "cuda",
-                    "operator": "example",
-                    "hardware_target": "gpu",
-                }
-            ),
-            config,
+        "problem_generalization": (
+            problem_generalization.render_prompt(generalization_context, config),
+            "",
         ),
     }
+
+
+def _rendered_prompts() -> dict[str, str]:
+    """Join both delivered channels so every instruction assertion covers the union."""
+    documents = {}
+    for phase, (prompt, system_prompt) in _rendered_documents().items():
+        documents[phase] = (
+            prompt.rstrip() + "\n\n" + system_prompt + "\n" if system_prompt else prompt
+        )
+    return documents
 
 
 def test_rendered_prompts_do_not_reveal_implementation_identity() -> None:
@@ -186,6 +200,22 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
         examples = re.findall(r"```json\n(.*?)\n```", prompt, re.DOTALL)
         for example in examples:
             json.loads(example)
+
+
+def test_session_tool_contract_survives_context_compaction_as_the_system_prompt() -> None:
+    documents = _rendered_documents()
+
+    for phase in ("optimization_attempt", "framework_baseline"):
+        prompt, system_prompt = documents[phase]
+        assert system_prompt.startswith("## Session tools")
+        assert "python3 agent/optimizer/src/runtime_tools.py gateway-execute --request" in (
+            system_prompt
+        )
+        assert "## Session tools" not in prompt
+        assert "runtime_tools.py" not in prompt
+    generalization_prompt, generalization_system = documents["problem_generalization"]
+    assert generalization_system == ""
+    assert "runtime_tools.py" not in generalization_prompt
 
 
 def test_optimizer_prompt_teaches_the_end_to_end_evidence_handoff() -> None:

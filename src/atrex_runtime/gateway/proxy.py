@@ -46,6 +46,7 @@ from .measurement_history import normalized_measurement_points
 from .production_policy import CandidateProductionValidator
 from .protocol import (
     GATEWAY_PROXY_PROTOCOL_VERSION,
+    AttemptReportRequestV2,
     CancelRequestV2,
     CandidateBundleV2,
     CandidateFileV2,
@@ -68,6 +69,7 @@ from .protocol import (
 
 _REQUEST_ADAPTER: TypeAdapter[GatewayProxyRequestV2] = TypeAdapter(GatewayProxyRequestV2)
 _CANDIDATE_REQUEST_TYPES = (
+    AttemptReportRequestV2,
     EvaluateRequestV2,
     ProfileRequestV2,
     DevRequestV2,
@@ -76,6 +78,7 @@ _CANDIDATE_REQUEST_TYPES = (
 )
 _RUNTIME_LOCAL_OPERATIONS = frozenset(
     {
+        GatewayOperation.ATTEMPT_REPORT,
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.GATEWAY_RESULT_READ,
@@ -272,7 +275,9 @@ class GatewayProxyService:
             event_base,
         )
         try:
-            if isinstance(request, KernelTrialShowRequestV2):
+            if isinstance(request, AttemptReportRequestV2):
+                result = self._register_attempt_report(request, candidate_digest)
+            elif isinstance(request, KernelTrialShowRequestV2):
                 result = self._show_kernel_trial(request)
             elif isinstance(request, KernelArtifactReadRequestV2):
                 result = self._read_kernel_artifact(request)
@@ -395,6 +400,39 @@ class GatewayProxyService:
                 },
             )
         return response
+
+    def _register_attempt_report(
+        self,
+        request: AttemptReportRequestV2,
+        candidate_digest: ArtifactDigest | None,
+    ) -> GatewayAdapterResult:
+        if candidate_digest is None:
+            raise InfrastructureError("Attempt report sealed no candidate")
+        if request.report.status == "candidate_ready":
+            evaluation = self._control.find_agent_evaluation(request.attempt_id, candidate_digest)
+            if evaluation is None:
+                raise ValueError(
+                    "candidate_ready requires a completed Agent evaluate for the exact current "
+                    f"work/kernel tree, sealed as {candidate_digest}. No Agent evaluate covers it; "
+                    'run {"operation": "evaluate"} and submit this report again'
+                )
+            if not evaluation.correct:
+                raise ValueError(
+                    "candidate_ready requires a correct Agent evaluate for the exact current "
+                    f"work/kernel tree, sealed as {candidate_digest}. Its evaluate reported "
+                    "incorrect results; repair the candidate, re-evaluate, and submit again"
+                )
+        return GatewayAdapterResult(
+            "completed",
+            cast(
+                JsonValue,
+                {
+                    "status": "registered",
+                    "candidate_digest": str(candidate_digest),
+                    "report_status": request.report.status,
+                },
+            ),
+        )
 
     def _show_kernel_trial(self, request: KernelTrialShowRequestV2) -> GatewayAdapterResult:
         _, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(request.attempt_id)

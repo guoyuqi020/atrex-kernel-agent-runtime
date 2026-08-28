@@ -13,6 +13,7 @@ from typing import Any, cast
 import pytest
 from conftest import NOW, digest, seed_lineage
 from pydantic import TypeAdapter, ValidationError
+from test_attempt_report import _value as _report_value
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.domain.errors import DirectionConcurrencyError, InvalidTransitionError
@@ -29,6 +30,7 @@ from atrex_runtime.gateway import (
     RegistryCandidateDiffValidator,
     SqliteGatewayControl,
 )
+from atrex_runtime.gateway.journals import RuntimeJournalService
 from atrex_runtime.gateway.protocol import (
     EvaluationV2,
     GatewayProxyRequestV2,
@@ -1022,9 +1024,7 @@ def test_direction_concurrency_error_is_machine_readable_and_actionable() -> Non
     recovery = cast(list[dict[str, Any]], response["recovery"])
     assert recovery[0]["tool"] == "list-directions"
     assert "close it with update-direction" in recovery[1]["instruction"]
-    assert "Retry start only after no other Direction is in progress" in recovery[2][
-        "instruction"
-    ]
+    assert "Retry start only after no other Direction is in progress" in recovery[2]["instruction"]
     assert "request_schema" in response
 
 
@@ -1306,3 +1306,121 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
 
     control.close()
     registry.close()
+
+
+@pytest.mark.anyio
+async def test_candidate_ready_needs_an_evaluate_for_the_exact_sealed_candidate(
+    tmp_path: Path,
+) -> None:
+    registry, control, attempt, capability_value, service, _adapter = _service(tmp_path)
+    report = _report_value(attempt.id)
+
+    def payload(key: str, *, path: str = "kernel.py") -> bytes:
+        return json.dumps(
+            {
+                "schema_version": 2,
+                "attempt_id": attempt.id,
+                "idempotency_key": key,
+                "operation": "attempt_report",
+                "report": report,
+                "candidate": {
+                    "files": [
+                        {
+                            "path": path,
+                            "content_base64": base64.b64encode(b"def kernel(): pass\n").decode(),
+                        }
+                    ]
+                },
+            }
+        ).encode()
+
+    with pytest.raises(ValueError, match="No Agent evaluate covers it"):
+        await service.execute(
+            capability_value.token,
+            payload("report-before-evaluate"),
+            operation_scope="runtime",
+        )
+
+    await service.execute(capability_value.token, _request(attempt))
+    accepted = await service.execute(
+        capability_value.token,
+        payload("report-after-evaluate"),
+        operation_scope="runtime",
+    )
+
+    assert accepted.operation == "attempt_report"
+    assert isinstance(accepted.result, dict)
+    assert accepted.result["status"] == "registered"
+
+    with pytest.raises(ValueError, match="No Agent evaluate covers it"):
+        await service.execute(
+            capability_value.token,
+            payload("report-after-edit", path="other.py"),
+            operation_scope="runtime",
+        )
+
+    control.close()
+    registry.close()
+
+
+def _direction_event(
+    event_id: str,
+    direction_id: str,
+    action: str,
+    recorded_at: str,
+) -> dict[str, object]:
+    proposal = action == "propose"
+    return {
+        "direction_event_id": f"directionevent_{event_id * 32}"[:47],
+        "direction_id": f"direction_{direction_id * 32}"[:42],
+        "recorded_at": recorded_at,
+        "action": action,
+        "name": "vectorize loads" if proposal else None,
+        "hypothesis": "one transaction replaces two" if proposal else None,
+        "rationale": "profile shows excess transactions" if proposal else None,
+        "plan": ["replace scalar loads"] if proposal else [],
+        "success_criteria": "latency improves" if proposal else None,
+        "stop_conditions": "alignment cannot be preserved" if proposal else None,
+        "analysis": None if proposal else "advance the inherited Direction",
+        "supporting_experiment_ids": [],
+    }
+
+
+def test_an_inherited_direction_replays_in_recorded_order(tmp_path: Path) -> None:
+    proposing = new_attempt_id()
+    advancing = new_attempt_id()
+    events = {
+        proposing: (_direction_event("a", "d", "propose", "2026-08-28T03:23:41+00:00"),),
+        advancing: (
+            _direction_event("b", "d", "start", "2026-08-28T04:21:49+00:00"),
+            _direction_event("c", "d", "defer", "2026-08-28T04:35:03+00:00"),
+        ),
+    }
+
+    class _Control:
+        # The visibility query lists the advancing Attempt before the proposing one.
+        def visible_kernel_trial_attempt_ids(
+            self,
+            _attempt_id: object,
+        ) -> tuple[object, tuple[Any, ...]]:
+            return None, (advancing, proposing)
+
+        def visible_attempt_report_artifacts(self, _attempt_id: object) -> tuple[Any, ...]:
+            return ()
+
+        def list_direction_events(self, attempt_id: Any) -> tuple[dict[str, object], ...]:
+            return events.get(attempt_id, ())
+
+        def list_experiments(self, _attempt_id: Any) -> tuple[dict[str, object], ...]:
+            return ()
+
+    service = RuntimeJournalService(
+        cast(Any, _Control()),
+        LocalArtifactStore(tmp_path),
+    )
+
+    ordered = service._visible_direction_events(advancing)
+    assert [event["action"] for event in ordered] == ["propose", "start", "defer"]
+
+    views = service._direction_views(advancing)
+    assert [view["status"] for view in views.values()] == ["deferred"]

@@ -14,6 +14,7 @@ from ..domain.ids import (
     parse_artifact_digest,
     parse_attempt_id,
 )
+from ..workers.attempt_report import AttemptReportV12
 
 GATEWAY_PROXY_PROTOCOL_VERSION: Literal[2] = 2
 
@@ -216,6 +217,19 @@ class ConfigRequestV2(_GatewayRequestV2):
     operation: Literal["config"]
 
 
+class AttemptReportRequestV2(_CandidateRequestV2):
+    """Register one terminal Attempt handoff against the exact current candidate."""
+
+    operation: Literal["attempt_report"]
+    report: AttemptReportV12
+
+    @model_validator(mode="after")
+    def _validate_subject(self) -> AttemptReportRequestV2:
+        if self.report.attempt_id != self.attempt_id:
+            raise ValueError("Attempt report names a different Attempt")
+        return self
+
+
 class KernelTrialShowRequestV2(_GatewayRequestV2):
     """Read one visible Kernel Trial's provenance, observations, and decisions."""
 
@@ -323,6 +337,7 @@ type GatewayProxyRequestV2 = Annotated[
     | EnvRequestV2
     | HealthRequestV2
     | ConfigRequestV2
+    | AttemptReportRequestV2
     | KernelTrialShowRequestV2
     | KernelArtifactReadRequestV2
     | GatewayResultReadRequestV2
@@ -344,6 +359,7 @@ _RUNTIME_OWNED_REQUEST_FIELDS = frozenset({"schema_version", "attempt_id", "cand
 _AGENT_HIDDEN_REQUEST_FIELDS = _RUNTIME_OWNED_REQUEST_FIELDS | {"idempotency_key"}
 _RUNTIME_QUERY_OPERATION_NAMES = frozenset(
     {
+        "attempt_report",
         "kernel_trial_show",
         "kernel_artifact_read",
         "gateway_result_read",
@@ -374,6 +390,7 @@ _GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
     "env": EnvRequestV2,
     "health": HealthRequestV2,
     "config": ConfigRequestV2,
+    "attempt_report": AttemptReportRequestV2,
     "kernel_trial_show": KernelTrialShowRequestV2,
     "kernel_artifact_read": KernelArtifactReadRequestV2,
     "gateway_result_read": GatewayResultReadRequestV2,
@@ -502,6 +519,7 @@ class GatewayProxyResponseV2(BaseModel):
         "env",
         "health",
         "config",
+        "attempt_report",
         "kernel_trial_show",
         "kernel_artifact_read",
         "gateway_result_read",

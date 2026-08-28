@@ -177,6 +177,7 @@ def _utc_now() -> datetime:
 _UNMETERED_OPERATIONS = frozenset(
     {
         GatewayOperation.DEV,
+        GatewayOperation.ATTEMPT_REPORT,
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.GATEWAY_RESULT_READ,
@@ -195,6 +196,7 @@ _UNMETERED_OPERATIONS = frozenset(
 
 _IMPLICIT_RUNTIME_OPERATIONS = frozenset(
     {
+        GatewayOperation.ATTEMPT_REPORT,
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.GATEWAY_RESULT_READ,
