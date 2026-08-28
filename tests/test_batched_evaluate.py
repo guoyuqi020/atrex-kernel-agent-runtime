@@ -41,8 +41,8 @@ def _contract(count: int) -> AgateEvaluationContractV1:
 
 
 @pytest.mark.anyio
-async def test_shape_batch_executor_uses_four_shapes_and_four_workers() -> None:
-    executor = ShapeBatchedEvaluateExecutor()
+async def test_shape_batch_executor_honours_the_requested_split_and_worker_cap() -> None:
+    executor = ShapeBatchedEvaluateExecutor(shape_batch_size=4, max_parallel_batches=4)
     active = 0
     peak = 0
     seen: list[ShapeBatch] = []
@@ -112,7 +112,7 @@ async def test_shape_batch_executor_preserves_single_job_result() -> None:
 
 @pytest.mark.anyio
 async def test_shape_batch_executor_fails_closed_when_any_batch_is_incorrect() -> None:
-    executor = ShapeBatchedEvaluateExecutor()
+    executor = ShapeBatchedEvaluateExecutor(shape_batch_size=4)
 
     async def evaluate(batch: ShapeBatch) -> ShapeBatchOutcome:
         correct = batch.index == 0
@@ -134,7 +134,7 @@ async def test_shape_batch_executor_fails_closed_when_any_batch_is_incorrect() -
 
 @pytest.mark.anyio
 async def test_shape_batch_executor_stops_on_candidate_rejection() -> None:
-    executor = ShapeBatchedEvaluateExecutor(max_parallel_batches=1)
+    executor = ShapeBatchedEvaluateExecutor(shape_batch_size=4, max_parallel_batches=1)
     seen: list[int] = []
     rejection = {
         "reason": "candidate_validation_failed",
@@ -175,3 +175,25 @@ async def test_shape_batch_executor_stops_on_candidate_rejection() -> None:
             "details": rejection,
         },
     }
+
+
+@pytest.mark.anyio
+async def test_one_agate_job_carries_every_shape_by_default() -> None:
+    executor = ShapeBatchedEvaluateExecutor()
+    seen: list[ShapeBatch] = []
+
+    async def evaluate(batch: ShapeBatch) -> ShapeBatchOutcome:
+        seen.append(batch)
+        return ShapeBatchOutcome(
+            {"job_id": "single", "status": "succeeded"},
+            EvaluationV2(correct=True, latency_us=5.0),
+            "single",
+            {"all_pass": True},
+        )
+
+    result = await executor.run(_contract(90), "one-job", evaluate)
+
+    assert len(seen) == 1
+    assert len(seen[0].shape_ids) == 90
+    assert seen[0].idempotency_key == "one-job"
+    assert result.job_id == "single"

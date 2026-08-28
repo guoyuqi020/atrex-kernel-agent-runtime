@@ -327,11 +327,11 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert recovered == outcome
     assert outcome.correct is True
     assert outcome.latency_us == 7.5
-    assert len(client.submitted) == 2
-    assert sorted(
+    assert len(client.submitted) == 1
+    assert [
         len(request["reference"]["shapes"])
         for request in client.submitted  # type: ignore[index]
-    ) == [1, 4]
+    ] == [5]
     assert client.submitted[0]["gpu"] == "L20N"
     options = client.submitted[0]["options"]
     assert isinstance(options, dict)
@@ -341,7 +341,6 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert evaluations[-1].kernel_artifact_digest == candidate_digest
     assert control.get_committed_outcome(attempt_id) == outcome
     assert [kind for kind, _aggregate, _payload in events.values] == [
-        "gateway.authoritative_evaluation_submitted",
         "gateway.authoritative_evaluation_submitted",
         "gateway.authoritative_evaluation_completed",
     ]

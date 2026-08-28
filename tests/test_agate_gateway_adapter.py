@@ -251,7 +251,12 @@ class BatchedEvalAgateClient(FakeAgateClient):
         assert kind == "eval"
         job_id = f"ev_batch_{len(self.submitted)}"
         self.submitted.append((kind, request))
-        self.latency_by_job[job_id] = 2.0 if job_id.endswith("0") else 32.0
+        reference = request["reference"]
+        assert isinstance(reference, dict)
+        shapes = reference["shapes"]
+        assert isinstance(shapes, dict)
+        # Batches submit concurrently, so key the stub on the batch, not on arrival order.
+        self.latency_by_job[job_id] = 2.0 if len(shapes) > 1 else 32.0
         return {"job_id": job_id, "status": "queued"}
 
     def get_job(
@@ -533,7 +538,7 @@ async def test_eval_repetitions_run_as_independent_jobs_and_average(tmp_path: Pa
 
 
 @pytest.mark.anyio
-async def test_optimizer_eval_uses_shared_shape_batches(tmp_path: Path) -> None:
+async def test_optimizer_eval_sends_every_shape_in_one_job(tmp_path: Path) -> None:
     contract = _contract().model_copy(update={"shapes": {str(index): {} for index in range(5)}})
     client = BatchedEvalAgateClient(_successful_job())
     builder = CapturingBuilder()
@@ -562,14 +567,12 @@ async def test_optimizer_eval_uses_shared_shape_batches(tmp_path: Path) -> None:
         )
     )
 
-    assert len(client.submitted) == 2
+    assert len(client.submitted) == 1
     references = [payload["reference"] for _kind, payload in client.submitted]
-    assert sorted(len(reference["shapes"]) for reference in references) == [1, 4]  # type: ignore[index]
+    assert [len(reference["shapes"]) for reference in references] == [5]  # type: ignore[index]
     assert result.evaluation is not None
-    assert result.evaluation.latency_us == pytest.approx((2.0**4 * 32.0) ** (1 / 5))
-    assert isinstance(result.result, dict)
-    assert result.result["operation"] == "shape_batched_evaluate"
-    assert result.job_id is None
+    assert result.evaluation.latency_us == pytest.approx(2.0)
+    assert result.job_id == "ev_batch_0"
     jobs.close()
 
 

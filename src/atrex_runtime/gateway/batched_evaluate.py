@@ -16,8 +16,7 @@ from .correctness import merge_correctness_summaries
 from .private_results import project_candidate_rejection
 from .protocol import EvaluationV2
 
-EVALUATE_SHAPE_BATCH_SIZE = 4
-EVALUATE_MAX_PARALLEL_BATCHES = 4
+EVALUATE_MAX_PARALLEL_BATCHES = 8
 CANDIDATE_REJECTED_CATEGORY = "candidate_rejected"
 
 
@@ -53,15 +52,15 @@ class BatchedEvaluateOutcome:
 
 
 class ShapeBatchedEvaluateExecutor:
-    """Execute four Shapes per job with at most four concurrent Agate jobs."""
+    """Submit one Agate job per Evaluate, or a bounded Shape split when asked."""
 
     def __init__(
         self,
         *,
-        shape_batch_size: int = EVALUATE_SHAPE_BATCH_SIZE,
+        shape_batch_size: int | None = None,
         max_parallel_batches: int = EVALUATE_MAX_PARALLEL_BATCHES,
     ) -> None:
-        if shape_batch_size <= 0 or max_parallel_batches <= 0:
+        if max_parallel_batches <= 0 or (shape_batch_size is not None and shape_batch_size <= 0):
             raise ValueError("Evaluate Shape batch limits must be positive")
         self._shape_batch_size = shape_batch_size
         self._max_parallel_batches = max_parallel_batches
@@ -109,9 +108,9 @@ class ShapeBatchedEvaluateExecutor:
         idempotency_key: str,
     ) -> tuple[ShapeBatch, ...]:
         shape_ids = sorted_shape_ids(contract)
+        size = len(shape_ids) if self._shape_batch_size is None else self._shape_batch_size
         groups = tuple(
-            shape_ids[offset : offset + self._shape_batch_size]
-            for offset in range(0, len(shape_ids), self._shape_batch_size)
+            shape_ids[offset : offset + size] for offset in range(0, len(shape_ids), max(size, 1))
         )
         single = len(groups) == 1
         return tuple(
@@ -348,7 +347,6 @@ def _candidate_rejected_outcome(
 __all__ = [
     "CANDIDATE_REJECTED_CATEGORY",
     "EVALUATE_MAX_PARALLEL_BATCHES",
-    "EVALUATE_SHAPE_BATCH_SIZE",
     "BatchedEvaluateOutcome",
     "ShapeBatch",
     "ShapeBatchOutcome",
