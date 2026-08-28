@@ -139,7 +139,7 @@
       "minimum_improvement_percent": 0.0,
       "allocation_timeout_seconds": 600,
       "shape_batch_size": 1,
-      "max_parallel_shape_batches": 4
+      "max_parallel_shape_batches": 8
     },
     "agent_promotion_comparison": {
       "method": "same_allocation_abba",
@@ -147,7 +147,7 @@
       "minimum_improvement_percent": 0.0,
       "allocation_timeout_seconds": 600,
       "shape_batch_size": 1,
-      "max_parallel_shape_batches": 4
+      "max_parallel_shape_batches": 8
     },
     "evidence": {
       "max_trace_files": 8,
@@ -189,8 +189,8 @@
       "session_trace_relative_path": "sessions/core",
       "token_usage_report_relative_path": "scratch/token-usage.json",
       "max_attempt_report_bytes": 65536,
-      "timeout_seconds": 5400,
-      "bootstrap_timeout_seconds": 10800,
+      "timeout_seconds": 7200,
+      "bootstrap_timeout_seconds": 14400,
       "terminate_grace_seconds": 10,
       "max_diagnostic_bytes": 131072,
       "max_session_tokens": 20000000,
@@ -230,7 +230,7 @@
           "QODER_PERSONAL_ACCESS_TOKEN"
         ]
       },
-      "timeout_seconds": 10800,
+      "timeout_seconds": 14400,
       "terminate_grace_seconds": 10,
       "max_diagnostic_bytes": 131072,
       "max_output_manifest_bytes": 16384

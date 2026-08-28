@@ -49,13 +49,13 @@
     "minimum_improvement_percent": 0.0,
     "allocation_timeout_seconds": 600,
     "shape_batch_size": 1,
-    "max_parallel_shape_batches": 4
+    "max_parallel_shape_batches": 8
   },
   "workers": {
     "reasoning_effort": "max",
-    "optimizer_timeout_seconds": 5400,
-    "bootstrap_timeout_seconds": 10800,
-    "evolver_timeout_seconds": 10800,
+    "optimizer_timeout_seconds": 7200,
+    "bootstrap_timeout_seconds": 14400,
+    "evolver_timeout_seconds": 14400,
     "optimizer_max_session_tokens": 20000000,
     "optimizer_max_session_credits": 1000000
   },

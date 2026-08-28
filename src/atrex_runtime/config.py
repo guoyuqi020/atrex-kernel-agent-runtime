@@ -263,7 +263,7 @@ class CoreOptimizerWorkerSettings(BaseModel):
     token_usage_report_relative_path: str
     max_attempt_report_bytes: int = Field(gt=0)
     timeout_seconds: float = Field(gt=0)
-    bootstrap_timeout_seconds: float = Field(default=10_800.0, gt=0)
+    bootstrap_timeout_seconds: float = Field(default=14_400.0, gt=0)
     terminate_grace_seconds: float = Field(gt=0)
     max_diagnostic_bytes: int = Field(gt=0)
     max_session_tokens: int = Field(gt=0)
@@ -605,7 +605,7 @@ class SameAllocationAbbaComparisonSettings(BaseModel):
     minimum_improvement_percent: float = Field(default=0.0, ge=0, lt=100)
     allocation_timeout_seconds: int = Field(default=600, gt=0)
     shape_batch_size: int = Field(default=1, gt=0)
-    max_parallel_shape_batches: int = Field(default=4, gt=0)
+    max_parallel_shape_batches: int = Field(default=8, gt=0)
 
 
 ComparisonSettings = Annotated[

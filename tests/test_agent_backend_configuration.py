@@ -60,10 +60,10 @@ def test_core_process_contract_contains_runtime_binding() -> None:
     assert process.agent_backend == "qodercli"
     assert process.reasoning_effort == "max"
     assert process.session_settings == ""
-    assert process.timeout_seconds == 5400
+    assert process.timeout_seconds == 7200
 
     bootstrap = build_core_process_config(
         campaign,
         timeout_seconds=campaign.optimizer.bootstrap_timeout_seconds,
     )
-    assert bootstrap.timeout_seconds == 10_800
+    assert bootstrap.timeout_seconds == 14_400

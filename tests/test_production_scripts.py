@@ -101,10 +101,10 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Pa
     assert settings.campaign.max_parallel_branches == 2
     assert settings.campaign.gate_policy.production_gate is True
     assert settings.campaign.optimizer.agent_backend == "codex"
-    assert settings.campaign.optimizer.timeout_seconds == 5400
-    assert settings.campaign.optimizer.bootstrap_timeout_seconds == 10_800
+    assert settings.campaign.optimizer.timeout_seconds == 7200
+    assert settings.campaign.optimizer.bootstrap_timeout_seconds == 14_400
     assert settings.campaign.evolver.agent_backend == "codex"
-    assert settings.campaign.evolver.timeout_seconds == 10_800
+    assert settings.campaign.evolver.timeout_seconds == 14_400
     secrets = workspace / "runtime.env"
     assert secrets.stat().st_mode & 0o777 == 0o600
 

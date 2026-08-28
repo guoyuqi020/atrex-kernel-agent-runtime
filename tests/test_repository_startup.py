@@ -122,7 +122,7 @@ def test_checked_in_comparison_evaluator_is_the_pinned_submodule(tmp_path: Path)
         assert comparison.minimum_improvement_percent == 0.0
         assert comparison.allocation_timeout_seconds == 600
         assert comparison.shape_batch_size == 1
-        assert comparison.max_parallel_shape_batches == 4
+        assert comparison.max_parallel_shape_batches == 8
 
     assert evaluator_repository == (repository / "third_party/atrex-bench").resolve()
     resolved = subprocess.run(

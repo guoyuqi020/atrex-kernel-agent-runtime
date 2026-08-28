@@ -77,7 +77,7 @@ def test_bootstrap_prepare_builds_valid_remote_agate_inputs(tmp_path: Path) -> N
     assert settings.gpu_wiki is None
     assert settings.campaign is not None
     assert settings.campaign.optimizer.max_session_tokens == 20_000_000
-    assert settings.campaign.optimizer.bootstrap_timeout_seconds == 10_800
+    assert settings.campaign.optimizer.bootstrap_timeout_seconds == 14_400
     assert spec.hardware_target == "TEST_GPU"
     assert tuple(spec.lineages) == (Dsl.TRITON,)
     assert spec.challenger_start_epoch == 1
