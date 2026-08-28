@@ -942,6 +942,13 @@ def _invalid_request_response(
         )
     if isinstance(error, ValidationError):
         issues = _agent_validation_issues(error)
+        # str(error) leads with every tagged-union variant and echoes the request prefix,
+        # so the cause it ends with costs far more context than the compacted issues.
+        response["detail"] = (
+            "; ".join(f"{issue['path']}: {issue['message']}" for issue in issues)
+            if issues
+            else "the request does not match the schema for this operation"
+        )
         if issues:
             response["issues"] = cast(JsonValue, issues)
     operation: object = None

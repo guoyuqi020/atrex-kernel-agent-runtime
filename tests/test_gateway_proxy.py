@@ -37,6 +37,7 @@ from atrex_runtime.gateway.protocol import (
     gateway_agent_request_schema,
 )
 from atrex_runtime.gateway.proxy import (
+    _REQUEST_ADAPTER,
     GatewayAdapterRequest,
     GatewayAdapterResult,
     _invalid_request_response,
@@ -1149,6 +1150,38 @@ async def test_runtime_journal_survives_attempt_recovery_generation(
     assert trial.annotations[0].experiment["name"] == "preserve recovered evidence"
     control.close()
     registry.close()
+
+
+def test_validation_detail_names_the_cause_without_the_union_or_the_request() -> None:
+    payload = json.dumps(
+        {
+            "schema_version": 2,
+            "attempt_id": f"attempt_{'0' * 32}",
+            "idempotency_key": "env-caps-1",
+            "operation": "env",
+            "capabilities": True,
+        }
+    ).encode()
+    try:
+        _REQUEST_ADAPTER.validate_json(payload)
+    except ValidationError as error:
+        response = _invalid_request_response(payload, error, operation_scope="gateway")
+    else:
+        raise AssertionError("env capabilities without gpu must fail validation")
+
+    detail = response["detail"]
+    assert isinstance(detail, str)
+    assert detail == "$: Value error, env capabilities requires gpu"
+    assert "tagged-union" not in detail
+    assert "EvaluateRequestV2" not in detail
+    assert "schema_version" not in detail
+    assert response["issues"] == [
+        {
+            "path": "$",
+            "code": "value_error",
+            "message": "Value error, env capabilities requires gpu",
+        }
+    ]
 
 
 @pytest.mark.anyio
