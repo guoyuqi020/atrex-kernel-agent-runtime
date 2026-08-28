@@ -197,6 +197,9 @@ class RuntimeJournalService:
         event_ids = [str(event["direction_event_id"]) for event in values]
         if len(set(event_ids)) != len(event_ids):
             raise ValueError("Visible Direction history contains duplicate Event IDs")
+        # A Direction is proposed in one Attempt and advanced in another, so replay
+        # must follow when each event was recorded rather than Attempt grouping.
+        values.sort(key=lambda event: (str(event["recorded_at"]), str(event["direction_event_id"])))
         return values
 
     def _visible_experiments(self, attempt_id: AttemptId) -> list[dict[str, object]]:
