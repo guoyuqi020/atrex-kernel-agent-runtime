@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import math
+import re
 import statistics
+from typing import cast
 
 from ..artifacts.local import JsonValue
 from .correctness import correctness_summary
@@ -42,7 +44,20 @@ _HIDDEN_DETAIL = "shape inputs and failure details withheld"
 _HIDDEN_FAILURE = (
     "one or more hidden evaluator cases failed; reproduce within the public shape_domain"
 )
+_HIDDEN_JOB_FAILURE = "gateway job did not complete; hidden-case details withheld"
 _CANDIDATE_REJECTED_CATEGORY = "candidate_rejected"
+_EVALUATION_STAGES = ("compile", "correctness", "performance")
+_MAX_FAILURE_TEXT = 400
+_MAX_TRACEBACK_TEXT = 4_000
+_MAX_UNESCAPE_ROUNDS = 4
+_STAGE_VERDICT = re.compile(
+    r'([A-Za-z_]+)":\s*\{"0":\s*\{"status":\s*"(\w+)",\s*"reason":\s*"([^"]*)"'
+)
+_CANDIDATE_TRACEBACK = re.compile(
+    r'(File "[^"]*/candidate/[^"]*", line \d+, in \w+\n(?:.*\n)*?)'
+    r"((?:[A-Za-z_.]*(?:Error|Exception))[^\n]*)"
+)
+_CANDIDATE_FRAME_PREFIX = re.compile(r'^File "[^"]*/candidate/', re.MULTILINE)
 
 
 def project_private_evaluation(
@@ -72,9 +87,77 @@ def project_private_job(raw: JsonValue) -> JsonValue:
         return {
             "status": raw.get("status"),
             "job_id": raw.get("job_id"),
-            "error": "gateway job did not complete; hidden-case details withheld",
+            "error": _project_job_failure(raw.get("error")),
         }
     return _strip_private_fields(raw)
+
+
+def _project_job_failure(error: JsonValue) -> JsonValue:
+    """Whitelist Agate's classification, the stage verdicts, and the candidate traceback."""
+    if not isinstance(error, dict):
+        return _HIDDEN_JOB_FAILURE
+    details = error.get("details")
+    details = details if isinstance(details, dict) else {}
+    logs = _unescape(details.get("logs_tail"))
+    projected: dict[str, JsonValue] = {}
+    for key, source in (
+        ("failure_origin", details.get("failure_origin")),
+        ("failure_rule", details.get("failure_rule")),
+        ("reason", error.get("reason")),
+        ("trace_id", error.get("trace_id")),
+    ):
+        if isinstance(source, str) and source.strip():
+            projected[key] = source[:_MAX_FAILURE_TEXT]
+    stages = _evaluation_stages(logs)
+    if stages:
+        projected["stages"] = cast(JsonValue, stages)
+    traceback = _candidate_traceback(logs)
+    if traceback is not None:
+        projected["candidate_traceback"] = traceback
+    return projected or _HIDDEN_JOB_FAILURE
+
+
+def _unescape(value: JsonValue) -> str:
+    """Undo the nested JSON escaping Agate applies to its captured log tail."""
+    if not isinstance(value, str):
+        return ""
+    text = value
+    for _ in range(_MAX_UNESCAPE_ROUNDS):
+        try:
+            decoded = text.encode("utf-8", "surrogateescape").decode("unicode_escape", "replace")
+        except (UnicodeDecodeError, UnicodeEncodeError):
+            break
+        if decoded == text:
+            break
+        text = decoded
+    return text
+
+
+def _evaluation_stages(logs: str) -> dict[str, JsonValue]:
+    """Read each stage verdict, tolerating a stage key clipped by the log-tail window."""
+    stages: dict[str, JsonValue] = {}
+    for match in _STAGE_VERDICT.finditer(logs):
+        key, status, reason = match.group(1), match.group(2), match.group(3)
+        stage = next((name for name in _EVALUATION_STAGES if name.endswith(key)), None)
+        if stage is None or stage in stages:
+            continue
+        verdict: dict[str, JsonValue] = {
+            "status": status,
+            "reason": reason[:_MAX_FAILURE_TEXT],
+        }
+        if key != stage:
+            verdict["key_truncated"] = True
+        stages[stage] = cast(JsonValue, verdict)
+    return {name: stages[name] for name in _EVALUATION_STAGES if name in stages}
+
+
+def _candidate_traceback(logs: str) -> str | None:
+    """Return only the Agent's own frames, so evaluator internals stay hidden."""
+    match = _CANDIDATE_TRACEBACK.search(logs)
+    if match is None:
+        return None
+    frames = _CANDIDATE_FRAME_PREFIX.sub('File "candidate/', match.group(1), count=0)
+    return f"{frames.rstrip()}\n{match.group(2)}".strip()[:_MAX_TRACEBACK_TEXT]
 
 
 def project_candidate_rejection(detail: JsonValue) -> JsonValue:
