@@ -1119,6 +1119,60 @@ async def test_disassemble_carries_private_init_kwargs_and_isa_format(tmp_path: 
 
 
 @pytest.mark.anyio
+async def test_compile_jobs_project_away_the_agate_envelope(tmp_path: Path) -> None:
+    client = FakeAgateClient(
+        {
+            "job_id": "cp_env",
+            "status": "succeeded",
+            "kind": "compile",
+            "error": None,
+            "execution_phase": "terminal",
+            "created_at": 1.0,
+            "updated_at": 2.0,
+            "trace_id": "req-abc",
+            "arch_enforced_by": None,
+            "command_ok": None,
+            "suggested_api": None,
+            "request_digest": {"init_kwargs": {"max_seqlen_k": 4320}},
+            "result": {"ok": True, "diagnostics": [], "asm_available": False},
+        }
+    )
+    builder = CapturingBuilder()
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    adapter = AgateGatewayAdapter(
+        client,
+        builder,
+        StaticContexts(AgateEvaluationContext("parameterized", "H20", Dsl.CUDA, _contract())),
+        jobs,
+        wait_timeout_s=1200,
+    )
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    candidate.joinpath("kernel.py").write_text("class Model: pass\n")
+
+    result = await adapter.execute(
+        GatewayAdapterRequest(
+            new_attempt_id(),
+            GatewayOperation.CHECK,
+            "check-envelope",
+            digest("candidate"),
+            candidate,
+            None,
+            None,
+            None,
+        )
+    )
+
+    assert result.worker_result == {
+        "status": "succeeded",
+        "job_id": "cp_env",
+        "error": None,
+        "result": {"ok": True, "diagnostics": [], "asm_available": False},
+    }
+    jobs.close()
+
+
+@pytest.mark.anyio
 async def test_agate_query_commands_are_scoped_and_config_is_redacted(tmp_path: Path) -> None:
     client = FakeAgateClient({"job_id": "dv_query", "status": "running", "kind": "dev"})
     builder = CapturingBuilder()

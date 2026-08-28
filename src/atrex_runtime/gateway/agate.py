@@ -37,6 +37,7 @@ from .contract import (
 from .control_models import GatewayOperation
 from .private_results import (
     project_candidate_rejection,
+    project_compile_job,
     project_private_evaluation,
     project_private_job,
 )
@@ -52,7 +53,21 @@ from .retrying_client import RETRYABLE_CLIENT_STATUSES, RetryingAgateClient
 AGATE_JOB_SCHEMA_VERSION = 2
 _JOB_KINDS = frozenset({"eval", "profile", "dev", "compile", "sol", "disassemble"})
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
+_COMPILE_OPERATIONS = frozenset({GatewayOperation.CHECK, GatewayOperation.DISASSEMBLE})
 _JSON_VALUE_ADAPTER: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
+
+
+def _worker_view(job: dict[str, JsonValue], operation: GatewayOperation) -> JsonValue | None:
+    """Project the jobs whose Agent view carries no evaluation identity.
+
+    `dev` is deliberately absent: its stdout is the Agent's own probe output, which the
+    private-field strip would remove.
+    """
+    if operation is GatewayOperation.PROFILE:
+        return project_private_job(job)
+    if operation in _COMPILE_OPERATIONS:
+        return project_compile_job(job)
+    return None
 
 
 def _nested_infrastructure_error(error: BaseException) -> InfrastructureError | None:
@@ -1115,16 +1130,12 @@ class AgateGatewayAdapter:
                 result=job,
                 job_id=job_id,
                 worker_result=(
-                    project_private_job(job)
-                    if operation is GatewayOperation.PROFILE
-                    else (
-                        {
-                            "status": status,
-                            "hidden_case_details": "shape inputs and failure details withheld",
-                        }
-                        if operation is GatewayOperation.EVALUATE
-                        else None
-                    )
+                    {
+                        "status": status,
+                        "hidden_case_details": "shape inputs and failure details withheld",
+                    }
+                    if operation is GatewayOperation.EVALUATE
+                    else _worker_view(job, operation)
                 ),
             )
         if status == "cancelled":
@@ -1133,16 +1144,12 @@ class AgateGatewayAdapter:
                 result=job,
                 job_id=job_id,
                 worker_result=(
-                    project_private_job(job)
-                    if operation is GatewayOperation.PROFILE
-                    else (
-                        {
-                            "status": "cancelled",
-                            "hidden_case_details": "shape inputs and failure details withheld",
-                        }
-                        if operation is GatewayOperation.EVALUATE
-                        else None
-                    )
+                    {
+                        "status": "cancelled",
+                        "hidden_case_details": "shape inputs and failure details withheld",
+                    }
+                    if operation is GatewayOperation.EVALUATE
+                    else _worker_view(job, operation)
                 ),
             )
         if status == "failed":
@@ -1157,9 +1164,7 @@ class AgateGatewayAdapter:
                 status="failed",
                 result=job,
                 job_id=job_id,
-                worker_result=(
-                    project_private_job(job) if operation is GatewayOperation.PROFILE else None
-                ),
+                worker_result=_worker_view(job, operation),
             )
         if operation is GatewayOperation.EVALUATE and expected_shape_ids is None:
             raise InfrastructureError("eval result mapping requires expected shape ids")
@@ -1176,7 +1181,7 @@ class AgateGatewayAdapter:
             worker_result=(
                 project_private_evaluation(job, evaluation, expected_shape_ids or ())
                 if operation is GatewayOperation.EVALUATE and evaluation is not None
-                else (project_private_job(job) if operation is GatewayOperation.PROFILE else None)
+                else _worker_view(job, operation)
             ),
         )
 

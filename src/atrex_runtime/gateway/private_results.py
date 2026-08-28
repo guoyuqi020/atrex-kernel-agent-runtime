@@ -92,6 +92,24 @@ def project_private_job(raw: JsonValue) -> JsonValue:
     return _strip_private_fields(raw)
 
 
+def project_compile_job(raw: JsonValue) -> JsonValue:
+    """Keep the compile verdict an Agent can act on and drop Agate's null envelope.
+
+    An allowlist rather than a denylist, so a request echo Agate may add later, such as
+    the `include_spec` digest, cannot reach the Agent by default.
+    """
+    if not isinstance(raw, dict):
+        return _strip_private_fields(raw)
+    if raw.get("status") == "rejected":
+        return project_candidate_rejection(raw.get("error"))
+    return {
+        "status": raw.get("status"),
+        "job_id": raw.get("job_id"),
+        "error": _project_job_failure(raw.get("error")) if raw.get("error") else None,
+        "result": _strip_private_fields(raw.get("result")),
+    }
+
+
 def _project_job_failure(error: JsonValue) -> JsonValue:
     """Whitelist Agate's classification, the stage verdicts, and the candidate traceback."""
     if not isinstance(error, dict):
@@ -241,4 +259,4 @@ def _positive_number(value: JsonValue | None) -> float | None:
     return number if number > 0 and math.isfinite(number) else None
 
 
-__all__ = ["project_private_evaluation", "project_private_job"]
+__all__ = ["project_compile_job", "project_private_evaluation", "project_private_job"]
