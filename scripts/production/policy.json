@@ -19,7 +19,7 @@
   },
   "gate_policy": {
     "optimizer": {
-      "correctness_cases": 1,
+      "correctness_cases": 5,
       "bench_iters": 100,
       "evaluate_repeats": 1
     },

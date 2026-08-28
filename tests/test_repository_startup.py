@@ -99,7 +99,7 @@ def test_checked_in_comparison_evaluator_is_the_pinned_submodule(tmp_path: Path)
         gate.optimizer.correctness_cases,
         gate.optimizer.bench_iters,
         gate.optimizer.evaluate_repeats,
-    ) == (1, 100, 1)
+    ) == (5, 100, 1)
     assert [
         (stage.correctness_cases, stage.evaluate_repeats) for stage in gate.bootstrap.stages
     ] == [(1, 1), (5, 1)]

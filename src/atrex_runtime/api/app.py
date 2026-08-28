@@ -205,7 +205,7 @@ def build_runtime_application(
                 1 if gate_policy is None else gate_policy.optimizer.evaluate_repeats
             ),
             optimizer_correctness_cases=(
-                1 if gate_policy is None else gate_policy.optimizer.correctness_cases
+                5 if gate_policy is None else gate_policy.optimizer.correctness_cases
             ),
             optimizer_bench_iters=(
                 100 if gate_policy is None else gate_policy.optimizer.bench_iters

@@ -398,7 +398,7 @@ class AgateGatewayAdapter:
         *,
         wait_timeout_s: float,
         optimizer_evaluate_repeats: int = 1,
-        optimizer_correctness_cases: int = 1,
+        optimizer_correctness_cases: int = 5,
         optimizer_bench_iters: int = 100,
         profile_without_roofline: bool = False,
         connection_summary: Mapping[str, str] | None = None,
