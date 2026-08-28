@@ -574,6 +574,29 @@ async def test_proxy_authorizes_profile_poll_and_cancel_worker_paths(tmp_path: P
     registry.close()
 
 
+@pytest.mark.anyio
+async def test_proxy_polls_live_state_instead_of_replaying_a_stale_snapshot(tmp_path: Path) -> None:
+    registry, control, attempt, capability_value, service, adapter = _service(tmp_path)
+    payload = {
+        "schema_version": 2,
+        "attempt_id": attempt.id,
+        "idempotency_key": "poll-1",
+        "operation": "poll",
+        "job_id": "job-1",
+    }
+
+    adapter.result = GatewayAdapterResult("queued", {"status": "running"}, job_id="job-1")
+    running = await service.execute(capability_value.token, json.dumps(payload).encode())
+    adapter.result = GatewayAdapterResult("completed", {"status": "succeeded"}, job_id="job-1")
+    succeeded = await service.execute(capability_value.token, json.dumps(payload).encode())
+
+    assert running.result == {"status": "running"}
+    assert succeeded.result == {"status": "succeeded"}
+    assert len(adapter.requests) == 2
+    control.close()
+    registry.close()
+
+
 def test_candidate_diff_policy_rejects_disallowed_or_unchanged_files(tmp_path: Path) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     before = tmp_path / "before"

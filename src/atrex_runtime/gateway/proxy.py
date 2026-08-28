@@ -97,6 +97,17 @@ _RUNTIME_JOURNAL_OPERATIONS = frozenset(
         GatewayOperation.JOURNAL_SNAPSHOT,
     }
 )
+# These answer "what is true right now", so replaying a committed response would pin a
+# poll to the job state observed on its first call and never report completion.
+_OBSERVATIONAL_OPERATIONS = frozenset(
+    {
+        GatewayOperation.POLL,
+        GatewayOperation.JOBS,
+        GatewayOperation.ENV,
+        GatewayOperation.HEALTH,
+        GatewayOperation.CONFIG,
+    }
+)
 _RUNTIME_OWNED_ERROR_FIELDS = frozenset(
     {"schema_version", "attempt_id", "candidate", "idempotency_key"}
 )
@@ -231,10 +242,15 @@ class GatewayProxyService:
             idempotency_key=request.idempotency_key,
             request_digest=str(request_digest),
         )
-        existing_response = self._control.get_operation_artifact(
-            request.attempt_id,
-            request.idempotency_key,
-            operation,
+        replayable = operation not in _OBSERVATIONAL_OPERATIONS
+        existing_response = (
+            self._control.get_operation_artifact(
+                request.attempt_id,
+                request.idempotency_key,
+                operation,
+            )
+            if replayable
+            else None
         )
         if existing_response is not None:
             return self._load_response(existing_response)
@@ -295,13 +311,14 @@ class GatewayProxyService:
             else:
                 result = await self._adapter.execute(adapter_request)
             result_digest = self._store_gateway_result(result)
-            self._control.bind_operation_gateway_result(
-                request.attempt_id,
-                request.idempotency_key,
-                operation,
-                result_digest,
-                recovery_generation=authorization.recovery_generation,
-            )
+            if replayable:
+                self._control.bind_operation_gateway_result(
+                    request.attempt_id,
+                    request.idempotency_key,
+                    operation,
+                    result_digest,
+                    recovery_generation=authorization.recovery_generation,
+                )
 
             if isinstance(request, EvaluateRequestV2):
                 if result.status != "completed" or result.evaluation is None:
@@ -378,16 +395,16 @@ class GatewayProxyService:
             evaluation=result.evaluation,
             result=result.result if result.worker_result is None else result.worker_result,
         )
-        response_artifact = self._artifacts.put_json(
-            cast(JsonValue, response.model_dump(mode="json")),
-            ArtifactKind.GATEWAY_RESULT,
-        )
-        self._control.commit_operation_artifact(
-            request.attempt_id,
-            request.idempotency_key,
-            operation,
-            response_artifact,
-        )
+        if replayable:
+            self._control.commit_operation_artifact(
+                request.attempt_id,
+                request.idempotency_key,
+                operation,
+                self._artifacts.put_json(
+                    cast(JsonValue, response.model_dump(mode="json")),
+                    ArtifactKind.GATEWAY_RESULT,
+                ),
+            )
         if evaluation_record is not None:
             self._events.record_runtime_event(
                 "gateway.evaluation_recorded",
