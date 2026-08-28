@@ -351,3 +351,17 @@ def test_problem_schema_metadata_is_added_after_generation(tmp_path: Path) -> No
         **contract,
     }
     assert "atrex.agent_problem.v1" not in _rendered_prompts()["problem_generalization"]
+
+
+def test_tool_prompt_states_the_gate_policy_tolerance() -> None:
+    """The Agent cannot judge its own margin unless the prompt matches the real thresholds."""
+    policy = json.loads(
+        (Path(__file__).resolve().parents[1] / "scripts/production/policy.json").read_text(
+            encoding="utf-8"
+        )
+    )["gate_policy"]
+    prompts = _rendered_prompts()
+
+    for phase in ("optimization_attempt", "framework_baseline"):
+        assert f"atol={policy['atol']}" in prompts[phase], phase
+        assert f"rtol={policy['rtol']}" in prompts[phase], phase
