@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from .controller.evidence import LocalEvidenceAssembler
@@ -84,8 +84,24 @@ class RevisionLineageSeedV1(BaseModel):
         return parse_kernel_revision_id(value)
 
 
+class LineageBaselineSeedV1(BaseModel):
+    """Another Lineage's frozen v0 baseline, cloned whole rather than re-measured."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    source_type: Literal["lineage_baseline"] = "lineage_baseline"
+    lineage_id: LineageId
+
+    @field_validator("lineage_id", mode="before")
+    @classmethod
+    def _validate_lineage_id(cls, value: object) -> LineageId:
+        if not isinstance(value, str):
+            raise ValueError("source Lineage ID must be a string")
+        return parse_lineage_id(value)
+
+
 LineageSeedSourceV1 = Annotated[
-    ArtifactLineageSeedV1 | RevisionLineageSeedV1,
+    ArtifactLineageSeedV1 | RevisionLineageSeedV1 | LineageBaselineSeedV1,
     Field(discriminator="source_type"),
 ]
 
@@ -124,6 +140,7 @@ class LineageSeedSpecV1(BaseModel):
     challenger_start_epoch: int = Field(default=1, gt=0)
     trajectories_per_branch: int = Field(default=1, gt=0)
     attempts_per_trajectory: int = Field(gt=0)
+    ephemeral_agent_state: bool = False
 
     @field_validator("creation_key")
     @classmethod
@@ -132,6 +149,12 @@ class LineageSeedSpecV1(BaseModel):
         if not normalized or "\x00" in normalized:
             raise ValueError("Lineage seed creation_key is invalid")
         return normalized
+
+    @model_validator(mode="after")
+    def _validate_seed_combination(self) -> Self:
+        if isinstance(self.seed, LineageBaselineSeedV1) and self.initial_evidence is not None:
+            raise ValueError("a cloned Lineage baseline already carries its Bootstrap Evidence")
+        return self
 
     @classmethod
     def from_file(cls, path: str | Path) -> Self:
@@ -243,7 +266,11 @@ class LineageSeeder:
         except KeyError:
             existing = None
         roots = self._resolve_roots(spec.seed, spec.dsl)
-        evidence = self._initial_evidence(lineage_id, spec.initial_evidence)
+        evidence = self._initial_evidence(
+            lineage_id,
+            spec.initial_evidence,
+            roots.bootstrap_evidence_source,
+        )
         provenance_digest = self._provenance(
             campaign_id,
             lineage_id,
@@ -267,35 +294,49 @@ class LineageSeeder:
         except KeyError:
             kernel = None
         if kernel is None:
-            outcome = await self._evaluator.evaluate(
-                campaign_id=campaign_id,
-                lineage_id=lineage_id,
-                dsl=spec.dsl,
-                kernel_artifact_digest=roots.kernel_artifact_digest,
-            )
-            if outcome.artifact_digest != roots.kernel_artifact_digest:
-                raise ValueError("Lineage seed evaluation returned a different Kernel Artifact")
-            if not outcome.correct or outcome.latency_us is None:
-                raise ValueError("Lineage seed Kernel failed authoritative evaluation")
-            if (
-                self._artifacts.verify(outcome.gateway_result_digest).kind
-                is not ArtifactKind.GATEWAY_RESULT
-            ):
-                raise ValueError("Lineage seed evaluation result has the wrong Artifact kind")
-            created_at = self._clock()
-            kernel = KernelRevision(
-                id=kernel_id,
-                parent_id=None,
-                artifact_digest=roots.kernel_artifact_digest,
-                produced_by_attempt_id=None,
-                evaluation=KernelEvaluation(
-                    correct=True,
-                    latency_us=outcome.latency_us,
-                    gateway_result_digest=outcome.gateway_result_digest,
-                ),
-                created_at=created_at,
-            )
-            self._registry.register_kernel_revision(kernel)
+            if roots.baseline_evaluation is not None:
+                created_at = self._clock()
+                kernel = KernelRevision(
+                    id=kernel_id,
+                    parent_id=None,
+                    artifact_digest=roots.kernel_artifact_digest,
+                    produced_by_attempt_id=None,
+                    evaluation=roots.baseline_evaluation,
+                    created_at=created_at,
+                )
+                self._registry.register_kernel_revision(kernel)
+            else:
+                outcome = await self._evaluator.evaluate(
+                    campaign_id=campaign_id,
+                    lineage_id=lineage_id,
+                    dsl=spec.dsl,
+                    kernel_artifact_digest=roots.kernel_artifact_digest,
+                )
+                if outcome.artifact_digest != roots.kernel_artifact_digest:
+                    raise ValueError(
+                        "Lineage seed evaluation returned a different Kernel Artifact"
+                    )
+                if not outcome.correct or outcome.latency_us is None:
+                    raise ValueError("Lineage seed Kernel failed authoritative evaluation")
+                if (
+                    self._artifacts.verify(outcome.gateway_result_digest).kind
+                    is not ArtifactKind.GATEWAY_RESULT
+                ):
+                    raise ValueError("Lineage seed evaluation result has the wrong Artifact kind")
+                created_at = self._clock()
+                kernel = KernelRevision(
+                    id=kernel_id,
+                    parent_id=None,
+                    artifact_digest=roots.kernel_artifact_digest,
+                    produced_by_attempt_id=None,
+                    evaluation=KernelEvaluation(
+                        correct=True,
+                        latency_us=outcome.latency_us,
+                        gateway_result_digest=outcome.gateway_result_digest,
+                    ),
+                    created_at=created_at,
+                )
+                self._registry.register_kernel_revision(kernel)
         else:
             if kernel.artifact_digest != roots.kernel_artifact_digest:
                 raise ValueError("Lineage seed Kernel identity resolved to different content")
@@ -331,6 +372,8 @@ class LineageSeeder:
             status=LineageStatus.READY,
             optimizer_model=spec.models.optimizer,
             evolver_model=spec.models.evolver,
+            ephemeral_agent_state=spec.ephemeral_agent_state,
+            bootstrap_source_lineage_id=roots.source_lineage_id,
         )
         self._registry.insert_lineage(lineage)
         self._registry.record_runtime_event(
@@ -351,6 +394,8 @@ class LineageSeeder:
         source: LineageSeedSourceV1,
         dsl: Dsl,
     ) -> _ResolvedSeedRoots:
+        if isinstance(source, LineageBaselineSeedV1):
+            return self._resolve_lineage_baseline(source.lineage_id, dsl)
         if isinstance(source, ArtifactLineageSeedV1):
             agent_digest = source.agent_artifact_digest
             kernel_digest = source.kernel_artifact_digest
@@ -378,6 +423,38 @@ class LineageSeeder:
             kernel_revision_id,
         )
 
+    def _resolve_lineage_baseline(
+        self,
+        source_lineage_id: LineageId,
+        dsl: Dsl,
+    ) -> _ResolvedSeedRoots:
+        source = self._registry.get_lineage(source_lineage_id)
+        if source.dsl is not dsl:
+            raise ValueError("source Lineage belongs to a different DSL")
+        agent_entries = self._registry.list_lineage_agent_revisions(source_lineage_id)
+        kernel_entries = self._registry.list_lineage_kernels(source_lineage_id)
+        if not agent_entries or agent_entries[0].revision_number != 0:
+            raise ValueError("source Lineage has no agent-v0 baseline")
+        if not kernel_entries or kernel_entries[0].revision_number != 0:
+            raise ValueError("source Lineage has no v0 Kernel baseline")
+        agent = agent_entries[0].revision
+        kernel = kernel_entries[0].revision
+        if not kernel.evaluation.correct or kernel.evaluation.latency_us is None:
+            raise ValueError("source Lineage baseline Kernel has no correct measurement")
+        if self._artifacts.verify(agent.optimizer_digest).kind is not ArtifactKind.KERNEL_AGENT:
+            raise ValueError("Lineage seed Agent Artifact has the wrong kind")
+        if self._artifacts.verify(kernel.artifact_digest).kind is not ArtifactKind.KERNEL:
+            raise ValueError("Lineage seed Kernel Artifact has the wrong kind")
+        return _ResolvedSeedRoots(
+            agent.optimizer_digest,
+            kernel.artifact_digest,
+            agent.id,
+            kernel.id,
+            source_lineage_id=source_lineage_id,
+            baseline_evaluation=kernel.evaluation,
+            bootstrap_evidence_source=source.evidence_checkpoint,
+        )
+
     def _validate_agent_artifact(self, digest: ArtifactDigest, dsl: Dsl) -> None:
         self._artifacts.verify(digest)
         with tempfile.TemporaryDirectory(prefix="atrex-lineage-seed-agent-") as temporary:
@@ -391,8 +468,11 @@ class LineageSeeder:
         self,
         lineage_id: LineageId,
         source: Path | None,
+        bootstrap_evidence_source: ArtifactDigest | None = None,
     ) -> ArtifactDigest:
         assembler = LocalEvidenceAssembler(self._registry, self._artifacts)
+        if bootstrap_evidence_source is not None:
+            return assembler.clone_bootstrap(lineage_id, bootstrap_evidence_source)
         if source is not None:
             return assembler.create_initial(
                 lineage_id,
@@ -425,6 +505,8 @@ class LineageSeeder:
             "kernel_artifact_digest": roots.kernel_artifact_digest,
             "source_agent_revision_id": roots.source_agent_revision_id,
             "source_kernel_revision_id": roots.source_kernel_revision_id,
+            "source_lineage_id": roots.source_lineage_id,
+            "ephemeral_agent_state": spec.ephemeral_agent_state,
             "initial_evidence_digest": evidence_checkpoint,
         }
         return self._artifacts.put_json(value, ArtifactKind.OPTIMIZER_SOURCE)
@@ -456,6 +538,8 @@ class LineageSeeder:
             lineage.attempts_per_trajectory,
             lineage.optimizer_model,
             lineage.evolver_model,
+            lineage.ephemeral_agent_state,
+            lineage.bootstrap_source_lineage_id,
             agent.optimizer_digest,
             agent.source_provenance_digest,
             kernel.artifact_digest,
@@ -468,6 +552,8 @@ class LineageSeeder:
             spec.attempts_per_trajectory,
             spec.models.optimizer,
             spec.models.evolver,
+            spec.ephemeral_agent_state,
+            roots.source_lineage_id,
             roots.agent_artifact_digest,
             provenance_digest,
             roots.kernel_artifact_digest,
@@ -526,3 +612,6 @@ class _ResolvedSeedRoots:
     kernel_artifact_digest: ArtifactDigest
     source_agent_revision_id: KernelAgentRevisionId | None
     source_kernel_revision_id: KernelRevisionId | None
+    source_lineage_id: LineageId | None = None
+    baseline_evaluation: KernelEvaluation | None = None
+    bootstrap_evidence_source: ArtifactDigest | None = None

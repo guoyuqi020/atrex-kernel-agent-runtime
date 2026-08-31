@@ -268,7 +268,25 @@ def test_optimizer_prompt_layers_are_concise_non_redundant_and_consistent() -> N
     )
     assert "This workspace carries no upstream project checkout" in prompt
     assert "reference/" not in prompt
+    assert "reference research" not in prompt
     assert "no local knowledge or reference checkout is available" not in prompt
+
+
+def test_execution_prompts_require_depositing_reusable_knowledge() -> None:
+    """The retained ablation arm measures nothing unless the Agent is told to accumulate."""
+    prompts = _rendered_prompts()
+
+    attempt = " ".join(prompts["optimization_attempt"].split())
+    assert "Deposit what the next Attempt would otherwise re-derive" in attempt
+    assert "This is a required step, not an option" in attempt
+    assert "an empty deposit must be a decision, not an omission" in attempt
+
+    bootstrap = " ".join(prompts["framework_baseline"].split())
+    assert "Before finishing, write what you had to discover to" in bootstrap
+    assert "re-derives the same facts from scratch" in bootstrap
+    # Permission-only wording is what made the deposit optional in practice.
+    for prompt in (attempt, bootstrap):
+        assert "may be saved under" not in prompt
 
 
 def test_optimizer_prompt_limits_advancement_not_open_direction_count() -> None:
@@ -293,7 +311,7 @@ def test_optimizer_prompt_registers_direction_before_exploration() -> None:
         normalized = " ".join(prompt.split())
         assert "durable unit of research and exploration" in normalized
         assert "immediately `propose` and `start`" in normalized
-        assert "before its Wiki/reference research" in normalized
+        assert "before its research" in normalized
         assert "`TaskCreate`" in prompt
         assert "do not register it" in normalized
         assert "do not wait for measurement" in normalized

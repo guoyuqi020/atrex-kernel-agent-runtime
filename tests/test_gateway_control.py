@@ -17,6 +17,7 @@ from atrex_runtime.domain.errors import (
     InvalidTransitionError,
 )
 from atrex_runtime.domain.ids import (
+    LineageId,
     new_attempt_id,
     new_epoch_id,
     parse_campaign_id,
@@ -785,12 +786,18 @@ def test_gateway_schema_v4_migrates_operations_and_legacy_bootstrap_run(
     registry.close()
 
 
-def _insert_attempt(registry: SqliteRegistry) -> Attempt:
+def _insert_attempt(
+    registry: SqliteRegistry,
+    dsl: Dsl = Dsl.TRITON,
+    bootstrap_source_lineage_id: LineageId | None = None,
+) -> Attempt:
     seeded = seed_lineage(
         registry,
+        dsl=dsl,
         evidence_checkpoint=digest("evidence"),
         challenger_count=0,
         attempts_per_trajectory=1,
+        bootstrap_source_lineage_id=bootstrap_source_lineage_id,
     )
     epoch = Epoch(
         id=new_epoch_id(),
@@ -1535,6 +1542,97 @@ def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_pat
                 },
             ),
         )
+    control.close()
+    registry.close()
+
+
+def test_visible_history_never_crosses_lineages(tmp_path: Path) -> None:
+    """Ablation isolation rests entirely on this: no query reaches another Lineage."""
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    subject = _insert_attempt(registry)
+    foreign = _insert_attempt(registry, Dsl.CUDA)
+    registry.complete_attempt(
+        foreign.id,
+        None,
+        accepted_as_branch_best=False,
+        failure_reason=None,
+    )
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"i" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+
+    subject_lineage, measurements = control.visible_measurement_attempt_ids(subject.id)
+    foreign_lineage, foreign_measurements = control.visible_measurement_attempt_ids(foreign.id)
+    _lineage, trials = control.visible_kernel_trial_attempt_ids(subject.id)
+
+    assert subject_lineage != foreign_lineage
+    assert foreign.id not in measurements
+    assert subject.id not in foreign_measurements
+    assert foreign.id not in trials
+    assert trials == (subject.id,)
+    assert control.visible_attempt_report_artifacts(subject.id) == ()
+    control.close()
+    registry.close()
+
+
+def test_shared_bootstrap_is_visible_without_exposing_the_source_lineage(
+    tmp_path: Path,
+) -> None:
+    """An arm inherits the Bootstrap it was seeded from, and nothing else from that Lineage."""
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    source = _insert_attempt(registry)
+    source_lineage = registry.get_lineage(
+        registry.get_epoch(source.epoch_id).lineage_id,
+    )
+    arm = _insert_attempt(registry, Dsl.CUDA, source_lineage.id)
+    registry.complete_attempt(
+        source.id,
+        None,
+        accepted_as_branch_best=False,
+        failure_reason=None,
+    )
+    campaign = registry.get_campaign(source_lineage.campaign_id)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"s" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    bootstrap_attempt_id = new_attempt_id()
+    control.issue_bootstrap(
+        BootstrapGatewaySubject(
+            attempt_id=bootstrap_attempt_id,
+            campaign_id=campaign.id,
+            lineage_id=source_lineage.id,
+            epoch_id=parse_epoch_id(
+                "epoch_" + str(bootstrap_attempt_id).removeprefix("attempt_")
+            ),
+            kernel_agent_revision_id=source_lineage.active_kernel_agent_revision_id,
+            operator=campaign.operator,
+            hardware_target=campaign.hardware_target,
+            dsl=source_lineage.dsl,
+            evaluation_contract_digest=campaign.evaluation_contract_digest,
+            input_kernel_digest=digest("bootstrap-input"),
+            evidence_digest=digest("bootstrap-evidence"),
+            created_at=NOW_DATETIME,
+        ),
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.EVALUATE}),
+            1,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+
+    _lineage, measurements = control.visible_measurement_attempt_ids(arm.id)
+    _trial_lineage, trials = control.visible_kernel_trial_attempt_ids(arm.id)
+
+    assert bootstrap_attempt_id in measurements
+    assert source.id not in measurements
+    assert bootstrap_attempt_id in trials
+    assert source.id not in trials
     control.close()
     registry.close()
 

@@ -23,6 +23,16 @@ def build_parser() -> argparse.ArgumentParser:
     seed_lineage.add_argument("--config", required=True, help="trusted Runtime JSON config")
     seed_lineage.add_argument("--campaign", required=True, help="existing active Campaign ID")
     seed_lineage.add_argument("--spec", required=True, help="trusted Lineage seed JSON spec")
+    seed_ablation_arm = commands.add_parser(
+        "seed-ablation-arm",
+        help="add an unevolved control arm in its own Campaign for ablation comparison",
+    )
+    seed_ablation_arm.add_argument("--config", required=True, help="trusted Runtime JSON config")
+    seed_ablation_arm.add_argument(
+        "--spec",
+        required=True,
+        help="trusted ablation arm JSON spec naming the source Lineage",
+    )
     run_campaign = commands.add_parser(
         "run-campaign",
         help="create or resume configured DSL lineages through an epoch target",

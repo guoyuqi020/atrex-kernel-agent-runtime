@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from .ablation import AblationArmResult
 from .artifacts.local import ArtifactKind, LocalArtifactStore
 from .bootstrap import BootstrapResult, CampaignBootstrapResult
 from .domain.ids import KernelAgentRevisionId, KernelRevisionId, LineageId
@@ -258,6 +259,18 @@ def lineage_seed_result_value(result: LineageSeedResult) -> dict[str, object]:
         },
         "initial_evidence_digest": result.evidence_checkpoint,
         "models": {"optimizer": result.optimizer_model, "evolver": result.evolver_model},
+    }
+
+
+def ablation_arm_result_value(result: AblationArmResult) -> dict[str, object]:
+    """Render one control arm's shape alongside the evolution arm it mirrors."""
+    return {
+        "campaign_id": result.campaign_id,
+        "source_campaign_id": result.source_campaign_id,
+        "source_lineage_id": result.source_lineage_id,
+        "trajectories_per_branch": result.trajectories_per_branch,
+        "ephemeral_agent_state": result.ephemeral_agent_state,
+        "lineage": lineage_seed_result_value(result.lineage),
     }
 
 

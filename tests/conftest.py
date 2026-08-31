@@ -110,6 +110,8 @@ def seed_lineage(
     attempts_per_trajectory: int = 2,
     optimizer_model: str | None = None,
     evolver_model: str | None = None,
+    ephemeral_agent_state: bool = False,
+    bootstrap_source_lineage_id: LineageId | None = None,
 ) -> SeededLineage:
     """Create a complete ready lineage with one correct baseline Kernel."""
     campaign_id = new_campaign_id()
@@ -169,6 +171,8 @@ def seed_lineage(
             status=LineageStatus.READY,
             optimizer_model=optimizer_model,
             evolver_model=evolver_model,
+            ephemeral_agent_state=ephemeral_agent_state,
+            bootstrap_source_lineage_id=bootstrap_source_lineage_id,
         )
     )
     return SeededLineage(lineage_id, active_revision_id, baseline)

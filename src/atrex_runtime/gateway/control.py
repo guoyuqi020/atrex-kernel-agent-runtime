@@ -1609,11 +1609,18 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         except KeyError as error:
             reason = error.args[0] if error.args else error
             raise InvalidTransitionError(f"visible history is unavailable: {reason}") from error
+        # An ablation arm shares the Bootstrap it was seeded from, so its measurement
+        # history is visible too. This admits only pre-evolution Bootstrap Attempts; the
+        # Epoch loop below stays scoped to this Lineage.
+        bootstrap_lineage_ids = [str(lineage.id)]
+        if lineage.bootstrap_source_lineage_id is not None:
+            bootstrap_lineage_ids.append(str(lineage.bootstrap_source_lineage_id))
         with self._lock:
             bootstrap_rows = self._connection.execute(
-                """SELECT attempt_id FROM bootstrap_gateway_subjects
-                    WHERE lineage_id = ? ORDER BY created_at, attempt_id""",
-                (str(lineage.id),),
+                f"""SELECT attempt_id FROM bootstrap_gateway_subjects
+                     WHERE lineage_id IN ({",".join("?" for _ in bootstrap_lineage_ids)})
+                     ORDER BY created_at, attempt_id""",
+                tuple(bootstrap_lineage_ids),
             ).fetchall()
         visible: list[AttemptId] = [
             parse_attempt_id(str(row["attempt_id"])) for row in bootstrap_rows

@@ -70,7 +70,7 @@ from ..domain.models import (
 )
 from ..sqlite_support import configure_durable_sqlite
 
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -652,6 +652,30 @@ class SqliteRegistry:
                     raise
                 else:
                     self._connection.execute("COMMIT")
+            version = 29
+        if version == 29:
+            with self._lock:
+                self._connection.execute("BEGIN IMMEDIATE")
+                try:
+                    if self._has_tables("lineages") and (
+                        "ephemeral_agent_state" not in self._table_columns("lineages")
+                    ):
+                        self._connection.execute(
+                            "ALTER TABLE lineages "
+                            "ADD COLUMN ephemeral_agent_state INTEGER NOT NULL DEFAULT 0"
+                        )
+                    if self._has_tables("lineages") and (
+                        "bootstrap_source_lineage_id" not in self._table_columns("lineages")
+                    ):
+                        self._connection.execute(
+                            "ALTER TABLE lineages ADD COLUMN bootstrap_source_lineage_id TEXT"
+                        )
+                    self._connection.execute("PRAGMA user_version = 30")
+                except BaseException:
+                    self._connection.execute("ROLLBACK")
+                    raise
+                else:
+                    self._connection.execute("COMMIT")
             return
         if version == 14:
             with self._lock:
@@ -1198,7 +1222,10 @@ class SqliteRegistry:
                     trajectories_per_branch INTEGER NOT NULL
                         CHECK (trajectories_per_branch > 0),
                     optimizer_model TEXT,
-                    evolver_model TEXT
+                    evolver_model TEXT,
+                    ephemeral_agent_state INTEGER NOT NULL DEFAULT 0
+                        CHECK (ephemeral_agent_state IN (0, 1)),
+                    bootstrap_source_lineage_id TEXT REFERENCES lineages(id)
                 );
                 CREATE TABLE lineage_kernel_versions (
                     kernel_revision_id TEXT PRIMARY KEY REFERENCES kernel_revisions(id),
@@ -1395,7 +1422,7 @@ class SqliteRegistry:
                     owner TEXT NOT NULL,
                     lease_expires_at TEXT NOT NULL
                 );
-                PRAGMA user_version = 29;
+                PRAGMA user_version = 30;
                 COMMIT;
                 """
             )
@@ -2989,8 +3016,9 @@ class SqliteRegistry:
                        active_kernel_agent_revision_id, best_kernel_revision_id,
                        evidence_checkpoint, attempts_per_branch, next_epoch_number, status,
                        challenger_count, challenger_start_epoch, trajectories_per_branch,
-                       optimizer_model, evolver_model
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       optimizer_model, evolver_model, ephemeral_agent_state,
+                       bootstrap_source_lineage_id
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     lineage.id,
                     lineage.campaign_id,
@@ -3007,6 +3035,8 @@ class SqliteRegistry:
                     lineage.trajectories_per_branch,
                     lineage.optimizer_model,
                     lineage.evolver_model,
+                    int(lineage.ephemeral_agent_state),
+                    lineage.bootstrap_source_lineage_id,
                 ),
             )
             baseline = self.get_kernel_revision(lineage.best_kernel_revision_id)
@@ -3070,6 +3100,12 @@ class SqliteRegistry:
             status=LineageStatus(_required_text(row, "status")),
             optimizer_model=_optional_text(row, "optimizer_model"),
             evolver_model=_optional_text(row, "evolver_model"),
+            ephemeral_agent_state=bool(_required_int(row, "ephemeral_agent_state")),
+            bootstrap_source_lineage_id=(
+                None
+                if (bootstrap_source := _optional_text(row, "bootstrap_source_lineage_id")) is None
+                else parse_lineage_id(bootstrap_source)
+            ),
         )
 
     def advance_lineage_evidence(

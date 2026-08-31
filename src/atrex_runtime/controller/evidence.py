@@ -213,6 +213,38 @@ class LocalEvidenceAssembler:
         finally:
             shutil.rmtree(staging, ignore_errors=True)
 
+    def clone_bootstrap(
+        self,
+        lineage_id: LineageId,
+        source_checkpoint_digest: ArtifactDigest,
+    ) -> ArtifactDigest:
+        """Re-root another Lineage's sealed Bootstrap so an ablation arm starts identically."""
+        source = self._artifacts.verify(source_checkpoint_digest)
+        if source.kind is not ArtifactKind.EVIDENCE:
+            raise ValueError("Bootstrap Evidence source has the wrong Artifact kind")
+        report = source.payload_path / "bootstrap/report.json"
+        conversation = source.payload_path / "bootstrap/conversation.jsonl"
+        for path in (report, conversation):
+            if path.is_symlink() or not path.is_file():
+                raise ValueError(f"Bootstrap Evidence source has no regular {path.name}")
+        staging = Path(tempfile.mkdtemp(prefix="atrex-bootstrap-clone-"))
+        try:
+            bootstrap = staging / "bootstrap"
+            bootstrap.mkdir(mode=0o700)
+            shutil.copyfile(report, bootstrap / "report.json")
+            shutil.copyfile(conversation, bootstrap / "conversation.jsonl")
+            self._write_checkpoint(
+                staging,
+                EvidenceCheckpointV1(
+                    lineage_id=lineage_id,
+                    through_epoch=0,
+                    previous_checkpoint_digest=None,
+                ),
+            )
+            return self._artifacts.put_directory(staging, ArtifactKind.EVIDENCE)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+
     def assemble_next(
         self,
         lineage_id: LineageId,

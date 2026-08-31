@@ -63,19 +63,70 @@ def _validate(value: dict[str, Any], *, dsl: str, phase: str, target_epoch: int 
         raise SystemExit(f"{dsl} Campaign result has an unexpected target Epoch")
 
 
+def _ablation_arms(
+    dsl_workspace: Path,
+    *,
+    dsl: str,
+    target_epoch: int | None,
+    allow_partial: bool,
+) -> list[dict[str, Any]]:
+    """Collect each control arm's Campaign result so the comparison pairing is durable."""
+    arms: list[dict[str, Any]] = []
+    for arm_workspace in sorted(dsl_workspace.glob("ablation-*")):
+        if not arm_workspace.is_dir():
+            continue
+        path = arm_workspace / "campaign-result.json"
+        seed_path = arm_workspace / "seed-result.json"
+        if not path.is_file():
+            if not allow_partial:
+                raise SystemExit(f"{dsl} ablation arm result is missing: {path}")
+            arms.append(
+                {
+                    "arm": arm_workspace.name,
+                    "result": None,
+                    "result_path": str(path),
+                    "status": "missing",
+                }
+            )
+            continue
+        value = _load(path)
+        _validate(value, dsl=dsl, phase="campaign", target_epoch=target_epoch)
+        arms.append(
+            {
+                "arm": arm_workspace.name,
+                "campaign_id": value["campaign_id"],
+                "result": value,
+                "result_path": str(path),
+                "seed_result": _load(seed_path) if seed_path.is_file() else None,
+            }
+        )
+    return arms
+
+
 def main() -> None:
     arguments = _arguments()
     workspace = arguments.workspace.expanduser().resolve()
     results: dict[str, Any] = {}
     for dsl in DSLS:
-        campaign_path = workspace / "dsls" / dsl / "campaign.json"
+        dsl_workspace = workspace / "dsls" / dsl
+        campaign_path = dsl_workspace / "campaign.json"
         campaign = _load(campaign_path)
         lineages = campaign.get("lineages")
         if not isinstance(lineages, dict) or tuple(lineages) != (dsl,):
             raise SystemExit(f"{dsl} workspace does not contain exactly its own Campaign")
-        path = workspace / "dsls" / dsl / f"{arguments.phase}-result.json"
+        path = dsl_workspace / f"{arguments.phase}-result.json"
+        ablation = (
+            _ablation_arms(
+                dsl_workspace,
+                dsl=dsl,
+                target_epoch=arguments.target_epoch,
+                allow_partial=arguments.allow_partial,
+            )
+            if arguments.phase == "campaign"
+            else []
+        )
         if arguments.allow_partial and not path.is_file():
-            bootstrap_path = workspace / "dsls" / dsl / "bootstrap-result.json"
+            bootstrap_path = dsl_workspace / "bootstrap-result.json"
             results[dsl] = {
                 "result": None,
                 "result_path": str(path),
@@ -83,6 +134,7 @@ def main() -> None:
                 "bootstrap_result_path": (
                     str(bootstrap_path) if bootstrap_path.is_file() else None
                 ),
+                "ablation": ablation,
             }
             continue
         value = _load(path)
@@ -96,6 +148,7 @@ def main() -> None:
             "campaign_id": value["campaign_id"],
             "result": value,
             "result_path": str(path),
+            "ablation": ablation,
         }
     summary = {
         "schema_version": 1,

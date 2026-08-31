@@ -10,6 +10,7 @@ from uuid import uuid4
 
 import anyio
 
+from ..ablation import AblationArmSeeder, AblationArmSpecV1
 from ..artifacts.local import LocalArtifactStore
 from ..bootstrap import (
     BootstrapResult,
@@ -30,6 +31,7 @@ from ..gateway.control import SqliteGatewayControl
 from ..gateway.result_metrics import GatewaySolSummary, gateway_result_sol_summary
 from ..lineage_seed import LineageSeedSpecV1
 from ..presentation import (
+    ablation_arm_result_value,
     bootstrap_result_value,
     lineage_bootstrap_value,
     lineage_seed_result_value,
@@ -116,6 +118,28 @@ def seed_lineage(config_path: str, campaign_value: str, spec_path: str) -> None:
             spec,
         )
     print(json.dumps(lineage_seed_result_value(result), sort_keys=True))
+
+
+def seed_ablation_arm(config_path: str, spec_path: str) -> None:
+    """Publish one unevolved control arm in its own Campaign for ablation comparison."""
+    settings = RuntimeSettings.from_file(config_path)
+    spec = AblationArmSpecV1.from_file(spec_path)
+    connection = build_agate_connection(settings.agate, os.environ)
+    client, request_builder = load_agate_sdk(connection)
+    with SqliteRegistry(settings.storage.registry_database) as registry:
+        artifacts = LocalArtifactStore(settings.storage.artifacts_root)
+        seeder = AblationArmSeeder(
+            registry,
+            build_lineage_seeder(
+                settings,
+                artifacts,
+                registry,
+                client,
+                request_builder,
+            ),
+        )
+        result = anyio.run(seeder.seed_arm, spec)
+    print(json.dumps(ablation_arm_result_value(result), sort_keys=True))
 
 
 def _bootstrap_cli_value(

@@ -138,6 +138,107 @@ async def test_artifact_seed_creates_independent_v0_roots_and_is_idempotent(
 
 
 @pytest.mark.anyio
+async def test_lineage_baseline_seed_clones_bootstrap_and_reuses_its_measurement(
+    tmp_path: Path,
+) -> None:
+    """An ablation arm must start from the identical Bootstrap result at no extra GPU cost."""
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    agent_digest = _agent_artifact(artifacts, tmp_path)
+    kernel_digest = _kernel_artifact(artifacts, tmp_path)
+    with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
+        existing = seed_lineage(registry)
+        campaign_id = registry.get_lineage(existing.lineage_id).campaign_id
+        evaluator = FakeEvaluator(artifacts, [])
+        seeder = LineageSeeder(
+            registry,
+            artifacts,
+            KernelAgentRevisionBuilder(artifacts, limits=kernel_agent_limits()),
+            evaluator,
+            clock=lambda: NOW,
+        )
+        evolution = await seeder.seed_lineage(
+            campaign_id,
+            LineageSeedSpecV1.model_validate(
+                {
+                    "creation_key": "evolution-arm",
+                    "dsl": "triton",
+                    "seed": {
+                        "source_type": "artifacts",
+                        "agent_artifact_digest": agent_digest,
+                        "kernel_artifact_digest": kernel_digest,
+                    },
+                    "challenger_count": 1,
+                    "attempts_per_trajectory": 2,
+                }
+            ),
+        )
+        assert len(evaluator.calls) == 1
+
+        spec = LineageSeedSpecV1.model_validate(
+            {
+                "creation_key": "ablation-arm-1",
+                "dsl": "triton",
+                "seed": {
+                    "source_type": "lineage_baseline",
+                    "lineage_id": str(evolution.lineage_id),
+                },
+                "challenger_count": 0,
+                "trajectories_per_branch": 1,
+                "attempts_per_trajectory": 2,
+                "ephemeral_agent_state": True,
+            }
+        )
+        ablation = await seeder.seed_lineage(campaign_id, spec)
+        repeated = await seeder.seed_lineage(campaign_id, spec)
+
+        assert repeated == ablation
+        # The baseline measurement is reused, so no second authoritative evaluation ran.
+        assert len(evaluator.calls) == 1
+        assert ablation.lineage_id != evolution.lineage_id
+        assert ablation.kernel_revision_id != evolution.kernel_revision_id
+        assert ablation.kernel_artifact_digest == evolution.kernel_artifact_digest
+        assert ablation.agent_artifact_digest == evolution.agent_artifact_digest
+        assert ablation.latency_us == evolution.latency_us
+        assert ablation.gateway_result_digest == evolution.gateway_result_digest
+        assert ablation.source_kernel_revision_id == evolution.kernel_revision_id
+
+        lineage = registry.get_lineage(ablation.lineage_id)
+        assert lineage.ephemeral_agent_state is True
+        assert lineage.challenger_count == 0
+        assert registry.list_lineage_kernels(lineage.id)[0].revision_number == 0
+
+        source_bootstrap = (
+            artifacts.verify(evolution.evidence_checkpoint).payload_path / "bootstrap"
+        )
+        cloned_bootstrap = (
+            artifacts.verify(ablation.evidence_checkpoint).payload_path / "bootstrap"
+        )
+        assert ablation.evidence_checkpoint != evolution.evidence_checkpoint
+        for name in ("report.json", "conversation.jsonl"):
+            assert (cloned_bootstrap / name).read_bytes() == (
+                source_bootstrap / name
+            ).read_bytes()
+
+
+@pytest.mark.anyio
+async def test_cloned_baseline_rejects_a_separate_initial_evidence_directory() -> None:
+    """A cloned baseline already carries Bootstrap Evidence, so a second source is ambiguous."""
+    with pytest.raises(ValueError, match="already carries its Bootstrap Evidence"):
+        LineageSeedSpecV1.model_validate(
+            {
+                "creation_key": "ablation-arm-1",
+                "dsl": "triton",
+                "seed": {
+                    "source_type": "lineage_baseline",
+                    "lineage_id": "lineage_" + "0" * 32,
+                },
+                "initial_evidence": "/tmp/some-evidence",
+                "attempts_per_trajectory": 2,
+            }
+        )
+
+
+@pytest.mark.anyio
 async def test_revision_seed_reuses_content_but_creates_new_revision_identities(
     tmp_path: Path,
 ) -> None:

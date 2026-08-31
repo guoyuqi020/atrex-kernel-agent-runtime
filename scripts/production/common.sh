@@ -34,6 +34,18 @@ atrex_prod_workspace_paths() {
   atrex_prod_dsls_root="${atrex_prod_workspace}/dsls"
   atrex_prod_bootstrap_summary="${atrex_prod_workspace}/bootstrap-results.json"
   atrex_prod_campaign_summary="${atrex_prod_workspace}/campaign-results.json"
+  atrex_prod_ablation_plan="${atrex_prod_workspace}/ablation.json"
+}
+
+atrex_prod_arm_paths() {
+  local dsl="$1"
+  local label="$2"
+  atrex_prod_dsl_paths "${dsl}"
+  atrex_prod_arm_workspace="${atrex_prod_dsl_workspace}/${label}"
+  atrex_prod_arm_spec="${atrex_prod_arm_workspace}/arm.json"
+  atrex_prod_arm_seed_result="${atrex_prod_arm_workspace}/seed-result.json"
+  atrex_prod_arm_campaign_result="${atrex_prod_arm_workspace}/campaign-result.json"
+  atrex_prod_arm_log="${atrex_prod_arm_workspace}/campaign.log"
 }
 
 atrex_prod_dsl_paths() {

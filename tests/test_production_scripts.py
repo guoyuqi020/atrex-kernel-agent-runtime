@@ -15,7 +15,9 @@ from atrex_runtime.config import RuntimeSettings
 
 ROOT = Path(__file__).resolve().parents[1]
 PRODUCTION = ROOT / "scripts/production"
-_git_commit = cast(Any, runpy.run_path(str(PRODUCTION / "prepare.py"))["_git_commit"])
+_prepare = runpy.run_path(str(PRODUCTION / "prepare.py"))
+_git_commit = cast(Any, _prepare["_git_commit"])
+_ablation_plan = cast(Any, _prepare["_ablation_plan"])
 
 
 def _operator(root: Path) -> Path:
@@ -108,6 +110,22 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Pa
     secrets = workspace / "runtime.env"
     assert secrets.stat().st_mode & 0o777 == 0o600
 
+    plan = json.loads((workspace / "ablation.json").read_text(encoding="utf-8"))
+    assert plan["schema_version"] == 2
+    assert plan["enabled"] is True
+    assert plan["attempts_per_trajectory"] == 2
+    # 1 Trajectory x (1 Active + 1 Challenger) = 2 isolated arms, plus one pooled and one
+    # retained arm, each sized to that same combined Trajectory count.
+    assert [
+        (arm["kind"], arm["trajectories_per_branch"], arm["ephemeral_agent_state"])
+        for arm in plan["arms"]
+    ] == [
+        ("isolated", 1, True),
+        ("isolated", 1, True),
+        ("pooled", 2, True),
+        ("retained", 2, False),
+    ]
+
     manifest_path = workspace / "production-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest["schema_version"] == 2
@@ -118,6 +136,56 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Pa
     manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
     subprocess.run(command, check=True, env=environment, capture_output=True, text=True)
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == manifest
+
+
+def test_ablation_plan_derives_all_three_compute_matched_arms() -> None:
+    """Each arm must mirror Active plus every Challenger to be compute-matched on its own."""
+    schedule = {
+        "challenger_count": 2,
+        "trajectories_per_branch": 3,
+        "attempts_per_trajectory": 4,
+        # Gating Challengers out of early Epochs must not shrink the arm set, or arm
+        # identity would move between Epochs.
+        "challenger_start_epoch": 5,
+    }
+
+    enabled = _ablation_plan({"schedule": {**schedule, "event_only": True}})
+    disabled = _ablation_plan({"schedule": {**schedule, "event_only": False}})
+    omitted = _ablation_plan({"schedule": schedule})
+
+    assert enabled["schema_version"] == 2
+    assert enabled["attempts_per_trajectory"] == 4
+    by_kind: dict[str, list[dict[str, Any]]] = {}
+    for arm in enabled["arms"]:
+        by_kind.setdefault(str(arm["kind"]), []).append(arm)
+    # 3 Trajectories x (1 Active + 2 Challengers) = 9.
+    assert len(by_kind["isolated"]) == 9
+    assert {arm["trajectories_per_branch"] for arm in by_kind["isolated"]} == {1}
+    assert {arm["ephemeral_agent_state"] for arm in by_kind["isolated"]} == {True}
+    assert [arm["label"] for arm in by_kind["isolated"][:2]] == [
+        "ablation-isolated-01",
+        "ablation-isolated-02",
+    ]
+    assert by_kind["pooled"] == [
+        {
+            "kind": "pooled",
+            "label": "ablation-pooled",
+            "trajectories_per_branch": 9,
+            "ephemeral_agent_state": True,
+        }
+    ]
+    # The retained arm keeps Skills and Tools, so only the Evolver is removed.
+    assert by_kind["retained"] == [
+        {
+            "kind": "retained",
+            "label": "ablation-retained",
+            "trajectories_per_branch": 9,
+            "ephemeral_agent_state": False,
+        }
+    ]
+    assert disabled["arms"] == []
+    assert disabled["enabled"] is False
+    assert omitted == disabled
 
 
 def test_prepare_prefers_shape_train_and_keeps_shape_valid_private(tmp_path: Path) -> None:
@@ -361,6 +429,96 @@ def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
             entry["result"]["lineages"][0].get("dsl") for entry in summary["dsls"].values()
         }
         assert result_dsls == ({None} if phase == "bootstrap" else {"cuda", "triton", "cutedsl"})
+
+
+def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None:
+    """The summary must carry the evolution-versus-control pairing for later comparison."""
+    workspace = tmp_path / "workspace"
+    for index, dsl in enumerate(("cuda", "triton", "cutedsl"), start=1):
+        dsl_workspace = workspace / "dsls" / dsl
+        dsl_workspace.mkdir(parents=True)
+        dsl_workspace.joinpath("campaign.json").write_text(
+            json.dumps({"lineages": {dsl: {}}}), encoding="utf-8"
+        )
+        dsl_workspace.joinpath("campaign-result.json").write_text(
+            json.dumps(
+                {
+                    "campaign_id": f"campaign_{index:032x}",
+                    "target_epoch_number": 10,
+                    "lineages": [{"dsl": dsl}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        dsl_workspace.joinpath("bootstrap-result.json").write_text(
+            json.dumps(
+                {
+                    "campaign_id": f"campaign_{index:032x}",
+                    "lineages": [{"lineage_id": f"lineage_{index:032x}"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        first = dsl_workspace / "ablation-isolated-01"
+        first.mkdir()
+        first.joinpath("campaign-result.json").write_text(
+            json.dumps(
+                {
+                    "campaign_id": f"campaign_{index + 100:032x}",
+                    "target_epoch_number": 10,
+                    "lineages": [{"dsl": dsl}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        first.joinpath("seed-result.json").write_text(
+            json.dumps({"campaign_id": f"campaign_{index + 100:032x}", "event_only": True}),
+            encoding="utf-8",
+        )
+        # A second arm that never produced a result must not sink the whole summary.
+        (dsl_workspace / "ablation-pooled").mkdir()
+
+    subprocess.run(
+        (
+            sys.executable,
+            str(PRODUCTION / "summarize.py"),
+            "--workspace",
+            str(workspace),
+            "--phase",
+            "campaign",
+            "--target-epoch",
+            "10",
+            "--allow-partial",
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    summary = json.loads((workspace / "campaign-results.json").read_text(encoding="utf-8"))
+
+    for dsl, entry in summary["dsls"].items():
+        arms = entry["ablation"]
+        assert [arm["arm"] for arm in arms] == ["ablation-isolated-01", "ablation-pooled"]
+        assert arms[0]["campaign_id"] != entry["campaign_id"]
+        assert arms[0]["result"]["lineages"][0]["dsl"] == dsl
+        assert arms[0]["seed_result"]["event_only"] is True
+        assert arms[1]["status"] == "missing"
+
+    subprocess.run(
+        (
+            sys.executable,
+            str(PRODUCTION / "summarize.py"),
+            "--workspace",
+            str(workspace),
+            "--phase",
+            "bootstrap",
+        ),
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    bootstrap = json.loads((workspace / "bootstrap-results.json").read_text(encoding="utf-8"))
+    assert all(entry["ablation"] == [] for entry in bootstrap["dsls"].values())
 
 
 def test_summarize_preserves_successful_dsl_results_when_one_is_missing(

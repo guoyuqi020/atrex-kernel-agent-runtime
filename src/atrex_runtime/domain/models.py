@@ -451,10 +451,16 @@ class Lineage:
     challenger_start_epoch: int = 1
     optimizer_model: str | None = None
     evolver_model: str | None = None
+    # Every Attempt starts from empty Skills and Tools instead of inheriting them. Absence
+    # of the Evolver is a separate matter, expressed by a zero Challenger count.
+    ephemeral_agent_state: bool = False
+    bootstrap_source_lineage_id: LineageId | None = None
 
     def __post_init__(self) -> None:
         if self.challenger_count < 0:
             raise ValueError("a lineage cannot require a negative Challenger count")
+        if self.bootstrap_source_lineage_id == self.id:
+            raise ValueError("a lineage cannot inherit its own Bootstrap history")
         if self.challenger_start_epoch <= 0:
             raise ValueError("a lineage requires a positive Challenger start Epoch")
         if self.trajectories_per_branch <= 0:

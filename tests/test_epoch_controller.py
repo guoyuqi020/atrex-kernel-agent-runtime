@@ -309,6 +309,102 @@ async def test_epoch_without_challengers_runs_parallel_trajectories_from_same_ke
 
 
 @pytest.mark.anyio
+async def test_event_only_lineage_runs_unevolved_on_its_own_kernel_line(
+    tmp_path: Path,
+) -> None:
+    """The ablation arm must never evolve and must advance only on its own output."""
+    registry = SqliteRegistry(tmp_path / "runtime.db")
+    seeded = seed_lineage(
+        registry,
+        challenger_count=0,
+        trajectories_per_branch=1,
+        attempts_per_trajectory=2,
+        ephemeral_agent_state=True,
+    )
+    evolver = FakeEvolver()
+    optimizer = ScriptedOptimizer(
+        seeded.active_revision_id,
+        active=[candidate("attempt-1", 90), candidate("attempt-2", 80)],
+        challenger=[],
+    )
+
+    result = await EpochController(
+        registry,
+        evolver,
+        optimizer,
+        FakeAttemptEvidence(),
+    ).run_epoch(seeded.lineage_id, 1)
+
+    assert evolver.calls == []
+    assert result.epoch.challenger_kernel_agent_revision_ids == ()
+    assert result.epoch.winner_kernel_agent_revision_id == seeded.active_revision_id
+    attempts = registry.list_attempts(result.epoch.id)
+    assert [attempt.branch for attempt in attempts] == [BranchRole.ACTIVE, BranchRole.ACTIVE]
+    assert attempts[0].kernel_agent_revision_id == seeded.active_revision_id
+    assert attempts[1].kernel_agent_revision_id == seeded.active_revision_id
+    # The second Attempt continues from the first's accepted output, not the seed.
+    assert attempts[1].input_kernel_revision_id == attempts[0].output_kernel_revision_id
+    lineage = registry.get_lineage(seeded.lineage_id)
+    assert lineage.ephemeral_agent_state is True
+    assert lineage.active_kernel_agent_revision_id == seeded.active_revision_id
+    assert lineage.best_kernel_revision_id == attempts[1].output_kernel_revision_id
+    registry.close()
+
+
+@pytest.mark.anyio
+async def test_pooled_event_only_lineage_pools_every_trajectory_into_one_baseline(
+    tmp_path: Path,
+) -> None:
+    """The pooled arm's next-Epoch baseline is the best Kernel across all Trajectories."""
+    registry = SqliteRegistry(tmp_path / "runtime.db")
+    seeded = seed_lineage(
+        registry,
+        challenger_count=0,
+        trajectories_per_branch=2,
+        attempts_per_trajectory=2,
+        ephemeral_agent_state=True,
+    )
+    evolver = FakeEvolver()
+    optimizer = ScriptedOptimizer(
+        seeded.active_revision_id,
+        active=[
+            candidate("trajectory-1-attempt-1", 95),
+            candidate("trajectory-1-attempt-2", 90),
+            candidate("trajectory-2-attempt-1", 85),
+            # The overall best lands in the second Trajectory.
+            candidate("trajectory-2-attempt-2", 60),
+        ],
+        challenger=[],
+    )
+
+    result = await EpochController(
+        registry,
+        evolver,
+        optimizer,
+        FakeAttemptEvidence(),
+    ).run_epoch(seeded.lineage_id, 1)
+
+    assert evolver.calls == []
+    attempts = registry.list_attempts(result.epoch.id)
+    assert len(attempts) == 4
+    assert {attempt.trajectory_ordinal for attempt in attempts} == {1, 2}
+    fastest = min(
+        (
+            registry.get_kernel_revision(attempt.output_kernel_revision_id)
+            for attempt in attempts
+            if attempt.output_kernel_revision_id is not None
+        ),
+        key=lambda kernel: kernel.evaluation.latency_us or float("inf"),
+    )
+    lineage = registry.get_lineage(seeded.lineage_id)
+    # Both Trajectories feed one pooled baseline, unlike the isolated arm's own line.
+    assert lineage.best_kernel_revision_id == fastest.id
+    assert result.epoch.best_kernel_revision_id == fastest.id
+    assert lineage.active_kernel_agent_revision_id == seeded.active_revision_id
+    registry.close()
+
+
+@pytest.mark.anyio
 async def test_retention_comparison_finalizes_candidate_evaluation_before_completion(
     tmp_path: Path,
 ) -> None:

@@ -709,6 +709,56 @@ def _runtime_config(
     }
 
 
+def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
+    """Derive both compute-matched control arms from the Campaign schedule."""
+    schedule = cast(dict[str, Any], policy["schedule"])
+    enabled = bool(schedule.get("event_only", False))
+    trajectories = int(schedule["trajectories_per_branch"])
+    challengers = int(schedule["challenger_count"])
+    # Each arm mirrors the combined Active-plus-Challenger Trajectory count so it is
+    # compute-matched on its own. The configured Challenger count is used rather than the
+    # challenger_start_epoch-gated one so arm identity is stable across Epochs.
+    total = trajectories * (1 + challengers)
+    arms: list[dict[str, Any]] = []
+    if enabled:
+        # Isolated: one Lineage per Trajectory, so no line ever sees another.
+        arms.extend(
+            {
+                "kind": "isolated",
+                "label": f"ablation-isolated-{ordinal:02d}",
+                "trajectories_per_branch": 1,
+                "ephemeral_agent_state": True,
+            }
+            for ordinal in range(1, total + 1)
+        )
+        # Pooled: one Lineage carrying every Trajectory, so Trajectories see each prior
+        # Epoch's results and every Epoch restarts from the historically best Kernel.
+        arms.append(
+            {
+                "kind": "pooled",
+                "label": "ablation-pooled",
+                "trajectories_per_branch": total,
+                "ephemeral_agent_state": True,
+            }
+        )
+        # Retained: the pooled shape but keeping Skills and Tools, so the Evolver is the
+        # only thing removed relative to the Active branch.
+        arms.append(
+            {
+                "kind": "retained",
+                "label": "ablation-retained",
+                "trajectories_per_branch": total,
+                "ephemeral_agent_state": False,
+            }
+        )
+    return {
+        "schema_version": 2,
+        "enabled": enabled,
+        "attempts_per_trajectory": int(schedule["attempts_per_trajectory"]),
+        "arms": arms,
+    }
+
+
 def _campaign(
     *,
     workspace: Path,
@@ -916,6 +966,7 @@ def main() -> None:
         required = (
             workspace / "runtime.json",
             workspace / "local-wiki.json",
+            workspace / "ablation.json",
             *(workspace / "dsls" / dsl / "campaign.json" for dsl in SUPPORTED_DSLS),
         )
         if not all(path.is_file() for path in required):
@@ -974,6 +1025,7 @@ def main() -> None:
             dsl_workspace / "production-manifest.json",
             {**requested_identity, "dsl": dsl},
         )
+    _write_json(workspace / "ablation.json", _ablation_plan(policy))
     host_home = os.environ.get("ATREX_SANDBOX_HOST_HOME", str(Path.home()))
     runtime = _runtime_config(
         root=root,

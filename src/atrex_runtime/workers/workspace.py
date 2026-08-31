@@ -297,6 +297,14 @@ class PreparedAttempt:
             shutil.rmtree(state, ignore_errors=True)
 
 
+def write_empty_agent_state(root: Path) -> None:
+    """Lay down the empty reusable Agent state a Session with no inherited state starts from."""
+    (root / "skills").mkdir(mode=0o700)
+    tools = root / "tools"
+    tools.mkdir(mode=0o700)
+    (tools / "README.md").write_text(TOOLS_README, encoding="utf-8")
+
+
 class AttemptWorkspaceAssembler(Protocol):
     """Materialize trusted Attempt inputs into a new private workspace."""
 
@@ -337,46 +345,58 @@ class LocalAttemptWorkspaceAssembler:
             raise ValueError("Attempt request disagrees with its Epoch Evidence")
         lineage = self._registry.get_lineage(epoch.lineage_id)
         campaign = self._registry.get_campaign(lineage.campaign_id)
-        # A physical retry of the same logical Attempt resumes from its latest
-        # sealed Session state. A new serial Attempt resumes from its predecessor.
-        previous_runtime_state_digest = (
-            attempt.runtime_state_digest or attempt.input_runtime_state_digest
-        )
+        # An event-only Lineage is an ablation control arm, so every Attempt starts from the
+        # same empty Agent state. That has to be decided before reading any prior digest:
+        # attempt.runtime_state_digest is sealed after the Session, so a physical retry would
+        # otherwise inherit the first run's Skills.
+        previous_runtime_state_digest: ArtifactDigest | None = None
         reset_persistent_scope = False
-        if previous_runtime_state_digest is None and attempt.ordinal > 1:
-            previous = self._registry.find_attempt(
-                attempt.epoch_id,
-                attempt.branch,
-                attempt.challenger_ordinal,
-                attempt.trajectory_ordinal,
-                attempt.ordinal - 1,
+        if not lineage.ephemeral_agent_state:
+            # A physical retry of the same logical Attempt resumes from its latest
+            # sealed Session state. A new serial Attempt resumes from its predecessor.
+            previous_runtime_state_digest = (
+                attempt.runtime_state_digest or attempt.input_runtime_state_digest
             )
-            if previous is None or previous.runtime_state_digest is None:
-                raise ValueError("Previous serial Attempt has no Runtime State checkpoint")
-            previous_runtime_state_digest = previous.runtime_state_digest
-        elif previous_runtime_state_digest is None:
-            if attempt.branch is BranchRole.ACTIVE:
-                previous_runtime_state_digest = self._active_branch_seed(epoch)
-            if previous_runtime_state_digest is None:
-                previous_runtime_state_digest = revision.runtime_state_digest
-            # A first logical Attempt starts a fresh per-Trajectory copy of the
-            # canonical Branch seed. It must not inherit an old same-ordinal cache.
-            reset_persistent_scope = previous_runtime_state_digest is not None
+            if previous_runtime_state_digest is None and attempt.ordinal > 1:
+                previous = self._registry.find_attempt(
+                    attempt.epoch_id,
+                    attempt.branch,
+                    attempt.challenger_ordinal,
+                    attempt.trajectory_ordinal,
+                    attempt.ordinal - 1,
+                )
+                if previous is None or previous.runtime_state_digest is None:
+                    raise ValueError("Previous serial Attempt has no Runtime State checkpoint")
+                previous_runtime_state_digest = previous.runtime_state_digest
+            elif previous_runtime_state_digest is None:
+                if attempt.branch is BranchRole.ACTIVE:
+                    previous_runtime_state_digest = self._active_branch_seed(epoch)
+                if previous_runtime_state_digest is None:
+                    previous_runtime_state_digest = revision.runtime_state_digest
+                # A first logical Attempt starts a fresh per-Trajectory copy of the
+                # canonical Branch seed. It must not inherit an old same-ordinal cache.
+                reset_persistent_scope = previous_runtime_state_digest is not None
 
         attempt_root = self._root / str(request.attempt_id)
         attempt_root.mkdir(mode=0o700, exist_ok=True)
         root = attempt_root / f"run-{uuid4().hex}"
         root.mkdir(mode=0o700)
 
-        persistent_skills, persistent_tools, persistent_lock = self._persistent_roots(
-            lineage_id=lineage.id,
-            revision=revision,
-            trajectory_ordinal=attempt.trajectory_ordinal,
-            previous_runtime_state_digest=previous_runtime_state_digest,
-            reset_from_seed=reset_persistent_scope,
-        )
-        _copy_reusable_tree(persistent_skills, root / "skills")
-        _copy_reusable_tree(persistent_tools, root / "tools")
+        persistent_skills: Path | None = None
+        persistent_tools: Path | None = None
+        persistent_lock: Path | None = None
+        if lineage.ephemeral_agent_state:
+            write_empty_agent_state(root)
+        else:
+            persistent_skills, persistent_tools, persistent_lock = self._persistent_roots(
+                lineage_id=lineage.id,
+                revision=revision,
+                trajectory_ordinal=attempt.trajectory_ordinal,
+                previous_runtime_state_digest=previous_runtime_state_digest,
+                reset_from_seed=reset_persistent_scope,
+            )
+            _copy_reusable_tree(persistent_skills, root / "skills")
+            _copy_reusable_tree(persistent_tools, root / "tools")
 
         manifest = AttemptInputManifestV9(
             attempt_id=request.attempt_id,

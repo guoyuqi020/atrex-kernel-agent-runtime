@@ -15,6 +15,7 @@ from .campaign import (
     recover_epoch,
     run_campaign,
     run_task_worker,
+    seed_ablation_arm,
     seed_lineage,
 )
 from .dev_shell import (
@@ -96,6 +97,9 @@ def main(argv: list[str] | None = None) -> None:
             cast(str, args.campaign),
             cast(str, args.spec),
         )
+        return
+    if args.command == "seed-ablation-arm":
+        seed_ablation_arm(cast(str, args.config), cast(str, args.spec))
         return
     if args.command == "run-campaign":
         run_campaign(

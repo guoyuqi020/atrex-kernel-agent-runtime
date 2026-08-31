@@ -59,7 +59,11 @@ from .workers.manifest import (
     AttemptTaskContextV5,
 )
 from .workers.optimizer import OptimizerSessionConfig
-from .workers.workspace import TOOLS_README, LocalAttemptWorkspaceAssembler, PreparedAttempt
+from .workers.workspace import (
+    LocalAttemptWorkspaceAssembler,
+    PreparedAttempt,
+    write_empty_agent_state,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -367,10 +371,7 @@ class TemporaryOptimizerDevShell:
         session_root = root / "sessions"
         session_root.mkdir(mode=0o700)
         (root / "scratch").mkdir(mode=0o700)
-        (root / "skills").mkdir(mode=0o700)
-        tools = root / "tools"
-        tools.mkdir(mode=0o700)
-        (tools / "README.md").write_text(TOOLS_README, encoding="utf-8")
+        write_empty_agent_state(root)
         return PreparedAttempt(
             root=root,
             manifest_path=manifest_path,

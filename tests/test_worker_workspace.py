@@ -419,6 +419,220 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     registry.close()
 
 
+def _single_trajectory_workspace(
+    tmp_path: Path,
+    registry: SqliteRegistry,
+    store: LocalArtifactStore,
+    *,
+    ephemeral_agent_state: bool,
+) -> tuple[LocalAttemptWorkspaceAssembler, RunAttemptRequest, str, str]:
+    """Assemble the least Registry state one prepare() call accepts."""
+    optimizer = _put_text_artifact(store, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT)
+    kernel_digest = _put_text_artifact(store, tmp_path, "kernel", ArtifactKind.KERNEL)
+    contract = store.put_json(
+        {"schema_version": 1, "candidate_path": "kernel.txt"},
+        ArtifactKind.EVALUATION_CONTRACT,
+    )
+    problem = store.put_json(
+        {"schema_version": "atrex.agent_problem.v1", "objective": "vector add"},
+        ArtifactKind.AGENT_PROBLEM,
+    )
+    campaign_id = new_campaign_id()
+    agent_id = new_kernel_agent_revision_id()
+    kernel_id = new_kernel_revision_id()
+    lineage_id = new_lineage_id()
+    epoch_id = new_epoch_id()
+    attempt_id = new_attempt_id()
+    evidence_source = tmp_path / "source-evidence"
+    (evidence_source / "bootstrap").mkdir(parents=True)
+    (evidence_source / "bootstrap/report.json").write_text(
+        json.dumps({"status": "baseline_ready"})
+    )
+    (evidence_source / "bootstrap/conversation.jsonl").write_text("{}\n")
+    (evidence_source / "checkpoint.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "lineage_id": str(lineage_id),
+                "through_epoch": 0,
+                "previous_checkpoint_digest": None,
+            }
+        )
+    )
+    evidence = store.put_directory(evidence_source, ArtifactKind.EVIDENCE)
+    attempt_source = tmp_path / "source-attempt-evidence"
+    for name in ("attempts", "traces", "diffs", "reports"):
+        (attempt_source / name).mkdir(parents=True, exist_ok=True)
+    (attempt_source / "context.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 2,
+                "epoch_id": str(epoch_id),
+                "attempt_id": str(attempt_id),
+                "branch": "active",
+                "challenger_ordinal": 0,
+                "trajectory_ordinal": 1,
+                "ordinal": 1,
+                "epoch_evidence_checkpoint": str(evidence),
+                "previous_attempt_ids": [],
+            }
+        )
+    )
+    (attempt_source / "lessons.json").write_text(
+        json.dumps({"schema_version": 1, "annotations": []})
+    )
+    attempt_evidence = store.put_directory(attempt_source, ArtifactKind.ATTEMPT_EVIDENCE)
+    registry.insert_campaign(Campaign(campaign_id, "vector_add", "h100", contract, problem, NOW))
+    registry.register_kernel_agent_revision(
+        KernelAgentRevision(
+            agent_id,
+            None,
+            "bootstrap:triton",
+            Dsl.TRITON,
+            optimizer,
+            "bootstrap",
+            NOW,
+            source_provenance_digest=digest("source"),
+        )
+    )
+    registry.register_kernel_revision(
+        KernelRevision(
+            kernel_id,
+            None,
+            kernel_digest,
+            None,
+            KernelEvaluation(True, 100.0, digest("gateway")),
+            NOW,
+        )
+    )
+    registry.insert_lineage(
+        Lineage(
+            id=lineage_id,
+            campaign_id=campaign_id,
+            dsl=Dsl.TRITON,
+            hardware_target="h100",
+            active_kernel_agent_revision_id=agent_id,
+            best_kernel_revision_id=kernel_id,
+            evidence_checkpoint=evidence,
+            challenger_count=0,
+            trajectories_per_branch=1,
+            attempts_per_trajectory=2,
+            next_epoch_number=1,
+            status=LineageStatus.READY,
+            ephemeral_agent_state=ephemeral_agent_state,
+        )
+    )
+    registry.insert_epoch(
+        Epoch(
+            id=epoch_id,
+            lineage_id=lineage_id,
+            number=1,
+            active_kernel_agent_revision_id=agent_id,
+            challenger_kernel_agent_revision_ids=(),
+            starting_kernel_revision_id=kernel_id,
+            evidence_checkpoint=evidence,
+            challenger_count=0,
+            trajectories_per_branch=1,
+            attempts_per_trajectory=2,
+            status=EpochStatus.RUNNING,
+            winner_kernel_agent_revision_id=None,
+            best_kernel_revision_id=None,
+            created_at=NOW,
+            completed_at=None,
+        )
+    )
+    registry.insert_attempt(
+        Attempt(
+            id=attempt_id,
+            epoch_id=epoch_id,
+            branch=BranchRole.ACTIVE,
+            challenger_ordinal=0,
+            trajectory_ordinal=1,
+            ordinal=1,
+            kernel_agent_revision_id=agent_id,
+            input_kernel_revision_id=kernel_id,
+            attempt_evidence_digest=attempt_evidence,
+            output_kernel_revision_id=None,
+            accepted_as_branch_best=False,
+            status=AttemptStatus.RUNNING,
+            infrastructure_failures=0,
+            recovery_generation=0,
+            authority_started_at=NOW,
+            failure_reason=None,
+            created_at=NOW,
+            completed_at=None,
+        )
+    )
+    request = RunAttemptRequest(
+        attempt_id,
+        agent_id,
+        kernel_id,
+        evidence,
+        attempt_evidence,
+        Dsl.TRITON,
+    )
+    assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, store)
+    return assembler, request, str(lineage_id), str(attempt_id)
+
+
+def test_event_only_attempt_never_inherits_agent_state(tmp_path: Path) -> None:
+    """The ablation arm must start identical every time, including after a physical retry."""
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    assembler, request, lineage_id, _attempt_id = _single_trajectory_workspace(
+        tmp_path,
+        registry,
+        store,
+        ephemeral_agent_state=True,
+    )
+
+    first = assembler.prepare(request)
+    assert list((first.root / "skills").iterdir()) == []
+    assert (first.root / "tools/README.md").is_file()
+    assert first.persistent_skills_root is None
+    assert first.persistent_tools_root is None
+    assert first.persistent_lock_path is None
+
+    (first.root / "skills/vector-load.md").write_text("reuse aligned loads\n")
+    first.persist_reusable_directories()
+    # The Session seals its own post-Session state; a physical retry must still start empty.
+    registry.record_attempt_runtime_state(
+        request.attempt_id,
+        first.seal_runtime_state(store),
+    )
+    retried = assembler.prepare(request)
+
+    assert list((retried.root / "skills").iterdir()) == []
+    assert not (retried.root / "skills/vector-load.md").exists()
+    assert not (tmp_path / "workspaces/.reusable" / lineage_id).exists()
+    registry.close()
+
+
+def test_a_normal_retry_does_inherit_agent_state(tmp_path: Path) -> None:
+    """Pin the inheritance the flag suppresses, so the ablation assertions cannot go vacuous."""
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    assembler, request, lineage_id, _attempt_id = _single_trajectory_workspace(
+        tmp_path,
+        registry,
+        store,
+        ephemeral_agent_state=False,
+    )
+
+    first = assembler.prepare(request)
+    (first.root / "skills/vector-load.md").write_text("reuse aligned loads\n")
+    first.persist_reusable_directories()
+    registry.record_attempt_runtime_state(
+        request.attempt_id,
+        first.seal_runtime_state(store),
+    )
+    retried = assembler.prepare(request)
+
+    assert (retried.root / "skills/vector-load.md").read_text() == "reuse aligned loads\n"
+    assert (tmp_path / "workspaces/.reusable" / lineage_id).is_dir()
+    registry.close()
+
+
 def test_evolved_revision_seeds_trajectory_from_candidate_runtime_state(tmp_path: Path) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     artifacts = LocalArtifactStore(tmp_path / "artifacts")

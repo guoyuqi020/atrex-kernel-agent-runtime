@@ -228,6 +228,109 @@ print(campaign)
 ' "${atrex_prod_bootstrap_result}" "${dsl}"
 }
 
+ablation_arm_labels() {
+  if [[ ! -f "${atrex_prod_ablation_plan}" ]]; then
+    return 0
+  fi
+  "${atrex_prod_python}" -c '
+import json, re, sys
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+if value.get("schema_version") != 2:
+    raise SystemExit(f"unsupported ablation plan schema: {sys.argv[1]}")
+if not value.get("enabled"):
+    raise SystemExit(0)
+for arm in value.get("arms", []):
+    label = arm["label"]
+    if re.fullmatch(r"ablation-[a-z0-9-]+", label) is None:
+        raise SystemExit(f"invalid ablation arm label: {label}")
+    print(label)
+' "${atrex_prod_ablation_plan}"
+}
+
+seed_arm() (
+  set -o pipefail
+  local dsl="$1"
+  local label="$2"
+  atrex_prod_arm_paths "${dsl}" "${label}"
+  mkdir -p -- "${atrex_prod_arm_workspace}"
+  # The arm clones the evolution Lineage's frozen baseline, so its spec only needs that
+  # Lineage plus its own Trajectory shape.
+  if ! "${atrex_prod_python}" -c '
+import json, sys
+bootstrap = json.load(open(sys.argv[1], encoding="utf-8"))
+plan = json.load(open(sys.argv[2], encoding="utf-8"))
+label = sys.argv[4]
+lineages = bootstrap.get("lineages", [])
+if len(lineages) != 1:
+    raise SystemExit("Bootstrap result does not own exactly one Lineage")
+arm = next(item for item in plan["arms"] if item["label"] == label)
+json.dump(
+    {
+        "schema_version": 1,
+        "creation_key": f"{label}-{sys.argv[5]}",
+        "source_lineage_id": lineages[0]["lineage_id"],
+        "attempts_per_trajectory": int(plan["attempts_per_trajectory"]),
+        "trajectories_per_branch": int(arm["trajectories_per_branch"]),
+        "ephemeral_agent_state": bool(arm["ephemeral_agent_state"]),
+    },
+    open(sys.argv[3], "w", encoding="utf-8"),
+    indent=2,
+    sort_keys=True,
+)
+' "${atrex_prod_bootstrap_result}" "${atrex_prod_ablation_plan}" "${atrex_prod_arm_spec}" \
+    "${label}" "${dsl}"; then
+    echo "[${dsl}/${label}] Could not write the arm spec." >&2
+    return 1
+  fi
+  local temporary="${atrex_prod_arm_seed_result}.tmp.${BASHPID}"
+  rm -f -- "${temporary}"
+  set +e
+  "${atrex_prod_cli}" seed-ablation-arm --config "${atrex_prod_config}" \
+    --spec "${atrex_prod_arm_spec}" | tee "${temporary}"
+  local statuses=("${PIPESTATUS[@]}")
+  set -e
+  if (( statuses[0] != 0 || statuses[1] != 0 )); then
+    rm -f -- "${temporary}"
+    echo "[${dsl}/${label}] Arm seeding failed." >&2
+    return 1
+  fi
+  mv "${temporary}" "${atrex_prod_arm_seed_result}"
+  echo "[${dsl}/${label}] Arm seeded: ${atrex_prod_arm_seed_result}"
+)
+
+run_arm() (
+  set -o pipefail
+  local dsl="$1"
+  local label="$2"
+  atrex_prod_arm_paths "${dsl}" "${label}"
+  local campaign_id
+  campaign_id="$("${atrex_prod_python}" -c '
+import json, re, sys
+value = json.load(open(sys.argv[1], encoding="utf-8"))
+campaign = value.get("campaign_id", "")
+if re.fullmatch(r"campaign_[0-9a-f]{32}", campaign) is None:
+    raise SystemExit(f"Arm seed result has no valid campaign_id: {sys.argv[1]}")
+print(campaign)
+' "${atrex_prod_arm_seed_result}")" || return 1
+  local temporary="${atrex_prod_arm_campaign_result}.tmp.${BASHPID}"
+  rm -f -- "${temporary}"
+  : >"${atrex_prod_arm_log}"
+  echo "[${dsl}/${label}] Campaign ${campaign_id} started through Epoch ${target_epoch}."
+  set +e
+  "${atrex_prod_cli}" run-campaign --config "${atrex_prod_config}" \
+    --campaign "${campaign_id}" --target-epoch "${target_epoch}" \
+    2> >(tee "${atrex_prod_arm_log}" >&2) | tee "${temporary}"
+  local statuses=("${PIPESTATUS[@]}")
+  set -e
+  if (( statuses[0] != 0 || statuses[1] != 0 )); then
+    rm -f -- "${temporary}"
+    echo "[${dsl}/${label}] Campaign failed; log: ${atrex_prod_arm_log}" >&2
+    return 1
+  fi
+  mv "${temporary}" "${atrex_prod_arm_campaign_result}"
+  echo "[${dsl}/${label}] Campaign completed: ${atrex_prod_arm_campaign_result}"
+)
+
 run_one() (
   set -o pipefail
   local dsl="$1"
@@ -263,9 +366,40 @@ run_dsl_pipeline() (
     echo "[${dsl}] Pipeline could not resolve its bootstrapped Campaign ID." >&2
     return 1
   fi
+  local arms=()
+  local label
+  if ! mapfile -t arms < <(ablation_arm_labels); then
+    echo "[${dsl}] Pipeline could not read the ablation plan." >&2
+    return 1
+  fi
+  # Seeding reuses the Bootstrap baseline's measurement, so it costs no GPU time and is
+  # cheap to do serially before the Campaigns fan out.
+  for label in "${arms[@]}"; do
+    if ! seed_arm "${dsl}" "${label}"; then
+      echo "[${dsl}] Pipeline stopped after ablation arm seeding failed." >&2
+      return 1
+    fi
+  done
   echo "[${dsl}] Bootstrap succeeded; entering Epoch execution immediately."
-  if ! run_one "${dsl}" "${campaign_id}"; then
-    echo "[${dsl}] Pipeline stopped after Campaign failure; other DSLs continue." >&2
+  local pids=()
+  local labels=()
+  run_one "${dsl}" "${campaign_id}" &
+  pids+=("$!")
+  labels+=("evolution")
+  for label in "${arms[@]}"; do
+    run_arm "${dsl}" "${label}" &
+    pids+=("$!")
+    labels+=("${label}")
+  done
+  local failed=0
+  local index
+  for index in "${!pids[@]}"; do
+    if ! wait "${pids[index]}"; then
+      echo "[${dsl}/${labels[index]}] Campaign failed; other Campaigns continue." >&2
+      failed=1
+    fi
+  done
+  if (( failed != 0 )); then
     return 1
   fi
 )
