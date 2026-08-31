@@ -189,7 +189,7 @@
       "session_trace_relative_path": "sessions/core",
       "token_usage_report_relative_path": "scratch/token-usage.json",
       "max_attempt_report_bytes": 65536,
-      "timeout_seconds": 7200,
+      "timeout_seconds": 28800,
       "bootstrap_timeout_seconds": 14400,
       "terminate_grace_seconds": 10,
       "max_diagnostic_bytes": 131072,
