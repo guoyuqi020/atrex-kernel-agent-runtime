@@ -82,6 +82,12 @@ class CandidateProductionValidator(Protocol):
         """Raise when the candidate violates Production policy."""
         ...
 
+    def violations(
+        self, attempt_id: AttemptId, candidate_digest: ArtifactDigest
+    ) -> tuple[str, ...]:
+        """Report Production policy violations without rejecting the request."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class ProductionKernelPolicy:
@@ -154,13 +160,19 @@ class ProductionKernelPolicy:
                 "prebuilt CUDA math/operator library reference is forbidden",
             ),
         ):
-            if re.search(pattern, policy_source, flags=re.IGNORECASE):
-                errors.append(message)
+            matched = _matched_tokens(pattern, policy_source)
+            if matched:
+                errors.append(f"{message}: {', '.join(matched)}")
 
-        if dsl is not Dsl.CUTEDSL and re.search(
-            r"#\s*include\s*[<\"]cutlass/", policy_source, flags=re.IGNORECASE
-        ):
-            errors.append("CUTLASS implementation is forbidden outside the CuteDSL lineage")
+        if dsl is not Dsl.CUTEDSL:
+            cutlass_includes = _matched_tokens(
+                r"#\s*include\s*[<\"]cutlass/[^>\"]*[>\"]?", policy_source
+            )
+            if cutlass_includes:
+                errors.append(
+                    "CUTLASS implementation is forbidden outside the CuteDSL lineage: "
+                    + ", ".join(cutlass_includes)
+                )
         errors.extend(_solution_violations(root / "solution.json", dsl))
         return tuple(dict.fromkeys(errors))
 
@@ -179,9 +191,16 @@ class RegistryProductionKernelValidator:
         self._policy = policy
 
     def validate(self, attempt_id: AttemptId, candidate_digest: ArtifactDigest) -> None:
+        violations = self.violations(attempt_id, candidate_digest)
+        if violations:
+            raise ValueError("production gate rejected candidate: " + "; ".join(violations))
+
+    def violations(
+        self, attempt_id: AttemptId, candidate_digest: ArtifactDigest
+    ) -> tuple[str, ...]:
         context = self._contexts.resolve(attempt_id)
         if not context.contract.production_gate:
-            return
+            return ()
         resolved = resolve_kernel_candidate(
             self._artifacts,
             candidate_digest,
@@ -190,7 +209,7 @@ class RegistryProductionKernelValidator:
             kind_error="production gate requires a Kernel Artifact",
             missing_error="production gate requires the contract candidate path",
         )
-        self._policy.validate(
+        return self._policy.violations(
             resolved.root,
             context.contract.candidate_path,
             context.dsl,
@@ -225,6 +244,19 @@ def _code_without_prose(source: str) -> str:
         row, column = token.start
         output[row - 1] = output[row - 1][:column]
     return "\n".join(output)
+
+
+def _matched_tokens(pattern: str, source: str, *, limit: int = 5) -> tuple[str, ...]:
+    """Locate each distinct match of a forbidden pattern as "token (line N)"."""
+    located: dict[str, int] = {}
+    for match in re.finditer(pattern, source, flags=re.IGNORECASE):
+        token = match.group(0).strip()
+        if token not in located:
+            located[token] = source.count("\n", 0, match.start()) + 1
+    descriptors = tuple(f"{token} (line {line})" for token, line in located.items())
+    if len(descriptors) <= limit:
+        return descriptors
+    return (*descriptors[:limit], f"and {len(descriptors) - limit} more")
 
 
 def _import_roots(tree: ast.AST) -> tuple[set[str], bool]:

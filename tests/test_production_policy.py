@@ -111,6 +111,63 @@ def test_production_gate_rejects_fallbacks_and_alternate_implementations(
         ProductionKernelPolicy().validate(tmp_path / "candidate", "kernel.py", Dsl.TRITON)
 
 
+def test_production_gate_locates_every_forbidden_library_token(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "candidate",
+        "import torch\n"
+        "from torch.utils.cpp_extension import load_inline\n"
+        'CUDA_SRC = r"""\n'
+        "#include <cublas_v2.h>\n"
+        "__global__ void kernel(float* x) {}\n"
+        "void gemm() { cublasSgemm(h, CUBLAS_OP_T, 1, 1, 1); }\n"
+        '"""\n',
+    )
+
+    violations = ProductionKernelPolicy().violations(tmp_path / "candidate", "kernel.py", Dsl.CUDA)
+
+    assert violations == (
+        "prebuilt CUDA math/operator library reference is forbidden: "
+        "cublas_v2 (line 4), cublasSgemm (line 6), CUBLAS_OP_T (line 6)",
+    )
+
+
+def test_production_gate_locates_a_forbidden_cutlass_include(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "candidate",
+        "import torch\nimport triton\n@triton.jit\ndef kernel(x):\n    return\n"
+        'SRC = r"""\n#include <cutlass/gemm/device/gemm.h>\n"""\n',
+    )
+
+    violations = ProductionKernelPolicy().violations(
+        tmp_path / "candidate", "kernel.py", Dsl.TRITON
+    )
+
+    assert violations == (
+        "CUTLASS implementation is forbidden outside the CuteDSL lineage: "
+        "#include <cutlass/gemm/device/gemm.h> (line 7)",
+    )
+
+
+def test_production_gate_ignores_a_forbidden_library_named_only_in_prose(tmp_path: Path) -> None:
+    _write(
+        tmp_path / "candidate",
+        "import torch\n"
+        "from torch.utils.cpp_extension import load_inline\n"
+        'CUDA_SRC = r"""__global__ void kernel(float* x) {}"""\n'
+        "\n"
+        "\n"
+        "class Model(torch.nn.Module):\n"
+        '    """Accumulation matches cuBLAS fp32 results bitwise."""\n'
+        "\n"
+        "    def forward(self, x):  # cuBLAS parity verified\n"
+        "        return x\n",
+    )
+
+    violations = ProductionKernelPolicy().violations(tmp_path / "candidate", "kernel.py", Dsl.CUDA)
+
+    assert violations == ()
+
+
 def test_production_gate_validates_solution_dependencies_and_languages(tmp_path: Path) -> None:
     root = tmp_path / "candidate"
     _write(

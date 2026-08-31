@@ -257,6 +257,7 @@ class GatewayProxyService:
 
         candidate_digest: ArtifactDigest | None = None
         candidate_path: Path | None = None
+        production_violations: tuple[str, ...] = ()
         if isinstance(request, _CANDIDATE_REQUEST_TYPES):
             if isinstance(request, DevRequestV2):
                 self._validate_dev_files(request)
@@ -270,8 +271,13 @@ class GatewayProxyService:
             )
             if self._candidate_diff is not None and isinstance(request, EvaluateRequestV2):
                 self._candidate_diff.validate(request.attempt_id, candidate_digest)
-            if self._candidate_production is not None and isinstance(request, EvaluateRequestV2):
-                self._candidate_production.validate(request.attempt_id, candidate_digest)
+            if self._candidate_production is not None:
+                if isinstance(request, EvaluateRequestV2):
+                    self._candidate_production.validate(request.attempt_id, candidate_digest)
+                elif isinstance(request, DevRequestV2):
+                    production_violations = self._candidate_production.violations(
+                        request.attempt_id, candidate_digest
+                    )
             candidate_path = self._artifacts.verify(candidate_digest).payload_path
         adapter_request = self._adapter_request(
             request,
@@ -376,6 +382,10 @@ class GatewayProxyService:
             },
         )
 
+        agent_payload = result.result if result.worker_result is None else result.worker_result
+        if production_violations:
+            agent_payload = _with_production_gate_advisory(agent_payload, production_violations)
+
         response = GatewayProxyResponseV2(
             schema_version=GATEWAY_PROXY_PROTOCOL_VERSION,
             operation=request.operation,
@@ -393,7 +403,7 @@ class GatewayProxyService:
             gateway_result_digest=str(result_digest),
             job_id=result.job_id,
             evaluation=result.evaluation,
-            result=result.result if result.worker_result is None else result.worker_result,
+            result=agent_payload,
         )
         if replayable:
             self._control.commit_operation_artifact(
@@ -794,6 +804,23 @@ class GatewayProxyService:
             job_id=job_id,
             parameters=parameters,
         )
+
+
+def _with_production_gate_advisory(
+    payload: JsonValue,
+    violations: tuple[str, ...],
+) -> JsonValue:
+    advisory = cast(
+        JsonValue,
+        {
+            "would_reject_at_seal": True,
+            "violations": list(violations),
+            "note": "this exploratory job still ran; evaluate would refuse this candidate",
+        },
+    )
+    if isinstance(payload, dict):
+        return cast(JsonValue, {**payload, "production_gate": advisory})
+    return cast(JsonValue, {"result": payload, "production_gate": advisory})
 
 
 class GatewayProxyAsgiApp:

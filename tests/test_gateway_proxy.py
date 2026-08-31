@@ -335,6 +335,68 @@ async def test_proxy_runs_production_gate_before_agate(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
+async def test_proxy_advises_a_dev_job_instead_of_rejecting_it(tmp_path: Path) -> None:
+    @dataclass
+    class AdvisoryPolicy:
+        validate_calls: int = 0
+        violation_calls: int = 0
+
+        def validate(self, attempt_id: object, candidate_digest: object) -> None:
+            self.validate_calls += 1
+            raise ValueError("production gate rejected candidate: cublasSgemm (line 6)")
+
+        def violations(self, attempt_id: object, candidate_digest: object) -> tuple[str, ...]:
+            self.violation_calls += 1
+            return (
+                "prebuilt CUDA math/operator library reference is forbidden: cublasSgemm (line 6)",
+            )
+
+    policy = AdvisoryPolicy()
+    registry, control, attempt, capability_value, service, adapter = _service(tmp_path, policy)
+    adapter.result = GatewayAdapterResult(
+        status="completed",
+        result={"job_id": "dv_1", "kind": "dev", "result": {"exit_code": 0, "stdout": "ok"}},
+    )
+
+    response = await service.execute(
+        capability_value.token,
+        json.dumps(
+            {
+                "schema_version": 2,
+                "attempt_id": attempt.id,
+                "idempotency_key": "dev-probe-1",
+                "operation": "dev",
+                "command": "python3 probe.py",
+                "candidate": {
+                    "files": [
+                        {
+                            "path": "kernel.py",
+                            "content_base64": base64.b64encode(b"def kernel(): pass\n").decode(),
+                        }
+                    ]
+                },
+            }
+        ).encode(),
+    )
+
+    assert policy.violation_calls == 1
+    assert policy.validate_calls == 0
+    assert len(adapter.requests) == 1
+    payload = response.result
+    assert isinstance(payload, dict)
+    assert payload["result"] == {"exit_code": 0, "stdout": "ok"}
+    assert payload["production_gate"] == {
+        "would_reject_at_seal": True,
+        "violations": [
+            "prebuilt CUDA math/operator library reference is forbidden: cublasSgemm (line 6)"
+        ],
+        "note": "this exploratory job still ran; evaluate would refuse this candidate",
+    }
+    control.close()
+    registry.close()
+
+
+@pytest.mark.anyio
 async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_path: Path) -> None:
     registry, control, attempt, capability_value, service, adapter = _service(tmp_path)
 
