@@ -93,14 +93,14 @@ from .control_schema import migrate_gateway_schema
 
 def _validate_profile_supporting_results(
     visible_trials: Mapping[str, GatewayKernelTrialRecord],
-    experiments: Sequence[Mapping[str, object]],
+    visible_experiments: Sequence[Mapping[str, object]],
     supporting_results: Sequence[Mapping[str, object]],
 ) -> None:
     """Bind Agent-authored profile provenance to exact durable Gateway observations."""
     if not supporting_results:
         return
     journal_bindings: set[tuple[ArtifactDigest, str, ArtifactDigest]] = set()
-    for experiment in experiments:
+    for experiment in visible_experiments:
         for side_name in ("before", "after"):
             side = experiment.get(side_name)
             if not isinstance(side, Mapping):
@@ -150,7 +150,9 @@ def _validate_profile_supporting_results(
         kernel = parse_artifact_digest(kernel_value)
         result = parse_artifact_digest(result_value)
         if (kernel, trial_id, result) not in journal_bindings:
-            raise ValueError("Profile supporting result is absent from the Experiment journal")
+            raise ValueError(
+                "Profile supporting result is absent from the visible Experiment journal"
+            )
         trial = visible_trials.get(trial_id)
         if trial is None:
             raise ValueError("Profile supporting Kernel Trial is outside visible history")
@@ -1030,6 +1032,15 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             values.append(value)
         return tuple(values)
 
+    def live_visible_experiments(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
+        """Return live Experiments for every Attempt in the visible Kernel Trial history."""
+        _lineage_id, visible_attempt_ids = self.visible_kernel_trial_attempt_ids(attempt_id)
+        return tuple(
+            experiment
+            for visible_attempt_id in visible_attempt_ids
+            for experiment in self.list_experiments(visible_attempt_id)
+        )
+
     def record_kernel_trial_annotations(
         self,
         attempt_id: AttemptId,
@@ -1049,7 +1060,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         }
         _validate_profile_supporting_results(
             visible_trials,
-            experiments,
+            (*experiments, *self.live_visible_experiments(attempt_id)),
             profile_supporting_results,
         )
         records: list[GatewayKernelTrialAnnotation] = []

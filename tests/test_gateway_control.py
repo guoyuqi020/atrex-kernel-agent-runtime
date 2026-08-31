@@ -216,7 +216,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
             (experiment,),
             profile_supporting_results=({**profile_reference, "operation": "dev"},),
         )
-    with pytest.raises(ValueError, match="absent from the Experiment journal"):
+    with pytest.raises(ValueError, match="absent from the visible Experiment journal"):
         control.record_kernel_trial_annotations(
             attempt.id,
             (experiment,),
@@ -1366,6 +1366,175 @@ def test_optimizer_history_inherits_completed_bootstrap_subject(tmp_path: Path) 
     assert control.visible_attempt_report_artifacts(current.id) == (
         (bootstrap_attempt_id, report_digest),
     )
+    control.close()
+    registry.close()
+
+
+def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    current = _insert_attempt(registry)
+    epoch = registry.get_epoch(current.epoch_id)
+    lineage = registry.get_lineage(epoch.lineage_id)
+    campaign = registry.get_campaign(lineage.campaign_id)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"v" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    historical_attempt_id = new_attempt_id()
+    historical_capability = control.issue_bootstrap(
+        BootstrapGatewaySubject(
+            attempt_id=historical_attempt_id,
+            campaign_id=campaign.id,
+            lineage_id=lineage.id,
+            epoch_id=parse_epoch_id(
+                "epoch_" + str(historical_attempt_id).removeprefix("attempt_")
+            ),
+            kernel_agent_revision_id=current.kernel_agent_revision_id,
+            operator=campaign.operator,
+            hardware_target=campaign.hardware_target,
+            dsl=lineage.dsl,
+            evaluation_contract_digest=campaign.evaluation_contract_digest,
+            input_kernel_digest=digest("historical-input"),
+            evidence_digest=digest("historical-evidence"),
+            created_at=NOW_DATETIME,
+        ),
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.PROFILE}),
+            1,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+    control.authorize(
+        historical_capability,
+        GatewayOperation.PROFILE,
+        idempotency_key="historical-profile-1",
+        request_digest=str(digest("historical-profile-request")),
+    )
+    historical_candidate = digest("historical-candidate")
+    historical_profile_result = digest("historical-profile-result")
+    control.bind_operation_candidate(
+        historical_attempt_id,
+        "historical-profile-1",
+        GatewayOperation.PROFILE,
+        historical_candidate,
+    )
+    control.bind_operation_gateway_result(
+        historical_attempt_id,
+        "historical-profile-1",
+        GatewayOperation.PROFILE,
+        historical_profile_result,
+    )
+    control.commit_operation_artifact(
+        historical_attempt_id,
+        "historical-profile-1",
+        GatewayOperation.PROFILE,
+        historical_profile_result,
+    )
+    historical_trial_id = control.list_kernel_trials((historical_attempt_id,))[0].id
+    historical_subject = {
+        "kernel_artifact_digest": str(historical_candidate),
+        "kernel_trial_id": historical_trial_id,
+        "gateway_result_digests": [str(historical_profile_result)],
+    }
+    control.append_experiment(
+        historical_attempt_id,
+        "historical-experiment-1",
+        {
+            "experiment_id": "experiment_" + "7" * 32,
+            "sequence": 1,
+            "recorded_at": NOW_DATETIME.isoformat(),
+            "direction_id": "direction_" + "7" * 32,
+            "name": "establish the profiled baseline",
+            "hypothesis": "the seed is memory bound",
+            "change": "kept the supplied seed unchanged",
+            "before": None,
+            "after": historical_subject,
+            "evidence": "historical-profile-1",
+            "analysis": "the baseline is memory bound",
+            "action": "baseline",
+        },
+        recovery_generation=0,
+    )
+
+    capability = control.issue(
+        current.id,
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.DEV}),
+            1,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+    control.authorize(
+        capability,
+        GatewayOperation.DEV,
+        idempotency_key="current-dev-1",
+        request_digest=str(digest("current-dev-request")),
+    )
+    current_candidate = digest("current-candidate")
+    current_result = digest("current-dev-result")
+    control.bind_operation_candidate(
+        current.id,
+        "current-dev-1",
+        GatewayOperation.DEV,
+        current_candidate,
+    )
+    control.bind_operation_gateway_result(
+        current.id,
+        "current-dev-1",
+        GatewayOperation.DEV,
+        current_result,
+    )
+    control.commit_operation_artifact(
+        current.id,
+        "current-dev-1",
+        GatewayOperation.DEV,
+        current_result,
+    )
+    current_experiment = {
+        "experiment_id": "experiment_" + "9" * 32,
+        "sequence": 1,
+        "recorded_at": NOW_DATETIME.isoformat(),
+        "direction_id": "direction_" + "9" * 32,
+        "name": "vectorize load",
+        "hypothesis": "one transaction replaces two",
+        "change": "used a vector load",
+        "before": historical_subject,
+        "after": {
+            "kernel_artifact_digest": str(current_candidate),
+            "kernel_trial_id": control.list_kernel_trials((current.id,))[0].id,
+            "gateway_result_digests": [str(current_result)],
+        },
+        "evidence": "current-dev-1",
+        "analysis": "latency improved",
+        "action": "keep_after",
+    }
+    historical_profile_reference = {
+        "operation": "profile",
+        "kernel_artifact_digest": str(historical_candidate),
+        "kernel_trial_id": historical_trial_id,
+        "gateway_result_digest": str(historical_profile_result),
+    }
+
+    assert control.live_visible_experiments(current.id)[0]["after"] == historical_subject
+    annotations = control.record_kernel_trial_annotations(
+        current.id,
+        (current_experiment,),
+        profile_supporting_results=(historical_profile_reference,),
+    )
+    assert len(annotations) == 1
+    with pytest.raises(ValueError, match="absent from the visible Experiment journal"):
+        control.record_kernel_trial_annotations(
+            current.id,
+            (current_experiment,),
+            profile_supporting_results=(
+                {
+                    **historical_profile_reference,
+                    "gateway_result_digest": str(digest("uncited")),
+                },
+            ),
+        )
     control.close()
     registry.close()
 

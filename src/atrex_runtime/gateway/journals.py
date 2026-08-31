@@ -139,9 +139,41 @@ class RuntimeJournalService:
                     "direction_events": list(self._current_direction_events(request.attempt_id)),
                     "experiments": list(self._current_experiments(request.attempt_id)),
                     "directions": list(self._direction_views(request.attempt_id).values()),
+                    "citable_profile_results": self._citable_profile_results(request.attempt_id),
                 },
             )
         raise ValueError(f"unsupported Runtime Journal operation: {request.operation}")
+
+    def _citable_profile_results(self, attempt_id: AttemptId) -> list[JsonValue]:
+        """Project every Kernel/Trial/Result identity already cited by a visible Experiment."""
+        bindings: dict[tuple[str, str, str], None] = {}
+        for experiment in self.control.live_visible_experiments(attempt_id):
+            for side_name in ("before", "after"):
+                side = experiment.get(side_name)
+                if not isinstance(side, Mapping):
+                    continue
+                results = side.get("gateway_result_digests")
+                if not isinstance(results, (list, tuple)):
+                    continue
+                for result in results:
+                    bindings[
+                        (
+                            str(side.get("kernel_artifact_digest")),
+                            str(side.get("kernel_trial_id")),
+                            str(result),
+                        )
+                    ] = None
+        return [
+            cast(
+                JsonValue,
+                {
+                    "kernel_artifact_digest": kernel,
+                    "kernel_trial_id": trial_id,
+                    "gateway_result_digest": result,
+                },
+            )
+            for kernel, trial_id, result in bindings
+        ]
 
     def _is_bootstrap(self, attempt_id: AttemptId) -> bool:
         try:

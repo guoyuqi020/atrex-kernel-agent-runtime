@@ -933,6 +933,13 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     assert cast(dict[str, Any], loaded_experiment.result)["after"] == subject
     assert len(cast(dict[str, Any], snapshot.result)["direction_events"]) == 3
     assert len(cast(dict[str, Any], snapshot.result)["experiments"]) == 1
+    assert cast(dict[str, Any], snapshot.result)["citable_profile_results"] == [
+        {
+            "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+            "kernel_trial_id": evaluated.kernel_trial_id,
+            "gateway_result_digest": evaluated.gateway_result_digest,
+        }
+    ]
     assert len(adapter.requests) == 1
 
     control.close()
