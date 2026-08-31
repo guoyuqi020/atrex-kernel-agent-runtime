@@ -44,7 +44,6 @@ class AttemptWorkspaceLayout:
     evidence: str = "input/evidence"
     agent_problem: str = ".runtime/agent-problem.json"
     optimizer: str = "agent/optimizer"
-    reference: str = "reference"
 
 
 ATTEMPT_WORKSPACE_LAYOUT = AttemptWorkspaceLayout()

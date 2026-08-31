@@ -35,10 +35,7 @@ from atrex_runtime.domain.models import (
 )
 from atrex_runtime.ports import RunAttemptRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
-from atrex_runtime.workers.manifest import (
-    ATTEMPT_WORKSPACE_LAYOUT,
-    AttemptInputManifestV9,
-)
+from atrex_runtime.workers.manifest import AttemptInputManifestV9
 from atrex_runtime.workers.workspace import LocalAttemptWorkspaceAssembler
 
 
@@ -418,10 +415,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     working_file = first.root / "work/kernel/kernel.txt"
     assert os.stat(working_file).st_mode & 0o200
     assert not (os.stat(first.root / "input/kernel/kernel.txt").st_mode & 0o200)
-    reference = first.root / ATTEMPT_WORKSPACE_LAYOUT.reference
-    assert reference.is_dir()
-    assert list(reference.iterdir()) == []
-    assert not (os.stat(reference).st_mode & 0o200)
+    assert not (first.root / "reference").exists()
     registry.close()
 
 

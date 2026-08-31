@@ -266,7 +266,8 @@ def test_optimizer_prompt_layers_are_concise_non_redundant_and_consistent() -> N
     assert prompt.index("# Runtime workspace and Evidence contract") < prompt.index(
         "## Session tools"
     )
-    assert "Use `reference/` for pinned production implementation patterns" in prompt
+    assert "This workspace carries no upstream project checkout" in prompt
+    assert "reference/" not in prompt
     assert "no local knowledge or reference checkout is available" not in prompt
 
 

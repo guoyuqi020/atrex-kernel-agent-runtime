@@ -444,8 +444,6 @@ class LocalAttemptWorkspaceAssembler:
         session_root = root / "sessions"
         session_root.mkdir(mode=0o700)
         (root / "scratch").mkdir(mode=0o700)
-        # Stays empty on the host; the Sandbox binds the pinned reference tree over it.
-        (root / paths.reference).mkdir(mode=0o500)
         prepared = PreparedAttempt(
             root=root,
             manifest_path=manifest_path,

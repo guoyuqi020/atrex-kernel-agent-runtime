@@ -371,8 +371,6 @@ class TemporaryOptimizerDevShell:
         tools = root / "tools"
         tools.mkdir(mode=0o700)
         (tools / "README.md").write_text(TOOLS_README, encoding="utf-8")
-        # Stays empty on the host; the Sandbox binds the pinned reference tree over it.
-        (root / paths.reference).mkdir(mode=0o500)
         return PreparedAttempt(
             root=root,
             manifest_path=manifest_path,

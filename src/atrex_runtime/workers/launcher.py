@@ -963,6 +963,8 @@ class BwrapSandboxLauncher:
                     )
                 )
         reference = self.settings.reference_projects_root
+        # Only the Bootstrap workspace lays down the mountpoint; an Attempt works
+        # from its own prior evidence instead of the pinned upstream projects.
         if reference is not None and (workspace / "reference").is_dir():
             bwrap.extend(("--ro-bind", str(reference), str(sandbox_workspace / "reference")))
         for source in sorted(workspace.glob("*.json")):

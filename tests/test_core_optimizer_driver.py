@@ -343,7 +343,6 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v9(tmp_path: Pa
         "input/kernel",
         ".runtime",
         "work/kernel",
-        "reference",
         "scratch",
         "sessions",
     ):

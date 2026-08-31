@@ -17,9 +17,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   query-only external knowledge service.
 - Made new production Campaign preparation reject dirty Core or Evolver worktrees so commit pins
   always identify the exact Agent Bundle source.
-- Added pinned upstream GPU kernel projects as a `reference/` tree in every Attempt and
-  framework-baseline workspace, bound read-only from `reference_projects_root` in both bubblewrap
-  launcher modes.
+- Added pinned upstream GPU kernel projects as a `reference/` tree in the framework-baseline
+  workspace, bound read-only from `reference_projects_root` in both bubblewrap launcher modes. An
+  Attempt no longer receives the tree: reading whole upstream projects belongs to establishing a
+  first implementation, while an Attempt should act on its own measured history.
 - Raised the Attempt manifest to schema 8 and stopped publishing the workspace layout in it. The
   layout is fixed at both ends and stated in the Agent Prompt, so serializing it only compared one
   hardcoded table against another while making every layout change a breaking protocol bump. A

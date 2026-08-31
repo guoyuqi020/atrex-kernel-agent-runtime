@@ -84,7 +84,6 @@ def _prepare_workspace(
         ".runtime",
         "input/kernel",
         "input/evidence/epochs/00000001/attempts",
-        "reference",
         "work/kernel",
         "scratch",
         "sessions",

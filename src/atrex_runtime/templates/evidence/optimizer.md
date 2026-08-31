@@ -11,7 +11,6 @@ workspace/
 │   ├── kernel/                 # read-only incumbent Kernel
 │   └── evidence/               # read-only authorized history described below
 ├── agent/optimizer/            # read-only Agent implementation and built-in resources
-├── reference/                  # read-only pinned upstream GPU projects
 ├── work/kernel/                # writable candidate copied from the incumbent
 ├── skills/                     # writable reusable methods
 ├── tools/                      # writable reusable tools; README.md is mandatory

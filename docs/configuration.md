@@ -198,9 +198,10 @@ data, or unrelated host paths into it, and apply resource limits at the OCI laye
   `~/workspace` below `sandbox_home`;
 - `read_only_bind_paths` available only as explicitly approved immutable dependencies or provider
   configuration; they cannot be located below any Worker root or Runtime storage root;
-- `reference_projects_root` bound read-only over the `reference/` directory of every Attempt and
-  framework-baseline workspace, under those same boundaries; the host check rejects a missing,
-  linked, or empty tree, because the reference projects are opt-in submodules;
+- `reference_projects_root` bound read-only over the `reference/` directory of the framework-baseline
+  workspace, under those same boundaries; an Attempt does not create that mountpoint and therefore
+  never receives the tree. The host check rejects a missing, linked, or empty tree, because the
+  reference projects are opt-in submodules;
 - per-Session `memory_max_bytes`, `memory_swap_max_bytes`, `cpu_quota_percent`, and `tasks_max`;
 - the host network namespace, including the host's DNS, routing, public egress, and reachable host
   services; `resolv_conf` is mounted read-only into the private `/run`.
