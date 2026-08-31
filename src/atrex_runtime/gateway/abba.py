@@ -37,6 +37,44 @@ from .correctness import merge_correctness_summaries
 from .execution import call_agate_json
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
+# One transient Agate batch used to fail the whole Epoch selection, discarding every sibling
+# batch that had already succeeded. The batch Job is idempotent, so a transient failure is
+# retried; the ceiling keeps a permanently unavailable Agate from hanging the selection.
+_ABBA_BATCH_RETRIES = 10
+_ABBA_RETRY_DELAY_SECONDS = 60.0
+
+
+class AbbaBatchFailure(InfrastructureError):
+    """One ABBA batch Job that produced no usable measurement, with Agate's own reason."""
+
+    def __init__(self, job: dict[str, JsonValue]) -> None:
+        error = job.get("error")
+        detail = error if isinstance(error, dict) else {}
+        self.error_class = detail.get("error_class")
+        self.reason = detail.get("reason")
+        self.trace_id = detail.get("trace_id") or job.get("trace_id")
+        # A command that ran and failed is deterministic; a fresh Job fails the same way.
+        self.retryable = job.get("command_ok") is not False and (
+            not detail or self.error_class == "infra"
+        )
+        super().__init__(
+            "Agate ABBA batch produced no measurement: "
+            f"job_id={job.get('job_id')} status={job.get('status')} "
+            f"command_ok={job.get('command_ok')} error_class={self.error_class} "
+            f"reason={self.reason} message={detail.get('message')} trace_id={self.trace_id}"
+        )
+
+    def event_payload(self) -> dict[str, JsonValue]:
+        """Agate's failure identity, so a Runtime event can be reconciled against Agate."""
+        return {
+            "error_class": self.error_class,
+            "reason": self.reason,
+            "trace_id": self.trace_id,
+            "retryable": self.retryable,
+            "detail": str(self),
+        }
+
+
 _RUNTIME_PATHS = ("scripts/run_eval.py", "src/atrex_bench")
 _PROTECTED_RUNNER_KEYS = frozenset(
     {
@@ -252,26 +290,49 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         limiter = anyio.Semaphore(max_parallel_shape_batches)
 
         async def run_batch(index: int, batch: list[str]) -> None:
-            async with limiter:
-                job, payload = await self._run_batch(
-                    comparison_id=comparison_id,
-                    batch_index=index,
-                    context_name=context.operator,
-                    hardware_target=context.agate_gpu,
-                    contract=contract,
-                    shape_ids=batch,
-                    schedule=schedule,
-                    incumbent_source=incumbent_source,
-                    candidate_source=candidate_source,
-                    evaluator_files=evaluator_files,
-                    per_run_timeout_seconds=per_run_timeout_seconds,
-                    allocation_timeout_seconds=allocation_timeout_seconds,
-                    purpose=purpose,
-                    incumbent=incumbent,
-                    candidate=candidate,
-                )
+            attempt = 0
+            while True:
+                try:
+                    async with limiter:
+                        job, payload = await self._run_batch(
+                            comparison_id=comparison_id,
+                            batch_index=index,
+                            context_name=context.operator,
+                            hardware_target=context.agate_gpu,
+                            contract=contract,
+                            shape_ids=batch,
+                            schedule=schedule,
+                            incumbent_source=incumbent_source,
+                            candidate_source=candidate_source,
+                            evaluator_files=evaluator_files,
+                            per_run_timeout_seconds=per_run_timeout_seconds,
+                            allocation_timeout_seconds=allocation_timeout_seconds,
+                            purpose=purpose,
+                            incumbent=incumbent,
+                            candidate=candidate,
+                        )
+                except AbbaBatchFailure as failure:
+                    attempt += 1
+                    if not failure.retryable or attempt > _ABBA_BATCH_RETRIES:
+                        raise
+                    self._journal.record_runtime_event(
+                        "comparison.abba_batch_retried",
+                        candidate.id,
+                        {
+                            "comparison_id": comparison_id,
+                            "batch_index": index,
+                            "operator": context.operator,
+                            "attempt": attempt,
+                            "max_retries": _ABBA_BATCH_RETRIES,
+                            "retry_delay_seconds": _ABBA_RETRY_DELAY_SECONDS,
+                            **failure.event_payload(),
+                        },
+                    )
+                    await anyio.sleep(_ABBA_RETRY_DELAY_SECONDS)
+                    continue
                 jobs[index] = job
                 payloads[index] = payload
+                return
 
         async with anyio.create_task_group() as tasks:
             for index, batch in enumerate(batches):
@@ -450,7 +511,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         if job.get("status") not in _TERMINAL:
             raise InfrastructureError("Agate ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:
-            raise InfrastructureError("Agate ABBA allocation failed")
+            raise AbbaBatchFailure(job)
         return job, _parse_remote_payload(job, schedule)
 
     def _kernel_source(

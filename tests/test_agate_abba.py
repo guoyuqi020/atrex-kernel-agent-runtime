@@ -21,6 +21,7 @@ from atrex_runtime.domain.models import (
     KernelRevision,
 )
 from atrex_runtime.gateway.abba import (
+    AbbaBatchFailure,
     AgateSameAllocationAbbaRunner,
     CommitPinnedAtrexBenchEvaluator,
 )
@@ -285,3 +286,176 @@ async def test_abba_runner_uses_one_dev_allocation_per_shape_batch_and_records_r
     assert aggregate["evaluation_contract_digest"] == str(contract_digest)
     assert aggregate["candidate"]["latency_us"] == pytest.approx(90.0)
     assert aggregate["candidate"]["sol_pct"] == pytest.approx(50.0)
+
+
+class FlakyAgateClient(FakeAgateClient):
+    """Fail the first N submissions with the exact payload a transient Agate batch returned."""
+
+    def __init__(self, failures: int, *, error: dict[str, object] | None = None) -> None:
+        super().__init__()
+        self.remaining_failures = failures
+        self.error = (
+            error
+            if error is not None
+            else {
+                "error_class": "infra",
+                "reason": "no_result",
+                "message": "result begin marker not found",
+                "trace_id": "req-8567eddfc34a",
+                "details": {"failure_origin": "unknown", "logs_tail": ""},
+            }
+        )
+
+    def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+        accepted = super().submit_job(kind, request)
+        with self._lock:
+            fail = self.remaining_failures > 0
+            if fail:
+                self.remaining_failures -= 1
+        if fail:
+            job_id = str(accepted["job_id"])
+            self.jobs[job_id] = {
+                "job_id": job_id,
+                "kind": "dev",
+                "status": "failed",
+                "command_ok": None,
+                "trace_id": "req-8567eddfc34a",
+                "error": self.error,
+            }
+        return accepted
+
+
+async def _run_pair(client: FakeAgateClient, tmp_path: Path) -> tuple[object, FakeJournal]:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    incumbent_dir = tmp_path / "incumbent"
+    candidate_dir = tmp_path / "candidate"
+    incumbent_dir.mkdir()
+    candidate_dir.mkdir()
+    (incumbent_dir / "kernel.py").write_text("INCUMBENT = True\n", encoding="utf-8")
+    (candidate_dir / "kernel.py").write_text("CANDIDATE = True\n", encoding="utf-8")
+    incumbent = KernelRevision(
+        new_kernel_revision_id(),
+        None,
+        artifacts.put_directory(incumbent_dir, ArtifactKind.KERNEL),
+        None,
+        KernelEvaluation(True, 100, digest("incumbent-gateway")),
+        NOW,
+    )
+    candidate = KernelRevision(
+        new_kernel_revision_id(),
+        incumbent.id,
+        artifacts.put_directory(candidate_dir, ArtifactKind.KERNEL),
+        None,
+        KernelEvaluation(True, 90, digest("candidate-gateway")),
+        NOW,
+    )
+    contract = AgateEvaluationContractV1(
+        candidate_path="kernel.py",
+        reference_py="def reference(): pass",
+        input_py="def _make_inputs(): return ()",
+        shapes={f"shape-{index}": [index] for index in range(5)},
+        options=AgateEvaluationOptionsV1(
+            num_correctness_cases=1, bench_iters=10, atol=0.01, rtol=0.01, timeout_s=60
+        ),
+    )
+    context = AgateEvaluationContext(
+        "vecadd", "H20", Dsl.TRITON, contract, digest("evaluation-contract")
+    )
+    journal = FakeJournal()
+    runner = AgateSameAllocationAbbaRunner(
+        client,
+        FakeContextResolver(context),  # type: ignore[arg-type]
+        artifacts,
+        journal,  # type: ignore[arg-type]
+        FakeEvaluator(),  # type: ignore[arg-type]
+        wait_timeout_s=90,
+    )
+    result = await runner.run_pair(
+        incumbent,
+        candidate,
+        repeats=1,
+        purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
+        per_run_timeout_seconds=100,
+        allocation_timeout_seconds=500,
+        shape_batch_size=3,
+        max_parallel_shape_batches=2,
+    )
+    return result, journal
+
+
+@pytest.mark.anyio
+async def test_transient_abba_batch_is_retried_up_to_the_ceiling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Ten consecutive transient failures still converge, which is the whole retry budget."""
+    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+    client = FlakyAgateClient(10)
+
+    result, journal = await _run_pair(client, tmp_path)
+
+    assert client.remaining_failures == 0
+    retries = [
+        payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
+    ]
+    assert len(retries) == 10
+    retry = retries[0]
+    assert isinstance(retry, dict)
+    assert retry["error_class"] == "infra"
+    assert retry["reason"] == "no_result"
+    assert retry["trace_id"] == "req-8567eddfc34a"
+    assert retry["retryable"] is True
+    assert retry["max_retries"] == 10
+    assert "result begin marker not found" in str(retry["detail"])
+    # The attempt counter is per batch, so it climbs from 1 on whichever batch is retried.
+    assert all(isinstance(item, dict) and 1 <= int(str(item["attempt"])) <= 10 for item in retries)
+    assert any(kind == "comparison.abba_completed" for kind, _, _ in journal.events)
+    assert result.gateway_result_digest is not None
+
+
+@pytest.mark.anyio
+async def test_transient_abba_batch_gives_up_past_the_ceiling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """One failure past the budget propagates, so an unavailable Agate cannot hang selection."""
+    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+
+    with pytest.raises(BaseExceptionGroup) as caught:
+        await _run_pair(FlakyAgateClient(11 * 2), tmp_path)
+
+    failures = [
+        error for error in caught.value.exceptions if isinstance(error, AbbaBatchFailure)
+    ]
+    assert failures
+    assert all(failure.retryable for failure in failures)
+    assert "reason=no_result" in str(failures[0])
+
+
+@pytest.mark.anyio
+async def test_failed_abba_command_is_not_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A command that ran and failed is deterministic, so a fresh Job would fail identically."""
+    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+
+    class CommandFailureClient(FakeAgateClient):
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            accepted = super().submit_job(kind, request)
+            job_id = str(accepted["job_id"])
+            self.jobs[job_id] = {
+                "job_id": job_id,
+                "status": "succeeded",
+                "command_ok": False,
+                "error": {"error_class": "user", "reason": "nonzero_exit"},
+            }
+            return accepted
+
+    with pytest.raises(BaseExceptionGroup) as caught:
+        await _run_pair(CommandFailureClient(), tmp_path)
+
+    failures = [error for error in caught.value.exceptions if isinstance(error, AbbaBatchFailure)]
+    assert failures
+    assert all(not failure.retryable for failure in failures)
+    assert "command_ok=False" in str(failures[0])
