@@ -18,6 +18,7 @@ Options:
   --service-workspace DIR      reuse its running Runtime/Wiki without managing services
   --hardware-target GPU        defaults to AGATE_GPU
   --seed-source FILE           defaults to reference.py
+  --dsl-seed-source DSL=PATH   repeatable; seeds one DSL from its own kernel
   --optimizer-model MODEL
   --evolver-model MODEL
   --launcher-mode sandbox|container
@@ -32,6 +33,7 @@ workspace=""
 service_workspace=""
 hardware_target="${AGATE_GPU:-}"
 seed_source=""
+dsl_seed_sources=()
 optimizer_model=""
 evolver_model=""
 launcher_mode="${ATREX_LAUNCHER_MODE:-}"
@@ -47,6 +49,7 @@ while (( $# > 0 )); do
     --service-workspace) service_workspace="${2:-}"; shift 2 ;;
     --hardware-target) hardware_target="${2:-}"; shift 2 ;;
     --seed-source) seed_source="${2:-}"; shift 2 ;;
+    --dsl-seed-source) dsl_seed_sources+=("${2:-}"); shift 2 ;;
     --optimizer-model) optimizer_model="${2:-}"; shift 2 ;;
     --evolver-model) evolver_model="${2:-}"; shift 2 ;;
     --launcher-mode) launcher_mode="${2:-}"; shift 2 ;;
@@ -89,6 +92,9 @@ if [[ "${prepared}" == false ]]; then
     --workspace-output "${workspace_output}"
   )
   [[ -n "${seed_source}" ]] && prepare_args+=(--seed-source "${seed_source}")
+  for entry in "${dsl_seed_sources[@]:-}"; do
+    [[ -n "${entry}" ]] && prepare_args+=(--dsl-seed-source "${entry}")
+  done
   [[ -n "${workspace}" ]] && prepare_args+=(--workspace "${workspace}")
   [[ -n "${service_workspace}" ]] && \
     prepare_args+=(--service-workspace "${service_workspace}")
@@ -109,6 +115,9 @@ if [[ "${prepared}" == false ]]; then
     --hardware-target "${hardware_target}"
   )
   [[ -n "${seed_source}" ]] && resume_args+=(--seed-source "${seed_source}")
+  for entry in "${dsl_seed_sources[@]:-}"; do
+    [[ -n "${entry}" ]] && resume_args+=(--dsl-seed-source "${entry}")
+  done
   [[ -n "${optimizer_model}" ]] && resume_args+=(--optimizer-model "${optimizer_model}")
   [[ -n "${evolver_model}" ]] && resume_args+=(--evolver-model "${evolver_model}")
   [[ -n "${launcher_mode}" ]] && resume_args+=(--launcher-mode "${launcher_mode}")
@@ -143,6 +152,9 @@ root_args=(
   --hardware-target "${hardware_target}"
 )
 [[ -n "${seed_source}" ]] && root_args+=(--seed-source "${seed_source}")
+for entry in "${dsl_seed_sources[@]:-}"; do
+  [[ -n "${entry}" ]] && root_args+=(--dsl-seed-source "${entry}")
+done
 [[ -n "${optimizer_model}" ]] && root_args+=(--optimizer-model "${optimizer_model}")
 [[ -n "${evolver_model}" ]] && root_args+=(--evolver-model "${evolver_model}")
 [[ -n "${launcher_mode}" ]] && root_args+=(--launcher-mode "${launcher_mode}")

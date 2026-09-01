@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import runpy
@@ -188,6 +189,61 @@ def test_ablation_plan_derives_all_three_compute_matched_arms() -> None:
     assert omitted == disabled
 
 
+def test_prepare_seeds_each_dsl_campaign_from_its_own_kernel(tmp_path: Path) -> None:
+    operator = _operator(tmp_path / "operator")
+    workspace = tmp_path / "workspace"
+    triton_seed = tmp_path / "triton-v1.py"
+    cuda_seed = tmp_path / "cuda-v1.py"
+    triton_seed.write_text("# triton framework baseline\n", encoding="utf-8")
+    cuda_seed.write_text("# cuda framework baseline\n", encoding="utf-8")
+    environment = dict(os.environ)
+    environment.update({"AGATE_URL": "https://agate.invalid", "AGATE_GPU": "test-gpu"})
+    command = (
+        sys.executable,
+        str(PRODUCTION / "prepare.py"),
+        "--kernel",
+        str(operator),
+        "--backend",
+        "codex",
+        "--workspace",
+        str(workspace),
+        "--dsl-seed-source",
+        f"triton={triton_seed}",
+        "--dsl-seed-source",
+        f"cuda={cuda_seed}",
+    )
+    subprocess.run(command, check=True, env=environment, capture_output=True, text=True)
+
+    reference = (operator / "reference.py").read_text(encoding="utf-8")
+    expected = {
+        "triton": triton_seed.read_text(encoding="utf-8"),
+        "cuda": cuda_seed.read_text(encoding="utf-8"),
+        "cutedsl": reference,
+    }
+    for dsl, text in expected.items():
+        baseline = workspace / "dsls" / dsl / "inputs/baseline-kernel/kernel.py"
+        assert baseline.read_text(encoding="utf-8") == text
+        manifest = json.loads(
+            (workspace / "dsls" / dsl / "production-manifest.json").read_text(encoding="utf-8")
+        )
+        pinned = manifest["dsl_seed_sources"][dsl]
+        assert pinned["sha256"] == hashlib.sha256(text.encode()).hexdigest()
+    manifest = json.loads(
+        (workspace / "dsls/triton/production-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["dsl_seed_sources"]["triton"]["path"] == str(triton_seed)
+    assert manifest["dsl_seed_sources"]["cutedsl"]["path"] == str(operator / "reference.py")
+
+    rejected = subprocess.run(
+        (*command[:-2], "--dsl-seed-source", f"gluon={triton_seed}"),
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+    assert rejected.returncode != 0
+    assert "--dsl-seed-source must be DSL=PATH" in rejected.stderr
+
+
 def test_prepare_prefers_shape_train_and_keeps_shape_valid_private(tmp_path: Path) -> None:
     operator = _shape_train_operator(tmp_path / "operator")
     workspace = tmp_path / "workspace"
@@ -218,9 +274,7 @@ def test_prepare_prefers_shape_train_and_keeps_shape_valid_private(tmp_path: Pat
         contract = json.loads(
             dsl_workspace.joinpath("evaluation-contract.json").read_text(encoding="utf-8")
         )
-        assert contract["shapes"] == {
-            "0": {"init_kwargs": None, "input_kwargs": {"n": 1024}}
-        }
+        assert contract["shapes"] == {"0": {"init_kwargs": None, "input_kwargs": {"n": 1024}}}
         assert "shape_valid" not in json.dumps(campaign.model_dump(mode="json"))
 
 

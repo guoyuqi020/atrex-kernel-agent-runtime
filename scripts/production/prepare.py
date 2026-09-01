@@ -57,6 +57,17 @@ def _arguments() -> argparse.Namespace:
             "or reference.py when --kernel names a directory"
         ),
     )
+    parser.add_argument(
+        "--dsl-seed-source",
+        action="append",
+        default=[],
+        metavar="DSL=PATH",
+        help=(
+            "seed one DSL Campaign from its own kernel, repeatable as cuda=..., "
+            "triton=..., cutedsl=...; PATH may be operator-relative or absolute, and "
+            "any DSL left unspecified falls back to --seed-source"
+        ),
+    )
     parser.add_argument("--optimizer-model")
     parser.add_argument("--evolver-model")
     parser.add_argument("--runtime-host")
@@ -810,9 +821,7 @@ def _campaign(
         "evaluation_contract": str(workspace / "evaluation-contract.json"),
         "shape_train": str(shape_train) if shape_train.is_file() else None,
         "agent_problem": (
-            str(agent_problem)
-            if not shape_train.is_file() and agent_problem.is_file()
-            else None
+            str(agent_problem) if not shape_train.is_file() and agent_problem.is_file() else None
         ),
         "problem_generalization_model": None,
         "base_revision": {"commit": core_commit},
@@ -907,6 +916,30 @@ def main() -> None:
     if not seed.is_relative_to(operator_root) or seed.is_symlink() or not seed.is_file():
         raise SystemExit(f"seed source must be a regular file inside the operator: {seed}")
 
+    dsl_seeds: dict[str, Path] = {}
+    for raw in args.dsl_seed_source:
+        name, separator, value = raw.partition("=")
+        dsl_name = name.strip().lower()
+        if not separator or dsl_name not in SUPPORTED_DSLS or not value.strip():
+            raise SystemExit(
+                "--dsl-seed-source must be DSL=PATH with DSL in "
+                f"{', '.join(SUPPORTED_DSLS)}: {raw!r}"
+            )
+        if dsl_name in dsl_seeds:
+            raise SystemExit(f"--dsl-seed-source repeats {dsl_name}")
+        candidate = Path(value.strip()).expanduser()
+        resolved = (candidate if candidate.is_absolute() else operator_root / candidate).resolve()
+        if resolved.is_symlink() or not resolved.is_file():
+            raise SystemExit(f"{dsl_name} seed source must be a regular file: {resolved}")
+        dsl_seeds[dsl_name] = resolved
+    seed_by_dsl = {dsl: dsl_seeds.get(dsl, seed) for dsl in SUPPORTED_DSLS}
+    seed_text_by_dsl: dict[str, str] = {}
+    for dsl, path in seed_by_dsl.items():
+        text = path.read_text(encoding="utf-8")
+        if not text.strip():
+            raise SystemExit(f"{dsl} seed source is empty: {path}")
+        seed_text_by_dsl[dsl] = text
+
     core_commit = _git_commit(
         root / "src/atrex-kernel-agent-core",
         require_clean=True,
@@ -927,6 +960,13 @@ def main() -> None:
         ).hexdigest(),
         "kernel_root": str(operator_root),
         "seed_source": str(seed),
+        "dsl_seed_sources": {
+            dsl: {
+                "path": str(seed_by_dsl[dsl]),
+                "sha256": hashlib.sha256(seed_text_by_dsl[dsl].encode()).hexdigest(),
+            }
+            for dsl in SUPPORTED_DSLS
+        },
         "operator": operator,
         "hardware_target": hardware_target,
         "backend": args.backend,
@@ -981,14 +1021,11 @@ def main() -> None:
         return
 
     workspace.mkdir(parents=True, exist_ok=True)
-    seed_text = seed.read_text(encoding="utf-8")
-    if not seed_text.strip():
-        raise SystemExit(f"seed source is empty: {seed}")
     contract = _evaluation_contract(operator_root)
     for dsl in SUPPORTED_DSLS:
         dsl_workspace = workspace / "dsls" / dsl
         baseline = dsl_workspace / "inputs" / "baseline-kernel" / "kernel.py"
-        _write_text(baseline, seed_text)
+        _write_text(baseline, seed_text_by_dsl[dsl])
         evidence = dsl_workspace / "inputs" / "initial-evidence" / "README.md"
         _write_text(
             evidence,
@@ -998,7 +1035,7 @@ def main() -> None:
                     "",
                     f"Operator: `{operator}`",
                     f"Hardware target: `{hardware_target}`",
-                    f"Seed source: `{seed.name}` from the pinned Atrex-Bench operator.",
+                    f"Seed source: `{seed_by_dsl[dsl].name}`.",
                     "",
                     "No prior optimization experiments exist; bootstrap must create the first "
                     f"correct self-contained {dsl} implementation.",

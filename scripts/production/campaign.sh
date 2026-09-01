@@ -16,6 +16,7 @@ start options:
   --workspace DIR
   --hardware-target GPU
   --seed-source FILE
+  --dsl-seed-source DSL=PATH   repeatable; seeds one DSL from its own kernel
   --optimizer-model MODEL
   --evolver-model MODEL
   --launcher-mode sandbox|container
@@ -50,6 +51,7 @@ workspace=""
 service_workspace=""
 hardware_target="${AGATE_GPU:-}"
 seed_source=""
+dsl_seed_sources=()
 optimizer_model=""
 evolver_model=""
 launcher_mode="${ATREX_LAUNCHER_MODE:-}"
@@ -63,6 +65,7 @@ while (( $# > 0 )); do
     --service-workspace) service_workspace="${2:-}"; shift 2 ;;
     --hardware-target) hardware_target="${2:-}"; shift 2 ;;
     --seed-source) seed_source="${2:-}"; shift 2 ;;
+    --dsl-seed-source) dsl_seed_sources+=("${2:-}"); shift 2 ;;
     --optimizer-model) optimizer_model="${2:-}"; shift 2 ;;
     --evolver-model) evolver_model="${2:-}"; shift 2 ;;
     --launcher-mode) launcher_mode="${2:-}"; shift 2 ;;
@@ -268,6 +271,9 @@ prepare_start() {
     --workspace-output "${workspace_output}"
   )
   [[ -n "${seed_source}" ]] && prepare_args+=(--seed-source "${seed_source}")
+  for entry in "${dsl_seed_sources[@]:-}"; do
+    [[ -n "${entry}" ]] && prepare_args+=(--dsl-seed-source "${entry}")
+  done
   [[ -n "${workspace}" ]] && prepare_args+=(--workspace "${workspace}")
   [[ -n "${hardware_target}" ]] && prepare_args+=(--hardware-target "${hardware_target}")
   [[ -n "${optimizer_model}" ]] && prepare_args+=(--optimizer-model "${optimizer_model}")
@@ -299,6 +305,9 @@ prepare_start() {
     --external-services
   )
   [[ -n "${seed_source}" ]] && run_args+=(--seed-source "${seed_source}")
+  for entry in "${dsl_seed_sources[@]:-}"; do
+    [[ -n "${entry}" ]] && run_args+=(--dsl-seed-source "${entry}")
+  done
   [[ -n "${optimizer_model}" ]] && run_args+=(--optimizer-model "${optimizer_model}")
   [[ -n "${evolver_model}" ]] && run_args+=(--evolver-model "${evolver_model}")
   [[ -n "${launcher_mode}" ]] && run_args+=(--launcher-mode "${launcher_mode}")
