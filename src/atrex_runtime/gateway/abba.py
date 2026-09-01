@@ -53,10 +53,7 @@ class AbbaBatchFailure(InfrastructureError):
         self.error_class = detail.get("error_class")
         self.reason = detail.get("reason")
         self.trace_id = detail.get("trace_id") or job.get("trace_id")
-        # A command that ran and failed is deterministic; a fresh Job fails the same way.
-        self.retryable = job.get("command_ok") is not False and (
-            not detail or self.error_class == "infra"
-        )
+        self.retryable = True
         super().__init__(
             "Agate ABBA batch produced no measurement: "
             f"job_id={job.get('job_id')} status={job.get('status')} "
@@ -311,10 +308,22 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                             incumbent=incumbent,
                             candidate=candidate,
                         )
-                except AbbaBatchFailure as failure:
+                except InfrastructureError as failure:
                     attempt += 1
-                    if not failure.retryable or attempt > _ABBA_BATCH_RETRIES:
+                    if attempt > _ABBA_BATCH_RETRIES:
                         raise
+                    failure_payload: dict[str, JsonValue]
+                    if isinstance(failure, AbbaBatchFailure):
+                        failure_payload = failure.event_payload()
+                    else:
+                        failure_payload = {
+                            "error_class": None,
+                            "reason": None,
+                            "trace_id": None,
+                            "retryable": True,
+                            "failure_type": type(failure).__name__,
+                            "detail": str(failure),
+                        }
                     self._journal.record_runtime_event(
                         "comparison.abba_batch_retried",
                         candidate.id,
@@ -325,7 +334,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                             "attempt": attempt,
                             "max_retries": _ABBA_BATCH_RETRIES,
                             "retry_delay_seconds": _ABBA_RETRY_DELAY_SECONDS,
-                            **failure.event_payload(),
+                            **failure_payload,
                         },
                     )
                     await anyio.sleep(_ABBA_RETRY_DELAY_SECONDS)
@@ -667,11 +676,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         return {
             "correct": correct,
             "correctness": merge_correctness_summaries(
-                [
-                    value
-                    for row in selected
-                    if isinstance((value := row.get("correctness")), dict)
-                ],
+                [value for row in selected if isinstance((value := row.get("correctness")), dict)],
                 passed=correct,
             ),
             "latency_us": latency_us,

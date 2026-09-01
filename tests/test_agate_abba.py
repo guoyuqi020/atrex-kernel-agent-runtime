@@ -12,6 +12,7 @@ import pytest
 from conftest import NOW, digest
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
+from atrex_runtime.domain.errors import InfrastructureError
 from atrex_runtime.domain.ids import new_kernel_revision_id
 from atrex_runtime.domain.models import (
     Dsl,
@@ -325,7 +326,12 @@ class FlakyAgateClient(FakeAgateClient):
         return accepted
 
 
-async def _run_pair(client: FakeAgateClient, tmp_path: Path) -> tuple[object, FakeJournal]:
+async def _run_pair(
+    client: FakeAgateClient,
+    tmp_path: Path,
+    *,
+    shape_batch_size: int = 3,
+) -> tuple[object, FakeJournal]:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     incumbent_dir = tmp_path / "incumbent"
     candidate_dir = tmp_path / "candidate"
@@ -377,7 +383,7 @@ async def _run_pair(client: FakeAgateClient, tmp_path: Path) -> tuple[object, Fa
         purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
         per_run_timeout_seconds=100,
         allocation_timeout_seconds=500,
-        shape_batch_size=3,
+        shape_batch_size=shape_batch_size,
         max_parallel_shape_batches=2,
     )
     return result, journal
@@ -424,38 +430,194 @@ async def test_transient_abba_batch_gives_up_past_the_ceiling(
     with pytest.raises(BaseExceptionGroup) as caught:
         await _run_pair(FlakyAgateClient(11 * 2), tmp_path)
 
-    failures = [
-        error for error in caught.value.exceptions if isinstance(error, AbbaBatchFailure)
-    ]
+    failures = [error for error in caught.value.exceptions if isinstance(error, AbbaBatchFailure)]
     assert failures
     assert all(failure.retryable for failure in failures)
     assert "reason=no_result" in str(failures[0])
 
 
 @pytest.mark.anyio
-async def test_failed_abba_command_is_not_retried(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A command that ran and failed is deterministic, so a fresh Job would fail identically."""
-    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
-
-    class CommandFailureClient(FakeAgateClient):
+async def test_abba_negative_kernel_measurement_is_not_retried(tmp_path: Path) -> None:
+    class IncorrectCandidateClient(FakeAgateClient):
         def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
             accepted = super().submit_job(kind, request)
             job_id = str(accepted["job_id"])
-            self.jobs[job_id] = {
-                "job_id": job_id,
-                "status": "succeeded",
-                "command_ok": False,
-                "error": {"error_class": "user", "reason": "nonzero_exit"},
-            }
+            result = self.jobs[job_id]["result"]
+            assert isinstance(result, dict)
+            stdout = result["stdout"]
+            assert isinstance(stdout, str)
+            payload = json.loads(stdout.split("=", 1)[1])
+            for run in payload["runs"]:
+                if run["revision"] == "candidate":
+                    run["result"]["all_pass"] = False
+            result["stdout"] = "__ATREX_RUNTIME_ABBA_RESULT__=" + json.dumps(
+                payload, separators=(",", ":")
+            )
             return accepted
 
-    with pytest.raises(BaseExceptionGroup) as caught:
-        await _run_pair(CommandFailureClient(), tmp_path)
+    client = IncorrectCandidateClient()
+    result, journal = await _run_pair(client, tmp_path)
 
-    failures = [error for error in caught.value.exceptions if isinstance(error, AbbaBatchFailure)]
-    assert failures
-    assert all(not failure.retryable for failure in failures)
-    assert "command_ok=False" in str(failures[0])
+    assert len(client.requests) == 2
+    assert all(run.correct is False for run in result.candidate_runs)
+    assert not any(kind == "comparison.abba_batch_retried" for kind, _, _ in journal.events)
+
+
+@pytest.mark.anyio
+async def test_abba_poll_error_retries_with_a_fresh_job(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+
+    class MissingAcceptedJobClient(FakeAgateClient):
+        failed_job_id: str | None = None
+
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            accepted = super().submit_job(kind, request)
+            if self.failed_job_id is None:
+                self.failed_job_id = str(accepted["job_id"])
+            return accepted
+
+        def get_job(
+            self,
+            job_id: str,
+            wait: bool = False,
+            timeout: float = 30.0,
+            include_spec: bool = False,
+        ) -> dict[str, object]:
+            if job_id == self.failed_job_id:
+                raise RuntimeError(
+                    "four transient 502 responses followed by 404 no job 'dv_f70805eb9398'"
+                )
+            return super().get_job(job_id, wait, timeout, include_spec)
+
+    client = MissingAcceptedJobClient()
+    result, journal = await _run_pair(client, tmp_path)
+
+    assert len(client.requests) == 3
+    assert client.failed_job_id == "dv_abba_0"
+    retries = [
+        payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
+    ]
+    assert len(retries) == 1
+    assert retries[0]["error_class"] is None
+    assert retries[0]["reason"] is None
+    assert retries[0]["trace_id"] is None
+    assert retries[0]["retryable"] is True
+    assert retries[0]["failure_type"] == "InfrastructureError"
+    assert "404 no job 'dv_f70805eb9398'" in str(retries[0]["detail"])
+    assert result.gateway_result_digest is not None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "failure", ("submit_error", "missing_job_id", "nonterminal", "malformed_payload")
+)
+async def test_abba_batch_infrastructure_errors_are_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+
+    class OneFailureClient(FakeAgateClient):
+        failed = False
+        failure_lock = threading.Lock()
+
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            accepted = super().submit_job(kind, request)
+            with self.failure_lock:
+                fail = not self.failed
+                if fail:
+                    self.failed = True
+            if not fail:
+                return accepted
+            if failure == "submit_error":
+                raise RuntimeError("Agate submit response was lost after acceptance")
+            job_id = str(accepted["job_id"])
+            if failure == "missing_job_id":
+                return {"status": "queued"}
+            if failure == "nonterminal":
+                self.jobs[job_id] = {"job_id": job_id, "status": "running"}
+            else:
+                self.jobs[job_id]["result"] = {
+                    "stdout": "remote process exited without an ABBA sentinel",
+                    "stderr": "",
+                    "exit_code": 0,
+                }
+            return accepted
+
+    client = OneFailureClient()
+    result, journal = await _run_pair(client, tmp_path)
+
+    assert len(client.requests) == 3
+    retries = [
+        payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
+    ]
+    assert len(retries) == 1
+    assert retries[0]["failure_type"] == "InfrastructureError"
+    assert retries[0]["retryable"] is True
+    assert result.gateway_result_digest is not None
+
+
+@pytest.mark.anyio
+async def test_abba_infrastructure_error_gives_up_past_the_ceiling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+
+    class UnavailableAgateClient(FakeAgateClient):
+        def get_job(
+            self,
+            job_id: str,
+            wait: bool = False,
+            timeout: float = 30.0,
+            include_spec: bool = False,
+        ) -> dict[str, object]:
+            raise RuntimeError(f"404 no job {job_id}")
+
+    client = UnavailableAgateClient()
+    with pytest.raises(BaseExceptionGroup) as caught:
+        await _run_pair(client, tmp_path, shape_batch_size=5)
+
+    assert len(client.requests) == 11
+    assert all(isinstance(error, InfrastructureError) for error in caught.value.exceptions)
+
+
+@pytest.mark.anyio
+async def test_failed_abba_command_is_retried(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+
+    class CommandFailureClient(FakeAgateClient):
+        failed = False
+
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            accepted = super().submit_job(kind, request)
+            if not self.failed:
+                self.failed = True
+                job_id = str(accepted["job_id"])
+                self.jobs[job_id] = {
+                    "job_id": job_id,
+                    "status": "succeeded",
+                    "command_ok": False,
+                    "error": {"error_class": "user", "reason": "nonzero_exit"},
+                }
+            return accepted
+
+    client = CommandFailureClient()
+    result, journal = await _run_pair(client, tmp_path)
+
+    assert len(client.requests) == 3
+    retries = [
+        payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
+    ]
+    assert len(retries) == 1
+    assert retries[0]["error_class"] == "user"
+    assert retries[0]["reason"] == "nonzero_exit"
+    assert retries[0]["retryable"] is True
+    assert result.gateway_result_digest is not None
