@@ -76,6 +76,13 @@ _CANDIDATE_REQUEST_TYPES = (
     CheckRequestV2,
     DisassembleRequestV2,
 )
+# Nomination already fails closed on the same policy, so attempt_report needs no advisory.
+_ADVISORY_PRODUCTION_GATE_TYPES = (
+    ProfileRequestV2,
+    DevRequestV2,
+    CheckRequestV2,
+    DisassembleRequestV2,
+)
 _RUNTIME_LOCAL_OPERATIONS = frozenset(
     {
         GatewayOperation.ATTEMPT_REPORT,
@@ -274,7 +281,7 @@ class GatewayProxyService:
             if self._candidate_production is not None:
                 if isinstance(request, EvaluateRequestV2):
                     self._candidate_production.validate(request.attempt_id, candidate_digest)
-                elif isinstance(request, DevRequestV2):
+                elif isinstance(request, _ADVISORY_PRODUCTION_GATE_TYPES):
                     production_violations = self._candidate_production.violations(
                         request.attempt_id, candidate_digest
                     )

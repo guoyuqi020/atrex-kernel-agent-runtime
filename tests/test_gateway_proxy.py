@@ -335,7 +335,20 @@ async def test_proxy_runs_production_gate_before_agate(tmp_path: Path) -> None:
 
 
 @pytest.mark.anyio
-async def test_proxy_advises_a_dev_job_instead_of_rejecting_it(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("operation", "extra"),
+    [
+        ("dev", {"command": "python3 probe.py"}),
+        ("profile", {"level": "sol"}),
+        ("check", {}),
+        ("disassemble", {}),
+    ],
+)
+async def test_proxy_advises_exploratory_operations_instead_of_rejecting_them(
+    tmp_path: Path,
+    operation: str,
+    extra: dict[str, object],
+) -> None:
     @dataclass
     class AdvisoryPolicy:
         validate_calls: int = 0
@@ -355,7 +368,7 @@ async def test_proxy_advises_a_dev_job_instead_of_rejecting_it(tmp_path: Path) -
     registry, control, attempt, capability_value, service, adapter = _service(tmp_path, policy)
     adapter.result = GatewayAdapterResult(
         status="completed",
-        result={"job_id": "dv_1", "kind": "dev", "result": {"exit_code": 0, "stdout": "ok"}},
+        result={"job_id": "j1", "kind": operation, "result": {"exit_code": 0, "stdout": "ok"}},
     )
 
     response = await service.execute(
@@ -364,9 +377,9 @@ async def test_proxy_advises_a_dev_job_instead_of_rejecting_it(tmp_path: Path) -
             {
                 "schema_version": 2,
                 "attempt_id": attempt.id,
-                "idempotency_key": "dev-probe-1",
-                "operation": "dev",
-                "command": "python3 probe.py",
+                "idempotency_key": f"{operation}-probe-1",
+                "operation": operation,
+                **extra,
                 "candidate": {
                     "files": [
                         {
