@@ -17,7 +17,7 @@ from uuid import uuid4
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, parse_artifact_digest
-from ..domain.models import BranchRole, Epoch, EpochStatus, KernelAgentRevision
+from ..domain.models import BranchRole, Epoch, EpochStatus, KernelAgentRevision, Lineage
 from ..filesystem import make_tree_owner_writable, make_tree_read_only
 from ..ports import RunAttemptRequest
 from ..registry.base import Registry
@@ -394,6 +394,7 @@ class LocalAttemptWorkspaceAssembler:
                 trajectory_ordinal=attempt.trajectory_ordinal,
                 previous_runtime_state_digest=previous_runtime_state_digest,
                 reset_from_seed=reset_persistent_scope,
+                bootstrap_seed=self._shared_bootstrap_seed(lineage),
             )
             _copy_reusable_tree(persistent_skills, root / "skills")
             _copy_reusable_tree(persistent_tools, root / "tools")
@@ -525,6 +526,17 @@ class LocalAttemptWorkspaceAssembler:
             best_kernel_producer_attempt_id=best_kernel_producer_attempt_id,
         )
 
+    def _shared_bootstrap_seed(self, lineage: Lineage) -> tuple[object, object] | None:
+        """Locate the Bootstrap deposit of the Lineage this one was cloned from."""
+        source_id = lineage.bootstrap_source_lineage_id
+        if source_id is None:
+            return None
+        revisions = self._registry.list_lineage_agent_revisions(source_id)
+        root = next((entry for entry in revisions if entry.revision_number == 0), None)
+        if root is None:
+            return None
+        return source_id, root.revision.id
+
     def _persistent_roots(
         self,
         *,
@@ -533,6 +545,7 @@ class LocalAttemptWorkspaceAssembler:
         trajectory_ordinal: int,
         previous_runtime_state_digest: ArtifactDigest | None = None,
         reset_from_seed: bool = False,
+        bootstrap_seed: tuple[object, object] | None = None,
     ) -> tuple[Path, Path, Path]:
         revision_id = revision.id
         parent_revision_id = revision.parent_id
@@ -572,7 +585,10 @@ class LocalAttemptWorkspaceAssembler:
                         / f"trajectory-{trajectory_ordinal:08d}"
                     )
                 elif not state_seeded:
-                    bootstrap = persistent / str(lineage_id) / str(revision_id) / "bootstrap"
+                    seed_lineage_id, seed_revision_id = bootstrap_seed or (lineage_id, revision_id)
+                    bootstrap = (
+                        persistent / str(seed_lineage_id) / str(seed_revision_id) / "bootstrap"
+                    )
                     if bootstrap.is_dir() and not bootstrap.is_symlink():
                         source_scope = bootstrap
                 if source_scope is not None:

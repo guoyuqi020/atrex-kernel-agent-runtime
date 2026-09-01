@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -207,9 +208,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     attempt_id = new_attempt_id()
     evidence_source = tmp_path / "source-evidence"
     (evidence_source / "bootstrap").mkdir(parents=True)
-    (evidence_source / "bootstrap/report.json").write_text(
-        json.dumps({"status": "baseline_ready"})
-    )
+    (evidence_source / "bootstrap/report.json").write_text(json.dumps({"status": "baseline_ready"}))
     (evidence_source / "bootstrap/conversation.jsonl").write_text("{}\n")
     (evidence_source / "checkpoint.json").write_text(
         json.dumps(
@@ -337,11 +336,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     )
     assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, store)
     bootstrap_state = (
-        tmp_path
-        / "workspaces/.reusable"
-        / str(lineage_id)
-        / str(agent_id)
-        / "bootstrap"
+        tmp_path / "workspaces/.reusable" / str(lineage_id) / str(agent_id) / "bootstrap"
     )
     (bootstrap_state / "skills").mkdir(parents=True)
     (bootstrap_state / "tools").mkdir()
@@ -406,9 +401,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
         "status": "baseline_ready"
     }
     assert (evidence_view / "bootstrap/conversation.jsonl").read_text() == "{}\n"
-    assert (
-        evidence_view / "epochs/00000001/trajectories/00000001/attempts"
-    ).is_dir()
+    assert (evidence_view / "epochs/00000001/trajectories/00000001/attempts").is_dir()
     assert not (evidence_view / "epochs/00000001/attempts").exists()
     assert not (first.root / "input/attempt-evidence").exists()
     assert list((first.root / "agent").iterdir()) == [first.root / "agent/optimizer"]
@@ -425,6 +418,7 @@ def _single_trajectory_workspace(
     store: LocalArtifactStore,
     *,
     ephemeral_agent_state: bool,
+    bootstrap_source_lineage_id: object | None = None,
 ) -> tuple[LocalAttemptWorkspaceAssembler, RunAttemptRequest, str, str]:
     """Assemble the least Registry state one prepare() call accepts."""
     optimizer = _put_text_artifact(store, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT)
@@ -445,9 +439,7 @@ def _single_trajectory_workspace(
     attempt_id = new_attempt_id()
     evidence_source = tmp_path / "source-evidence"
     (evidence_source / "bootstrap").mkdir(parents=True)
-    (evidence_source / "bootstrap/report.json").write_text(
-        json.dumps({"status": "baseline_ready"})
-    )
+    (evidence_source / "bootstrap/report.json").write_text(json.dumps({"status": "baseline_ready"}))
     (evidence_source / "bootstrap/conversation.jsonl").write_text("{}\n")
     (evidence_source / "checkpoint.json").write_text(
         json.dumps(
@@ -505,23 +497,60 @@ def _single_trajectory_workspace(
             NOW,
         )
     )
-    registry.insert_lineage(
-        Lineage(
-            id=lineage_id,
-            campaign_id=campaign_id,
-            dsl=Dsl.TRITON,
-            hardware_target="h100",
-            active_kernel_agent_revision_id=agent_id,
-            best_kernel_revision_id=kernel_id,
-            evidence_checkpoint=evidence,
-            challenger_count=0,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=2,
-            next_epoch_number=1,
-            status=LineageStatus.READY,
-            ephemeral_agent_state=ephemeral_agent_state,
-        )
+    mirrored = Lineage(
+        id=lineage_id,
+        campaign_id=campaign_id,
+        dsl=Dsl.TRITON,
+        hardware_target="h100",
+        active_kernel_agent_revision_id=agent_id,
+        best_kernel_revision_id=kernel_id,
+        evidence_checkpoint=evidence,
+        challenger_count=0,
+        trajectories_per_branch=1,
+        attempts_per_trajectory=2,
+        next_epoch_number=1,
+        status=LineageStatus.READY,
+        ephemeral_agent_state=ephemeral_agent_state,
+        bootstrap_source_lineage_id=bootstrap_source_lineage_id,
     )
+    deposit_agent_id = str(agent_id)
+    if bootstrap_source_lineage_id is not None:
+        source_agent_id = new_kernel_agent_revision_id()
+        source_kernel_id = new_kernel_revision_id()
+        registry.register_kernel_agent_revision(
+            KernelAgentRevision(
+                source_agent_id,
+                None,
+                "bootstrap:triton:source",
+                Dsl.TRITON,
+                optimizer,
+                "bootstrap",
+                NOW,
+                source_provenance_digest=digest("source"),
+            )
+        )
+        registry.register_kernel_revision(
+            KernelRevision(
+                source_kernel_id,
+                None,
+                kernel_digest,
+                None,
+                KernelEvaluation(True, 100.0, digest("gateway")),
+                NOW,
+            )
+        )
+        registry.insert_lineage(
+            replace(
+                mirrored,
+                id=bootstrap_source_lineage_id,
+                active_kernel_agent_revision_id=source_agent_id,
+                best_kernel_revision_id=source_kernel_id,
+                ephemeral_agent_state=False,
+                bootstrap_source_lineage_id=None,
+            )
+        )
+        deposit_agent_id = str(source_agent_id)
+    registry.insert_lineage(mirrored)
     registry.insert_epoch(
         Epoch(
             id=epoch_id,
@@ -572,7 +601,7 @@ def _single_trajectory_workspace(
         Dsl.TRITON,
     )
     assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, store)
-    return assembler, request, str(lineage_id), str(attempt_id)
+    return assembler, request, str(lineage_id), deposit_agent_id
 
 
 def test_event_only_attempt_never_inherits_agent_state(tmp_path: Path) -> None:
@@ -633,18 +662,67 @@ def test_a_normal_retry_does_inherit_agent_state(tmp_path: Path) -> None:
     registry.close()
 
 
+def test_retaining_clone_inherits_the_source_lineage_bootstrap_state(tmp_path: Path) -> None:
+    """A cloned arm has no Bootstrap Attempt, so it must read the source Lineage's deposit."""
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    source_lineage_id = new_lineage_id()
+    assembler, request, lineage_id, agent_id = _single_trajectory_workspace(
+        tmp_path,
+        registry,
+        store,
+        ephemeral_agent_state=False,
+        bootstrap_source_lineage_id=source_lineage_id,
+    )
+
+    deposit = tmp_path / "workspaces/.reusable" / str(source_lineage_id) / agent_id / "bootstrap"
+    (deposit / "skills").mkdir(parents=True)
+    (deposit / "tools").mkdir()
+    (deposit / "skills/bootstrap.md").write_text("shared baseline lesson\n")
+    (deposit / "tools/refcheck.py").write_text("# shared checker\n")
+    (deposit / "tools/README.md").write_text("# Bootstrap tools\n")
+
+    prepared = assembler.prepare(request)
+
+    assert (prepared.root / "skills/bootstrap.md").read_text() == "shared baseline lesson\n"
+    assert (prepared.root / "tools/refcheck.py").read_text() == "# shared checker\n"
+    assert (tmp_path / "workspaces/.reusable" / lineage_id).is_dir()
+    registry.close()
+
+
+def test_ephemeral_clone_still_ignores_the_source_lineage_bootstrap_state(tmp_path: Path) -> None:
+    """Inheriting for a retaining clone must not leak into the always-empty arms."""
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    source_lineage_id = new_lineage_id()
+    assembler, request, _lineage_id, agent_id = _single_trajectory_workspace(
+        tmp_path,
+        registry,
+        store,
+        ephemeral_agent_state=True,
+        bootstrap_source_lineage_id=source_lineage_id,
+    )
+
+    deposit = tmp_path / "workspaces/.reusable" / str(source_lineage_id) / agent_id / "bootstrap"
+    (deposit / "skills").mkdir(parents=True)
+    (deposit / "skills/bootstrap.md").write_text("shared baseline lesson\n")
+
+    prepared = assembler.prepare(request)
+
+    assert list((prepared.root / "skills").iterdir()) == []
+    assert (prepared.root / "tools/README.md").is_file()
+    assert not (prepared.root / "tools/refcheck.py").exists()
+    registry.close()
+
+
 def test_evolved_revision_seeds_trajectory_from_candidate_runtime_state(tmp_path: Path) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     state = tmp_path / "candidate-state"
     (state / "skills").mkdir(parents=True)
     (state / "tools").mkdir()
-    (state / "skills/evolved.md").write_text(
-        "candidate-selected lesson\n"
-    )
-    (state / "tools/README.md").write_text(
-        "# Candidate tools\n"
-    )
+    (state / "skills/evolved.md").write_text("candidate-selected lesson\n")
+    (state / "tools/README.md").write_text("# Candidate tools\n")
     state_digest = artifacts.put_directory(
         state,
         ArtifactKind.KERNEL_AGENT_RUNTIME_STATE,
