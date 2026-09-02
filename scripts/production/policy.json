@@ -5,7 +5,7 @@
     "challenger_count": 1,
     "challenger_start_epoch": 2,
     "trajectories_per_branch": 1,
-    "attempts_per_trajectory": 2,
+    "attempts_per_trajectory": 3,
     "event_only": true
   },
   "runtime": {

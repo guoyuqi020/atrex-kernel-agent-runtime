@@ -13,7 +13,7 @@ Required:
   --kernel PATH|SUITE/OPERATOR  Atrex-Bench operator directory
   --backend NAME               claude, codex, qodercli, or pi
 Options:
-  --target-epoch N             absolute Epoch target to complete; defaults to 10
+  --target-epoch N             absolute Epoch target to complete; defaults to 5
   --workspace DIR
   --service-workspace DIR      reuse its running Runtime/Wiki without managing services
   --hardware-target GPU        defaults to AGATE_GPU
@@ -28,7 +28,7 @@ EOF
 
 kernel=""
 backend=""
-target_epoch="10"
+target_epoch="5"
 workspace=""
 service_workspace=""
 hardware_target="${AGATE_GPU:-}"
@@ -417,7 +417,20 @@ run_dsl_pipeline() (
 )
 
 echo
-echo "Each Campaign has 2 serial Attempts per Branch and targets Epoch ${target_epoch}."
+attempts_per_branch=""
+if [[ -f "${atrex_prod_ablation_plan}" ]]; then
+  attempts_per_branch="$(
+    "${atrex_prod_python}" -c '
+import json, sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["attempts_per_trajectory"])
+' "${atrex_prod_ablation_plan}"
+  )"
+fi
+if [[ -n "${attempts_per_branch}" ]]; then
+  echo "Each Campaign has ${attempts_per_branch} serial Attempts per Branch and targets Epoch ${target_epoch}."
+else
+  echo "Each Campaign runs its configured serial Attempts per Branch and targets Epoch ${target_epoch}."
+fi
 echo "Epoch 1 is Active-only. From Epoch 2, Active and one Challenger run concurrently."
 
 for dsl in "${dsls[@]}"; do

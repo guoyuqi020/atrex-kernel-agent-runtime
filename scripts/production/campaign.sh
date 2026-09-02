@@ -46,7 +46,7 @@ fi
 
 kernel=""
 backend=""
-target_epoch="10"
+target_epoch="5"
 workspace=""
 service_workspace=""
 hardware_target="${AGATE_GPU:-}"
