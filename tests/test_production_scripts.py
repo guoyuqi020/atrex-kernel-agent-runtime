@@ -736,6 +736,37 @@ def test_production_runner_has_independent_per_dsl_pipelines() -> None:
     assert "At least one DSL Bootstrap failed" not in runner
 
 
+def test_production_runner_prints_schedule_through_actual_shell(tmp_path: Path) -> None:
+    runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
+    start = runner.index('attempts_per_branch="$(')
+    end = runner.index('for dsl in "${dsls[@]}"; do', start)
+    cuda = tmp_path / "dsls" / "cuda"
+    cuda.mkdir(parents=True)
+    (cuda / "campaign.json").write_text(
+        json.dumps({"attempts_per_trajectory": 3}), encoding="utf-8"
+    )
+    plan = _ablation_plan(json.loads((PRODUCTION / "policy.json").read_text()))
+    plan_path = tmp_path / "ablation.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    environment = {
+        **os.environ,
+        "atrex_prod_python": sys.executable,
+        "atrex_prod_dsls_root": str(tmp_path / "dsls"),
+        "atrex_prod_ablation_plan": str(plan_path),
+        "target_epoch": "5",
+    }
+    result = subprocess.run(
+        ("bash", "-euc", runner[start:end]),
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "3 serial Attempts per Branch" in result.stdout
+    assert "ablation-pool-1=15 Epochs x 1 Attempts = 15 total" in result.stdout
+    assert "ablation-pool-5=3 Epochs x 5 Attempts = 15 total" in result.stdout
+
+
 def test_services_start_initializes_control_plane() -> None:
     service = (PRODUCTION / "services.sh").read_text(encoding="utf-8")
 

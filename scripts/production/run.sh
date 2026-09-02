@@ -438,9 +438,9 @@ import json, sys
 plan = json.load(open(sys.argv[1], encoding="utf-8"))
 if plan.get("enabled"):
     values = [
-        f"{arm['label']}={arm['target_epoch_number']} Epochs x "
-        f"{arm['attempts_per_trajectory']} Attempts = "
-        f"{plan['optimizer_attempt_budget_per_arm']} total"
+        "{label}={target_epoch_number} Epochs x {attempts_per_trajectory} Attempts = {budget} total".format(
+            **arm, budget=plan["optimizer_attempt_budget_per_arm"]
+        )
         for arm in plan["arms"]
     ]
     print("Ablation arms: " + ", ".join(values))

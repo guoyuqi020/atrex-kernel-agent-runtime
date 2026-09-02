@@ -1149,7 +1149,13 @@ def main() -> None:
     print(f"Worker launcher: {launcher_mode}")
     print(f"DSL Campaign workspaces: {', '.join(SUPPORTED_DSLS)}")
     print("Production content policy gate: enabled")
-    print("Schedule: bootstrap, then 2 Attempts/Branch/Epoch; 1 Challenger from Epoch 2")
+    schedule = policy["schedule"]
+    print(
+        f"Schedule: bootstrap, then {schedule['attempts_per_trajectory']} "
+        f"Attempts/Trajectory/Epoch; {schedule['trajectories_per_branch']} "
+        f"Trajectories/Branch; {schedule['challenger_count']} Challenger(s) "
+        f"from Epoch {schedule['challenger_start_epoch']}"
+    )
     print(f"Runtime config: {workspace / 'runtime.json'}")
     for dsl in SUPPORTED_DSLS:
         print(f"{dsl} Campaign config: {workspace / 'dsls' / dsl / 'campaign.json'}")
