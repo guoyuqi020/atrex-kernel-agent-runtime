@@ -66,12 +66,39 @@ from .workspace import (
     validate_reusable_agent_state_seed,
 )
 
-EVOLUTION_INPUT_VERSION: Literal[10] = 10
+EVOLUTION_INPUT_VERSION: Literal[11] = 11
 EVOLUTION_TRACE_VERSION: Literal[9] = 9
 EVOLUTION_FAILURE_VERSION: Literal[5] = 5
 EVOLVER_LAUNCH_INSTRUCTION = "Run the versioned Evolver Bundle once."
 EVOLVER_TIMEOUT_EXIT_STATUS = 124
 EVOLVER_WORKSPACE_RELATIVE_PATH = PurePosixPath("input/evolver")
+
+
+def _last_completed_epoch_pool(
+    evidence_root: Path,
+) -> tuple[KernelAgentRevisionId, tuple[KernelAgentRevisionId, ...]] | None:
+    """Resolve the most recent completed Epoch's Active and Challenger branch revisions."""
+    epochs = evidence_root / "epochs"
+    if epochs.is_symlink() or not epochs.is_dir():
+        return None
+    records = sorted(epochs.glob("*.json"), reverse=True)
+    if not records:
+        return None
+    raw: object = json.loads(records[0].read_bytes())
+    if not isinstance(raw, dict):
+        raise ValueError("Completed Epoch Evidence record is invalid")
+    raw_active = raw.get("active_kernel_agent_revision_id")
+    raw_challengers = raw.get("challenger_kernel_agent_revision_ids")
+    if (
+        not isinstance(raw_active, str)
+        or not isinstance(raw_challengers, list)
+        or not all(isinstance(item, str) for item in raw_challengers)
+    ):
+        raise ValueError("Completed Epoch Branch pool is invalid")
+    return (
+        parse_kernel_agent_revision_id(raw_active),
+        tuple(parse_kernel_agent_revision_id(cast(str, item)) for item in raw_challengers),
+    )
 
 
 def _active_next_epoch_runtime_state_seed(
@@ -184,7 +211,6 @@ class EvolutionPathsV2(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     agents: Literal["input/agents"] = "input/agents"
-    historical: Literal["input/historical"] = "input/historical"
     evidence: Literal["input/evidence"] = "input/evidence"
     candidate: Literal["candidate"] = "candidate"
     scratch: Literal["scratch"] = "scratch"
@@ -197,14 +223,15 @@ class VisibleAgentRevisionV2(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     revision_id: KernelAgentRevisionId
-    version: str | None = Field(default=None, pattern=r"^agent-v[0-9]+$")
+    version: str = Field(pattern=r"^agent-v[0-9]+$")
     optimizer_digest: ArtifactDigest
     path: str = Field(min_length=1, max_length=300)
     optimization_summary_path: str = Field(min_length=1, max_length=300)
     sessions_path: str | None = Field(default=None, min_length=1, max_length=300)
+    reports_path: str | None = Field(default=None, min_length=1, max_length=300)
     runtime_state_path: str = Field(min_length=1, max_length=300)
     parent: bool
-    relationship: Literal["active", "current_epoch_challenger", "lineage_history"]
+    relationship: Literal["active", "challenger", "current_epoch_challenger", "lineage_history"]
     challenger_ordinal: int | None = Field(default=None, gt=0)
     parent_revision_id: KernelAgentRevisionId | None
     created_by: str = Field(min_length=1, max_length=200)
@@ -237,21 +264,28 @@ class VisibleAgentRevisionV2(BaseModel):
 
     @model_validator(mode="after")
     def _validate_relationship(self) -> Self:
-        if self.parent != (self.relationship == "active"):
-            raise ValueError("visible Agent parent marker disagrees with its relationship")
-        if (self.relationship == "current_epoch_challenger") != (
+        if self.parent and self.relationship not in {"active", "challenger"}:
+            raise ValueError("the Parent must occupy the last completed Epoch's comparison pool")
+        if (self.relationship in {"challenger", "current_epoch_challenger"}) != (
             self.challenger_ordinal is not None
         ):
-            raise ValueError("only current-Epoch Challengers have a Challenger ordinal")
+            raise ValueError("only Challenger entries have a Challenger ordinal")
+        competed = self.relationship in {"active", "challenger"}
+        if competed != (self.sessions_path is not None) or competed != (
+            self.reports_path is not None
+        ):
+            raise ValueError(
+                "Sessions and Attempt reports belong to the last completed Epoch's branches"
+            )
         return self
 
 
-class EvolutionInputManifestV10(BaseModel):
+class EvolutionInputManifestV11(BaseModel):
     """Immutable parent, Agent pool, and lineage evidence for one Evolution session."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[10] = EVOLUTION_INPUT_VERSION
+    schema_version: Literal[11] = EVOLUTION_INPUT_VERSION
     parent_revision_id: KernelAgentRevisionId
     evidence_checkpoint: ArtifactDigest
     idempotency_key: str = Field(min_length=1, max_length=300)
@@ -321,6 +355,12 @@ class EvolutionOutput(BaseModel):
     hypothesis: str = Field(min_length=1, max_length=4000)
     expected_effect: str = Field(min_length=1, max_length=4000)
     changed_paths: tuple[str, ...] = Field(max_length=512)
+    # Defaulted because sealed historical traces predating this field are re-parsed
+    # by _previous_evolution_output under extra="forbid".
+    contributing_revision_ids: tuple[KernelAgentRevisionId, ...] = Field(
+        default=(),
+        max_length=64,
+    )
     unimplemented_capabilities: tuple[UnimplementedCapabilityV1, ...] = Field(max_length=64)
 
     @field_validator("kernel_agent_revision_id", mode="before")
@@ -329,6 +369,22 @@ class EvolutionOutput(BaseModel):
         if not isinstance(value, str):
             raise ValueError("kernel_agent_revision_id must be a string")
         return parse_kernel_agent_revision_id(value)
+
+    @field_validator("contributing_revision_ids", mode="before")
+    @classmethod
+    def _validate_contributing_revisions(cls, value: object) -> tuple[str, ...]:
+        if not isinstance(value, list | tuple):
+            raise ValueError("contributing_revision_ids must be an array")
+        normalized: list[str] = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("contributing_revision_ids entries must be strings")
+            normalized.append(str(parse_kernel_agent_revision_id(item)))
+        if len(set(normalized)) != len(normalized):
+            raise ValueError("contributing_revision_ids cannot contain duplicates")
+        if normalized != sorted(normalized):
+            raise ValueError("contributing_revision_ids must be sorted")
+        return tuple(normalized)
 
     @field_validator("changed_paths")
     @classmethod
@@ -352,6 +408,10 @@ class EvolutionOutput(BaseModel):
     def _validate_mode_fields(self) -> Self:
         if self.proposal_type == "reuse" and self.changed_paths:
             raise ValueError("reuse requires changed_paths to be empty")
+        if self.proposal_type == "reuse" and self.contributing_revision_ids:
+            raise ValueError("reuse requires contributing_revision_ids to be empty")
+        if self.kernel_agent_revision_id in self.contributing_revision_ids:
+            raise ValueError("contributing_revision_ids cannot repeat the selected Source base")
         return self
 
 
@@ -424,7 +484,7 @@ class EvolutionTraceV9(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: Literal[9] = EVOLUTION_TRACE_VERSION
-    input: EvolutionInputManifestV10
+    input: EvolutionInputManifestV11
     agent: EvolutionAgentDescriptorV3
     process_returncode: Literal[0]
     stdout: str
@@ -506,7 +566,7 @@ class EvolutionFailureTraceV5(BaseModel):
 
     schema_version: Literal[5] = EVOLUTION_FAILURE_VERSION
     status: Literal["failed"] = "failed"
-    input: EvolutionInputManifestV10
+    input: EvolutionInputManifestV11
     phase: Literal["session", "candidate_validation"]
     error_type: str = Field(min_length=1, max_length=200)
     process: EvolutionFailureProcessV2 | None
@@ -553,7 +613,6 @@ class EvolutionWorkspaceAssembler:
         run_root.mkdir(parents=True, mode=0o700)
         control_root.mkdir(parents=True, mode=0o700)
         agents_root = run_root / "input/agents"
-        historical_root = run_root / "input/historical"
         evidence_root = run_root / "input/evidence"
         evolution_reports_root = run_root / "input/evolution-reports"
         candidate_root = run_root / "candidate"
@@ -571,67 +630,65 @@ class EvolutionWorkspaceAssembler:
 
         revision = request.parent_revision
         agents_root.mkdir(parents=True, mode=0o700)
-        historical_root.mkdir(parents=True, mode=0o700)
         evolution_reports_root.mkdir(parents=True, mode=0o700)
+        evidence = self._artifacts.verify(request.evidence_checkpoint)
+        if evidence.kind is not ArtifactKind.EVIDENCE:
+            raise ValueError("Evolution Evidence checkpoint has the wrong Artifact kind")
         catalog_by_id = {entry.revision.id: entry for entry in request.agent_catalog}
         visible_by_id = {
             revision_id: entry.revision for revision_id, entry in catalog_by_id.items()
         }
         visible_by_id[revision.id] = revision
+        pool = _last_completed_epoch_pool(evidence.payload_path)
+        pool_active, pool_challengers = (revision.id, ()) if pool is None else pool
+        pool_ordinal_by_id = {
+            challenger_id: ordinal
+            for ordinal, challenger_id in enumerate(pool_challengers, start=1)
+        }
+        if (
+            pool_active not in visible_by_id
+            or not pool_ordinal_by_id.keys() <= visible_by_id.keys()
+        ):
+            raise ValueError("completed Epoch Branch pool is outside the visible Agent catalog")
         visible_agents: list[VisibleAgentRevisionV2] = []
         visible_paths: dict[KernelAgentRevisionId, tuple[str, str]] = {}
         previous_reports: list[tuple[KernelAgentRevision, EvolutionOutput, int | None]] = []
-        participant_agents: dict[str, str] = {}
-        historical_agents: dict[str, tuple[str, Path]] = {}
+        agent_versions: dict[str, str] = {}
+        pool_versions: set[str] = set()
         challenger_prefix = f"epoch:{request.epoch_id}:challenger:"
         for visible in visible_by_id.values():
             challenger_ordinal: int | None = None
-            relationship: Literal["active", "current_epoch_challenger", "lineage_history"] = (
-                "lineage_history"
-            )
-            if visible.id == revision.id:
+            relationship: Literal[
+                "active", "challenger", "current_epoch_challenger", "lineage_history"
+            ] = "lineage_history"
+            if visible.id == pool_active:
                 relationship = "active"
+            elif visible.id in pool_ordinal_by_id:
+                relationship = "challenger"
+                challenger_ordinal = pool_ordinal_by_id[visible.id]
             elif visible.creation_key.startswith(challenger_prefix):
                 suffix = visible.creation_key.removeprefix(challenger_prefix)
                 if suffix.isdigit() and int(suffix) > 0:
                     relationship = "current_epoch_challenger"
                     challenger_ordinal = int(suffix)
             catalog_entry = catalog_by_id.get(visible.id)
-            version = None if catalog_entry is None else f"agent-v{catalog_entry.revision_number}"
-            if relationship == "active":
-                role_label = "active"
-                relative = "input/agents/active/source"
-                optimization_summary_path = "input/evidence/active/optimization-summary.json"
-                sessions_path = "input/evidence/active/sessions"
-                runtime_state_path = "input/agents/active/runtime-state"
-                participant_agents[role_label] = visible.id
-            elif relationship == "current_epoch_challenger":
-                assert challenger_ordinal is not None
-                role_label = f"challenger-{challenger_ordinal:04d}"
-                relative = f"input/agents/{role_label}/source"
-                optimization_summary_path = f"input/evidence/{role_label}/optimization-summary.json"
-                sessions_path = f"input/evidence/{role_label}/sessions"
-                runtime_state_path = f"input/agents/{role_label}/runtime-state"
-                participant_agents[role_label] = visible.id
-            else:
-                if version is None:
-                    raise ValueError("historical Agent revision has no lineage version")
-                relative = f"input/historical/{version}/source"
-                optimization_summary_path = f"input/historical/{version}/optimization-summary.json"
-                sessions_path = None
-                runtime_state_path = f"input/historical/{version}/runtime-state"
-                historical_agents[visible.id] = (version, run_root / f"input/historical/{version}")
+            if catalog_entry is None:
+                raise ValueError("visible Agent revision has no lineage version")
+            version = f"agent-v{catalog_entry.revision_number}"
+            competed = relationship in {"active", "challenger"}
+            relative = f"input/agents/{version}/source"
+            runtime_state_path = f"input/agents/{version}/runtime-state"
+            optimization_summary_path = f"input/evidence/{version}/optimization-summary.json"
+            sessions_path = f"input/evidence/{version}/sessions" if competed else None
+            reports_path = f"input/evidence/{version}/reports" if competed else None
+            agent_versions[version] = visible.id
+            if competed:
+                pool_versions.add(version)
             self._artifacts.materialize(visible.optimizer_digest, run_root / relative)
             visible_paths[visible.id] = (relative, runtime_state_path)
             previous_output = _previous_evolution_output(self._artifacts, visible)
             if previous_output is not None:
-                previous_reports.append(
-                    (
-                        visible,
-                        previous_output,
-                        None if catalog_entry is None else catalog_entry.revision_number,
-                    )
-                )
+                previous_reports.append((visible, previous_output, catalog_entry.revision_number))
             visible_agents.append(
                 VisibleAgentRevisionV2(
                     revision_id=visible.id,
@@ -640,6 +697,7 @@ class EvolutionWorkspaceAssembler:
                     path=relative,
                     optimization_summary_path=optimization_summary_path,
                     sessions_path=sessions_path,
+                    reports_path=reports_path,
                     runtime_state_path=runtime_state_path,
                     parent=visible.id == revision.id,
                     relationship=relationship,
@@ -669,6 +727,12 @@ class EvolutionWorkspaceAssembler:
             produced_paths = visible_paths.get(produced.id)
             if base_paths is None or produced_paths is None:
                 raise ValueError("Evolution report Agent paths are outside visible history")
+            contributing_paths: list[str] = []
+            for contributor_id in previous_output.contributing_revision_ids:
+                contributor_paths = visible_paths.get(contributor_id)
+                if contributor_paths is None:
+                    raise ValueError("Evolution report Agent paths are outside visible history")
+                contributing_paths.append(contributor_paths[0])
             report_path = evolution_reports_root / f"evo-{evolution_number}.json"
             if report_path.exists() or report_path.is_symlink():
                 raise ValueError("Evolution report number is duplicated")
@@ -688,6 +752,8 @@ class EvolutionWorkspaceAssembler:
                             "proposal_type": previous_output.proposal_type,
                             "hypothesis": previous_output.hypothesis,
                             "expected_effect": previous_output.expected_effect,
+                            "changed_paths": list(previous_output.changed_paths),
+                            "contributing_source_paths": contributing_paths,
                             "unimplemented_capabilities": [
                                 item.model_dump(mode="json")
                                 for item in previous_output.unimplemented_capabilities
@@ -711,35 +777,21 @@ class EvolutionWorkspaceAssembler:
             },
             read_only=False,
         )
-        evidence = self._artifacts.verify(request.evidence_checkpoint)
-        if evidence.kind is not ArtifactKind.EVIDENCE:
-            raise ValueError("Evolution Evidence checkpoint has the wrong Artifact kind")
         assemble_evolver_evidence_view(
             evidence_root,
             control_root=control_state_root,
             lineage_payload=evidence.payload_path,
             lineage_checkpoint=request.evidence_checkpoint,
             artifacts=self._artifacts,
-            participant_agents=participant_agents,
-            historical_agents={
-                version: revision_id
-                for revision_id, (version, _destination) in historical_agents.items()
-            },
-            historical_root=historical_root,
+            agent_versions=agent_versions,
+            pool_versions=frozenset(pool_versions),
         )
-        for role, revision_id in participant_agents.items():
+        for version, revision_id in agent_versions.items():
             source_state = reusable_state_staging / revision_id
-            target_state = agents_root / role / "runtime-state"
+            destination = agents_root / version
             if not source_state.is_dir() or source_state.is_symlink():
-                raise ValueError(f"participant Agent runtime state is unavailable: {role}")
-            shutil.move(source_state, target_state)
-        for revision_id, (version, destination) in historical_agents.items():
-            source_state = reusable_state_staging / revision_id
-            target_state = destination / "runtime-state"
-            if not source_state.is_dir() or source_state.is_symlink():
-                raise ValueError(f"historical Agent runtime state is unavailable: {version}")
-            shutil.move(source_state, target_state)
-            make_tree_read_only(destination)
+                raise ValueError(f"visible Agent runtime state is unavailable: {version}")
+            shutil.move(source_state, destination / "runtime-state")
         if reusable_state_staging.exists():
             if any(reusable_state_staging.iterdir()):
                 raise ValueError(
@@ -747,7 +799,7 @@ class EvolutionWorkspaceAssembler:
                 )
             reusable_state_staging.rmdir()
         candidate_root.mkdir(mode=0o700)
-        shutil.copytree(agents_root / "active/source", candidate_root / "source")
+        shutil.copytree(run_root / visible_paths[revision.id][0], candidate_root / "source")
         candidate_runtime_state = candidate_root / "runtime-state"
         active_runtime_state_seed = _active_next_epoch_runtime_state_seed(
             evidence.payload_path,
@@ -770,7 +822,7 @@ class EvolutionWorkspaceAssembler:
         make_tree_read_only(agents_root)
         make_tree_read_only(evolution_reports_root)
 
-        manifest = EvolutionInputManifestV10(
+        manifest = EvolutionInputManifestV11(
             parent_revision_id=revision.id,
             evidence_checkpoint=request.evidence_checkpoint,
             idempotency_key=request.idempotency_key,
@@ -1367,7 +1419,7 @@ class EvolverBundleRunner(EvolverRunner):
                     token_usage=result.token_usage,
                 )
             trace = EvolutionFailureTraceV5(
-                input=EvolutionInputManifestV10.model_validate_json(
+                input=EvolutionInputManifestV11.model_validate_json(
                     prepared.manifest_path.read_bytes()
                 ),
                 phase=phase,
@@ -1392,7 +1444,7 @@ class EvolverBundleRunner(EvolverRunner):
             prepared.output_path,
             max_bytes=self._max_output_manifest_bytes,
         )
-        manifest = EvolutionInputManifestV10.model_validate_json(
+        manifest = EvolutionInputManifestV11.model_validate_json(
             prepared.manifest_path.read_bytes()
         )
         repository_by_revision = {
@@ -1445,6 +1497,18 @@ class EvolverBundleRunner(EvolverRunner):
                 )
             if base.dsl is not request.parent_revision.dsl:
                 raise ValueError("Evolution base changed the lineage DSL")
+            for contributor_id in output.contributing_revision_ids:
+                contributor = visible.get(contributor_id)
+                if contributor is None:
+                    raise ValueError(
+                        "Evolution credits an Agent revision outside frozen Evidence"
+                    )
+                if contributor.dsl is not request.parent_revision.dsl:
+                    raise ValueError("Evolution credits an Agent revision from another DSL")
+                if contributor.creation_key.startswith(current_challenger_prefix):
+                    raise ValueError(
+                        "Evolution can only credit completed Lineage history"
+                    )
             candidate = self._builder.build_candidate(
                 prepared.candidate_root / "source",
                 request.parent_revision.dsl,
@@ -1489,7 +1553,7 @@ class EvolverBundleRunner(EvolverRunner):
             else self._seal_session_trace(result.session_trace_path)
         )
         trace = EvolutionTraceV9(
-            input=EvolutionInputManifestV10.model_validate_json(
+            input=EvolutionInputManifestV11.model_validate_json(
                 prepared.manifest_path.read_bytes()
             ),
             agent=result.agent,
@@ -1514,6 +1578,7 @@ class EvolverBundleRunner(EvolverRunner):
                 "base_revision_id": base_revision_id,
                 "evolution_trace_digest": evolution_trace_digest,
                 "changed_paths": sorted(changed_paths),
+                "contributing_revision_ids": list(output.contributing_revision_ids),
                 "runtime_state_changed": bool(runtime_state_changed_paths),
                 "unimplemented_capabilities": [
                     item.model_dump(mode="json") for item in output.unimplemented_capabilities

@@ -84,16 +84,20 @@ Epoch 记录的 Parent Agent 与 Evidence Checkpoint，包含此前 Kernel 历�
 创建 Challenger、不执行 Agent、不晋升，也不生成 Token Report。
 
 `workers/evolution.py` 创建固定的
-input/agents/evidence/historical/candidate/scratch Workspace 与 Runtime-private 控制文件，并只接受
+input/agents/evidence/evolution-reports/candidate/scratch Workspace 与
+Runtime-private 控制文件，并只接受
 相同 DSL 的完整仓库变更。它冻结精确的 Lineage 内 Agent/Kernel 版本 Catalog、全部历史 Kernel
 Artifact，以及按 Agent Revision/Trajectory 划分的只读 `skills/`、`tools/` 快照，供 Evolver
-比较。`input/agents/` 只包含当前 Active 与本 Epoch Challenger；`input/evidence/<role>/` 保存实测
-优化效果，并按 Trajectory 保存该 Agent 最近完成 Epoch 中每个 Attempt 的一份 Conversation；Bootstrap
-与更早 Epoch 的 Conversation 只保留在 Runtime 私有历史中。`input/historical/agent-vN/` 将每个非当前版本的源码、效果汇总和
-运行时状态放在一起。有序的 `input/evolution-reports/evo-N.json` Wrapper 暴露可用的 Agent 创建报告及
-Source Base/产出 Agent 路径，不暴露完整 Evolution Trace。当前运行时状态位于 `input/agents/` 对应角色源码旁边，详细 Epoch Tree 保留在已有
+比较。两棵 Agent-facing 树都按 Lineage 版本索引：`input/agents/agent-vN/` 保存每个可见版本的封存源码与
+运行时状态，`input/evidence/agent-vN/` 保存 Runtime 对它的派生结论，因此任何目录名都不再编码 Epoch
+角色。每个版本都有效果汇总；只有在上一个已完成 Epoch 中参赛的两条分支还额外按 Trajectory 拥有该 Epoch
+每个 Attempt 的一份 Conversation 与一份 Attempt Report。Bootstrap 与更早 Epoch 的 Conversation 只保留在
+Runtime 私有历史中；尚未运行任何 Attempt 的 Revision 两者皆无。有序的
+`input/evolution-reports/evo-N.json` Wrapper 暴露可用的 Agent 创建报告及
+Source Base/产出 Agent 路径，不暴露完整 Evolution Trace。运行时状态位于 `input/agents/` 中该版本源码旁边，详细 Epoch Tree 保留在已有
 Runtime Evidence Store 中，不再复制进 Evolution Workspace。每份效果汇总分别呈现最近完成 Epoch 的
-Attempt 正确性与最佳 Kernel 逐 Shape Gateway 结果，以及累计 Epoch 参赛、获胜和失败次数。运行时状态与
+Attempt 正确性与最佳 Kernel 逐 Shape Gateway 结果、累计 Epoch 参赛/获胜/失败次数，以及该 Epoch 的分支、
+胜负和裁定 Agent 对比的规则。运行时状态与
 版本化 Source 分离；Candidate 具有可写 `source/` 和唯一一份 Revision 级
 `runtime-state/{skills,tools}/` 公共种子。根级 `skills/` 和 `tools/` 在 Source 中仍会被拒绝。Evolver
 可直接整理公共种子，也可修改消费它的版本化机制；Runtime 独立封存完整 Source 与 State，把两个
@@ -115,8 +119,9 @@ Lineage Agent Catalog 暴露给每次 Evolver 调用，在每个 Branch 内并�
 应用权威保留策略：从 Provider stdout 和对话中移除高频 Claude `system/thinking_tokens` 估算遥测，
 权威 Usage 继续保存在 `events.jsonl`。对于 Optimizer 可见的每个历史 Attempt，
 `workers/evidence_view.py` 只按最新封存 Session Digest 投影一个与 Runtime Final `report.json`
-平级的 `conversation.jsonl`；全部重试 Artifact 仍保留在 Runtime 存储中。Evolver Evidence 继续保留
-更丰富的全分支诊断视图。`knowledge/ingest.py` 在 Epoch 结束后独立构造
+平级的 `conversation.jsonl`，并置于覆盖每个已完成分支的分支层之下；全部重试 Artifact 仍保留在
+Runtime 存储中。Evolver Evidence 依靠 Measurement、Diff 与精确 Kernel Artifact 保持更丰富的诊断
+视图。`knowledge/ingest.py` 在 Epoch 结束后独立构造
 有界的保留 Session 上传 Projection，并应用同一兼容过滤。
 
 ## 稳定接口

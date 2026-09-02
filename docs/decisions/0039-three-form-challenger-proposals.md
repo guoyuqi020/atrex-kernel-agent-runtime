@@ -3,7 +3,8 @@
 ## Decision
 
 Each Evolver invocation emits exactly one uniform `EvolutionOutput` proposal. Every mode uses
-`kernel_agent_revision_id` and `changed_paths`. The latter contains only sorted paths relative to
+`kernel_agent_revision_id`, `changed_paths`, and `contributing_revision_ids`. The second contains only
+sorted paths relative to
 the selected Agent Source root. `reuse` requires an empty array; a new-revision mode may also use an
 empty array for a Runtime-State-only change:
 
@@ -26,6 +27,12 @@ Every proposal may carry bounded `unimplemented_capabilities`. Each entry names 
 its expected Kernel-optimization benefit, and why the Evolver could not implement it. Runtime stores
 these entries as untrusted Evolution Evidence for later Evolvers; they do not grant capabilities or
 affect selection.
+
+A Candidate may combine content from several visible Agents. `contributing_revision_ids` names every
+revision other than the Source base whose Source, Skills, or Tools it drew content from; each must be
+completed Lineage history or the Active, never a Challenger built in the same Epoch. This is provenance,
+not parentage: the Source base and the diff target remain the single `kernel_agent_revision_id`, so the
+declaration adds no ancestry edge.
 
 Proposal type, Source reference revision, resulting competing revision, and Evolution Trace Digest belong to the
 Epoch Challenger participation record. Revision parentage remains a single-parent tree. Epoch

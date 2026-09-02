@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -449,3 +450,60 @@ def test_attempt_report_rejects_legacy_experiment_decision_field(tmp_path: Path)
 
     with pytest.raises(ValueError, match="Extra inputs are not permitted"):
         AttemptReportV12.from_file(path, expected_attempt_id=attempt_id, max_bytes=8192)
+
+
+def _load(tmp_path: Path, value: dict[str, object], attempt_id: str) -> AttemptReportV12:
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    return AttemptReportV12.from_file(path, expected_attempt_id=attempt_id, max_bytes=8192)
+
+
+def test_sealed_report_without_contributing_trials_defaults_to_none(tmp_path: Path) -> None:
+    """Reports sealed before the field existed are still re-parsed by the Bootstrap path."""
+    attempt_id = new_attempt_id()
+    value = _value(attempt_id)
+    assert "contributing_kernel_trial_ids" not in value
+
+    assert _load(tmp_path, value, attempt_id).contributing_kernel_trial_ids == ()
+
+
+def test_attempt_report_accepts_sorted_unique_contributing_trials(tmp_path: Path) -> None:
+    attempt_id = new_attempt_id()
+    trials = ["gtrial_" + "a" * 32, "gtrial_" + "b" * 32]
+    value = {**_value(attempt_id), "contributing_kernel_trial_ids": trials}
+
+    report = _load(tmp_path, value, attempt_id)
+
+    assert report.contributing_kernel_trial_ids == tuple(trials)
+
+
+@pytest.mark.parametrize(
+    ("trials", "message"),
+    [
+        (["kerneltrial_" + "a" * 32], "String should match pattern"),
+        (["gtrial_" + "a" * 32, "gtrial_" + "a" * 32], "must be unique"),
+        (["gtrial_" + "b" * 32, "gtrial_" + "a" * 32], "must be sorted"),
+    ],
+)
+def test_attempt_report_rejects_invalid_contributing_trials(
+    tmp_path: Path, trials: list[str], message: str
+) -> None:
+    attempt_id = new_attempt_id()
+    value = {**_value(attempt_id), "contributing_kernel_trial_ids": trials}
+
+    with pytest.raises(ValueError, match=message):
+        _load(tmp_path, value, attempt_id)
+
+
+def test_report_field_set_matches_the_pinned_core_contract() -> None:
+    """A drift between the two definitions rejects valid reports at one boundary only."""
+    core_src = Path(__file__).resolve().parents[1] / "src/atrex-kernel-agent-core/src"
+    sys.path.insert(0, str(core_src))
+    try:
+        from runtime_tools import _REPORT_FIELDS
+    finally:
+        sys.path.remove(str(core_src))
+
+    # Runtime attaches these four itself; every other field is Agent-supplied.
+    runtime_owned = {"schema_version", "attempt_id", "experiments", "direction_events"}
+    assert set(AttemptReportV12.model_fields) - runtime_owned == set(_REPORT_FIELDS)

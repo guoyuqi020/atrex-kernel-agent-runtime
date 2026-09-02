@@ -287,6 +287,31 @@ def test_registry_migrates_schema_22_with_campaign_evolver_commit(tmp_path: Path
     assert "evolver_commit" in columns
 
 
+def test_registry_migrates_schema_30_with_null_selection_reason(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite"
+    with closing(sqlite3.connect(path)) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE epochs(id TEXT PRIMARY KEY, status TEXT NOT NULL);
+            INSERT INTO epochs VALUES ('epoch-old', 'completed');
+            PRAGMA user_version = 30;
+            """
+        )
+
+    with SqliteRegistry(path):
+        pass
+    with closing(sqlite3.connect(path)) as connection:
+        version = connection.execute("PRAGMA user_version").fetchone()
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(epochs)")}
+        reason = connection.execute(
+            "SELECT selection_reason FROM epochs WHERE id = 'epoch-old'"
+        ).fetchone()
+
+    assert version == (SCHEMA_VERSION,)
+    assert "selection_reason" in columns
+    assert reason == (None,)
+
+
 def test_registry_binds_legacy_evolver_commit_once(tmp_path: Path) -> None:
     with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
         seeded = seed_lineage(registry)

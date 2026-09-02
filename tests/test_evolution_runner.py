@@ -29,12 +29,14 @@ from atrex_runtime.domain.models import (
 )
 from atrex_runtime.ports import (
     BuildChallengerRequest,
+    BuildChallengerResult,
     KernelAgentCandidateProposal,
     KernelAgentReuseProposal,
 )
 from atrex_runtime.registry.sqlite import SqliteRegistry
 from atrex_runtime.workers.evolution import (
-    EvolutionInputManifestV10,
+    EvolutionInputManifestV11,
+    EvolutionOutput,
     EvolutionProcessConfig,
     EvolutionSessionResult,
     EvolutionWorkspaceAssembler,
@@ -140,10 +142,72 @@ def _evidence(artifacts: LocalArtifactStore, tmp_path: Path) -> ArtifactDigest:
     return artifacts.put_directory(source, ArtifactKind.EVIDENCE)
 
 
+def _completed_epoch_evidence(
+    artifacts: LocalArtifactStore,
+    tmp_path: Path,
+    *,
+    active_id: str,
+    challenger_id: str,
+    winner_id: str,
+) -> ArtifactDigest:
+    source = tmp_path / f"evidence-epoch-{winner_id}"
+    (source / "bootstrap").mkdir(parents=True)
+    (source / "bootstrap/report.json").write_text(
+        json.dumps({"status": "baseline_ready"}), encoding="utf-8"
+    )
+    (source / "bootstrap/conversation.jsonl").write_text("{}\n", encoding="utf-8")
+    (source / "checkpoint.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "lineage_id": "lineage_test",
+                "through_epoch": 1,
+                "previous_checkpoint_digest": None,
+            }
+        ),
+        encoding="utf-8",
+    )
+    (source / "epochs").mkdir()
+    (source / "epochs/00000001.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "number": 1,
+                "active_kernel_agent_revision_id": active_id,
+                "challenger_kernel_agent_revision_ids": [challenger_id],
+                "winner_kernel_agent_revision_id": winner_id,
+                "starting_kernel_revision_id": None,
+                "starting_kernel": None,
+                "best_kernel_revision_id": None,
+                "best_kernel": None,
+                "attempts": [
+                    {
+                        "attempt_id": f"attempt_{branch}",
+                        "branch": branch,
+                        "challenger_ordinal": 0 if branch == "active" else 1,
+                        "trajectory_ordinal": 1,
+                        "ordinal": 1,
+                        "kernel_agent_revision_id": (
+                            active_id if branch == "active" else challenger_id
+                        ),
+                        "input_kernel_revision_id": None,
+                        "accepted_as_branch_best": False,
+                        "output": None,
+                    }
+                    for branch in ("active", "challenger")
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    return artifacts.put_directory(source, ArtifactKind.EVIDENCE)
+
+
 def _agent_script(
     tmp_path: Path,
     *,
     declared_path: str = "prompts/episode.md",
+    contributing: tuple[str, ...] = (),
 ) -> Path:
     script = tmp_path / "evolve.py"
     script.write_text(
@@ -194,6 +258,9 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "changed_paths": ["""
         + json.dumps(declared_path)
         + """],
+    "contributing_revision_ids": """
+        + json.dumps(sorted(contributing))
+        + """,
 }))
 """,
         encoding="utf-8",
@@ -256,6 +323,7 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "hypothesis": "Retry a historical design unchanged.",
     "expected_effect": "Reproduce its previously useful search behavior.",
     "changed_paths": [],
+    "contributing_revision_ids": [],
     "unimplemented_capabilities": []
 }))
 """,
@@ -301,6 +369,7 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "hypothesis": "Seed a reusable measured-bottleneck procedure.",
     "expected_effect": "Spend fewer Attempts on unsupported directions.",
     "changed_paths": [],
+    "contributing_revision_ids": [],
     "unimplemented_capabilities": []
 }))
 """,
@@ -322,7 +391,7 @@ assert sys.stdin.read() == "Run the versioned Evolver Bundle once."
 workspace = Path(os.environ["ATREX_EVOLUTION_WORKSPACE"])
 candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
 shutil.rmtree(candidate / "source")
-shutil.copytree(workspace / "input/historical/agent-v1/source", candidate / "source")
+shutil.copytree(workspace / "input/agents/agent-v1/source", candidate / "source")
 for path in [candidate, *candidate.rglob("*")]:
     path.chmod(0o700 if path.is_dir() else 0o600)
 (candidate / "source/prompts/episode.md").write_text("history repaired optimizer\\n")
@@ -351,6 +420,7 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "hypothesis": "Repair one weak step in the historical design.",
     "expected_effect": "Retain its prior strengths with a narrower policy.",
     "changed_paths": ["prompts/episode.md"],
+    "contributing_revision_ids": [],
     "unimplemented_capabilities": []
 }))
 """,
@@ -363,23 +433,56 @@ def _request(
     artifacts: LocalArtifactStore,
     tmp_path: Path,
 ) -> BuildChallengerRequest:
+    parent = _parent(artifacts, tmp_path)
     return BuildChallengerRequest(
-        parent_revision=_parent(artifacts, tmp_path),
+        parent_revision=parent,
         epoch_id=new_epoch_id(),
         evidence_checkpoint=_evidence(artifacts, tmp_path),
         idempotency_key="epoch:test:challenger",
+        agent_catalog=(_baseline_catalog_entry(parent),),
         model="evolver-model",
     )
 
 
-def _historical_catalog(revision: KernelAgentRevision) -> tuple[KernelAgentCatalogEntry, ...]:
+def _baseline_catalog_entry(revision: KernelAgentRevision) -> KernelAgentCatalogEntry:
+    rooted = revision.parent_id is None
+    return KernelAgentCatalogEntry(
+        revision=revision,
+        revision_number=0 if rooted else 1,
+        parent_revision_number=None if rooted else 0,
+        campaign_id=new_campaign_id(),
+        lineage_id=new_lineage_id(),
+        introduced_epoch_id=None,
+        introduced_epoch_number=None,
+        disposition="baseline",
+        active=True,
+    )
+
+
+def _historical_catalog(
+    parent: KernelAgentRevision,
+    revision: KernelAgentRevision,
+) -> tuple[KernelAgentCatalogEntry, ...]:
+    campaign_id = new_campaign_id()
+    lineage_id = new_lineage_id()
     return (
+        KernelAgentCatalogEntry(
+            revision=parent,
+            revision_number=0,
+            parent_revision_number=None,
+            campaign_id=campaign_id,
+            lineage_id=lineage_id,
+            introduced_epoch_id=None,
+            introduced_epoch_number=None,
+            disposition="baseline",
+            active=True,
+        ),
         KernelAgentCatalogEntry(
             revision=revision,
             revision_number=1,
             parent_revision_number=0,
-            campaign_id=new_campaign_id(),
-            lineage_id=new_lineage_id(),
+            campaign_id=campaign_id,
+            lineage_id=lineage_id,
             introduced_epoch_id=None,
             introduced_epoch_number=None,
             disposition="rejected",
@@ -393,20 +496,20 @@ def test_evolution_workspace_copies_full_parent_to_writable_candidate(tmp_path: 
     request = _request(artifacts, tmp_path)
 
     prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
-    manifest = EvolutionInputManifestV10.model_validate_json(prepared.manifest_path.read_bytes())
+    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
 
     assert manifest.parent_revision_id == request.parent_revision.id
     assert len(manifest.visible_agents) == 1
     assert manifest.visible_agents[0].relationship == "active"
     assert manifest.visible_agents[0].challenger_ordinal is None
     assert manifest.visible_agents[0].created_by == "bootstrap"
-    assert manifest.schema_version == 10
+    assert manifest.schema_version == 11
     assert prepared.manifest_path == prepared.control_root / ".runtime/evolution-input.json"
     assert not (prepared.root / ".runtime").exists()
     assert list((prepared.root / "input/evolution-reports").iterdir()) == []
     assert not (os.stat(prepared.root / "input/evolution-reports").st_mode & 0o200)
     assert prepared.model == "evolver-model"
-    parent_prompt = prepared.root / "input/agents/active/source/prompts/episode.md"
+    parent_prompt = prepared.root / "input/agents/agent-v0/source/prompts/episode.md"
     candidate_prompt = prepared.candidate_root / "source/prompts/episode.md"
     assert parent_prompt.is_file()
     assert candidate_prompt.is_file()
@@ -458,6 +561,7 @@ def test_evolution_workspace_copies_active_revision_runtime_state_seed(tmp_path:
         epoch_id=initial.epoch_id,
         evidence_checkpoint=initial.evidence_checkpoint,
         idempotency_key=initial.idempotency_key,
+        agent_catalog=(_baseline_catalog_entry(active),),
         model=initial.model,
     )
 
@@ -548,7 +652,201 @@ def test_evolver_prefers_winning_trajectory_terminal_state(tmp_path: Path) -> No
     assert (selected / "skills/state.md").read_text() == "trajectory-two-final\n"
 
 
-def test_evolution_workspace_exposes_active_and_challenger_runtime_state(
+def _pool_request(
+    artifacts: LocalArtifactStore,
+    tmp_path: Path,
+    *,
+    winner: str,
+) -> tuple[BuildChallengerRequest, KernelAgentRevision, KernelAgentRevision]:
+    """Build a request whose last completed Epoch compared two distinct revisions."""
+    incumbent = _parent(artifacts, tmp_path)
+    rival_source = tmp_path / "rival-source"
+    (rival_source / "prompts").mkdir(parents=True)
+    (rival_source / "src").mkdir()
+    (rival_source / "prompts/episode.md").write_text("rival optimizer\n", encoding="utf-8")
+    (rival_source / "src/main.py").write_text("def main(): ...\n", encoding="utf-8")
+    (rival_source / "atrex-bundle.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "bundle_format": "atrex-kernel-agent-bundle-v1",
+                "entrypoint": {"command": "src/main.py"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    rival = KernelAgentRevision(
+        id=new_kernel_agent_revision_id(),
+        parent_id=incumbent.id,
+        creation_key="epoch:previous:challenger:1",
+        dsl=incumbent.dsl,
+        optimizer_digest=artifacts.put_directory(rival_source, ArtifactKind.KERNEL_AGENT),
+        created_by="evolver",
+        created_at=NOW,
+        evolution_trace_digest=digest("rival-evolution"),
+    )
+    parent, other = (rival, incumbent) if winner == "challenger" else (incumbent, rival)
+    campaign_id = new_campaign_id()
+    lineage_id = new_lineage_id()
+    catalog = tuple(
+        KernelAgentCatalogEntry(
+            revision=revision,
+            revision_number=number,
+            parent_revision_number=None if number == 0 else 0,
+            campaign_id=campaign_id,
+            lineage_id=lineage_id,
+            introduced_epoch_id=None,
+            introduced_epoch_number=None,
+            disposition="baseline" if number == 0 else "challenger",
+            active=revision.id == parent.id,
+        )
+        for revision, number in ((incumbent, 0), (rival, 1))
+    )
+    request = BuildChallengerRequest(
+        parent_revision=parent,
+        epoch_id=new_epoch_id(),
+        evidence_checkpoint=_completed_epoch_evidence(
+            artifacts,
+            tmp_path,
+            active_id=str(incumbent.id),
+            challenger_id=str(rival.id),
+            winner_id=str(parent.id),
+        ),
+        idempotency_key="epoch:test:challenger",
+        agent_catalog=catalog,
+        model="evolver-model",
+    )
+    return request, parent, other
+
+
+def test_evolution_workspace_pools_the_last_completed_epoch_challenger_winner(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request, parent, loser = _pool_request(artifacts, tmp_path, winner="challenger")
+
+    prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
+    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+
+    by_id = {item.revision_id: item for item in manifest.visible_agents}
+    assert by_id[loser.id].relationship == "active"
+    assert by_id[loser.id].challenger_ordinal is None
+    assert by_id[loser.id].parent is False
+    assert by_id[loser.id].version == "agent-v0"
+    assert by_id[loser.id].path == "input/agents/agent-v0/source"
+    assert by_id[parent.id].relationship == "challenger"
+    assert by_id[parent.id].challenger_ordinal == 1
+    assert by_id[parent.id].parent is True
+    assert by_id[parent.id].version == "agent-v1"
+    assert by_id[parent.id].path == "input/agents/agent-v1/source"
+    assert by_id[parent.id].sessions_path == "input/evidence/agent-v1/sessions"
+    assert by_id[parent.id].reports_path == "input/evidence/agent-v1/reports"
+    assert sorted(child.name for child in (prepared.root / "input/agents").iterdir()) == [
+        "agent-v0",
+        "agent-v1",
+    ]
+    assert sorted(child.name for child in (prepared.root / "input/evidence").iterdir()) == [
+        "agent-v0",
+        "agent-v1",
+    ]
+    assert not (prepared.root / "input/current-epoch-challengers").exists()
+    assert not (prepared.root / "input/historical").exists()
+    assert (
+        prepared.root / "input/agents/agent-v0/source/prompts/episode.md"
+    ).read_text() == "parent optimizer\n"
+    assert (
+        prepared.root / "input/agents/agent-v1/source/prompts/episode.md"
+    ).read_text() == "rival optimizer\n"
+    assert (
+        prepared.candidate_root / "source/prompts/episode.md"
+    ).read_text() == "rival optimizer\n"
+    for version in ("agent-v0", "agent-v1"):
+        assert (prepared.root / f"input/evidence/{version}/sessions").is_dir()
+        assert (prepared.root / f"input/evidence/{version}/reports").is_dir()
+
+
+def test_evolution_workspace_pools_the_last_completed_epoch_active_winner(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request, parent, loser = _pool_request(artifacts, tmp_path, winner="active")
+
+    prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
+    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+
+    by_id = {item.revision_id: item for item in manifest.visible_agents}
+    assert by_id[parent.id].relationship == "active"
+    assert by_id[parent.id].parent is True
+    assert by_id[loser.id].relationship == "challenger"
+    assert by_id[loser.id].challenger_ordinal == 1
+    assert by_id[loser.id].parent is False
+    assert (
+        prepared.candidate_root / "source/prompts/episode.md"
+    ).read_text() == "parent optimizer\n"
+
+
+def test_evolution_workspace_keys_same_ordinal_challengers_by_distinct_versions(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request, parent, loser = _pool_request(artifacts, tmp_path, winner="active")
+    fresh = KernelAgentRevision(
+        id=new_kernel_agent_revision_id(),
+        parent_id=parent.id,
+        creation_key=f"epoch:{request.epoch_id}:challenger:1",
+        dsl=parent.dsl,
+        optimizer_digest=parent.optimizer_digest,
+        created_by="evolver",
+        created_at=NOW,
+        evolution_trace_digest=digest("fresh-evolution"),
+    )
+    existing = request.agent_catalog[0]
+    request = BuildChallengerRequest(
+        parent_revision=request.parent_revision,
+        epoch_id=request.epoch_id,
+        evidence_checkpoint=request.evidence_checkpoint,
+        idempotency_key=request.idempotency_key,
+        agent_catalog=(
+            *request.agent_catalog,
+            replace(
+                existing,
+                revision=fresh,
+                revision_number=2,
+                parent_revision_number=0,
+                disposition="challenger",
+                active=False,
+            ),
+        ),
+        model=request.model,
+    )
+
+    prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
+    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+
+    by_id = {item.revision_id: item for item in manifest.visible_agents}
+    assert by_id[loser.id].relationship == "challenger"
+    assert by_id[loser.id].challenger_ordinal == 1
+    assert by_id[loser.id].version == "agent-v1"
+    assert by_id[loser.id].path == "input/agents/agent-v1/source"
+    assert by_id[fresh.id].relationship == "current_epoch_challenger"
+    assert by_id[fresh.id].challenger_ordinal == 1
+    assert by_id[fresh.id].version == "agent-v2"
+    assert by_id[fresh.id].path == "input/agents/agent-v2/source"
+    assert by_id[fresh.id].sessions_path is None
+    assert by_id[fresh.id].reports_path is None
+    assert (prepared.root / "input/agents/agent-v1/source/prompts/episode.md").is_file()
+    assert (prepared.root / "input/agents/agent-v2/source/prompts/episode.md").is_file()
+    assert sorted(child.name for child in (prepared.root / "input/evidence").iterdir()) == [
+        "agent-v0",
+        "agent-v1",
+        "agent-v2",
+    ]
+    assert not (prepared.root / "input/evidence/agent-v2/sessions").exists()
+    assert not (prepared.root / "input/evidence/agent-v2/reports").exists()
+    assert (prepared.root / "input/evidence/agent-v2/optimization-summary.json").is_file()
+
+
+def test_evolution_workspace_separates_current_epoch_challenger_from_the_pool(
     tmp_path: Path,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
@@ -622,22 +920,35 @@ def test_evolution_workspace_exposes_active_and_challenger_runtime_state(
         attempt_workspaces_root=attempt_workspaces,
     ).prepare(request)
 
-    assert (prepared.root / "input/agents/active/source/prompts/episode.md").is_file()
-    assert (prepared.root / "input/agents/challenger-0001/source/prompts/episode.md").is_file()
-    assert not any((prepared.root / "input/historical").iterdir())
+    assert (prepared.root / "input/agents/agent-v0/source/prompts/episode.md").is_file()
+    assert sorted(child.name for child in (prepared.root / "input/agents").iterdir()) == [
+        "agent-v0",
+        "agent-v1",
+    ]
+    current_epoch = prepared.root / "input/agents/agent-v1"
+    assert (current_epoch / "source/prompts/episode.md").is_file()
+    assert (prepared.root / "input/evidence/agent-v1/optimization-summary.json").is_file()
+    assert not (prepared.root / "input/evidence/agent-v1/sessions").exists()
+    assert not (prepared.root / "input/evidence/agent-v1/reports").exists()
+    assert not (prepared.root / "input/historical").exists()
     reusable = prepared.root / "input/agents"
     assert (
-        reusable / "active/runtime-state" / "trajectories/trajectory-00000001/skills/lesson.md"
+        reusable / "agent-v0/runtime-state" / "trajectories/trajectory-00000001/skills/lesson.md"
     ).read_text() == "active skill\n"
     assert (
-        reusable
-        / "challenger-0001/runtime-state"
-        / "trajectories/trajectory-00000002/tools/helper.py"
+        current_epoch / "runtime-state" / "trajectories/trajectory-00000002/tools/helper.py"
     ).read_text() == "print('challenger')\n"
-    assert not (os.stat(reusable / "active").st_mode & 0o200)
-    agent_catalog = EvolutionInputManifestV10.model_validate_json(
+    assert not (os.stat(reusable / "agent-v0").st_mode & 0o200)
+    assert not (os.stat(current_epoch).st_mode & 0o200)
+    agent_catalog = EvolutionInputManifestV11.model_validate_json(
         prepared.manifest_path.read_bytes()
     ).visible_agents
+    relationship_by_id = {item.revision_id: item.relationship for item in agent_catalog}
+    assert relationship_by_id[active.id] == "active"
+    assert relationship_by_id[challenger.id] == "current_epoch_challenger"
+    sessions_by_id = {item.revision_id: item.sessions_path for item in agent_catalog}
+    assert sessions_by_id[active.id] == "input/evidence/agent-v0/sessions"
+    assert sessions_by_id[challenger.id] is None
     reusable_by_id = {
         item.revision_id: (
             item.runtime_state_path,
@@ -645,13 +956,13 @@ def test_evolution_workspace_exposes_active_and_challenger_runtime_state(
         )
         for item in agent_catalog
     }
-    assert reusable_by_id[active.id][0] == "input/agents/active/runtime-state"
+    assert reusable_by_id[active.id][0] == "input/agents/agent-v0/runtime-state"
     assert [path.name for path in reusable_by_id[active.id][1]] == ["trajectory-00000001"]
-    assert reusable_by_id[challenger.id][0] == "input/agents/challenger-0001/runtime-state"
+    assert reusable_by_id[challenger.id][0] == "input/agents/agent-v1/runtime-state"
     assert [path.name for path in reusable_by_id[challenger.id][1]] == ["trajectory-00000002"]
 
 
-def test_evolution_workspace_separates_historical_agent_source_and_effect(
+def test_evolution_workspace_gives_a_non_pool_version_source_state_and_summary(
     tmp_path: Path,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
@@ -671,23 +982,30 @@ def test_evolution_workspace_separates_historical_agent_source_and_effect(
         epoch_id=initial.epoch_id,
         evidence_checkpoint=initial.evidence_checkpoint,
         idempotency_key=initial.idempotency_key,
-        agent_catalog=_historical_catalog(historical),
+        agent_catalog=_historical_catalog(initial.parent_revision, historical),
     )
 
     prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
 
-    historical_root = prepared.root / "input/historical/agent-v1"
-    assert (historical_root / "source/prompts/episode.md").is_file()
-    assert json.loads((historical_root / "optimization-summary.json").read_text()) == {
+    agent_root = prepared.root / "input/agents/agent-v1"
+    evidence_root = prepared.root / "input/evidence/agent-v1"
+    assert (agent_root / "source/prompts/episode.md").is_file()
+    assert (agent_root / "runtime-state/trajectories").is_dir()
+    assert json.loads((evidence_root / "optimization-summary.json").read_text()) == {
         "career": {
             "epoch_participation_count": 0,
             "loss_count": 0,
             "win_count": 0,
         },
         "kernel_agent_revision_id": historical.id,
+        "version": "agent-v1",
+        "source_path": "input/agents/agent-v1/source",
+        "runtime_state_path": "input/agents/agent-v1/runtime-state",
         "latest_epoch": None,
     }
-    assert (historical_root / "runtime-state/trajectories").is_dir()
+    assert not (evidence_root / "sessions").exists()
+    assert not (evidence_root / "reports").exists()
+    assert not (prepared.root / "input/historical").exists()
     assert not (prepared.root / f"input/agents/{historical.id}").exists()
     assert not (prepared.root / "runtime-tools").exists()
 
@@ -809,6 +1127,8 @@ async def test_fixed_runner_collects_complete_repository_candidate(
         created_at=NOW,
         evolution_trace_digest=build.evolution_trace_digest,
     )
+    campaign_id = new_campaign_id()
+    lineage_id = new_lineage_id()
     next_workspace = EvolutionWorkspaceAssembler(
         tmp_path / "next-evolutions",
         artifacts,
@@ -824,12 +1144,23 @@ async def test_fixed_runner_collects_complete_repository_candidate(
                     revision=request.parent_revision,
                     revision_number=0,
                     parent_revision_number=None,
-                    campaign_id=new_campaign_id(),
-                    lineage_id=new_lineage_id(),
+                    campaign_id=campaign_id,
+                    lineage_id=lineage_id,
                     introduced_epoch_id=None,
                     introduced_epoch_number=None,
                     disposition="rejected",
                     active=False,
+                ),
+                KernelAgentCatalogEntry(
+                    revision=evolved_revision,
+                    revision_number=1,
+                    parent_revision_number=0,
+                    campaign_id=campaign_id,
+                    lineage_id=lineage_id,
+                    introduced_epoch_id=None,
+                    introduced_epoch_number=None,
+                    disposition="baseline",
+                    active=True,
                 ),
             ),
         )
@@ -840,17 +1171,19 @@ async def test_fixed_runner_collects_complete_repository_candidate(
     assert previous_report["evolution_number"] == 1
     expected_projected_report = dict(trace["output"])
     expected_projected_report.pop("kernel_agent_revision_id")
-    expected_projected_report.pop("changed_paths")
+    expected_projected_report.pop("contributing_revision_ids")
+    expected_projected_report["contributing_source_paths"] = []
     assert previous_report["report"] == expected_projected_report
+    assert previous_report["report"]["changed_paths"] == trace["output"]["changed_paths"]
     assert "kernel_agent_revision_id" not in json.dumps(previous_report)
-    assert "changed_paths" not in json.dumps(previous_report)
+    assert "contributing_revision_ids" not in json.dumps(previous_report)
     assert previous_report["parent"] == {
-        "runtime_state_path": "input/historical/agent-v0/runtime-state",
-        "source_path": "input/historical/agent-v0/source",
+        "runtime_state_path": "input/agents/agent-v0/runtime-state",
+        "source_path": "input/agents/agent-v0/source",
     }
     assert previous_report["generated_agent"] == {
-        "runtime_state_path": "input/agents/active/runtime-state",
-        "source_path": "input/agents/active/source",
+        "runtime_state_path": "input/agents/agent-v1/runtime-state",
+        "source_path": "input/agents/agent-v1/source",
     }
     session_trace = artifacts.verify(trace["session_trace_digest"])
     assert session_trace.kind is ArtifactKind.SESSION_LOG
@@ -935,7 +1268,7 @@ async def test_fixed_runner_reuses_a_visible_historical_revision_without_new_con
         epoch_id=base_request.epoch_id,
         evidence_checkpoint=base_request.evidence_checkpoint,
         idempotency_key=base_request.idempotency_key,
-        agent_catalog=_historical_catalog(historical),
+        agent_catalog=_historical_catalog(base_request.parent_revision, historical),
     )
     sessions = SubprocessEvolutionSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
@@ -1014,7 +1347,7 @@ async def test_fixed_runner_evolves_from_history_only_after_runtime_candidate_re
         epoch_id=base_request.epoch_id,
         evidence_checkpoint=base_request.evidence_checkpoint,
         idempotency_key=base_request.idempotency_key,
-        agent_catalog=_historical_catalog(historical),
+        agent_catalog=_historical_catalog(base_request.parent_revision, historical),
     )
     sessions = SubprocessEvolutionSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
@@ -1055,6 +1388,142 @@ async def test_fixed_runner_evolves_from_history_only_after_runtime_candidate_re
     assert (candidate / "docs/design.md").read_text() == "parent design\n"
 
 
+def test_evolution_output_field_set_matches_the_frozen_evolver_contract() -> None:
+    """A drift between the two definitions rejects valid drafts at one boundary only."""
+    evolver_src = Path(__file__).resolve().parents[1] / "src/atrex-kernel-agent-evolver/src"
+    sys.path.insert(0, str(evolver_src))
+    try:
+        from report import EVOLUTION_OUTPUT_FIELDS
+    finally:
+        sys.path.remove(str(evolver_src))
+
+    assert set(EvolutionOutput.model_fields) == set(EVOLUTION_OUTPUT_FIELDS)
+
+
+def _sibling_revision(
+    artifacts: LocalArtifactStore,
+    tmp_path: Path,
+    parent: KernelAgentRevision,
+    *,
+    creation_key: str,
+) -> KernelAgentRevision:
+    """Register one further visible revision of the same Lineage and DSL."""
+    source = tmp_path / f"sibling-{creation_key.replace(':', '-')}"
+    shutil.copytree(
+        artifacts.verify(parent.optimizer_digest).payload_path,
+        source,
+        copy_function=shutil.copyfile,
+    )
+    for path in [source, *source.rglob("*")]:
+        path.chmod(0o700 if path.is_dir() else 0o600)
+    (source / "prompts/episode.md").write_text(f"{creation_key} optimizer\n")
+    return KernelAgentRevision(
+        id=new_kernel_agent_revision_id(),
+        parent_id=parent.id,
+        creation_key=creation_key,
+        dsl=parent.dsl,
+        optimizer_digest=artifacts.put_directory(source, ArtifactKind.KERNEL_AGENT),
+        created_by="evolver",
+        created_at=NOW,
+        evolution_trace_digest=digest(f"evolution-{creation_key}"),
+    )
+
+
+async def _build_with_contributor(
+    artifacts: LocalArtifactStore,
+    tmp_path: Path,
+    *,
+    current_epoch_challenger: bool,
+    records: list[tuple[str, object, dict[str, object]]],
+) -> tuple[BuildChallengerResult, KernelAgentRevision]:
+    base_request = _request(artifacts, tmp_path)
+    creation_key = (
+        f"epoch:{base_request.epoch_id}:challenger:1"
+        if current_epoch_challenger
+        else "epoch:old:challenger:1"
+    )
+    contributor = _sibling_revision(
+        artifacts,
+        tmp_path,
+        base_request.parent_revision,
+        creation_key=creation_key,
+    )
+    request = BuildChallengerRequest(
+        parent_revision=base_request.parent_revision,
+        epoch_id=base_request.epoch_id,
+        evidence_checkpoint=base_request.evidence_checkpoint,
+        idempotency_key=base_request.idempotency_key,
+        agent_catalog=_historical_catalog(base_request.parent_revision, contributor),
+    )
+    sessions = SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        EvolutionProcessConfig(
+            bundle_commit="0" * 40,
+            bundle_tree="1" * 40,
+            bundle_artifact_digest=digest("evolver-bundle"),
+            command_argv=(
+                str(Path(sys.executable).resolve()),
+                str(_agent_script(tmp_path, contributing=(str(contributor.id),))),
+            ),
+            agent_backend="claude",
+            isolated_home_environment_keys=(),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            environment=(),
+            timeout_seconds=10,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+        ),
+    )
+    runner = EvolverBundleRunner(
+        EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts),
+        sessions,
+        artifacts,
+        FakeRuntimeEventRecorder(records),
+        kernel_agent_limits=kernel_agent_limits(),
+        max_output_manifest_bytes=8192,
+    )
+    return await runner.build_challenger(request), contributor
+
+
+@pytest.mark.anyio
+async def test_fixed_runner_records_credited_completed_history(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    records: list[tuple[str, object, dict[str, object]]] = []
+
+    build, contributor = await _build_with_contributor(
+        artifacts,
+        tmp_path,
+        current_epoch_challenger=False,
+        records=records,
+    )
+
+    assert isinstance(build.proposal, KernelAgentCandidateProposal)
+    # Crediting fused content never moves the Source base off the Active revision.
+    assert build.proposal.proposal_type == "evolved"
+    trace = json.loads(
+        (artifacts.verify(build.evolution_trace_digest).payload_path / "value.json").read_text()
+    )
+    assert trace["output"]["contributing_revision_ids"] == [str(contributor.id)]
+    assert trace["output"]["kernel_agent_revision_id"] != str(contributor.id)
+    assert records[-1][2]["contributing_revision_ids"] == [str(contributor.id)]
+
+
+@pytest.mark.anyio
+async def test_fixed_runner_rejects_crediting_a_current_epoch_challenger(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+
+    with pytest.raises(ValueError, match="only credit completed Lineage history"):
+        await _build_with_contributor(
+            artifacts,
+            tmp_path,
+            current_epoch_challenger=True,
+            records=[],
+        )
+
+
 @pytest.mark.anyio
 async def test_runtime_executes_current_evolver_bundle_entrypoint(tmp_path: Path) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
@@ -1079,6 +1548,7 @@ Path("scratch/evolution-report-draft.json").write_text(json.dumps({
     "hypothesis": "The current Evolver entrypoint accepts the Runtime protocol.",
     "expected_effect": "Produce one valid complete Challenger Bundle.",
     "changed_paths": ["prompts/integration.md"],
+    "contributing_revision_ids": [],
     "unimplemented_capabilities": []
 }))
 published = subprocess.run(

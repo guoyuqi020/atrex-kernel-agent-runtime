@@ -218,8 +218,8 @@ checkpoint, DSL, optimizer digest, workspace paths, and a read-only `visible_age
 catalog contains the Active parent, retained Lineage Agent history, and Challengers already created
 earlier in the same Epoch. Each entry includes repository path, Parent link, creator, relationship,
 and current-Epoch Challenger ordinal when applicable. The unversioned Evolution output declares
-proposal mode, selected Agent revision, hypothesis, expected effect, and exact Source-root-relative
-changed paths.
+proposal mode, selected Agent revision, hypothesis, expected effect, exact Source-root-relative
+changed paths, and the other visible revisions whose content the Candidate drew on.
 Trace schema v9 records Bundle commit/tree/Artifact identity, selected model, and process evidence.
 Evolver has no token cutoff; its mandatory report records complete provider usage with a null budget.
 Schema v10 has no Runtime query authority. Evolver reads current Agents,
@@ -247,8 +247,10 @@ their Trace.
 Attempt Evidence schema v2 is immutable and includes only earlier Attempts from the same Branch slot
 and Trajectory. Completed Epoch Evidence preserves Challenger and Trajectory identities, summaries,
 reports, diffs, normalized Session projections, normalized Evaluate/Profile measurements, lessons,
-and source digests. Agent view schema v1 is role-scoped: an Optimizer sees the promoted completed
-lineage plus bounded current same-Trajectory Attempts with branch-control identities removed.
+and source digests. Agent view schema v1 is role-scoped: an Optimizer sees every completed branch's
+Attempt reports and conversations under a per-branch layer, with each Epoch summary naming the
+selected branch, plus bounded current same-Trajectory Attempts with branch-control identities
+removed.
 Runtime derives the compact Evolver filesystem view from complete durable Evidence: each current
 participant receives an authoritative latest-Epoch optimization summary and one Conversation per
 Attempt; completed non-current Agent versions receive a summary beside their source. Older detailed

@@ -376,7 +376,7 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v9(tmp_path: Pa
                     "trigger": None,
                 },
                 "visibility": {
-                    "completed_epochs": "promoted_lineage",
+                    "completed_epochs": "all_completed_branches",
                     "current_attempts_before": 1,
                     "current_trajectory_ordinal": 1,
                 },

@@ -80,7 +80,7 @@ Repository checks do not prove the following. A production release record must a
 | Gateway/GPU | Every authorized operation and denied operation works through the selected Core binding, Runtime Proxy, pinned Agate, driver, GPU, and Evaluation Contract. |
 | Evolution semantics | Configured Challenger pool, concurrent same-start Trajectories, serial per-Trajectory Attempts, independent Kernel/Agent selection, same-DSL constraint, fresh sessions, rollback, and failure evidence reproduce under real providers. |
 | Token accounting | All four provider-token buckets are accurate; missing or inconsistent reports fail closed at the intended model-request boundary. |
-| Evidence/Wiki | Optimizer promoted history, Evolver all-branch history with Agent winners and exact Kernels, same-Trajectory current Attempts, complete measured Epoch outcomes, raw Session materialization, and live Wiki freeze-before-return match the real service. |
+| Evidence/Wiki | Optimizer all-branch completed history, Evolver all-branch history with Agent winners and exact Kernels, same-Trajectory current Attempts, complete measured Epoch outcomes, raw Session materialization, and live Wiki freeze-before-return match the real service. |
 | Crash recovery | Forced termination at bootstrap, Challenger, Attempt, selection, Evidence publication, task lease, and Wiki lease points produces no duplicate authoritative outcome. |
 | Operations/soak | Backup/restore, readiness failure, GC, rotation, disk pressure, cancellation, observability retention, and representative multi-DSL soak stay within agreed bounds. |
 

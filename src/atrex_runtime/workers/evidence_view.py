@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 import shutil
 from importlib.resources import files
 from pathlib import Path
@@ -26,6 +27,7 @@ from ..serialization import canonical_json_bytes, write_canonical_json
 from .session_trace import enforce_session_trace_retention, retained_session_file
 
 EVIDENCE_VIEW_VERSION: Literal[1] = 1
+_AGENT_VERSION = re.compile(r"agent-v[0-9]+")
 EVIDENCE_MANIFEST_RELATIVE_PATH = Path(".runtime/evidence-manifest.json")
 EVIDENCE_PROMPT_RELATIVE_PATH = Path(".runtime/evidence-instructions.md")
 
@@ -68,7 +70,7 @@ class EvidenceVisibilityV1(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    completed_epochs: Literal["promoted_lineage", "all_completed_branches"] = "promoted_lineage"
+    completed_epochs: Literal["all_completed_branches"] = "all_completed_branches"
     current_attempts_before: int | None = Field(default=None, gt=0)
     current_trajectory_ordinal: int | None = Field(default=None, gt=0)
 
@@ -90,11 +92,6 @@ class EvidenceViewManifestV1(BaseModel):
     def _validate_role_scope(self) -> Self:
         before = self.visibility.current_attempts_before
         trajectory = self.visibility.current_trajectory_ordinal
-        expected_completed = (
-            "all_completed_branches" if self.role == "evolver" else "promoted_lineage"
-        )
-        if self.visibility.completed_epochs != expected_completed:
-            raise ValueError(f"{self.role.title()} Evidence has the wrong completed-Epoch scope")
         if self.current_epoch is None:
             if before is not None or trajectory is not None:
                 raise ValueError("completed-only Evidence view cannot expose current Attempts")
@@ -124,9 +121,8 @@ def assemble_evolver_evidence_view(
     lineage_payload: Path,
     lineage_checkpoint: ArtifactDigest,
     artifacts: LocalArtifactStore,
-    participant_agents: dict[str, str] | None = None,
-    historical_agents: dict[str, str] | None = None,
-    historical_root: Path | None = None,
+    agent_versions: dict[str, str] | None = None,
+    pool_versions: frozenset[str] = frozenset(),
 ) -> EvidenceViewManifestV1:
     """Expose completed Lineage history and per-Agent runtime state to an Evolver."""
     through_epoch = _lineage_through_epoch(lineage_payload)
@@ -146,34 +142,24 @@ def assemble_evolver_evidence_view(
         artifacts,
         write_prompt=False,
     )
-    participants = participant_agents or {}
-    for role, revision_id in sorted(participants.items()):
-        if role != "active" and not (
-            role.startswith("challenger-")
-            and len(role.removeprefix("challenger-")) == 4
-            and role.removeprefix("challenger-").isdigit()
-        ):
-            raise ValueError(f"invalid Evolver participant role: {role}")
-        participant = destination / role
-        participant.mkdir(mode=0o700)
+    versions = agent_versions or {}
+    if not pool_versions <= versions.keys():
+        raise ValueError("the completed Epoch Branch pool is outside the visible Agent versions")
+    for version, revision_id in sorted(versions.items()):
+        if _AGENT_VERSION.fullmatch(version) is None:
+            raise ValueError(f"invalid Evolver Agent version: {version}")
+        entry = destination / version
+        entry.mkdir(mode=0o700)
         write_canonical_json(
-            participant / "optimization-summary.json",
-            evolver_agent_optimization_summary(destination, revision_id, artifacts),
+            entry / "optimization-summary.json",
+            evolver_agent_optimization_summary(
+                destination, revision_id, artifacts, version=version
+            ),
         )
-        _materialize_evolver_agent_sessions(
-            destination,
-            revision_id,
-            participant / "sessions",
-        )
-    history = historical_agents or {}
-    if history and historical_root is None:
-        raise ValueError("historical Agent summaries require a historical root")
-    if historical_root is not None:
-        for version, revision_id in sorted(history.items()):
-            write_canonical_json(
-                historical_root / version / "optimization-summary.json",
-                evolver_agent_optimization_summary(destination, revision_id, artifacts),
-            )
+        if version not in pool_versions:
+            continue
+        _materialize_evolver_agent_sessions(destination, revision_id, entry / "sessions")
+        _materialize_evolver_agent_reports(destination, revision_id, entry / "reports")
     shutil.rmtree(destination / "bootstrap")
     shutil.rmtree(destination / "epochs")
     make_tree_read_only(destination)
@@ -184,12 +170,14 @@ def evolver_agent_optimization_summary(
     evidence_root: Path,
     revision_id: str,
     artifacts: LocalArtifactStore,
+    *,
+    version: str,
 ) -> dict[str, JsonValue]:
     """Summarize the latest competition and career record of one Agent revision."""
     records = _evolver_agent_attempt_records(evidence_root, revision_id)
     latest_epoch: JsonValue = None
     if records:
-        epoch_number = records[-1][0]
+        epoch_number, _label, latest_branch, _record_attempts = records[-1]
         attempts = [
             attempt
             for record_epoch, _label, _branch, record_attempts in records
@@ -204,8 +192,19 @@ def evolver_agent_optimization_summary(
             isinstance(item, dict) and item.get("correct") is False for item in outputs
         )
         best_output = min(correct_outputs, key=_candidate_latency, default=None)
+        raw_ordinal = latest_branch.get("challenger_ordinal")
         latest_epoch = {
             "epoch_number": epoch_number,
+            "branch": latest_branch.get("branch"),
+            "challenger_ordinal": (
+                None
+                if not isinstance(raw_ordinal, int)
+                or isinstance(raw_ordinal, bool)
+                or raw_ordinal <= 0
+                else raw_ordinal
+            ),
+            "outcome": "won" if latest_branch.get("selected") is True else "lost",
+            "selection_reason": _evolver_epoch_selection_reason(evidence_root, epoch_number),
             "attempt_count": len(attempts),
             "correct_attempt_count": len(correct_outputs),
             "incorrect_attempt_count": incorrect_count,
@@ -220,6 +219,9 @@ def evolver_agent_optimization_summary(
     }
     return {
         "kernel_agent_revision_id": revision_id,
+        "version": version,
+        "source_path": f"input/agents/{version}/source",
+        "runtime_state_path": f"input/agents/{version}/runtime-state",
         "latest_epoch": latest_epoch,
         "career": {
             "epoch_participation_count": len(participated_epochs),
@@ -227,6 +229,20 @@ def evolver_agent_optimization_summary(
             "loss_count": len(participated_epochs - won_epochs),
         },
     }
+
+
+def _evolver_epoch_selection_reason(evidence_root: Path, epoch_number: int) -> JsonValue:
+    """Read which rule resolved one completed Epoch's Agent comparison."""
+    summary = _json_object(
+        evidence_root / "epochs" / f"{epoch_number:08d}" / "summary.json",
+        f"Evolver Epoch {epoch_number} summary",
+    )
+    reason = summary.get("selection_reason")
+    if reason is None:
+        return None
+    if not isinstance(reason, str):
+        raise ValueError("completed Epoch selection reason is invalid")
+    return reason
 
 
 def _candidate_latency(value: dict[str, JsonValue]) -> float:
@@ -302,6 +318,41 @@ def _materialize_evolver_agent_sessions(
             if target.exists() or target.is_symlink():
                 raise FileExistsError(target)
             shutil.copyfile(conversation, target)
+
+
+def _materialize_evolver_agent_reports(
+    evidence_root: Path,
+    revision_id: str,
+    destination: Path,
+) -> None:
+    """Copy the latest completed Epoch's Attempt reports for one Agent revision."""
+    destination.mkdir(mode=0o700)
+    records = _evolver_agent_attempt_records(evidence_root, revision_id)
+    if not records:
+        return
+    latest_epoch = records[-1][0]
+    for epoch_number, _branch_label, _branch, attempts in records:
+        if epoch_number != latest_epoch:
+            continue
+        for attempt in attempts:
+            attempt_path = attempt.get("_evidence_path")
+            if not isinstance(attempt_path, str):
+                continue
+            report = evidence_root / attempt_path / "report.json"
+            if not report.exists():
+                continue
+            trajectory = attempt.get("trajectory_ordinal")
+            ordinal = attempt.get("ordinal")
+            if not isinstance(trajectory, int) or not isinstance(ordinal, int):
+                raise ValueError("Evolver Attempt report coordinates are invalid")
+            if report.is_symlink() or not report.is_file():
+                raise ValueError("Evolver Attempt report must be a regular file")
+            trajectory_root = destination / f"trajectory-{trajectory:08d}"
+            trajectory_root.mkdir(mode=0o700, exist_ok=True)
+            target = trajectory_root / f"attempt-{ordinal:08d}.report.json"
+            if target.exists() or target.is_symlink():
+                raise FileExistsError(target)
+            shutil.copyfile(report, target)
 
 
 def _evolver_agent_attempt_records(
@@ -423,10 +474,10 @@ def _assemble_base(
     epochs = destination / "epochs"
     epochs.mkdir(mode=0o700)
     for number in range(1, manifest.through_completed_epoch + 1):
-        if manifest.visibility.completed_epochs == "all_completed_branches":
+        if manifest.role == "evolver":
             _append_evolver_completed_epoch(lineage_payload, epochs, number, artifacts)
         else:
-            _append_promoted_completed_epoch(lineage_payload, epochs, number, artifacts)
+            _append_optimizer_completed_epoch(lineage_payload, epochs, number, artifacts)
     control_root.mkdir(parents=True, exist_ok=True, mode=0o700)
     manifest_path = control_root / EVIDENCE_MANIFEST_RELATIVE_PATH.name
     if manifest_path.exists() or manifest_path.is_symlink():
@@ -444,12 +495,13 @@ def _assemble_base(
     manifest_path.chmod(0o400)
 
 
-def _append_promoted_completed_epoch(
+def _append_optimizer_completed_epoch(
     lineage: Path,
     epochs: Path,
     number: int,
     artifacts: LocalArtifactStore,
 ) -> None:
+    """Project every branch's Attempt reports and latest conversation for one Epoch."""
     label = f"{number:08d}"
     source_summary = lineage / "epochs" / f"{label}.json"
     summary = _json_object(source_summary, f"completed Epoch {number} summary")
@@ -468,37 +520,59 @@ def _append_promoted_completed_epoch(
     ):
         raise ValueError(f"completed Epoch {number} summary is inconsistent")
     challenger_revisions = cast(list[str], raw_challenger_revisions)
-    selected_branch = BranchRole.ACTIVE.value
-    selected_challenger_ordinal = 0
-    if winner_revision != active_revision:
-        selected_branch = BranchRole.CHALLENGER.value
-        selected_challenger_ordinal = challenger_revisions.index(winner_revision) + 1
-    selected_attempts = _selected_completed_attempts(
+    validated_attempts = _validated_completed_attempts(
         raw_attempts,
-        selected_branch,
-        selected_challenger_ordinal,
         number,
         active_revision=active_revision,
         challenger_revisions=challenger_revisions,
     )
     destination = epochs / label
     destination.mkdir(mode=0o700)
-    for raw_attempt in selected_attempts:
-        attempt_id = raw_attempt.get("attempt_id")
-        ordinal = raw_attempt.get("ordinal")
-        trajectory_ordinal = raw_attempt.get("trajectory_ordinal")
-        assert isinstance(attempt_id, str)
-        assert isinstance(ordinal, int)
-        assert isinstance(trajectory_ordinal, int)
+    branches: list[JsonValue] = [
+        {
+            "branch": BranchRole.ACTIVE.value,
+            "challenger_ordinal": 0,
+            "selected": winner_revision == active_revision,
+        }
+    ]
+    branches.extend(
+        {
+            "branch": BranchRole.CHALLENGER.value,
+            "challenger_ordinal": ordinal,
+            "selected": winner_revision == revision,
+        }
+        for ordinal, revision in enumerate(challenger_revisions, start=1)
+    )
+    write_canonical_json(
+        destination / "summary.json",
+        {
+            "schema_version": EVIDENCE_VIEW_VERSION,
+            "number": number,
+            "branches": branches,
+        },
+    )
+    for raw_attempt in validated_attempts:
+        attempt_id = cast(str, raw_attempt["attempt_id"])
+        branch = cast(str, raw_attempt["branch"])
+        challenger_ordinal = cast(int, raw_attempt["challenger_ordinal"])
+        trajectory_ordinal = cast(int, raw_attempt["trajectory_ordinal"])
+        ordinal = cast(int, raw_attempt["ordinal"])
+        branch_label = (
+            BranchRole.ACTIVE.value
+            if branch == BranchRole.ACTIVE.value
+            else f"challenger-{challenger_ordinal:04d}"
+        )
         attempt_root = (
             destination
+            / "branches"
+            / branch_label
             / "trajectories"
             / f"{trajectory_ordinal:08d}"
             / "attempts"
             / f"{ordinal:08d}"
         )
         attempt_root.mkdir(parents=True, mode=0o700)
-        _project_optional_json(
+        _copy_optional_json(
             lineage / "reports" / label / f"{attempt_id}.json",
             attempt_root / "report.json",
         )
@@ -508,32 +582,6 @@ def _append_promoted_completed_epoch(
             attempt_root / "conversation.jsonl",
             artifacts=artifacts,
         )
-
-
-def _selected_completed_attempts(
-    raw_attempts: list[JsonValue],
-    selected_branch: str,
-    selected_challenger_ordinal: int,
-    epoch_number: int,
-    *,
-    active_revision: str,
-    challenger_revisions: list[str],
-) -> list[dict[str, JsonValue]]:
-    validated = _validated_completed_attempts(
-        raw_attempts,
-        epoch_number,
-        active_revision=active_revision,
-        challenger_revisions=challenger_revisions,
-    )
-    selected = [
-        attempt
-        for attempt in validated
-        if attempt.get("branch") == selected_branch
-        and attempt.get("challenger_ordinal") == selected_challenger_ordinal
-    ]
-    if not selected:
-        raise ValueError(f"completed Epoch {epoch_number} has no promoted-lineage Attempts")
-    return selected
 
 
 def _append_evolver_completed_epoch(

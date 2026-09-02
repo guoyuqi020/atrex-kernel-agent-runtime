@@ -6,6 +6,21 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- 为 Optimizer 的 Attempt Report 新增必填的 `contributing_kernel_trial_ids`，列出本次 Attempt 取用过
+  其代码或思路的历史 Kernel Trial。之所以用 Kernel Trial ID，是因为 Optimizer 本来就没有、也不应该
+  获得 Kernel Revision 词汇。Core 与 Runtime 都只校验形状，都不去解析它是否在可见历史内，与该 Report
+  中其他 Kernel Trial 引用的处理方式一致。Runtime 会把它带入派生的 Final Report，因此后续 Attempt 与
+  Evolver 无需额外改动即可读到。
+- 明确告知 Evolver 可以研究、汇总并融合多个可见 Agent 的 Source、Skill 与 Tool 到同一个 Candidate，
+  并新增必填的 `contributing_revision_ids` 提案字段，声明除 Source Base 以外所有被取用过内容的
+  Revision。Runtime 会按冻结可见范围、Lineage DSL 和已完成历史重新校验每一项，随后记录进已封存的
+  Evolution Trace、Sealed Proposal 事件与 Epoch Lesson，并以 Source 路径形式投影到
+  `input/evolution-reports/evo-N.json`。Source Base、Source Diff 目标与 Revision 祖先关系仍然唯一。
+- 在 `input/evolution-reports/evo-N.json` 中补充每次历史 Evolution 的准确 Source 修改集合，
+  Evolver 不再需要 Diff 两棵 Source 树才能知道那次演化改了哪些文件。
+- 向 Optimizer 开放每个已完成 Epoch 的全部分支（包括未被选中的），位于
+  `epochs/N/branches/<label>/`，每个 Epoch 的 `summary.json` 标明被选中的分支。当前 Epoch 仍只显示本
+  Attempt 自己的 Trajectory，绝不暴露并发运行的兄弟分支。
 - 增加常驻生产控制面、受管多 DSL Campaign Task 与逐 DSL 检查脚本。
 - Sandbox Host 准备支持并发，并通过以非 root Worker 直接创建 Root/Probe 兼容 Lima virtiofs。
 - 明确记录 Worker 共享宿主网络的边界。

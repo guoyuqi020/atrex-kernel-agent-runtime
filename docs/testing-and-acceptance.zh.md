@@ -76,7 +76,7 @@ sudo --preserve-env=PATH,QODER_PERSONAL_ACCESS_TOKEN \
 | Gateway/GPU | 所选 Core Binding 经 Runtime Proxy 在固定 Agate、Driver、GPU、Evaluation Contract 上跑通全部授权与拒绝操作。 |
 | Evolution 语义 | 配置的 Challenger Pool、同起点并发 Trajectory、每 Trajectory 串行 Attempt、独立 Kernel/Agent 选择、同 DSL、全新 Session、Rollback 和失败证据在真实 Provider 下可复现。 |
 | Token 记账 | 四类 Provider Token 准确；缺失或不一致 Report 在预期模型请求边界 Fail Closed。 |
-| Evidence/Wiki | Optimizer 已晋升历史、包含 Agent 胜者与精确 Kernel 的 Evolver 全分支历史、同 Trajectory 当前 Attempt、完整已测量 Epoch Outcome、原始 Session 物化和 Wiki 返回前冻结符合真实服务。 |
+| Evidence/Wiki | Optimizer 全分支已完成历史、包含 Agent 胜者与精确 Kernel 的 Evolver 全分支历史、同 Trajectory 当前 Attempt、完整已测量 Epoch Outcome、原始 Session 物化和 Wiki 返回前冻结符合真实服务。 |
 | Crash 恢复 | 在 Bootstrap、Challenger、Attempt、Selection、Evidence 发布、Task Lease、Wiki Lease 强制终止，不产生重复权威 Outcome。 |
 | 运维/Soak | Backup/Restore、Readiness 故障、GC、轮换、磁盘压力、取消、可观测性保留和代表性多 DSL Soak 保持约定边界。 |
 

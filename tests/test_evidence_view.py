@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 
+import pytest
 from conftest import digest
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
@@ -234,6 +235,7 @@ def _lineage(
             "active_kernel_agent_revision_id": "agent_active",
             "challenger_kernel_agent_revision_ids": ["agent_challenger"],
             "winner_kernel_agent_revision_id": f"agent_{winner}",
+            "selection_reason": "authoritative_comparison",
             "starting_kernel_revision_id": kernel_ids["starting"],
             "starting_kernel": {
                 "kernel_revision_id": kernel_ids["starting"],
@@ -390,32 +392,102 @@ def test_evolver_sessions_expose_only_latest_epoch_and_latest_attempt_run(
                         "branch": "active",
                         "challenger_ordinal": 0,
                         "kernel_agent_revision_id": "agent_active",
-                    }
+                    },
+                    {
+                        "branch": "challenger",
+                        "challenger_ordinal": 1,
+                        "kernel_agent_revision_id": "agent_loser",
+                    },
                 ]
             },
         )
-        attempt = epoch_root / "branches/active/trajectories/00000001/attempts/00000001"
-        _write(
-            attempt / "summary.json",
-            {"trajectory_ordinal": 1, "ordinal": 1},
-        )
-        for run in (1, 2):
-            conversation = attempt / f"traces/run-{run:04d}/conversation.jsonl"
-            conversation.parent.mkdir(parents=True)
-            conversation.write_text(f"epoch {epoch} run {run}\n")
+        for branch_label, trajectory in (("active", 1), ("challenger-0001", 2)):
+            attempt = (
+                epoch_root
+                / f"branches/{branch_label}/trajectories/{trajectory:08d}/attempts/00000001"
+            )
+            _write(
+                attempt / "summary.json",
+                {"trajectory_ordinal": trajectory, "ordinal": 1},
+            )
+            for run in (1, 2):
+                conversation = attempt / f"traces/run-{run:04d}/conversation.jsonl"
+                conversation.parent.mkdir(parents=True)
+                conversation.write_text(f"{branch_label} epoch {epoch} run {run}\n")
 
     destination = tmp_path / "sessions"
     _materialize_evolver_agent_sessions(evidence, "agent_active", destination)
+    losing = tmp_path / "losing-sessions"
+    _materialize_evolver_agent_sessions(evidence, "agent_loser", losing)
 
     conversation = destination / "trajectory-00000001/attempt-00000001.conversation.jsonl"
-    assert conversation.read_text() == "epoch 2 run 2\n"
+    assert conversation.read_text() == "active epoch 2 run 2\n"
     assert [path.relative_to(destination).as_posix() for path in destination.rglob("*")] == [
         "trajectory-00000001",
         "trajectory-00000001/attempt-00000001.conversation.jsonl",
     ]
+    losing_conversation = losing / "trajectory-00000002/attempt-00000001.conversation.jsonl"
+    assert losing_conversation.read_text() == "challenger-0001 epoch 2 run 2\n"
+    assert [path.relative_to(losing).as_posix() for path in losing.rglob("*")] == [
+        "trajectory-00000002",
+        "trajectory-00000002/attempt-00000001.conversation.jsonl",
+    ]
 
 
-def test_optimizer_view_projects_one_promoted_agent_lineage_by_epoch(tmp_path: Path) -> None:
+def test_evolver_view_summarizes_non_pool_versions_without_sessions_or_reports(
+    tmp_path: Path,
+) -> None:
+    destination = tmp_path / "view"
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    traces = _trace_digests(store, tmp_path / "trace-sources")
+
+    assemble_evolver_evidence_view(
+        destination,
+        control_root=tmp_path / ".runtime",
+        lineage_payload=_lineage(tmp_path / "lineage", traces, store, winner="challenger"),
+        lineage_checkpoint=digest("lineage"),
+        artifacts=store,
+        agent_versions={
+            "agent-v0": "agent_active",
+            "agent-v1": "agent_challenger",
+            "agent-v2": "agent_fresh",
+        },
+        pool_versions=frozenset({"agent-v0", "agent-v1"}),
+    )
+
+    summary = json.loads((destination / "agent-v2/optimization-summary.json").read_text())
+    assert summary == {
+        "kernel_agent_revision_id": "agent_fresh",
+        "version": "agent-v2",
+        "source_path": "input/agents/agent-v2/source",
+        "runtime_state_path": "input/agents/agent-v2/runtime-state",
+        "latest_epoch": None,
+        "career": {"epoch_participation_count": 0, "win_count": 0, "loss_count": 0},
+    }
+    assert not (destination / "agent-v2/sessions").exists()
+    assert not (destination / "agent-v2/reports").exists()
+    for version in ("agent-v0", "agent-v1"):
+        assert (destination / version / "sessions").is_dir()
+        assert (destination / version / "reports").is_dir()
+
+
+def test_evolver_view_rejects_a_pool_version_outside_the_visible_versions(tmp_path: Path) -> None:
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    traces = _trace_digests(store, tmp_path / "trace-sources")
+
+    with pytest.raises(ValueError, match="outside the visible Agent versions"):
+        assemble_evolver_evidence_view(
+            tmp_path / "view",
+            control_root=tmp_path / ".runtime",
+            lineage_payload=_lineage(tmp_path / "lineage", traces, store),
+            lineage_checkpoint=digest("lineage"),
+            artifacts=store,
+            agent_versions={"agent-v0": "agent_active"},
+            pool_versions=frozenset({"agent-v0", "agent-v9"}),
+        )
+
+
+def test_optimizer_view_projects_every_completed_branch_by_epoch(tmp_path: Path) -> None:
     checkpoint = digest("lineage")
     destination = tmp_path / "view"
     control_root = tmp_path / ".runtime"
@@ -440,6 +512,7 @@ def test_optimizer_view_projects_one_promoted_agent_lineage_by_epoch(tmp_path: P
 
     assert EvidenceViewManifestV1.from_file(control_root / "evidence-manifest.json") == manifest
     assert manifest.prompt_fragment_sha256 == EVIDENCE_PROMPT_SHA256
+    assert manifest.visibility.completed_epochs == "all_completed_branches"
     assert manifest.visibility.current_trajectory_ordinal == 1
     assert (control_root / "evidence-instructions.md").read_text() == EVIDENCE_PROMPT_TEXT
     assert not (destination / "manifest.json").exists()
@@ -460,21 +533,39 @@ def test_optimizer_view_projects_one_promoted_agent_lineage_by_epoch(tmp_path: P
     assert "controller independently selects" in EVIDENCE_PROMPT_TEXT
     assert "They may have different producers" in EVIDENCE_PROMPT_TEXT
     assert "promoted Agent/Kernel trajectory" not in EVIDENCE_PROMPT_TEXT
+    assert "every branch that ran in it" in EVIDENCE_PROMPT_TEXT
+    assert "never a concurrently running sibling" in EVIDENCE_PROMPT_TEXT
     completed = destination / "epochs/00000001"
     current = destination / "epochs/00000002"
-    completed_attempt_root = completed / "trajectories/00000001/attempts/00000001"
-    assert (completed_attempt_root / "report.json").is_file()
-    assert '"branch"' not in (completed_attempt_root / "report.json").read_text()
-    assert {path.name for path in completed_attempt_root.iterdir()} == {
-        "report.json",
-        "conversation.jsonl",
+    assert json.loads((completed / "summary.json").read_text()) == {
+        "schema_version": 1,
+        "number": 1,
+        "branches": [
+            {"branch": "active", "challenger_ordinal": 0, "selected": True},
+            {"branch": "challenger", "challenger_ordinal": 1, "selected": False},
+        ],
     }
-    for aggregate in ("summary.json", "lessons.json", "measurements.json"):
+    completed_attempt_root = completed / "branches/active/trajectories/00000001/attempts/00000001"
+    losing_attempt_root = (
+        completed / "branches/challenger-0001/trajectories/00000001/attempts/00000001"
+    )
+    for attempt_root, branch in (
+        (completed_attempt_root, "active"),
+        (losing_attempt_root, "challenger"),
+    ):
+        report = json.loads((attempt_root / "report.json").read_text())
+        assert report["branch"] == branch
+        assert {path.name for path in attempt_root.iterdir()} == {
+            "report.json",
+            "conversation.jsonl",
+        }
+    for aggregate in ("lessons.json", "measurements.json"):
         assert not (completed / aggregate).exists()
         assert not (current / aggregate).exists()
-    assert {path.name for path in completed.iterdir()} == {"trajectories"}
+    assert not (current / "summary.json").exists()
+    assert {path.name for path in completed.iterdir()} == {"summary.json", "branches"}
     assert {path.name for path in current.iterdir()} == {"trajectories"}
-    assert not (completed / "branches").exists()
+    assert not (completed / "trajectories").exists()
     assert not (completed / "evolution").exists()
     assert not (completed / "experiment-history.json").exists()
     assert not (completed / "direction-history.json").exists()
@@ -484,6 +575,10 @@ def test_optimizer_view_projects_one_promoted_agent_lineage_by_epoch(tmp_path: P
     assert "secret-current-1" in completed_trace.read_text()
     assert "raw result current-1" in completed_trace.read_text()
     assert "thinking_tokens" not in completed_trace.read_text()
+    losing_trace = losing_attempt_root / "conversation.jsonl"
+    assert "hidden reasoning challenger" in losing_trace.read_text()
+    assert "raw result challenger" in losing_trace.read_text()
+    assert "thinking_tokens" not in losing_trace.read_text()
     source_trace = store.verify(traces["active"]).payload_path
     assert "thinking_tokens" in (source_trace / "provider/stdout.stream-json").read_text()
     assert "thinking_tokens" in (source_trace / "conversation.jsonl").read_text()
@@ -518,10 +613,11 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
         ),
         lineage_checkpoint=digest("lineage"),
         artifacts=store,
-        participant_agents={
-            "active": "agent_active",
-            "challenger-0001": "agent_challenger",
+        agent_versions={
+            "agent-v0": "agent_active",
+            "agent-v1": "agent_challenger",
         },
+        pool_versions=frozenset({"agent-v0", "agent-v1"}),
     )
 
     assert manifest.role == "evolver"
@@ -533,25 +629,45 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert "candidate/runtime-state/" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "revision seed" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "every Trajectory of the new revision" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "`secondary_criteria`" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "`incumbent_retained`" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "Never assume the winner was" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "tells you which `agent-vN` competed in it" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "`current_epoch_challenger` — created earlier in the current Epoch" in (
+        EVOLVER_EVIDENCE_PROMPT_TEXT
+    )
+    assert "`lineage_history` — a completed version outside that pool" in (
+        EVOLVER_EVIDENCE_PROMPT_TEXT
+    )
+    assert "Read `latest_epoch.epoch_number` from either pool" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert manifest.prompt_fragment_sha256 != EVIDENCE_PROMPT_SHA256
     assert manifest.current_epoch is None
     assert manifest.visibility.completed_epochs == "all_completed_branches"
     assert manifest.visibility.current_trajectory_ordinal is None
     assert not (destination / "epochs").exists()
     assert not (destination / "bootstrap").exists()
-    active_effect = json.loads((destination / "active/optimization-summary.json").read_text())
+    active_effect = json.loads((destination / "agent-v0/optimization-summary.json").read_text())
+    assert active_effect["version"] == "agent-v0"
+    assert active_effect["source_path"] == "input/agents/agent-v0/source"
+    assert active_effect["runtime_state_path"] == "input/agents/agent-v0/runtime-state"
     assert active_effect["latest_epoch"]["attempt_count"] == 1
     assert active_effect["latest_epoch"]["correct_attempt_count"] == 1
+    assert active_effect["latest_epoch"]["branch"] == "active"
+    assert active_effect["latest_epoch"]["challenger_ordinal"] is None
+    assert active_effect["latest_epoch"]["outcome"] == "lost"
+    assert active_effect["latest_epoch"]["selection_reason"] == "authoritative_comparison"
     assert active_effect["career"] == {
         "epoch_participation_count": 1,
         "loss_count": 1,
         "win_count": 0,
     }
-    challenger_effect = json.loads(
-        (destination / "challenger-0001/optimization-summary.json").read_text()
-    )
+    challenger_effect = json.loads((destination / "agent-v1/optimization-summary.json").read_text())
     assert challenger_effect["latest_epoch"] == {
         "attempt_count": 1,
+        "branch": "challenger",
+        "challenger_ordinal": 1,
+        "outcome": "won",
+        "selection_reason": "authoritative_comparison",
         "best_kernel": {
             "gateway_result": {
                 "correct": True,
@@ -577,16 +693,24 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
         "loss_count": 0,
         "win_count": 1,
     }
-    challenger_sessions = destination / "challenger-0001/sessions"
+    challenger_sessions = destination / "agent-v1/sessions"
     assert [path.name for path in challenger_sessions.iterdir()] == ["trajectory-00000001"]
     challenger_conversation = (
         challenger_sessions / "trajectory-00000001/attempt-00000001.conversation.jsonl"
     )
     assert "hidden reasoning challenger" in challenger_conversation.read_text()
     active_conversation = (
-        destination / "active/sessions/trajectory-00000001/attempt-00000001.conversation.jsonl"
+        destination / "agent-v0/sessions/trajectory-00000001/attempt-00000001.conversation.jsonl"
     )
     assert "hidden reasoning current-1" in active_conversation.read_text()
+    for version, branch in (("agent-v0", "active"), ("agent-v1", "challenger")):
+        report = json.loads(
+            (
+                destination / version / "reports/trajectory-00000001/attempt-00000001.report.json"
+            ).read_text()
+        )
+        assert report["branch"] == branch
+        assert report["direction_events"]
     assert not any(destination.rglob("bootstrap.conversation.jsonl"))
     assert not (control_root / "evolver-evidence-data").exists()
     assert not (destination / "epochs/00000002").exists()

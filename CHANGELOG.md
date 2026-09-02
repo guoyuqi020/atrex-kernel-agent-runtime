@@ -6,6 +6,25 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Added a required `contributing_kernel_trial_ids` field to the Optimizer's Attempt Report, naming the
+  historical Kernel Trials whose code or approach the Attempt drew from. Kernel Trial identifiers are
+  used because the Optimizer has no Kernel revision vocabulary and must not gain one. Both Core and
+  Runtime check its shape; neither resolves it against visible history, matching how every other Kernel
+  Trial reference in the report is treated. Runtime carries it into the derived Final Report, so later
+  Attempts and the Evolver read it without further work.
+- Told the Evolver it may study, summarize, and combine Source, Skills, and Tools from several visible
+  Agents into one Candidate, and added a required `contributing_revision_ids` proposal field declaring
+  every revision other than the Source base it drew content from. Runtime revalidates each credited
+  revision against frozen visibility, the Lineage DSL, and completed history, then records them in the
+  sealed Evolution trace, the sealed-proposal event, and Epoch lessons, and projects them as Source
+  paths into `input/evolution-reports/evo-N.json`. The Source base, the Source diff target, and
+  revision parentage all remain single.
+- Added the exact Source change set of each prior Evolution to
+  `input/evolution-reports/evo-N.json`, so an Evolver no longer has to diff two Source trees to learn
+  which files that Evolution touched.
+- Exposed every completed Epoch branch to the Optimizer, including the ones that were not selected,
+  under `epochs/N/branches/<label>/`, with each Epoch's `summary.json` naming the selected branch. The
+  current Epoch still shows only the Attempt's own Trajectory and never a concurrently running sibling.
 - Added persistent production control-plane and managed multi-DSL Campaign task scripts with
   per-DSL inspection.
 - Made Sandbox host preparation concurrency-safe and Lima-virtiofs compatible by creating Worker

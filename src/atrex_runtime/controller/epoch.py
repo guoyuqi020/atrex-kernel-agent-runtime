@@ -19,6 +19,7 @@ from ..domain.ids import (
     new_kernel_revision_id,
 )
 from ..domain.models import (
+    AgentSelectionReason,
     Attempt,
     AttemptReportStatus,
     AttemptStatus,
@@ -168,13 +169,14 @@ class EpochController:
             epoch = self._registry.get_epoch(epoch.id)
         if epoch.status is EpochStatus.SELECTING:
             scores = self._scores(epoch)
-            winner = await self._select_kernel_agent(epoch, scores)
+            winner, selection_reason = await self._select_kernel_agent(epoch, scores)
             best_kernel = select_best_kernel(self._retained_kernels(epoch))
             self._registry.complete_epoch(
                 epoch.id,
                 EpochSelection(
                     winner_kernel_agent_revision_id=winner.kernel_agent_revision_id,
                     best_kernel_revision_id=best_kernel.id,
+                    selection_reason=selection_reason,
                 ),
             )
             epoch = self._registry.get_epoch(epoch.id)
@@ -664,17 +666,20 @@ class EpochController:
         self,
         epoch: Epoch,
         scores: tuple[BranchScore, ...],
-    ) -> BranchScore:
+    ) -> tuple[BranchScore, AgentSelectionReason | None]:
         if not scores:
             raise InvalidTransitionError(f"Epoch {epoch.id} has no Agent scores")
         winner = scores[0]
+        reason: AgentSelectionReason | None = None
         for candidate in scores[1:]:
             if self._agent_promotion_comparator is None:
-                winner = select_kernel_agent(
+                selection = select_kernel_agent(
                     winner,
                     candidate,
                     measurement_uncertainty_us=self._agent_measurement_uncertainty_us,
                 )
+                winner = selection.winner
+                reason = selection.reason
                 continue
             incumbent_kernel = self._branch_best_kernel(
                 epoch,
@@ -687,6 +692,7 @@ class EpochController:
                 candidate.challenger_ordinal,
             )
             if incumbent_kernel.id == candidate_kernel.id:
+                reason = AgentSelectionReason.IDENTICAL_KERNEL
                 continue
             comparison = await self._agent_promotion_comparator.compare(
                 incumbent_kernel,
@@ -704,9 +710,10 @@ class EpochController:
                     "reason": comparison.reason,
                 },
             )
+            reason = AgentSelectionReason.AUTHORITATIVE_COMPARISON
             if comparison.accepted:
                 winner = candidate
-        return winner
+        return winner, reason
 
     def _branch_best_kernel(
         self,

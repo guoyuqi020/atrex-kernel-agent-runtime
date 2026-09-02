@@ -6,8 +6,10 @@ import asyncio
 import math
 import statistics
 from collections.abc import Iterable
+from dataclasses import dataclass
 
 from .domain.models import (
+    AgentSelectionReason,
     BranchRole,
     BranchScore,
     KernelMeasurementPurpose,
@@ -21,6 +23,14 @@ from .ports import (
     KernelMeasurementRunner,
     KernelPairMeasurementRunner,
 )
+
+
+@dataclass(frozen=True, slots=True)
+class AgentSelectionResult:
+    """The winning Branch score and the rule that resolved the comparison."""
+
+    winner: BranchScore
+    reason: AgentSelectionReason
 
 
 class OrdinaryEvaluateKernelComparator(KernelComparator):
@@ -249,7 +259,7 @@ def select_kernel_agent(
     candidate: BranchScore,
     *,
     measurement_uncertainty_us: float = 0.0,
-) -> BranchScore:
+) -> AgentSelectionResult:
     """Select two Branch scores lexicographically, retaining the incumbent on a tie."""
     if candidate.branch is not BranchRole.CHALLENGER:
         raise ValueError("the candidate selection score must be a Challenger")
@@ -260,7 +270,10 @@ def select_kernel_agent(
 
     latency_delta = incumbent.best_latency_us - candidate.best_latency_us
     if abs(latency_delta) > measurement_uncertainty_us:
-        return candidate if latency_delta > 0 else incumbent
+        return AgentSelectionResult(
+            candidate if latency_delta > 0 else incumbent,
+            AgentSelectionReason.LATENCY,
+        )
 
     incumbent_secondary = (
         incumbent.first_best_attempt,
@@ -275,8 +288,8 @@ def select_kernel_agent(
         candidate.failed_candidates,
     )
     if candidate_secondary < incumbent_secondary:
-        return candidate
-    return incumbent
+        return AgentSelectionResult(candidate, AgentSelectionReason.SECONDARY_CRITERIA)
+    return AgentSelectionResult(incumbent, AgentSelectionReason.INCUMBENT_RETAINED)
 
 
 def select_best_kernel(revisions: Iterable[KernelRevision]) -> KernelRevision:

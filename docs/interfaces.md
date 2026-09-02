@@ -199,8 +199,8 @@ in that Lineage.
 `list-experiments` and `load-experiment` combine the current live Runtime Journal with prior durable
 Journals; terminal Report Artifacts remain a compatibility fallback for older records. Completed Epoch history includes journals from the
 selected branch and every losing Active/Challenger branch, while branch, Epoch, Attempt, selection,
-and current/history provenance remain hidden from the Agent. Ordinary Agent/Kernel Evidence remains
-promoted-lineage-only. In-progress visibility remains
+and current/history provenance remain hidden from the Agent. Ordinary Agent/Kernel Evidence carries
+every completed branch keyed by branch label. In-progress visibility remains
 limited to earlier Attempts on the same trajectory; parallel branches become visible only after the
 Epoch barrier. These reads use the Attempt-scoped Runtime Journal endpoint, never contact Agate,
 consume no Gateway quota, and cannot select an
@@ -223,6 +223,12 @@ Every Finding requires a non-empty unique `supporting_experiment_ids` array. Eac
 Experiment in the same attached Journal, so a Finding resolves through that Experiment's available
 before/after subjects to exact Kernel Artifacts, Trials, and Gateway Results without repeating those
 identities in the Finding itself.
+`contributing_kernel_trial_ids` is a required sorted unique array naming the historical Kernel Trials
+whose code or approach the Attempt drew content from, and is empty when it drew from none. Core and
+Runtime both check its shape; neither resolves it against visible history, because the report is an
+Agent interpretation rather than a measured fact, exactly like the Trial identities inside Experiment
+subjects. Runtime carries it into the derived Final Report, so later Attempts and the Evolver can read
+it.
 The Gateway defines no low-level Agate `submit` passthrough and no standalone `sol` operation.
 Evaluation uses only Runtime-constructed `evaluate`; SOL profiling remains available through
 `profile` with `level="sol"`.
@@ -332,9 +338,10 @@ only for readability.
 ## Evolver filesystem interface
 
 Evolver has no Runtime Tool or Runtime HTTP capability. Runtime materializes one frozen filesystem
-view containing current participant repositories and runtime state under `input/agents/`, their
-latest-completed-Epoch summaries and Conversations under `input/evidence/`, and completed non-current
-Agent versions under `input/historical/agent-vN/`. Prior Agent-creation reports are ordered as
+view keyed by Lineage version: every visible Agent version's repository and runtime state under
+`input/agents/agent-vN/`, and what Runtime derived about it under `input/evidence/agent-vN/`. Every
+version has an optimization summary; only the two branches that competed in the last completed Epoch
+also have that Epoch's Conversations and Attempt reports. Prior Agent-creation reports are ordered as
 `input/evolution-reports/evo-N.json` and link Source Base/produced-Agent paths. The only writable Agent components are
 `candidate/source/` and `candidate/runtime-state/`.
 

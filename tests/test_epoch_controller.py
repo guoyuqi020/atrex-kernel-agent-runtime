@@ -16,6 +16,7 @@ from atrex_runtime.controller import EpochController
 from atrex_runtime.domain.errors import InfrastructureError, InvalidTransitionError
 from atrex_runtime.domain.ids import AttemptId, KernelAgentRevisionId, new_kernel_revision_id
 from atrex_runtime.domain.models import (
+    AgentSelectionReason,
     AttemptReportStatus,
     AttemptStatus,
     BranchRole,
@@ -305,6 +306,7 @@ async def test_epoch_without_challengers_runs_parallel_trajectories_from_same_ke
         (0, 2, 2, AttemptStatus.COMPLETED),
     ]
     assert result.epoch.winner_kernel_agent_revision_id == seeded.active_revision_id
+    assert result.epoch.selection_reason is None
     registry.close()
 
 
@@ -794,6 +796,7 @@ async def test_epoch_promotes_challenger_and_best_kernel_after_scoped_retry(
         result.epoch.winner_kernel_agent_revision_id
         == result.challenger_scores[0].kernel_agent_revision_id
     )
+    assert result.epoch.selection_reason is AgentSelectionReason.LATENCY
     assert result.epoch.best_kernel_revision_id is not None
     best = registry.get_kernel_revision(result.epoch.best_kernel_revision_id)
     assert best.evaluation.latency_us == 70

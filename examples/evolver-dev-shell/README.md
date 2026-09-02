@@ -24,14 +24,15 @@ The Backend argument controls the Evolver metadata in the synthetic input; no Ba
 started. The example does not require Agate credentials. `AGATE_GPU`, if set, is retained as the
 hardware label; otherwise `nvidia-h100` is used.
 
-Inside the shell, inspect the current pool in `input/agents/`, its Sessions and measured effect in
-`input/evidence/<role>/`, completed versions in `input/historical/agent-vN/`, and the writable
-`candidate/` and `scratch/` directories. The Evolution
+Inside the shell, inspect each visible Agent version's source and state in
+`input/agents/agent-vN/`, what Runtime derived about it in `input/evidence/agent-vN/`, and the writable
+`candidate/` and `scratch/` directories. Only versions that competed in the last completed Epoch have
+`sessions/` and `reports/`. The Evolution
 manifest is Runtime-private under `.runtime/` and is not part of the Agent-facing workspace contract.
 
 ```bash
-find input/agents input/evidence input/historical -maxdepth 3 -type f -print
-cat input/evidence/active/optimization-summary.json
+find input/agents input/evidence -maxdepth 3 -type f -print
+cat input/evidence/agent-v0/optimization-summary.json
 ```
 
 Exiting destroys the inner Evolution workspace and the outer temporary state directory. The JSON

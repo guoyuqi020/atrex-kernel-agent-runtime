@@ -23,14 +23,14 @@ bash examples/evolver-dev-shell/run.sh bash codex
 Backend 参数只决定合成输入里的 Evolver 元数据，不会启动 Backend 进程。示例不需要 Agate
 凭据；如果设置了 `AGATE_GPU`，它会被用作硬件标签，否则使用 `nvidia-h100`。
 
-进入 Shell 后可以检查 `input/agents/` 中的当前参赛池、`input/evidence/<role>/` 中对应的 Session
-与实测效果、`input/historical/agent-vN/` 中的历史版本，以及可写的
-`candidate/` 与 `scratch/` 目录。Evolution
-Manifest 位于 Runtime-private `.runtime/`，不属于 Agent-facing Workspace Contract。
+进入 Shell 后可以检查 `input/agents/agent-vN/` 中每个可见 Agent 版本的源码与状态、
+`input/evidence/agent-vN/` 中 Runtime 对它的派生结论，以及可写的
+`candidate/` 与 `scratch/` 目录。只有在上一个已完成 Epoch 中参赛的版本才有 `sessions/` 与 `reports/`。
+Evolution Manifest 位于 Runtime-private `.runtime/`，不属于 Agent-facing Workspace Contract。
 
 ```bash
-find input/agents input/evidence input/historical -maxdepth 3 -type f -print
-cat input/evidence/active/optimization-summary.json
+find input/agents input/evidence -maxdepth 3 -type f -print
+cat input/evidence/agent-v0/optimization-summary.json
 ```
 
 退出后，内部 Evolution Workspace 与外层临时目录都会被销毁。JSON 摘要会报告

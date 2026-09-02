@@ -34,6 +34,16 @@ class BranchRole(StrEnum):
     CHALLENGER = "challenger"
 
 
+class AgentSelectionReason(StrEnum):
+    """Which rule resolved the final Agent comparison of one completed Epoch."""
+
+    AUTHORITATIVE_COMPARISON = "authoritative_comparison"
+    IDENTICAL_KERNEL = "identical_kernel"
+    LATENCY = "latency"
+    SECONDARY_CRITERIA = "secondary_criteria"
+    INCUMBENT_RETAINED = "incumbent_retained"
+
+
 class ChallengerProposalType(StrEnum):
     """How an Evolver selected or created one Epoch Challenger."""
 
@@ -494,6 +504,7 @@ class Epoch:
     best_kernel_revision_id: KernelRevisionId | None
     created_at: str
     completed_at: str | None
+    selection_reason: AgentSelectionReason | None = None
 
     def __post_init__(self) -> None:
         if self.challenger_count < 0:
@@ -680,3 +691,4 @@ class EpochSelection:
 
     winner_kernel_agent_revision_id: KernelAgentRevisionId
     best_kernel_revision_id: KernelRevisionId
+    selection_reason: AgentSelectionReason | None = None

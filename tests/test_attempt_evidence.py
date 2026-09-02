@@ -390,6 +390,7 @@ def _complete_attempt(
                     ],
                 }
             ],
+            "contributing_kernel_trial_ids": ["gtrial_0123456789abcdef0123456789abcdef"],
             "blocker": None,
             "experiments": [
                 {
@@ -575,6 +576,9 @@ def test_attempt_evidence_contains_only_earlier_same_branch_history(
             "result": "PASS",
             "failure_reason": None,
         }
+        assert report_value["contributing_kernel_trial_ids"] == [
+            "gtrial_0123456789abcdef0123456789abcdef"
+        ]
         assert "kernel_revision_id" not in json.dumps(report_value)
         assert "gateway_result_digest" not in json.dumps(report_value["parent_kernel"])
         assert challenger.attempt_report_digest is not None

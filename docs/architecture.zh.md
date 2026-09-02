@@ -63,14 +63,17 @@ Epoch 包含 `(1 + K) × Y × X` 个 Optimizer Session 和 `K`
 个 Evolver Session。
 
 Session 永远使用全新进程，不复用模型上下文。Attempt Evidence 只包含同一 Trajectory 内较早的
-Attempt。Optimizer View 只包含已晋升的完成 Agent Lineage；Evolver View 包含每个已完成的
-Active/Challenger 分支、Agent 选择结果、Attempt Outcome 与被引用的精确 Kernel Artifact。
+Attempt。Optimizer View 按分支包含每个已完成 Active/Challenger 分支的 Attempt Report 与
+Conversation，且每个已完成 Epoch 都标明被选中的分支；Evolver View 还额外包含 Agent 选择结果、
+Attempt Outcome 与被引用的精确 Kernel Artifact。
 Runtime 还会冻结版本化 Agent/Kernel Catalog 和全部历史 Kernel Artifact。Evolver Workspace
-明确拆分当前 Active/Challenger 源码池（`input/agents/`）、最近完成 Epoch 的 Attempt Conversation 与实测效果投影
-（`input/evidence/<role>/`），以及将源码、累计效果、逐 Trajectory `skills/tools` 放在一起的历史版本
-（`input/historical/agent-vN/`）。此前 Agent 创建时的报告位于只读
-`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，当前运行时状态位于
-`input/agents/` 对应角色源码旁边。每个 Optimizer Session 都把终态 `skills/tools` 封存为不可变
+明确拆分每个可见 Agent 版本的封存源码与逐 Trajectory `skills/tools`（`input/agents/agent-vN/`）以及
+Runtime 对它的派生结论（`input/evidence/agent-vN/`）。两棵树都按 Lineage 版本索引，任何目录名都不再
+编码 Epoch 角色。每个版本都有效果汇总；只有在上一个已完成 Epoch 中参赛的两条分支还额外拥有该 Epoch 的
+Attempt Conversation 与 Attempt Report。每份汇总都记录该版本的分支、胜负以及裁定 Agent 对比的规则。
+此前 Agent 创建时的报告位于只读
+`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，运行时状态位于
+`input/agents/` 中该版本源码旁边。每个 Optimizer Session 都把终态 `skills/tools` 封存为不可变
 Runtime State Artifact，生产它的 Attempt 记录 `runtime_state_digest`；Attempt ID 本身就是生产者
 身份，因此不再引入第二个 Checkpoint ID。后续串行 Attempt 在本地缓存丢失时会从该摘要恢复准确
 State。Runtime 使用最近完成 Epoch 获胜分支中、产出最佳 Kernel 的 Trajectory 在最后一个 Attempt

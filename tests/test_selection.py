@@ -10,6 +10,7 @@ from conftest import NOW, digest
 
 from atrex_runtime.domain.ids import new_kernel_agent_revision_id, new_kernel_revision_id
 from atrex_runtime.domain.models import (
+    AgentSelectionReason,
     BranchRole,
     BranchScore,
     KernelEvaluation,
@@ -43,7 +44,10 @@ def test_exact_tie_retains_active() -> None:
     active = score(BranchRole.ACTIVE, 80)
     challenger = score(BranchRole.CHALLENGER, 80)
 
-    assert select_kernel_agent(active, challenger) is active
+    selection = select_kernel_agent(active, challenger)
+
+    assert selection.winner is active
+    assert selection.reason is AgentSelectionReason.INCUMBENT_RETAINED
 
 
 def test_measurement_uncertainty_uses_secondary_metrics() -> None:
@@ -59,7 +63,26 @@ def test_measurement_uncertainty_uses_secondary_metrics() -> None:
         failed_candidates=0,
     )
 
-    assert select_kernel_agent(active, challenger, measurement_uncertainty_us=0.1) is challenger
+    selection = select_kernel_agent(active, challenger, measurement_uncertainty_us=0.1)
+
+    assert selection.winner is challenger
+    assert selection.reason is AgentSelectionReason.SECONDARY_CRITERIA
+
+
+def test_latency_beyond_uncertainty_reports_a_latency_decision() -> None:
+    active = score(BranchRole.ACTIVE, 80)
+    challenger = score(BranchRole.CHALLENGER, 70)
+
+    selection = select_kernel_agent(active, challenger, measurement_uncertainty_us=0.1)
+
+    assert selection.winner is challenger
+    assert selection.reason is AgentSelectionReason.LATENCY
+
+    slower = score(BranchRole.CHALLENGER, 90)
+    retained = select_kernel_agent(active, slower, measurement_uncertainty_us=0.1)
+
+    assert retained.winner is active
+    assert retained.reason is AgentSelectionReason.LATENCY
 
 
 @pytest.mark.anyio

@@ -73,15 +73,20 @@ appends one cumulative Evidence checkpoint. Thus an
 Epoch contains `(1 + K) × Y × X` Optimizer Sessions and `K` Evolver Sessions.
 
 Each session is a fresh process. Model context is never reused. Attempt Evidence contains earlier
-Attempts only from the same Trajectory. The Optimizer view contains only the promoted completed
-Agent lineage, while the Evolver view contains every completed Active/Challenger branch, Agent
-selection result, Attempt outcome, and exact referenced Kernel artifact. Runtime additionally
+Attempts only from the same Trajectory. The Optimizer view contains every completed Active/Challenger
+branch's Attempt reports and conversations keyed by branch, and each completed Epoch names the
+selected branch, while the Evolver view adds Agent selection result, Attempt outcome, and exact
+referenced Kernel artifact. Runtime additionally
 freezes versioned Agent/Kernel catalogs and every historical Kernel Artifact. The Evolver workspace
-separates the current Active/Challenger source pool (`input/agents/`), their latest-completed-Epoch
-Attempt conversations and measured effect projection (`input/evidence/<role>/`), and completed Agent versions with source, accumulated
-effect, and per-Trajectory `skills/tools` (`input/historical/agent-vN/`). Prior Agent-creation reports
-are read-only files under `input/evolution-reports/`; full Evolution traces remain private. Detailed Epoch trees remain
-Runtime-private. Current runtime state sits beside its role source under `input/agents/`. Every
+separates every visible Agent version's sealed source and per-Trajectory `skills/tools`
+(`input/agents/agent-vN/`) from what Runtime derived about it (`input/evidence/agent-vN/`). Both trees
+are keyed by Lineage version, so no directory name encodes an Epoch role. Every version has an
+optimization summary; only the two branches that competed in the last completed Epoch also have that
+Epoch's Attempt conversations and Attempt reports. Each summary records the version's branch, outcome,
+and the rule that resolved the comparison. Prior
+Agent-creation reports are read-only files under `input/evolution-reports/`; full Evolution traces
+remain private. Detailed Epoch trees remain Runtime-private. Runtime state sits beside its
+version's source under `input/agents/`. Every
 Optimizer Session seals its terminal `skills/tools` as an immutable Runtime State Artifact and the
 producing Attempt records its `runtime_state_digest`; the Attempt ID is the producer identity, so
 there is no second checkpoint ID. A later serial Attempt restores that exact State if its local

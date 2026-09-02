@@ -192,8 +192,8 @@ Evolver `atrex-evolver-bundle.json` schema v1 声明唯一入口。Runtime 固�
 Checkpoint、DSL、Optimizer Digest、Workspace Path 和只读 `visible_agents` Catalog；其中包含
 Active Parent、已保留的 Lineage Agent 历史，以及同一 Epoch 中此前创建的 Challenger。每个条目
 包含仓库路径、Parent Link、创建者、关系类型，以及适用时的当前 Epoch Challenger Ordinal。
-无版本号的 Evolution Output 声明提案形态、所选 Agent Revision、假设、预期效果，以及相对于 Source
-根目录的准确 Changed Paths；Trace schema v9 记录所选 Model、
+无版本号的 Evolution Output 声明提案形态、所选 Agent Revision、假设、预期效果、相对于 Source
+根目录的准确 Changed Paths，以及 Candidate 取用过内容的其他可见 Revision；Trace schema v9 记录所选 Model、
 Bundle Commit/Tree/Artifact 与进程证据。Evolver 没有 Token 截止；必需 Report 使用空 Budget
 记录完整 Provider Usage。
 Schema v10 不包含 Runtime 查询权限。Evolver 直接从冻结文件读取当前 Agent、历史
@@ -216,7 +216,8 @@ State 身份的唯一位置。缺少直接字段的旧 Revision 仍可通过 Tra
 Attempt Evidence schema v2 不可变，只包含相同 Branch Slot 和 Trajectory 中较早的 Attempt。
 已完成 Epoch Evidence 保留 Challenger 与 Trajectory 身份、Summary、Report、Diff、规范化
 Session Projection、规范化 Evaluate/Profile Measurement、Lesson 和来源 Digest。Agent View schema v1 按 Role
-限制：Optimizer 只看到已晋升的完成 Lineage 和有界的当前同 Trajectory Attempt，并移除 Branch
+限制：Optimizer 按分支看到每个已完成分支的 Attempt Report 与 Conversation，每个 Epoch Summary 都标明
+被选中的分支；当前 Epoch 仍只有有界的同 Trajectory Attempt，并移除 Branch
 控制身份。Runtime 从完整持久 Evidence 派生精简 Evolver 文件系统 View：每个当前参赛者获得一份
 权威的最近 Epoch 优化汇总和每个 Attempt 的一份 Conversation；已完成且非当前的 Agent 版本在源码旁获得
 一份汇总。更早的详细分支 Tree 和精确 Kernel Artifact 保留在 Runtime Registry 与 Artifact Store，不重复进

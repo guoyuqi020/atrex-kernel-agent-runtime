@@ -36,6 +36,7 @@ from ..domain.ids import (
     parse_worker_session_id,
 )
 from ..domain.models import (
+    AgentSelectionReason,
     Attempt,
     AttemptReportStatus,
     AttemptSessionTrace,
@@ -70,7 +71,7 @@ from ..domain.models import (
 )
 from ..sqlite_support import configure_durable_sqlite
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -676,6 +677,23 @@ class SqliteRegistry:
                     raise
                 else:
                     self._connection.execute("COMMIT")
+            version = 30
+        if version == 30:
+            with self._lock:
+                self._connection.execute("BEGIN IMMEDIATE")
+                try:
+                    if self._has_tables("epochs") and (
+                        "selection_reason" not in self._table_columns("epochs")
+                    ):
+                        self._connection.execute(
+                            "ALTER TABLE epochs ADD COLUMN selection_reason TEXT"
+                        )
+                    self._connection.execute("PRAGMA user_version = 31")
+                except BaseException:
+                    self._connection.execute("ROLLBACK")
+                    raise
+                else:
+                    self._connection.execute("COMMIT")
             return
         if version == 14:
             with self._lock:
@@ -1260,6 +1278,10 @@ class SqliteRegistry:
                     challenger_count INTEGER NOT NULL CHECK (challenger_count >= 0),
                     trajectories_per_branch INTEGER NOT NULL
                         CHECK (trajectories_per_branch > 0),
+                    selection_reason TEXT CHECK (selection_reason IS NULL OR selection_reason IN (
+                        'authoritative_comparison', 'identical_kernel', 'latency',
+                        'secondary_criteria', 'incumbent_retained'
+                    )),
                     UNIQUE (lineage_id, number)
                 );
                 CREATE UNIQUE INDEX one_open_epoch_per_lineage
@@ -1422,7 +1444,7 @@ class SqliteRegistry:
                     owner TEXT NOT NULL,
                     lease_expires_at TEXT NOT NULL
                 );
-                PRAGMA user_version = 30;
+                PRAGMA user_version = 31;
                 COMMIT;
                 """
             )
@@ -3284,6 +3306,7 @@ class SqliteRegistry:
         winner = _optional_text(row, "winner_kernel_agent_revision_id")
         best = _optional_text(row, "best_kernel_revision_id")
         completed = _optional_text(row, "completed_at")
+        reason = _optional_text(row, "selection_reason")
         epoch_id = parse_epoch_id(_required_text(row, "id"))
         with self._lock:
             challenger_rows = self._connection.execute(
@@ -3318,6 +3341,7 @@ class SqliteRegistry:
             best_kernel_revision_id=None if best is None else parse_kernel_revision_id(best),
             created_at=_required_text(row, "created_at"),
             completed_at=completed,
+            selection_reason=(None if reason is None else AgentSelectionReason(reason)),
         )
 
     @staticmethod
@@ -4254,10 +4278,16 @@ class SqliteRegistry:
             cursor = self._connection.execute(
                 """UPDATE epochs SET status = 'completed',
                    winner_kernel_agent_revision_id = ?, best_kernel_revision_id = ?,
-                   completed_at = ? WHERE id = ? AND status = 'selecting'""",
+                   selection_reason = ?, completed_at = ?
+                   WHERE id = ? AND status = 'selecting'""",
                 (
                     selection.winner_kernel_agent_revision_id,
                     selection.best_kernel_revision_id,
+                    (
+                        None
+                        if selection.selection_reason is None
+                        else selection.selection_reason.value
+                    ),
                     now,
                     epoch_id,
                 ),

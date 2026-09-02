@@ -116,7 +116,7 @@ def _prepare_workspace(
                 "trigger": None,
             },
             "visibility": {
-                "completed_epochs": "promoted_lineage",
+                "completed_epochs": "all_completed_branches",
                 "current_attempts_before": 1,
             },
         },

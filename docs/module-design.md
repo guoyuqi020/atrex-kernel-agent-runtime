@@ -91,18 +91,22 @@ excludes Kernels produced by the selected or later Epochs. It prepares the same 
 but creates no Challenger, Agent execution, promotion, or token report.
 
 `workers/evolution.py` creates a fixed
-input/agents/evidence/historical/candidate/scratch workspace with Runtime-private control files and accepts
+input/agents/evidence/evolution-reports/candidate/scratch workspace with
+Runtime-private control files and accepts
 same-DSL full-repository changes. It freezes exact Lineage-local Agent/Kernel version catalogs,
 every historical Kernel Artifact, and read-only per-Agent/per-Trajectory `skills/` and `tools/`
-snapshots for comparison by the Evolver. `input/agents/` contains only the current Active and
-current-Epoch Challengers; `input/evidence/<role>/` contains measured optimization effect and one
-conversation per Attempt from that Agent's latest completed Epoch, organized by Trajectory;
-Bootstrap and older conversations remain private Runtime history. `input/historical/agent-vN/`
-co-locates each non-current version's source, effect summary,
-and runtime state. Ordered `input/evolution-reports/evo-N.json` wrappers expose each available
-Agent-authored creation report plus Source Base/produced-Agent paths, not its full Evolution trace. Current runtime state sits beside its role source under `input/agents/`, not in
+snapshots for comparison by the Evolver. Both Agent-facing trees are keyed by Lineage version:
+`input/agents/agent-vN/` holds each visible version's sealed source and runtime state, and
+`input/evidence/agent-vN/` holds what Runtime derived about it, so no directory name encodes an Epoch
+role. Every version has an effect summary; only the two branches that competed in the last completed
+Epoch also have that Epoch's per-Attempt conversation and Attempt report, organized by Trajectory.
+Bootstrap and older conversations remain private Runtime history, and revisions that have run no
+Attempt have neither. Ordered `input/evolution-reports/evo-N.json` wrappers expose each available
+Agent-authored creation report plus Source Base/produced-Agent paths, not its full Evolution trace.
+Runtime state sits beside its version's source under `input/agents/`, not in
 Evidence. Each effect summary separates the latest completed Epoch's Attempt correctness and best
-per-Shape Gateway result from cumulative Epoch participation, wins, and losses. Detailed Epoch trees
+per-Shape Gateway result from cumulative Epoch participation, wins, and losses, and records that
+Epoch's branch, outcome, and the rule that resolved the Agent comparison. Detailed Epoch trees
 remain in the existing Runtime Evidence store and are not duplicated into Evolution workspaces.
 Runtime-state snapshots remain separate from versioned source. Candidate has writable `source/` and
 one flat, revision-wide `runtime-state/{skills,tools}/` seed. Top-level `skills/` and `tools/` remain
@@ -124,7 +128,7 @@ independent Trajectories concurrently within each Branch, and executes Attempts 
 Trajectory. `controller/attempt_evidence.py` isolates incremental memory by Trajectory;
 `controller/evidence.py` publishes the complete measured Epoch only after selection.
 
-`controller/projection.py` emits bounded normalized summaries that contain only a Session source digest; it deliberately excludes the unredacted `conversation.jsonl` from semantic projection. `workers/session_trace.py` applies the authoritative retention policy before every Core or Evolver Session Artifact is sealed: high-frequency Claude `system/thinking_tokens` estimate telemetry is removed from Provider stdout and the conversation, while authoritative usage remains in `events.jsonl`. For each Optimizer-visible historical Attempt, `workers/evidence_view.py` follows the latest sealed Session digest and exposes only a flat `conversation.jsonl` beside the Runtime Final `report.json`; every retry Artifact remains in Runtime storage. Evolver evidence retains its richer all-branch diagnostic view. `knowledge/ingest.py` independently constructs bounded retained Session upload projections after epoch completion and applies the same compatibility filter.
+`controller/projection.py` emits bounded normalized summaries that contain only a Session source digest; it deliberately excludes the unredacted `conversation.jsonl` from semantic projection. `workers/session_trace.py` applies the authoritative retention policy before every Core or Evolver Session Artifact is sealed: high-frequency Claude `system/thinking_tokens` estimate telemetry is removed from Provider stdout and the conversation, while authoritative usage remains in `events.jsonl`. For each Optimizer-visible historical Attempt, `workers/evidence_view.py` follows the latest sealed Session digest and exposes only a flat `conversation.jsonl` beside the Runtime Final `report.json`, under a per-branch layer that covers every completed branch; every retry Artifact remains in Runtime storage. Evolver evidence stays richer through measurements, diffs, and exact Kernel Artifacts. `knowledge/ingest.py` independently constructs bounded retained Session upload projections after epoch completion and applies the same compatibility filter.
 
 ## Stable interfaces
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -361,6 +361,11 @@ class AttemptReportV12(BaseModel):
     analysis: str = Field(min_length=1)
     knowledge_used: tuple[AttemptKnowledgeUseV1, ...]
     findings: tuple[AttemptFindingV1, ...] = Field(min_length=1)
+    # Defaulted because sealed historical reports predating this field are re-parsed
+    # strictly by composition/bootstrap.py.
+    contributing_kernel_trial_ids: tuple[
+        Annotated[str, Field(pattern=r"^gtrial_[0-9a-f]{32}$")], ...
+    ] = Field(default=(), max_length=64)
     blocker: str | None
     experiments: tuple[AttemptExperimentV8, ...] = Field(min_length=1)
     direction_events: tuple[AttemptDirectionEventV1, ...] = Field(min_length=1)
@@ -377,6 +382,15 @@ class AttemptReportV12(BaseModel):
     def _validate_optional_text(cls, value: str | None) -> str | None:
         if value is not None and not value.strip():
             raise ValueError("Attempt report blocker cannot be blank")
+        return value
+
+    @field_validator("contributing_kernel_trial_ids")
+    @classmethod
+    def _validate_contributing_kernel_trial_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        if len(set(value)) != len(value):
+            raise ValueError("Attempt report contributing Kernel Trial IDs must be unique")
+        if list(value) != sorted(value):
+            raise ValueError("Attempt report contributing Kernel Trial IDs must be sorted")
         return value
 
     @model_validator(mode="before")

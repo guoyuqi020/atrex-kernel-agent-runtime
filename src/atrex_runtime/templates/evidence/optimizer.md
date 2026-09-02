@@ -38,7 +38,16 @@ input/evidence/
 │   └── conversation.jsonl
 └── epochs/
     └── <eight-digit-epoch>/
-        └── trajectories/
+        ├── summary.json                        # completed Epoch only
+        ├── branches/                           # completed Epoch only
+        │   └── <active or challenger-NNNN>/
+        │       └── trajectories/
+        │           └── <eight-digit-trajectory>/
+        │               └── attempts/
+        │                   └── <eight-digit-attempt>/
+        │                       ├── report.json
+        │                       └── conversation.jsonl
+        └── trajectories/                       # current Epoch only, this Trajectory alone
             └── <eight-digit-trajectory>/
                 └── attempts/
                     └── <eight-digit-attempt>/
@@ -55,20 +64,24 @@ After an Epoch completes, the controller independently selects the next active A
 the fastest retained correct Kernel. They may have different producers. `input/kernel/` is always
 the authoritative current starting point.
 
-Ordinary Evidence contains the promoted completed Agent lineage plus bounded earlier Attempts from
-the current Trajectory. It does not expose a concurrently running sibling or branch. Exact
-historical Kernel, Trial, Result, Direction, and Experiment records remain in controller storage and
-are retrieved through the supplied Runtime-local query commands. Every Direction update and
-Experiment record is durably appended by Runtime before its tool call returns; a Worker crash or
-recovery generation does not roll the logical Attempt Journal back. Journal queries may include every
+Each completed Epoch exposes every branch that ran in it, whether or not that branch was selected,
+under `branches/<label>/`. That Epoch's `summary.json` lists the branches and marks the selected one.
+A non-selected branch records real attempts against the same starting Kernel: read it for what was
+tried and what it measured, and do not treat it as noise. For the current Epoch you see only bounded
+earlier Attempts from your own Trajectory, never a concurrently running sibling. Exact historical
+Kernel, Trial, Result, Direction, and Experiment records remain in controller storage and are
+retrieved through the supplied Runtime-local query commands. Every Direction update and Experiment
+record is durably appended by Runtime before its tool call returns; a Worker crash or recovery
+generation does not roll the logical Attempt Journal back. Journal queries may include every
 completed Active and Challenger path from a frozen Epoch, without exposing branch-control
 provenance. No Journal history file exists under `input/evidence/` or the internal control area.
 
-There are no generated Epoch summaries, aggregated lessons, or measurement projections in this
-tree. Read directories in numeric order. Each historical Attempt exposes only its final report and
-latest sealed backend-neutral `conversation.jsonl`; all physical retries remain in controller
-storage. Conversation files may contain sensitive raw model/tool content. Retention omits only
-high-frequency Claude thinking-token estimate telemetry.
+Beyond each completed Epoch's `summary.json` branch list, there are no generated Epoch summaries,
+aggregated lessons, or measurement projections in this tree. Read directories in numeric order. Each
+historical Attempt exposes only its final report and latest sealed backend-neutral
+`conversation.jsonl`; all physical retries remain in controller storage. Conversation files may
+contain sensitive raw model/tool content. Retention omits only high-frequency Claude thinking-token
+estimate telemetry.
 
 ## Trust and measurement reuse
 

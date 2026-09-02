@@ -39,7 +39,7 @@ from atrex_runtime.registry.base import Registry
 from atrex_runtime.workers.evolution import (
     EvolutionAgentDescriptorV3,
     EvolutionCandidateTraceV3,
-    EvolutionInputManifestV10,
+    EvolutionInputManifestV11,
     EvolutionOutput,
     EvolutionTraceV9,
     VisibleAgentRevisionV2,
@@ -277,7 +277,7 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
         runtime_state_digest=digest("runtime-state"),
     )
     trace = EvolutionTraceV9(
-        input=EvolutionInputManifestV10(
+        input=EvolutionInputManifestV11(
             parent_revision_id=parent_id,
             evidence_checkpoint=digest("evidence"),
             idempotency_key="evolve:1",
@@ -286,11 +286,13 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
             visible_agents=(
                 VisibleAgentRevisionV2(
                     revision_id=parent_id,
+                    version="agent-v0",
                     optimizer_digest=digest("parent-optimizer"),
-                    path="input/agents/active/source",
-                    optimization_summary_path="input/evidence/active/optimization-summary.json",
-                    sessions_path="input/evidence/active/sessions",
-                    runtime_state_path="input/agents/active/runtime-state",
+                    path="input/agents/agent-v0/source",
+                    optimization_summary_path="input/evidence/agent-v0/optimization-summary.json",
+                    sessions_path="input/evidence/agent-v0/sessions",
+                    reports_path="input/evidence/agent-v0/reports",
+                    runtime_state_path="input/agents/agent-v0/runtime-state",
                     parent=True,
                     relationship="active",
                     challenger_ordinal=None,
@@ -469,6 +471,7 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
     ]
     assert lessons[1]["trusted"] is False
     assert lessons[1]["text"] == "Reduce register pressure"
+    assert lessons[0]["contributing_revision_ids"] == []
     assert lessons[0]["unimplemented_capabilities"] == [
         {
             "capability": "Live occupancy modeling",

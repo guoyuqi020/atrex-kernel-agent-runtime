@@ -370,6 +370,9 @@ class LocalEvidenceAssembler:
                     "hypothesis": evolution.output.hypothesis,
                     "expected_effect": evolution.output.expected_effect,
                     "changed_paths": list(getattr(evolution.output, "changed_paths", ())),
+                    "contributing_revision_ids": list(
+                        getattr(evolution.output, "contributing_revision_ids", ())
+                    ),
                     "unimplemented_capabilities": [
                         item.model_dump(mode="json")
                         for item in evolution.output.unimplemented_capabilities
@@ -641,6 +644,9 @@ class LocalEvidenceAssembler:
             "trajectories_per_branch": epoch.trajectories_per_branch,
             "attempts_per_trajectory": epoch.attempts_per_trajectory,
             "winner_kernel_agent_revision_id": epoch.winner_kernel_agent_revision_id,
+            "selection_reason": (
+                None if epoch.selection_reason is None else epoch.selection_reason.value
+            ),
             "starting_kernel_revision_id": epoch.starting_kernel_revision_id,
             "starting_kernel": self._kernel_value(starting_kernel),
             "best_kernel_revision_id": epoch.best_kernel_revision_id,

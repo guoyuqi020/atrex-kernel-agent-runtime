@@ -3,7 +3,8 @@
 ## 决策
 
 每次 Evolver 调用准确输出一个统一的 `EvolutionOutput` 提案。所有模式都使用
-`kernel_agent_revision_id` 与 `changed_paths`；后者只包含相对于所选 Agent Source 根目录的排序路径。
+`kernel_agent_revision_id`、`changed_paths` 与 `contributing_revision_ids`；`changed_paths` 只包含相对于
+所选 Agent Source 根目录的排序路径。
 `reuse` 要求空数组；如果只修改 Runtime State，新 Revision 模式也可以使用空数组：
 
 - `evolved` 创建新 Agent Revision，其 Parent 是本 Epoch 的 Active Revision；
@@ -21,6 +22,11 @@ Runtime 校验 Base 并跨 Source 与状态种子比较最终 Diff。
 每个提案都可以携带有界的 `unimplemented_capabilities`。每一项说明一种 Agent 能力、预期的
 Kernel 优化收益，以及 Evolver 无法实现它的原因。Runtime 将这些内容作为不可信 Evolution
 Evidence 保存，供后续 Evolver 查看；它们不会授予能力，也不影响胜负选择。
+
+Candidate 可以融合多个可见 Agent 的内容。`contributing_revision_ids` 列出除 Source Base 以外，所有被
+取用过 Source、Skill 或 Tool 的 Revision；每一项必须是已完成的 Lineage 历史或 Active，不能是同一
+Epoch 内正在构建的 Challenger。这是来源记录而非祖先关系：Source Base 与 Diff 目标仍是唯一的
+`kernel_agent_revision_id`，该声明不增加任何祖先边。
 
 提案类型、Source Reference Revision、实际参赛 Revision 和 Evolution Trace Digest 属于 Epoch Challenger
 参赛记录。Revision 祖先关系仍是单 Parent 树；Epoch 竞争、复用与晋升是另一条时间线，不增加

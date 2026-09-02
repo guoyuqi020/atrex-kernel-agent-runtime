@@ -177,7 +177,7 @@ Bootstrap Session 开始时没有更早 Journal；成功后，
 `list-experiments` 和 `load-experiment` 把当前实时 Runtime Journal 与历史持久 Journal 合并；终态
 Attempt Report Artifact 只作为旧数据的兼容回退。已完成 Epoch 包含获胜分支以及所有未获胜 Active/Challenger 分支的
 Journal，但不向 Agent 暴露分支、Epoch、Attempt、选中状态或当前/历史来源；普通 Agent/Kernel Evidence
-仍只保留已晋升路线。运行中
+按分支标签保留每个已完成分支。运行中
 Epoch 仍只可见同 Trajectory 更早 Attempt，并行分支要到 Epoch barrier 后才会可见。它们使用
 Attempt-scoped Runtime Journal Endpoint，不访问 Agate、不消耗 Gateway 配额，也不能任意选择 Attempt 或 Lineage。
 Direction 历史遵循相同的已完成全路径/运行中同 Trajectory 可见边界；Agent-facing 结果不暴露
@@ -194,6 +194,10 @@ Core 要求每组绑定已出现在本 Attempt 的 Experiment Journal；Runtime 
 每个 Finding 必须包含非空且唯一的 `supporting_experiment_ids`；每个 ID 都必须属于同一份随 Report
 附加的 Experiment Journal。这样 Finding 可通过 Experiment 中实际存在的 before/after Subject 追溯到准确
 Kernel Artifact、Trial 和 Gateway Result，而无需在 Finding 中重复这些身份。
+`contributing_kernel_trial_ids` 是必填的有序去重数组，列出本次 Attempt 取用过其代码或思路的历史
+Kernel Trial；没有取用时为空。Core 与 Runtime 都只校验它的形状，都不去解析它是否在可见历史内 ——
+因为 Report 是 Agent 的解读而非测量事实，与 Experiment Subject 里的 Trial 身份同理。Runtime 会把它带入
+派生的 Final Report，供后续 Attempt 与 Evolver 阅读。
 Gateway 不定义低层 Agate `submit` 透传，也不定义独立的 `sol` 操作。评测只能使用由
 Runtime 构造的 `evaluate`；SOL Profile 仍通过 `profile` 的 `level="sol"` 使用。
 
@@ -296,9 +300,10 @@ Report 对外展示。缺失或非 ready 的 Handoff 会直接终结，不会运
 
 ## Evolver 文件系统接口
 
-Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份冻结文件视图：当前参赛仓库和
-Runtime State 位于 `input/agents/`，最近完成 Epoch 的汇总和 Conversation 位于
-`input/evidence/`，已完成且非当前的 Agent 版本位于 `input/historical/agent-vN/`，此前 Agent 创建报告
+Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份按 Lineage 版本索引的冻结文件
+视图：每个可见 Agent 版本的仓库与 Runtime State 位于 `input/agents/agent-vN/`，Runtime 对它的派生结论
+位于 `input/evidence/agent-vN/`。每个版本都有优化效果汇总；只有在上一个已完成 Epoch 中参赛的两条分支
+还额外拥有该 Epoch 的 Conversation 与 Attempt Report。此前 Agent 创建报告
 按 `input/evolution-reports/evo-N.json` 排序并关联 Source Base/产出 Agent 路径。唯一可写的 Agent
 组件是 `candidate/source/` 与 `candidate/runtime-state/`。
 
