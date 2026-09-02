@@ -11,7 +11,7 @@ import anyio
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, AttemptId
-from ..gateway.contract import AgateEvaluationContextResolver
+from ..gateway.contract import AgateEvaluationContextResolver, candidate_path_for_attempt
 from ..kernel_agents import is_ignored_kernel_agent_path
 from .attempt_report import AttemptReportV12
 from .core_phase import CorePhaseRunner, PreparedCorePhase
@@ -215,7 +215,7 @@ class CoreOptimizerSessionDriver:
         the nomination unmatchable against the Agent's evaluation.
         """
         working = prepared.root / "work/kernel"
-        selected = self._contract_candidate_path(attempt_id)
+        selected = candidate_path_for_attempt(self._contexts, attempt_id)
         if selected is not None:
             source = working.joinpath(*selected.split("/"))
             if source.is_symlink() or not source.is_file():
@@ -233,15 +233,6 @@ class CoreOptimizerSessionDriver:
                 relative, directory=directory
             ),
         )
-
-    def _contract_candidate_path(self, attempt_id: AttemptId) -> str | None:
-        """Return the contract-declared candidate file, or None when unresolvable."""
-        if self._contexts is None:
-            return None
-        try:
-            return self._contexts.resolve(attempt_id).contract.candidate_path
-        except (KeyError, LookupError, ValueError):
-            return None
 
     def prepare_launch(
         self,

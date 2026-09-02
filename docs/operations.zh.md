@@ -33,7 +33,8 @@ Core 与 Evolver 是部署批准、按完整 Commit 固定的 Git 仓库；相�
    Job 终态属于结果，不会被该策略重新提交。周期性健康观测仍是有界单次探针，不持有 Campaign 工作。
 6. 执行 Campaign schema-v3 Bootstrap 时保持 Runtime、Gateway 和可选 Wiki 可用；Core Baseline
    Session 会回调 Runtime。
-7. 使用绝对目标 Epoch 调度 Campaign；Wiki Drainer 独立运行。
+7. 使用绝对目标 Epoch 调度 Campaign。GPU Wiki 只需运行查询服务；Runtime 没有 Feedback Drainer
+   或交付进程。
 
 示例命令见仓库 [README](../README.zh.md)。配置只保存凭据环境变量名。
 
@@ -101,8 +102,9 @@ atrex-kernel-agent-runtime show-agent-revision \
 
 ## Attempt 评测历史
 
-使用 `list-evaluations` 查看一个 Attempt 中 Agent 提交的全部探索 Kernel，以及独立的
-Runtime-final 终评。`show-evaluation` 标识一对不可变记录；`--source` 返回该步实际评测的准确
+使用 `list-evaluations` 查看一个 Attempt 中 Agent 提交的全部探索 Kernel，以及 Runtime 持有的
+Comparator/Finalization Record。Retention Comparator 的 Candidate 聚合是权威结果；Runtime 不会
+在其后再增加一次独立 Final Eval。`show-evaluation` 标识一对不可变记录；`--source` 返回该步实际评测的准确
 文件，`--result` 返回完整原始 Gateway 响应。即使 Kernel 错误、被回退或从未成为 Kernel
 Revision，这些记录也仍然存在。CLI 会直接打开 Gateway Control，因此需要配置中指定的
 Capability Signing Key 环境变量。
@@ -200,9 +202,15 @@ atrex-kernel-agent-runtime show-worker-session --config runtime.json --session "
 
 ## 恢复与维护
 
-重复 Bootstrap、绝对 Epoch 目标与 Task Creation Key 都是幂等的。Bootstrap 重试会轮换 Capability Generation，同时保留此前 Run 与 Gateway Operation。Failed Epoch 恢复必须提供 Operator Key 和原因。Cancellation 是协作式的，只在安全 Transition 完成。Wiki 至少一次交付；永久失败需先检查，再显式 Requeue。
+重复 Bootstrap、绝对 Epoch 目标与 Task Creation Key 都是幂等的。Bootstrap 重试会轮换 Capability
+Generation，同时保留此前 Run 与 Gateway Operation。Failed Epoch 恢复必须提供 Operator Key 和
+原因。Cancellation 是协作式的，只在安全 Transition 完成。Wiki Query 会同步冻结，不存在待排空
+Delivery Queue。
 
-备份 SQLite 前必须停止 Runtime、Scheduler、Task Worker 和 Wiki Drainer，并一致备份 Registry、Gateway Control、Agate Jobs 与 Artifact Store。先恢复到隔离环境，再运行 Readiness 与身份校验。Runtime SQLite 使用 rollback journal；如果仍有 `-wal`/`-shm` 文件，说明状态由旧版本生成，只能在所有持有进程停止后迁移。
+备份 SQLite 前必须停止 Runtime、Scheduler、Task Worker 和 Agent 进程，并一致备份 Registry、
+Gateway Control、Agate Jobs 与 Artifact Store。先恢复到隔离环境，再运行 Readiness 与身份校验。
+Runtime SQLite 使用 rollback journal；如果仍有 `-wal`/`-shm` 文件，说明状态由旧版本生成，只能
+在所有持有进程停止后迁移。
 
 Artifact/Workspace GC 有界且默认 Dry Run。只有在部署静止并满足事故保留要求后才能 Apply。不得直接删除 CAS 对象。
 

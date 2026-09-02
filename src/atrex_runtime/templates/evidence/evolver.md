@@ -19,8 +19,8 @@ Every visible Agent revision appears exactly once, keyed by its Lineage version 
 `input/agents/agent-vN/` is its sealed Source and accumulated per-Trajectory State;
 `input/evidence/agent-vN/` is what Runtime derived about it. No directory name encodes an Epoch role.
 
-Every version has an `optimization-summary.json`. Only the two branches that competed in the most
-recent completed Epoch also have `sessions/` and `reports/`, and both of their sets come from that same
+Every version has an `optimization-summary.json`. Only the branches that competed in the most
+recent completed Epoch also have `sessions/` and `reports/`, and all of those sets come from that same
 Epoch, so their behavior is directly comparable. Every other version has Source, State, and a career
 summary but no conversations and no Attempt reports. Bootstrap, older-Epoch conversations, and detailed
 Runtime history are not exposed.
@@ -32,7 +32,8 @@ tells you which `agent-vN` competed in it:
 - `active` — ran as that Epoch's Active branch.
 - `challenger` — ran as that Epoch's Challenger at its `challenger_ordinal`.
 - `current_epoch_challenger` — created earlier in the current Epoch. It has not competed, so it has no
-  conversations and no Attempt reports.
+  conversations or Attempt Reports. Use it only to avoid duplicating an existing proposal; do not copy
+  its content, treat it as outcome Evidence, or credit it as a contributor.
 - `lineage_history` — a completed version outside that pool.
 
 The Session context does not carry an Epoch number. Read `latest_epoch.epoch_number` from either pool
@@ -42,11 +43,15 @@ The Session context marks exactly one visible Agent with `parent: true`. That re
 Base and won the last completed Epoch. Read `latest_epoch.branch` to see which side each competitor ran
 as, and `latest_epoch.outcome` to see which one won — do not infer either from a path.
 
-`latest_epoch.selection_reason` names the rule that actually decided it. Never assume the winner was
-simply faster:
+`latest_epoch.selection_reason` records the rule applied in the final pairwise selection step that
+left the Epoch winner in place. With multiple Challengers it is not the complete tournament history
+and does not explain every losing Agent individually. Never infer more than the recorded value:
 
-- `authoritative_comparison` — Runtime ran a head-to-head comparison of the two branches' best Kernels
-  and its verdict decided. This is the production path.
+- `authoritative_comparison` — Runtime used the configured authoritative Kernel comparator in that
+  step. Its accepted/rejected verdict decided the step; this does not imply the retained winner's raw
+  latency point estimate was lower.
+- `identical_kernel` — both sides reached the same best Kernel, so Runtime retained the incumbent in
+  that step without another comparison.
 - `latency` — the better best-Kernel latency won, and the difference exceeded measurement uncertainty.
 - `secondary_criteria` — the latencies tied within measurement uncertainty, so the decision fell to
   reaching the best result earlier, then more strict improvements, then more valid candidates, then
@@ -115,9 +120,10 @@ empty State. Runtime never merges Trajectories. The sealed Candidate State initi
 every Trajectory of the new revision and the next Active.
 
 Every visible version's Source and Runtime State is readable, not only the one you start from. You may
-study, summarize, and merge content from several of them into the single writable Candidate. The
-revision you declare as the Source base fixes only what your Source diff is measured against; the
-revisions you drew content from are recorded separately as provenance.
+study all of them, but may merge content only from the Active and completed Lineage history—not an
+unevaluated `current_epoch_challenger`—into the single writable Candidate. The revision you declare as
+the Source base fixes only what your Source diff is measured against; other eligible revisions you
+drew content from are recorded separately as provenance.
 
 ## Optimization summary
 

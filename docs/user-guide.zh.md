@@ -187,7 +187,33 @@ atrex-kernel-agent-runtime seed-lineage \
 Runtime 会重新校验 Agent 仓库、按目标 Campaign Contract 独立评测 Kernel，并创建新的独立
 `agent-v0`/`v0` Lineage；不会改变 Campaign 冻结的 Core/Evolver Commit。
 
-## 10. 调试 Agent Workspace
+## 10. 创建非进化 Ablation Arm
+
+创建一份 Ablation v1 JSON，指定源 Lineage 与控制组拓扑：
+
+```json
+{
+  "schema_version": 1,
+  "creation_key": "triton-no-evolution",
+  "source_lineage_id": "lineage_0123456789abcdef0123456789abcdef",
+  "attempts_per_trajectory": 3,
+  "trajectories_per_branch": 1,
+  "ephemeral_agent_state": true,
+  "optimizer_model": null
+}
+```
+
+```bash
+atrex-kernel-agent-runtime seed-ablation-arm \
+  --config runtime.json \
+  --spec ablation.json
+```
+
+Runtime 从源 Bootstrap Baseline 创建一个独立的单 Lineage Campaign，不创建 Challenger。使用
+`ephemeral_agent_state=true` 可在每次 Attempt 后清空自适应 Skills/Tools；设为 false 则保留串行
+State，只隔离 Evolver 修改缺失的影响。
+
+## 11. 调试 Agent Workspace
 
 以下命令创建或重建真实 Workspace 和权限，但不启动 Agent：
 
@@ -209,7 +235,7 @@ Revision 都把 Source 与 State 一起封存为
 每个持久工具的调用方法、输入输出、依赖、示例和限制都必须同步写入
 `tools/README.md`。
 
-## 11. 恢复与维护
+## 12. 恢复与维护
 
 失败 Epoch 不会被自动改写。检查后显式授权幂等重试：
 

@@ -84,7 +84,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Pa
         dsl_workspace = workspace / "dsls" / dsl
         campaign = CampaignSpecV3.from_file(dsl_workspace / "campaign.json")
         assert tuple(value.value for value in campaign.selected_dsls()) == (dsl,)
-        assert campaign.attempts_per_trajectory == 2
+        assert campaign.attempts_per_trajectory == 3
         assert campaign.challenger_count == 1
         assert campaign.challenger_start_epoch == 2
         assert campaign.lineages[campaign.selected_dsls()[0]].baseline_kernel == (
@@ -112,19 +112,28 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Pa
     assert secrets.stat().st_mode & 0o777 == 0o600
 
     plan = json.loads((workspace / "ablation.json").read_text(encoding="utf-8"))
-    assert plan["schema_version"] == 2
+    assert plan["schema_version"] == 3
     assert plan["enabled"] is True
-    assert plan["attempts_per_trajectory"] == 2
-    # 1 Trajectory x (1 Active + 1 Challenger) = 2 isolated arms, plus one pooled and one
-    # retained arm, each sized to that same combined Trajectory count.
+    assert plan["optimizer_attempt_budget_per_arm"] == 15
+    # Every Arm spends 15 Attempts after Bootstrap. pool-1 and pool-5 vary how those
+    # Attempts are grouped into Epochs; Bootstrap itself is outside the budget.
     assert [
-        (arm["kind"], arm["trajectories_per_branch"], arm["ephemeral_agent_state"])
+        (
+            arm["kind"],
+            arm["label"],
+            arm["trajectories_per_branch"],
+            arm["attempts_per_trajectory"],
+            arm["target_epoch_number"],
+            arm["ephemeral_agent_state"],
+        )
         for arm in plan["arms"]
     ] == [
-        ("isolated", 1, True),
-        ("isolated", 1, True),
-        ("pooled", 2, True),
-        ("retained", 2, False),
+        ("isolated", "ablation-isolated-01", 1, 3, 5, True),
+        ("isolated", "ablation-isolated-02", 1, 3, 5, True),
+        ("pooled", "ablation-pooled", 1, 3, 5, True),
+        ("pooled", "ablation-pool-1", 1, 1, 15, True),
+        ("pooled", "ablation-pool-5", 1, 5, 3, True),
+        ("retained", "ablation-retained", 1, 3, 5, False),
     ]
 
     manifest_path = workspace / "production-manifest.json"
@@ -139,12 +148,12 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(tmp_path: Pa
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == manifest
 
 
-def test_ablation_plan_derives_all_three_compute_matched_arms() -> None:
-    """Each arm must mirror Active plus every Challenger to be compute-matched on its own."""
+def test_ablation_plan_derives_equal_budget_fixed_pool_sizes() -> None:
+    """Give every control exactly 15 post-Bootstrap Attempts with different pool sizes."""
     schedule = {
         "challenger_count": 2,
         "trajectories_per_branch": 3,
-        "attempts_per_trajectory": 4,
+        "attempts_per_trajectory": 3,
         # Gating Challengers out of early Epochs must not shrink the arm set, or arm
         # identity would move between Epochs.
         "challenger_start_epoch": 5,
@@ -154,14 +163,22 @@ def test_ablation_plan_derives_all_three_compute_matched_arms() -> None:
     disabled = _ablation_plan({"schedule": {**schedule, "event_only": False}})
     omitted = _ablation_plan({"schedule": schedule})
 
-    assert enabled["schema_version"] == 2
-    assert enabled["attempts_per_trajectory"] == 4
+    assert enabled["schema_version"] == 3
+    assert enabled["optimizer_attempt_budget_per_arm"] == 15
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for arm in enabled["arms"]:
         by_kind.setdefault(str(arm["kind"]), []).append(arm)
+        assert (
+            arm["trajectories_per_branch"]
+            * arm["attempts_per_trajectory"]
+            * arm["target_epoch_number"]
+            == 15
+        )
     # 3 Trajectories x (1 Active + 2 Challengers) = 9.
     assert len(by_kind["isolated"]) == 9
     assert {arm["trajectories_per_branch"] for arm in by_kind["isolated"]} == {1}
+    assert {arm["attempts_per_trajectory"] for arm in by_kind["isolated"]} == {3}
+    assert {arm["target_epoch_number"] for arm in by_kind["isolated"]} == {5}
     assert {arm["ephemeral_agent_state"] for arm in by_kind["isolated"]} == {True}
     assert [arm["label"] for arm in by_kind["isolated"][:2]] == [
         "ablation-isolated-01",
@@ -171,22 +188,47 @@ def test_ablation_plan_derives_all_three_compute_matched_arms() -> None:
         {
             "kind": "pooled",
             "label": "ablation-pooled",
-            "trajectories_per_branch": 9,
+            "trajectories_per_branch": 1,
+            "attempts_per_trajectory": 3,
+            "target_epoch_number": 5,
             "ephemeral_agent_state": True,
-        }
+        },
+        {
+            "kind": "pooled",
+            "label": "ablation-pool-1",
+            "trajectories_per_branch": 1,
+            "attempts_per_trajectory": 1,
+            "target_epoch_number": 15,
+            "ephemeral_agent_state": True,
+        },
+        {
+            "kind": "pooled",
+            "label": "ablation-pool-5",
+            "trajectories_per_branch": 1,
+            "attempts_per_trajectory": 5,
+            "target_epoch_number": 3,
+            "ephemeral_agent_state": True,
+        },
     ]
     # The retained arm keeps Skills and Tools, so only the Evolver is removed.
     assert by_kind["retained"] == [
         {
             "kind": "retained",
             "label": "ablation-retained",
-            "trajectories_per_branch": 9,
+            "trajectories_per_branch": 1,
+            "attempts_per_trajectory": 3,
+            "target_epoch_number": 5,
             "ephemeral_agent_state": False,
         }
     ]
     assert disabled["arms"] == []
     assert disabled["enabled"] is False
     assert omitted == disabled
+
+    with pytest.raises(ValueError, match="cannot spend exactly 15 Attempts"):
+        _ablation_plan(
+            {"schedule": {**schedule, "attempts_per_trajectory": 4, "event_only": True}}
+        )
 
 
 def test_prepare_seeds_each_dsl_campaign_from_its_own_kernel(tmp_path: Path) -> None:
@@ -461,6 +503,17 @@ def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
             ),
             encoding="utf-8",
         )
+    workspace.joinpath("ablation.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "enabled": False,
+                "optimizer_attempt_budget_per_arm": 15,
+                "arms": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     for phase, extra in (("bootstrap", ()), ("campaign", ("--target-epoch", "10"))):
         subprocess.run(
@@ -519,7 +572,7 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
             json.dumps(
                 {
                     "campaign_id": f"campaign_{index + 100:032x}",
-                    "target_epoch_number": 10,
+                    "target_epoch_number": 5,
                     "lineages": [{"dsl": dsl}],
                 }
             ),
@@ -531,6 +584,27 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
         )
         # A second arm that never produced a result must not sink the whole summary.
         (dsl_workspace / "ablation-pooled").mkdir()
+
+    workspace.joinpath("ablation.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "enabled": True,
+                "optimizer_attempt_budget_per_arm": 15,
+                "arms": [
+                    {
+                        "label": "ablation-isolated-01",
+                        "target_epoch_number": 5,
+                    },
+                    {
+                        "label": "ablation-pooled",
+                        "target_epoch_number": 5,
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     subprocess.run(
         (
@@ -556,7 +630,9 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
         assert arms[0]["campaign_id"] != entry["campaign_id"]
         assert arms[0]["result"]["lineages"][0]["dsl"] == dsl
         assert arms[0]["seed_result"]["event_only"] is True
+        assert arms[0]["target_epoch_number"] == 5
         assert arms[1]["status"] == "missing"
+        assert arms[1]["target_epoch_number"] == 5
 
     subprocess.run(
         (
@@ -597,6 +673,17 @@ def test_summarize_preserves_successful_dsl_results_when_one_is_missing(
             ),
             encoding="utf-8",
         )
+    workspace.joinpath("ablation.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 3,
+                "enabled": False,
+                "optimizer_attempt_budget_per_arm": 15,
+                "arms": [],
+            }
+        ),
+        encoding="utf-8",
+    )
 
     subprocess.run(
         (
@@ -644,6 +731,8 @@ def test_production_runner_has_independent_per_dsl_pipelines() -> None:
     assert 'run_dsl_pipeline "${dsl}" &' in runner
     assert 'if ! bootstrap_one "${dsl}"; then' in runner
     assert 'run_one "${dsl}" "${campaign_id}"' in runner
+    assert 'arm_target_epoch="$(' in runner
+    assert '--campaign "${campaign_id}" --target-epoch "${arm_target_epoch}"' in runner
     assert "At least one DSL Bootstrap failed" not in runner
 
 

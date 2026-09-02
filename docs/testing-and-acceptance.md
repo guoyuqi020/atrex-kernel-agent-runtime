@@ -27,7 +27,12 @@ environment has exercised the Linux Sandbox boundary, shared-host DNS/egress and
 virtiofs Worker-root preparation, and live Claude/Codex/QoderCLI connectivity. This evidence is
 diagnostic and does not replace acceptance on the exact production image.
 
-The Runtime suite covers durable state transitions and schema migration, fencing, append-only Bootstrap generations and partial recovery, common Core phases, full-repository Evolution, token reports, ordinary repeated Evaluate, same-allocation ABBA scheduling/batching/per-run evidence, durable Kernel/Agent/measurement/Bootstrap Run catalog queries and bounded source export, generation-scoped Gateway/Wiki capabilities and operation retention, Evidence visibility and raw-by-digest materialization, Wiki Outbox, lifecycle events, administration, readiness, retention, Git archive safety, exact commit provenance, application startup, and wheel independence.
+The Runtime suite covers durable state transitions and schema migration, fencing, append-only
+Bootstrap generations and recovery, Core phases, full-repository Evolution, provider-native usage,
+ordinary Evaluate, same-allocation ABBA, Production Gate, Kernel/Agent/Trial/measurement catalogs,
+bounded source export, generation-scoped Gateway/Wiki capabilities, query freezing, Evidence
+visibility, lifecycle events, administration, readiness, retention, Git import safety, commit
+provenance, application startup, ablation arms, and wheel independence.
 
 ## Live Agent Backend connectivity
 

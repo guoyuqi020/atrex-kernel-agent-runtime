@@ -26,7 +26,11 @@ Lima 参考环境已经覆盖 Linux Sandbox 边界、共享宿主 DNS/出站与 
 Root 准备，以及 Claude/Codex/QoderCLI 真实连通性。这些证据只用于诊断，不能替代准确生产镜像
 上的验收。
 
-Runtime Suite 覆盖持久状态 Transition 与 Schema Migration、Fencing、Append-only Bootstrap Generation/部分恢复、共用 Core 阶段、完整仓库 Evolution、Token Report、普通重复 Evaluate、同 Allocation ABBA Schedule/Batch/逐轮证据、持久 Kernel/Agent/Measurement/Bootstrap Run Catalog 查询和有界 Source 导出、按 Generation 隔离的 Gateway/Wiki Capability 与 Operation 保留、Evidence 可见性与按 Digest 原始物化、Wiki Outbox、生命周期 Event、管理、Readiness、保留、Git Archive 安全、精确 Commit Provenance、应用启动和 Wheel 独立性。
+Runtime Suite 覆盖持久 Transition 与 Schema Migration、Fencing、Append-only Bootstrap
+Generation/Recovery、Core Phase、完整仓库 Evolution、Provider 原生用量、普通 Evaluate、同 Allocation
+ABBA、Production Gate、Kernel/Agent/Trial/Measurement Catalog、有界 Source 导出、按 Generation 隔离
+的 Gateway/Wiki Capability、Query 冻结、Evidence 可见性、生命周期 Event、管理、Readiness、保留、
+Git Import 安全、Commit Provenance、应用启动、Ablation Arm 和 Wheel 独立性。
 
 ## 真实 Agent Backend 连通性
 

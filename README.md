@@ -11,6 +11,12 @@ The Runtime does not implement an Agent framework. Core and Evolver own their pr
 workflow, and Claude/Codex/QoderCLI/Pi adapters. Runtime owns immutable provenance, model/backend
 binding, capabilities, evaluation policy, persistence, sandbox policy, and promotion.
 
+This separation is useful even with a fixed, non-evolving Optimizer. Prompt-driven Harnesses can
+prescribe a workflow and ask an Agent to summarize experiments, but an Agent-authored Journal is not
+an automatic record of execution. Runtime therefore captures exact Kernels, Gateway measurements,
+tool failures, Sessions, and their relationships when they occur; Agent reports add interpretation
+without becoming the source of measurement truth. See [Design principles](docs/design-principles.md).
+
 ## Main lifecycle
 
 ```text
@@ -74,12 +80,14 @@ for trusted local debugging or configure the Linux `sandbox` launcher, then foll
 ## Documentation
 
 - [Documentation index](docs/README.md)
+- [Design principles](docs/design-principles.md)
+- [Design and implementation](DESIGN.md)
 - [Architecture and trust design](docs/architecture.md)
-- [Module design](docs/module-design.md)
 - [User Guide](docs/user-guide.md)
 - [CLI, HTTP, and Runtime Tools interfaces](docs/interfaces.md)
 - [Configuration reference](docs/configuration.md)
-- [Performance and correctness gates](docs/performance-gates.md)
+- [Evaluation and promotion](docs/evaluation.md)
+- [Durable protocols](docs/protocols.md)
 - [Deployment and operations](docs/operations.md)
 - [Production runner](scripts/production/README.md)
 - [Release checklist](docs/release-checklist.md)

@@ -30,12 +30,24 @@ service 前自行提权；`container` 模式完全不会提权。
 - 每个 DSL 在自己的 Bootstrap 成功后立即进入 Epoch，不等待另外两个 DSL；
 - 一个 DSL Bootstrap 或运行失败不会取消或阻塞另外两个，成功结果会保留，重复执行只恢复失败
   或未完成的 Campaign；
-- 默认运行至 Epoch 10；
-- Epoch 1 只有 Active，串行运行 2 个全新 Optimizer Session；
+- 默认运行至 Epoch 5；
+- Epoch 1 只有 Active，串行运行 3 个全新 Optimizer Session；
 - 从 Epoch 2 开始，每个 Epoch 开始前由一个 Evolver 生成一个 Challenger；
-- Active 和 Challenger 并行运行，各自串行运行 2 个 Attempt；
+- Active 和 Challenger 并行运行，各自串行运行 3 个 Attempt；
 - Epoch 结束后独立比较并选择 Agent，下一 Epoch 再生成一个 Challenger；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
+
+默认 `event_only=true` 时，每个 DSL 还会运行不包含 Evolver 的 Ablation Campaign。
+每个 Arm 都固定使用 15 个 Bootstrap 之后的 Optimizer Attempt，Bootstrap 不计入。默认 Pool
+每个 Epoch 运行 3 个 Attempt，另外两个串行 Pool Arm 只改变 Attempt 的分组方式：
+
+- `ablation-pooled`：5 个 Epoch x 3 个 Attempt；
+- `ablation-pool-1`：15 个 Epoch x 1 个 Attempt；
+- `ablation-pool-5`：3 个 Epoch x 5 个 Attempt。
+
+Isolated 和 Retained 对照臂同样运行 5 个 Epoch x 3 个 Attempt。生成的 Ablation Plan
+会为每个 Arm 分别保存每 Epoch Attempt 数和派生的目标 Epoch。因此 `--target-epoch`
+只控制进化 Campaign，不改变固定的 Ablation 预算。
 
 ## 前置条件
 
@@ -103,7 +115,7 @@ bash scripts/production/run.sh \
   --env-file /secure/atrex-production.env
 ```
 
-默认绝对目标为 Epoch 10；需要继续到其他 Epoch 时可显式传入 `--target-epoch N`。
+默认绝对目标为 Epoch 5；需要继续到其他 Epoch 时可显式传入 `--target-epoch N`。
 
 对于新版 Atrex-Bench 布局，准备流程只把 `shape_train.json` 暴露给 Agent，并将
 `shape_valid.json` 作为精确 Evaluation Contract 封存。旧版 `agent_problem.json` 与

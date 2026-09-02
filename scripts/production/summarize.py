@@ -67,14 +67,24 @@ def _ablation_arms(
     dsl_workspace: Path,
     *,
     dsl: str,
-    target_epoch: int | None,
+    plan: dict[str, Any],
     allow_partial: bool,
 ) -> list[dict[str, Any]]:
     """Collect each control arm's Campaign result so the comparison pairing is durable."""
+    targets = {
+        str(arm["label"]): int(arm["target_epoch_number"])
+        for arm in plan.get("arms", [])
+    }
     arms: list[dict[str, Any]] = []
     for arm_workspace in sorted(dsl_workspace.glob("ablation-*")):
         if not arm_workspace.is_dir():
             continue
+        try:
+            target_epoch = targets[arm_workspace.name]
+        except KeyError as error:
+            raise SystemExit(
+                f"{dsl} ablation arm is absent from the frozen plan: {arm_workspace.name}"
+            ) from error
         path = arm_workspace / "campaign-result.json"
         seed_path = arm_workspace / "seed-result.json"
         if not path.is_file():
@@ -86,6 +96,7 @@ def _ablation_arms(
                     "result": None,
                     "result_path": str(path),
                     "status": "missing",
+                    "target_epoch_number": target_epoch,
                 }
             )
             continue
@@ -98,6 +109,7 @@ def _ablation_arms(
                 "result": value,
                 "result_path": str(path),
                 "seed_result": _load(seed_path) if seed_path.is_file() else None,
+                "target_epoch_number": target_epoch,
             }
         )
     return arms
@@ -106,6 +118,9 @@ def _ablation_arms(
 def main() -> None:
     arguments = _arguments()
     workspace = arguments.workspace.expanduser().resolve()
+    ablation_plan = _load(workspace / "ablation.json") if arguments.phase == "campaign" else {}
+    if arguments.phase == "campaign" and ablation_plan.get("schema_version") != 3:
+        raise SystemExit("campaign summary requires Ablation Plan schema 3")
     results: dict[str, Any] = {}
     for dsl in DSLS:
         dsl_workspace = workspace / "dsls" / dsl
@@ -119,7 +134,7 @@ def main() -> None:
             _ablation_arms(
                 dsl_workspace,
                 dsl=dsl,
-                target_epoch=arguments.target_epoch,
+                plan=ablation_plan,
                 allow_partial=arguments.allow_partial,
             )
             if arguments.phase == "campaign"
@@ -154,6 +169,9 @@ def main() -> None:
         "schema_version": 1,
         "phase": arguments.phase,
         "target_epoch_number": arguments.target_epoch,
+        "ablation_optimizer_attempt_budget_per_arm": ablation_plan.get(
+            "optimizer_attempt_budget_per_arm"
+        ),
         "created_at": datetime.now(UTC).isoformat(),
         "dsls": results,
     }

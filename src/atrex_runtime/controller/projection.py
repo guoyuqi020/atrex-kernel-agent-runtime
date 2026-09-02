@@ -12,6 +12,7 @@ from typing import Literal
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore, StoredArtifact
 from ..domain.ids import ArtifactDigest
+from ..filesystem import regular_file_map
 from ..workers.session_trace import retained_session_file
 
 TRACE_PROJECTION_VERSION: Literal[2] = 2
@@ -118,7 +119,7 @@ class EvidenceArtifactProjector:
         }
 
     def raw_session_projection(self, digest: ArtifactDigest) -> dict[str, JsonValue]:
-        """Return every bounded retained Session file for post-Epoch Wiki upload."""
+        """Return every bounded retained Session file for authorized Evidence materialization."""
         artifact, all_files = self._bounded_session(digest)
         files: list[JsonValue] = []
         for path in all_files:
@@ -365,8 +366,4 @@ class EvidenceArtifactProjector:
 
     @staticmethod
     def _regular_files(root: Path) -> dict[str, Path]:
-        return {
-            PurePosixPath(*path.relative_to(root).parts).as_posix(): path
-            for path in root.rglob("*")
-            if path.is_file()
-        }
+        return regular_file_map(root)

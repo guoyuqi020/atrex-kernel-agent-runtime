@@ -6,6 +6,9 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- 新增 `ablation-pool-1` 和 `ablation-pool-5` 生产对照臂，并将所有 Ablation Arm 的预算
+  固定为 Bootstrap 之后恰好 15 个 Optimizer Attempt。各 Arm 按每 Epoch 1、3 或 5 个 Attempt
+  自行派生目标 Epoch，Bootstrap 始终不计入。
 - 为 Optimizer 的 Attempt Report 新增必填的 `contributing_kernel_trial_ids`，列出本次 Attempt 取用过
   其代码或思路的历史 Kernel Trial。之所以用 Kernel Trial ID，是因为 Optimizer 本来就没有、也不应该
   获得 Kernel Revision 词汇。Core 与 Runtime 都只校验形状，都不去解析它是否在可见历史内，与该 Report
@@ -21,6 +24,12 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 - 向 Optimizer 开放每个已完成 Epoch 的全部分支（包括未被选中的），位于
   `epochs/N/branches/<label>/`，每个 Epoch 的 `summary.json` 标明被选中的分支。当前 Epoch 仍只显示本
   Attempt 自己的 Trajectory，绝不暴露并发运行的兄弟分支。
+- 围绕架构、配置、接口、评测、运维与持久协议重新整合发布文档；删除已被取代的设计/状态文档，
+  并将术语与当前 Campaign、Lineage、Epoch、Branch、Trajectory、Attempt、Kernel Trial、
+  Kernel Revision 和 Agent Revision 模型同步。
+- 新增精简的设计理念文档，解释可进化 Agent 与可信 Runtime Authority 之间的分离。
+- 删除无调用方的完整 Agent State 快照校验，并统一 Gateway Result 投影、Candidate 路径解析、
+  Artifact 文件索引与 SQLite 事务处理。
 - 增加常驻生产控制面、受管多 DSL Campaign Task 与逐 DSL 检查脚本。
 - Sandbox Host 准备支持并发，并通过以非 root Worker 直接创建 Root/Probe 兼容 Lima virtiofs。
 - 明确记录 Worker 共享宿主网络的边界。
@@ -32,7 +41,7 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 - 固定版本的上游 GPU Kernel 项目作为 Framework Baseline Workspace 的 `reference/` 目录提供，
   在两种 bubblewrap 模式下从 `reference_projects_root` 只读挂载。Attempt 不再挂载这棵树：
   通读上游项目属于建立首个实现的工作，而 Attempt 应当依据自己已测得的历史推进。
-- Attempt Manifest 升到 schema 8，并不再在其中发布 Workspace 布局。布局在两端都是固定的，
+- Attempt Manifest 升到 schema 9，并不再在其中发布 Workspace 布局。布局在两端都是固定的，
   且已由 Agent Prompt 说明，序列化它只是让一张写死的表和另一张写死的表互相比较，同时把每次
   布局调整都变成破坏性协议升级。按更早 schema 注册的 Kernel Agent Revision 不再能启动，
   已有 Lineage 需要重新 Bootstrap。

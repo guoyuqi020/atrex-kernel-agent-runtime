@@ -39,7 +39,8 @@ Core and Evolver are deployment-approved Git repositories pinned by full commit.
    The periodic health observation remains a bounded one-shot probe; it never owns Campaign work.
 6. Keep Runtime, Gateway, and optional Wiki available while running Campaign schema-v3 bootstrap;
    Core baseline sessions call back through Runtime.
-7. Schedule a Campaign by absolute target epoch. Run the Wiki drainer independently.
+7. Schedule a Campaign by absolute target Epoch. GPU Wiki needs only its query service; Runtime has
+   no feedback drainer or delivery process.
 
 Example commands are in the repository [README](../README.md). Configuration contains credential environment-variable names only.
 
@@ -110,8 +111,10 @@ atrex-kernel-agent-runtime show-agent-revision \
 
 ## Attempt evaluation history
 
-Use `list-evaluations` to inspect every exploratory Kernel submitted by an Agent and the independent
-Runtime-final evaluation for one Attempt. `show-evaluation` identifies one immutable pair;
+Use `list-evaluations` to inspect every exploratory Kernel submitted by an Agent and the
+Runtime-owned comparator/finalization records for one Attempt. The retention comparator's Candidate
+aggregate is authoritative; Runtime does not add another independent final Eval afterward.
+`show-evaluation` identifies one immutable pair;
 `--source` includes the exact files evaluated at that step and `--result` includes the complete raw
 Gateway response. These records exist even when the Kernel was incorrect, reverted, or never became
 a Kernel Revision. The CLI opens Gateway Control directly and therefore requires the configured
@@ -213,9 +216,16 @@ trace could be sealed; the catalog still retains their exact workspace and termi
 
 ## Recovery and maintenance
 
-Repeated bootstrap, absolute epoch targets, and task creation keys are idempotent. Bootstrap retries rotate capability Generation while retaining earlier Runs and Gateway operations. Failed Epoch recovery requires an operator key and reason. Cancellation is cooperative and only finalizes at safe transitions. Wiki delivery is at least once; inspect permanent failures, then explicitly requeue.
+Repeated Bootstrap, absolute Epoch targets, and Task creation keys are idempotent. Bootstrap retries
+rotate Capability Generation while retaining earlier Runs and Gateway operations. Failed Epoch
+recovery requires an operator key and reason. Cancellation is cooperative and only finalizes at
+safe transitions. Wiki queries are frozen synchronously; there is no delivery queue to drain.
 
-Before SQLite backup, quiesce Runtime, schedulers, task workers, and Wiki drainers, then back up Registry, Gateway control, Agate jobs, and Artifact store consistently. Restore into an isolated environment first and run readiness plus identity checks. Runtime SQLite files use rollback journals; a leftover `-wal`/`-shm` pair indicates state created by an older release and should only be migrated while every owning process is stopped.
+Before SQLite backup, quiesce Runtime, schedulers, task workers, and Agent processes, then back up
+Registry, Gateway control, Agate jobs, and Artifact store consistently. Restore into an isolated
+environment first and run readiness plus identity checks. Runtime SQLite files use rollback
+journals; a leftover `-wal`/`-shm` pair indicates state created by an older release and should only
+be migrated while every owning process is stopped.
 
 Artifact and workspace GC are bounded and dry-run by default. Apply them only while the deployment is quiescent and after incident-retention requirements are satisfied. Never delete objects directly from the CAS.
 

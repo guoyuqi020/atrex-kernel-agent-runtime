@@ -2,42 +2,35 @@
 
 English | [中文](README.zh.md)
 
-## Start here
+## Use and operate
 
-- [User Guide](user-guide.md): install, configure, bootstrap, run, inspect, recover, and maintain.
-- [Interface Reference](interfaces.md): CLI, HTTP API, Optimizer Runtime Tools, Evolver filesystem
-  inputs, and external service contracts.
+- [User Guide](user-guide.md): install, configure, Bootstrap, run, inspect, and recover.
 - [Configuration Reference](configuration.md): Runtime schema v1 and Campaign schema v3.
-- [Runnable examples](../examples/README.md): remote Agate, Bootstrap, Lineage, Evolution, dev
-  shells, and local Wiki.
-- [Production runner](../scripts/production/README.md): persistent control plane, managed Campaign
-  tasks, per-DSL inspection, and recovery.
+- [Interface Reference](interfaces.md): CLI, HTTP, Optimizer Runtime Tools, and Evolver filesystem.
+- [Deployment and Operations](operations.md): production topology, isolation, backup, and incidents.
+- [Runnable Examples](../examples/README.md) and
+  [Production Runner](../scripts/production/README.md).
 
-## Design
+## Understand and verify
 
-- [Architecture](architecture.md): trust boundary, lifecycle, isolation, and data flow.
-- [Module design](module-design.md): implementation modules and ownership.
-- [Runtime code organization](code-organization.md): dependency direction and source layout.
-- [Full-repository Agent revision](full-repository-optimizer-revision.md): Git import, sealing,
-  evolution, and provenance.
-- [Performance gates](performance-gates.md): correctness, Production Gate, Evaluate, and ABBA.
-- [Trusted Roofline construction](roofline-builder.md): optional commit-pinned Roofline generation.
-- [Architecture decisions](decisions/README.md): current decisions only.
-
-## Operations and release
-
-- [Deployment and operations](operations.md): production topology, sandbox setup, backup, recovery,
-  retention, and incidents.
-- [Protocols](protocols.md): durable schemas and Artifact semantics.
-- [Implementation status](implementation-status.md): implemented scope and remaining acceptance work.
-- [Testing and production acceptance](testing-and-acceptance.md): automated and target-environment
-  verification.
-- [Release checklist](release-checklist.md): packaging and publication gate.
-- [Changelog](../CHANGELOG.md): released behavior by version.
+- [Design Principles](design-principles.md): why the Runtime separates Agent evolution from trusted
+  control, uses Lineage-local competition, and keeps history append-only.
+- [Design and Implementation](../DESIGN.md): AKA limitations, missing evolution capabilities,
+  Runtime responsibilities, end-to-end execution, implementation mapping, and remaining risks.
+- [Architecture](architecture.md): terminology, ownership, lifecycle, storage, isolation, and source
+  organization.
+- [Evaluation and Promotion](evaluation.md): private contracts, correctness, Production Gate,
+  Evaluate/ABBA, Roofline, NCU, and selection.
+- [Protocols](protocols.md): durable identities, Artifacts, Evidence, Session, and visibility rules.
+- [Architecture Decisions](decisions/README.md): rationale that still constrains the implementation.
+- [Testing and Production Acceptance](testing-and-acceptance.md): repository checks and deployment
+  evidence.
+- [Release Checklist](release-checklist.md) and [Changelog](../CHANGELOG.md).
 
 ## Documentation authority
 
-Current code and strict schemas are the executable authority. The interface and configuration
-references describe the supported public surface. Architecture decisions explain why current
-constraints exist; they do not add compatibility behavior. If target-environment acceptance is not
-listed as complete in implementation status, the feature is implemented but not production-proven.
+Current code and strict schemas are executable authority. Configuration and Interface references
+define the supported public surface. Architecture and Protocols describe current semantics;
+Architecture Decisions only explain why constraints exist. Production readiness is established by
+the Testing/Acceptance document and Release Checklist, not by a manually maintained feature-status
+table.

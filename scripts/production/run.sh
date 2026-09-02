@@ -247,7 +247,7 @@ ablation_arm_labels() {
   "${atrex_prod_python}" -c '
 import json, re, sys
 value = json.load(open(sys.argv[1], encoding="utf-8"))
-if value.get("schema_version") != 2:
+if value.get("schema_version") != 3:
     raise SystemExit(f"unsupported ablation plan schema: {sys.argv[1]}")
 if not value.get("enabled"):
     raise SystemExit(0)
@@ -281,7 +281,7 @@ json.dump(
         "schema_version": 1,
         "creation_key": f"{label}-{sys.argv[5]}",
         "source_lineage_id": lineages[0]["lineage_id"],
-        "attempts_per_trajectory": int(plan["attempts_per_trajectory"]),
+        "attempts_per_trajectory": int(arm["attempts_per_trajectory"]),
         "trajectories_per_branch": int(arm["trajectories_per_branch"]),
         "ephemeral_agent_state": bool(arm["ephemeral_agent_state"]),
     },
@@ -324,13 +324,21 @@ if re.fullmatch(r"campaign_[0-9a-f]{32}", campaign) is None:
     raise SystemExit(f"Arm seed result has no valid campaign_id: {sys.argv[1]}")
 print(campaign)
 ' "${atrex_prod_arm_seed_result}")" || return 1
+  local arm_target_epoch
+  arm_target_epoch="$("${atrex_prod_python}" -c '
+import json, sys
+plan = json.load(open(sys.argv[1], encoding="utf-8"))
+label = sys.argv[2]
+arm = next(item for item in plan["arms"] if item["label"] == label)
+print(int(arm["target_epoch_number"]))
+' "${atrex_prod_ablation_plan}" "${label}")" || return 1
   local temporary="${atrex_prod_arm_campaign_result}.tmp.${BASHPID}"
   rm -f -- "${temporary}"
   : >"${atrex_prod_arm_log}"
-  echo "[${dsl}/${label}] Campaign ${campaign_id} started through Epoch ${target_epoch}."
+  echo "[${dsl}/${label}] Campaign ${campaign_id} started through Epoch ${arm_target_epoch}."
   set +e
   "${atrex_prod_cli}" run-campaign --config "${atrex_prod_config}" \
-    --campaign "${campaign_id}" --target-epoch "${target_epoch}" \
+    --campaign "${campaign_id}" --target-epoch "${arm_target_epoch}" \
     2> >(tee "${atrex_prod_arm_log}" >&2) | tee "${temporary}"
   local statuses=("${PIPESTATUS[@]}")
   set -e
@@ -417,19 +425,26 @@ run_dsl_pipeline() (
 )
 
 echo
-attempts_per_branch=""
-if [[ -f "${atrex_prod_ablation_plan}" ]]; then
-  attempts_per_branch="$(
-    "${atrex_prod_python}" -c '
+attempts_per_branch="$(
+  "${atrex_prod_python}" -c '
 import json, sys
 print(json.load(open(sys.argv[1], encoding="utf-8"))["attempts_per_trajectory"])
+' "${atrex_prod_dsls_root}/cuda/campaign.json"
+)"
+echo "Each evolution Campaign has ${attempts_per_branch} serial Attempts per Branch and targets Epoch ${target_epoch}."
+if [[ -f "${atrex_prod_ablation_plan}" ]]; then
+  "${atrex_prod_python}" -c '
+import json, sys
+plan = json.load(open(sys.argv[1], encoding="utf-8"))
+if plan.get("enabled"):
+    values = [
+        f"{arm['label']}={arm['target_epoch_number']} Epochs x "
+        f"{arm['attempts_per_trajectory']} Attempts = "
+        f"{plan['optimizer_attempt_budget_per_arm']} total"
+        for arm in plan["arms"]
+    ]
+    print("Ablation arms: " + ", ".join(values))
 ' "${atrex_prod_ablation_plan}"
-  )"
-fi
-if [[ -n "${attempts_per_branch}" ]]; then
-  echo "Each Campaign has ${attempts_per_branch} serial Attempts per Branch and targets Epoch ${target_epoch}."
-else
-  echo "Each Campaign runs its configured serial Attempts per Branch and targets Epoch ${target_epoch}."
 fi
 echo "Epoch 1 is Active-only. From Epoch 2, Active and one Challenger run concurrently."
 

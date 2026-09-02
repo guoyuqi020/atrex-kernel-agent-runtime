@@ -20,7 +20,7 @@ the selected Source base and initial Active State checkpoint, validates the repo
 changed-file set, and requires at least one actual Source or State change. Runtime State paths are
 not part of the Agent report. For reuse it requires Source and the common seed to remain unchanged. For
 `evolve_from_history`, Evolver replaces Source with a writable copy from the selected
-`input/historical/agent-vN/` and may synthesize the common seed from visible historical state.
+`input/agents/agent-vN/source/` and may synthesize the common seed from visible historical state.
 Runtime validates the declared base and checks the final Diff across Source and state seed.
 
 Every proposal may carry bounded `unimplemented_capabilities`. Each entry names an Agent capability,

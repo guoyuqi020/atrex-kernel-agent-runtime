@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+
+
+def regular_file_map(root: Path) -> dict[str, Path]:
+    """Index regular descendants by normalized POSIX-relative path."""
+    return {
+        PurePosixPath(*path.relative_to(root).parts).as_posix(): path
+        for path in root.rglob("*")
+        if path.is_file()
+    }
 
 
 def make_tree_owner_writable(root: Path) -> None:
@@ -22,4 +31,4 @@ def _set_tree_modes(root: Path, *, directory_mode: int, file_mode: int) -> None:
     os.chmod(root, directory_mode)
 
 
-__all__ = ["make_tree_owner_writable", "make_tree_read_only"]
+__all__ = ["make_tree_owner_writable", "make_tree_read_only", "regular_file_map"]

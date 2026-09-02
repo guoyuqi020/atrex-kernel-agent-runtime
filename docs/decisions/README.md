@@ -12,7 +12,6 @@ designs were removed from the release tree. Current behavior is defined by code,
 - [0001](0001-agate-sdk-adapter.md): Agate SDK adapter boundary
 - [0003](0003-evidence-handoff.md): immutable Evidence handoff
 - [0007](0007-immutable-agent-traces.md): immutable raw Agent traces
-- [0012](0012-documentation-status-and-release-gates.md): documentation authority and release gates
 - [0013](0013-branch-local-attempt-evidence.md): branch-local Attempt Evidence
 - [0014](0014-failed-epoch-recovery.md): failed-Epoch recovery
 - [0015](0015-durable-campaign-task-control-plane.md): durable Campaign Tasks

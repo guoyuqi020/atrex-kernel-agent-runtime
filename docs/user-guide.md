@@ -198,7 +198,33 @@ Runtime revalidates the Agent repository, independently evaluates the Kernel aga
 Campaign contract, and creates a new independent `agent-v0`/`v0` Lineage. This does not alter the
 Campaign's frozen Core or Evolver commits.
 
-## 10. Debug Agent workspaces
+## 10. Create an unevolved ablation arm
+
+Create a small Ablation v1 JSON file naming a source Lineage and its control topology:
+
+```json
+{
+  "schema_version": 1,
+  "creation_key": "triton-no-evolution",
+  "source_lineage_id": "lineage_0123456789abcdef0123456789abcdef",
+  "attempts_per_trajectory": 3,
+  "trajectories_per_branch": 1,
+  "ephemeral_agent_state": true,
+  "optimizer_model": null
+}
+```
+
+```bash
+atrex-kernel-agent-runtime seed-ablation-arm \
+  --config runtime.json \
+  --spec ablation.json
+```
+
+Runtime creates a separate one-Lineage Campaign from the source Bootstrap baseline with no
+Challenger. Use `ephemeral_agent_state=true` to reset adaptive Skills/Tools every Attempt; use false
+to retain serial State and isolate only the absence of Evolver changes.
+
+## 11. Debug Agent workspaces
 
 These commands create/reconstruct the real workspace and authority but do not start an Agent:
 
@@ -221,7 +247,7 @@ and State together as one logical Bundle, and each new trajectory receives an in
 copy. Keep `tools/README.md` synchronized with every saved
 tool's invocation, inputs, outputs, dependencies, example, and limitations.
 
-## 11. Recovery and maintenance
+## 12. Recovery and maintenance
 
 A failed Epoch is not automatically rewritten. After inspection, authorize an idempotent retry:
 

@@ -320,7 +320,7 @@ def build_parser() -> argparse.ArgumentParser:
     artifact_gc.add_argument(
         "--confirm-runtime-stopped",
         action="store_true",
-        help="confirm all Runtime, Worker, Wiki drainer, and bootstrap processes are stopped",
+        help="confirm all Runtime, Worker, Agent, and bootstrap processes are stopped",
     )
     workspace_gc = commands.add_parser(
         "gc-workspaces",
@@ -333,7 +333,7 @@ def build_parser() -> argparse.ArgumentParser:
     workspace_gc.add_argument(
         "--confirm-runtime-stopped",
         action="store_true",
-        help="confirm all Runtime, Worker, Wiki drainer, and bootstrap processes are stopped",
+        help="confirm all Runtime, Worker, Agent, and bootstrap processes are stopped",
     )
     digest_evolver = commands.add_parser(
         "digest-evolver-bundle",

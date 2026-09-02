@@ -1,219 +1,76 @@
-# Protocols
+# Durable protocols
 
 English | [中文](protocols.zh.md)
 
-All JSON schemas reject unknown fields. IDs use typed prefixes; Artifact digests use `sha256:<64 lowercase hex>`. Durable payloads are canonical UTF-8 JSON where a digest depends on serialization.
+This document defines persisted identities and visibility rules. Callable commands and routes are
+in [Interface Reference](interfaces.md); deployment fields are in
+[Configuration](configuration.md); measurement policy is in
+[Evaluation and Promotion](evaluation.md). Pydantic models and database migrations remain the
+executable schema authority.
 
-## HTTP surface
+## Identity and versioning
 
-| Route | Authority | Purpose |
-| --- | --- | --- |
-| `GET /healthz` | none | Process liveness. |
-| `GET /readyz` | none | Local Registry, Gateway control, Agate job store, and Artifact-store probes. |
-| `POST /v1/operations` | Attempt capability | Structured GPU/Agate operation; every Agent `evaluate` is an immutable exploratory record. |
-| `POST /v1/runtime/queries` | Attempt capability | Unmetered reads for a known Trial, Kernel source, or Gateway result. |
-| `POST /v1/runtime/journals` | Attempt capability | Immediate durable Direction/Experiment mutations and authorized list/load reads. |
-| `POST /v1/wiki/query` | Attempt capability | Runtime-enriched live Wiki query, frozen before return. |
-| `POST /v1/admin/campaigns/bootstrap` | Admin bearer | Campaign schema v3 only. |
-| `POST /v1/admin/campaigns/{id}/lineages` | Admin bearer | Add an independently versioned Lineage from sealed Agent and Kernel content. |
-| `GET /v1/admin/bootstrap-attempts/{id}/runs` | Admin bearer | Ordered physical Bootstrap execution Generations. |
-| `GET /v1/admin/bootstrap-attempts/{id}/runs/{generation}` | Admin bearer | Exact Bootstrap status, failure, workspace, tokens, Trace, Report, and result identities. |
-| `GET /v1/admin/campaigns/{id}/epochs` | Admin bearer | Active/Challenger competition and winner history across Campaign lineages. |
-| `GET /v1/admin/lineages/{id}/epochs` | Admin bearer | Ordered Epoch winner history with `agent-vN` and `vN` labels. |
-| `GET /v1/admin/campaigns/{id}/attempts` | Admin bearer | Every Attempt across Campaign lineages, including no-Candidate outcomes. |
-| `GET /v1/admin/lineages/{id}/attempts` | Admin bearer | Ordered complete Attempt history for one lineage. |
-| `GET /v1/admin/attempts/{id}` | Admin bearer | One Attempt's status, report disposition, and input/output version relation. |
-| `GET /v1/admin/attempts/{id}/report` | Admin bearer | Runtime Final Attempt Report with authoritative parent/Candidate Gateway performance. |
-| `GET /v1/admin/attempts/{id}/evaluations` | Admin bearer | Ordered Agent-exploratory and Runtime-final evaluations. |
-| `GET /v1/admin/attempts/{id}/evaluations/{evaluation_id}` | Admin bearer | One immutable evaluated Kernel/result identity pair. |
-| `GET .../evaluations/{evaluation_id}/source` | Admin bearer | Exact bounded files of the Kernel evaluated at that step. |
-| `GET .../evaluations/{evaluation_id}/result` | Admin bearer | Exact raw Gateway result for that step. |
-| `GET /v1/admin/attempts/{id}/kernel-trials` | Admin bearer | Exact unversioned Candidate snapshots observed in the Attempt. |
-| `GET /v1/admin/attempts/{id}/kernel-trials/{trial_id}` | Admin bearer | One Trial's Gateway observations and Agent decisions. |
-| `GET .../kernel-trials/{trial_id}/source` | Admin bearer | Exact files for a measured, probed, or reverted Trial. |
-| `GET .../kernel-trials/{trial_id}/results` | Admin bearer | Retained structured results for each Trial observation. |
-| `GET /v1/admin/campaigns/{id}/kernels` | Admin bearer | Every baseline and terminal Attempt Kernel across DSL lineages. |
-| `GET /v1/admin/lineages/{id}/kernels` | Admin bearer | Ordered Kernel catalog for one DSL lineage. |
-| `GET /v1/admin/campaigns/{id}/agent-revisions` | Admin bearer | Versioned Agent histories across Campaign lineages. |
-| `GET /v1/admin/lineages/{id}/agent-revisions` | Admin bearer | Ordered `agent-vN` history for one DSL lineage. |
-| `GET /v1/admin/agent-revisions/{id}` | Admin bearer | One Agent revision with parent, disposition, and Artifact provenance. |
-| `GET /v1/admin/kernels/{id}` | Admin bearer | Kernel, producing Agent/Attempt context, primary evaluation, and durable repeat measurements. |
-| `GET /v1/admin/kernels/{id}/source` | Admin bearer | Bounded exact Kernel Artifact files as UTF-8 or Base64. |
-| `GET /v1/admin/kernels/{id}/measurements` | Admin bearer | Primary Gateway evaluation plus durable retention/promotion repeats. |
-| `/v1/admin/campaigns/...` | Admin bearer | Inspect persisted Campaign/Lineage models, cancel, and schedule Campaigns/Tasks. |
-| `/v1/admin/epochs/.../recover` | Admin bearer | Explicit Failed Epoch recovery. |
-| `/v1/admin/events`, `/events/export`, `/events/prune`, `/metrics` | Admin bearer | Bounded observability and maintenance. |
+Typed IDs are opaque and prefix-qualified: `campaign_`, `lineage_`, `epoch_`, `attempt_`,
+`workersession_`, `kernelrev_`, `agentrev_`, and `sha256:`. Callers must not parse semantics
+from their suffixes.
 
-There is no `/v1/admin/bootstrap` compatibility alias.
+Content and presentation identities are separate:
 
-Each distinct Agent evaluation seals and records the exact candidate and raw result but does not
-commit an Attempt outcome. Runtime seals the terminal nomination and evaluates it through the
-configured authoritative retention comparator; only its `runtime_final` records are linked to the outcome. The
-`list-evaluations` and `show-evaluation [--source] [--result]` CLI commands expose the same history.
-Every candidate-bearing operation binds its sealed Candidate Artifact before external execution.
-The binding remains a durable Artifact root after operation failure, Event pruning, or source
-rollback. A schema-v12 Agent Attempt Handoff gives every Direction and Experiment durable IDs.
-Direction definitions are immutable and lifecycle changes are append-only events; each Experiment
-names its Direction. Ordinary comparison actions bind both `before` and `after` to an exact Kernel
-Artifact, Kernel Trial, and non-empty list of Gateway Result Digests. The Bootstrap-only `baseline`
-action instead requires `before=null` and one complete `after`, establishing the first measured
-anchor without registering `v0`. `evidence` contains observations; `analysis` contains interpretation
-and the hypothesis verdict; other actions record whether the Agent kept the After Kernel, restored
-the Before Kernel, or abandoned the direction. Runtime maps those actions to the observed `after` Trial's
-internal disposition. The report's terminal `status` is an Optimizer handoff state, not a retention
-decision; no top-level `decision` is accepted. Runtime then joins that handoff with the registered
-input/output Kernel revisions and their authoritative Gateway Result Artifacts to derive the
-schema-v1 Final Attempt Report. This projection exposes exact Kernel Artifact identities and
-aggregate/per-Shape latency while withholding internal Kernel Revision IDs. It also projects the
-trusted content-level Production Gate as `NOT_ENABLED`, `PASS`, `FAIL`, or `NOT_RUN`; this field is
-derived by Runtime and is never Agent-authored.
-Direction and Experiment mutations use `/v1/runtime/journals`. Runtime validates and commits each
-mutation before replying, and stores its idempotency key against the logical Attempt. Consequently
-the Journal is immediately queryable and survives a physical Session failure or recovery-generation
-change. `attempt-report` obtains a Runtime snapshot and embeds that same authoritative current
-Attempt Journal in the terminal handoff; terminal publication is not the first persistence point.
-Completed selected and discarded search paths contribute frozen Direction and Experiment journals
-to subsequent Optimizer sessions, while scheduling provenance remains hidden.
-These unversioned `Kernel Trial` records do not consume `vN` revision numbers.
-An Optimizer can inspect a known Trial returned by a Gateway response or retained Experiment record
-with `kernel-trial-show`, read exact source by `kernel_artifact_digest` with `kernel-artifact-read`, and read the normalized
-Agent-visible measurement by `gateway_result_digest` with `gateway-result-read`. Runtime includes the current Attempt so
-a reverted Candidate remains recoverable within the same Session, then applies the same promoted
-and same-trajectory visibility rule to older Attempts. These Runtime-local reads are unmetered and
-do not contact Agate.
-The Worker response is deliberately different from the admin-visible raw result: private input,
-request, per-case failure, and evaluator-spec fields are withheld. `evaluate` returns aggregate
-correctness/latency and optional latency keyed by opaque numeric `shape_id`. `profile` accepts an
-optional numeric `shape_id`, defaults to one evaluator-owned case, and returns a sanitized profiler
-view labeled only with that number.
-`check` and `disassemble` expose no Shape selector: Runtime deterministically selects the first
-opaque Contract Shape that declares them and supplies its private `init_kwargs` to the Agate compile
-job so parameterized `Model` constructors are built correctly.
-These semantics do not depend on `launcher.mode`.
+- Artifact digest identifies exact bytes and supports verification/deduplication.
+- Kernel Revision ID plus Lineage-local `vN` identifies one retained historical reference.
+- Agent Revision ID plus Lineage-local `agent-vN` identifies one Agent Bundle reference.
+- Kernel Trial ID identifies an unversioned measured Candidate inside Attempt-visible history.
 
-Runtime normalizes successful `evaluate` and `profile` responses into append-only internal
-`gateway_measurements` rows. They remain available to Gates, frozen Evidence, and administrative
-interfaces, but are not a separate Agent query surface. `kernel-trial-show` accepts a known
-`kernel_trial_id` and returns only its Kernel Artifact Digest and normalized `gateway_results`;
-result entries omit their already-resolved Gateway Result Digests. Visibility is derived, not
-caller-selected: completed Epochs expose only winning-branch Attempts to an Optimizer, while the
-current Epoch exposes only earlier completed
-Attempts in the same branch, Challenger slot, and trajectory plus its own in-progress Trials.
+Rejected, reverted, blocked, pivoted, or infrastructure-failed Attempts remain durable but consume
+no `vN` unless a Kernel Revision is actually published.
 
-Attempt history is independent of Kernel history. `list-attempts [--format table]` and
-`show-attempt` retain `pivot`, `blocked`, infrastructure-failed, and other no-Candidate sessions;
-such Attempts have no output `vN` because no Kernel revision was registered. A completed Agent
-Session also seals its exact terminal Runtime State. The producing Attempt stores the Artifact as
-`runtime_state_digest`; its existing `attempt_id` is the producer reference, and no separate State
-checkpoint identifier exists. Serial recovery uses this immutable digest rather than trusting a
-mutable workspace cache. Before the first physical Session, Runtime also seals the logical input as
-`input_runtime_state_digest`. Physical retries may advance `runtime_state_digest`, but never rewrite
-the logical input. Runtime uses the last terminal State of the winning branch's best-Kernel
-Trajectory as the common seed for both the next Active Branch and Evolver Candidate. Missing
-terminal State falls back to that Trajectory's first Attempt input.
+## Campaign and Lineage
 
-Epoch history exposes the pre-competition Active, ordered Challenger pool, terminal winner,
-`active_retained`/`challenger_promoted` decision, starting Kernel, and selected global-best Kernel.
-`list-epochs [--format table]` accepts either Campaign or Lineage scope.
+A Campaign freezes operator, resolved hardware architecture, Agate GPU selector, Evaluation
+Contract, public Agent Problem, Core source provenance, Evolver commit, and policy. A creation key is
+idempotent only while all immutable inputs match.
 
-Kernel catalog entries expose the immutable Kernel/Agent revision IDs, Lineage-local `vN` and
-parent-version labels, Campaign, Lineage, DSL, optional Epoch/Attempt/Branch context, retention
-decision, source and Gateway-result Artifact references, correctness, latency, parent-relative
-improvement, Gateway-reported SOL percentage, and creation time. A single Shape uses its exact
-`sol.pct`; multiple Shapes use the all-Shape geometric mean. If any Shape has no SOL value, the
-projection is JSON `null` and the table renders `-`. A same-allocation ABBA result carries the sealed
-Evaluation Contract digest and authoritative Candidate latency/SOL aggregates, so the Kernel catalog
-does not lose Roofline evidence when the ABBA Artifact replaces an exploratory Eval result. Artifact
-reference objects contain `digest`, `kind`, and
-`referenced_at`; Digest-only fields remain for compatibility. Exploratory evaluations use stable
-`g<generation>-e<ordinal>` labels and do not consume Kernel version numbers. Framework-baseline and
-Attempt evaluations come from the Kernel revision. Every repeated retention/promotion Evaluate is independently persisted in
-`kernel_measurements`; it remains queryable after lifecycle Event pruning.
+Each Lineage owns exactly one DSL, independent Agent/Kernel version trees, models, Epoch topology,
+active Agent, best Kernel, common Evidence checkpoint, and Runtime State lineage. Adding a seeded
+Lineage creates fresh `agent-v0`/`v0` roots; source Revision IDs are provenance, not shared
+version ancestry.
 
-Kernel Agent catalogs use an independent Lineage-local `agent-vN` sequence. They expose the parent
-Agent version, Bootstrap/Lineage-seed/Evolver origin, introduction Epoch, active flag, promotion disposition,
-creation time, and exact Optimizer Artifact identity. Every Kernel entry includes the Agent version
-that produced it. `list-agent-revisions [--format table]` and `show-agent-revision` expose the same
-projection as the authenticated API.
+An Ablation Arm is a separate Campaign and Lineage rooted from another Lineage's sealed Bootstrap
+baseline. It has no Challengers. Its optional ephemeral-State behavior is part of Lineage identity.
 
-## Bootstrap and Bundle protocols
+## Epoch, Branch, Trajectory, and Attempt
 
-Campaign schema v3 requires `creation_key`, operator, an Agate GPU environment selector in
-`hardware_target`, Evaluation Contract
-path, full `base_revision.commit`, `challenger_count`, `challenger_start_epoch`,
-`trajectories_per_branch`, `attempts_per_trajectory`, and per-DSL
-`baseline_kernel`/`initial_evidence`. The keys of `lineages` are the authoritative and complete
-initial Bootstrap DSL selection. Optional `shape_train` is the preferred public train-domain
-contract and is mutually exclusive with the legacy `agent_problem`; either bypasses Core problem
-generalization. Exact `shape_valid.json` cases, `metadata.json`, and `roofline.json` are sealed in the
-Evaluation Contract and never copied into the Agent workspace. The stored public-contract Artifact
-remains complete. Core renders a concise execution view into the Agent Prompt: generator/range
-provenance is omitted and `shape_domain` becomes the sole parameter-domain source. Fixed parameters
-are direct JSON values; variable parameters use range or multi-value Domain objects.
-Operation/category labels are supplied by the objective;
-`operator_contract` remains only when it carries non-Shape ABI semantics such as construction,
-mutation, layout, or return behavior. Directly implied invariants are removed, while cross-field and
-semantic invariants remain visible. For migration-only `atrex.agent_problem.v1`, the legacy flat
-`operator_contract` is normalized entirely into `shape_domain`; private `shapes.json` remains sealed
-as the evaluator-case fallback. Runtime
-accepts optional `lineages.<dsl>.models.optimizer` and `.evolver` model identities. A null or
-missing identity selects the Backend CLI default. Optional top-level
-`problem_generalization_model` is scoped only to generated Agent Problems. Runtime persists these
-identities and binds them to fresh Sessions as `ATREX_AGENT_MODEL`. Runtime imports Core once and
-creates one revision per selected DSL from the same optimizer digest. One
-stable Bootstrap Attempt may have multiple append-only recovery Generations. Each new physical
-Session receives a fresh capability generation; old Gateway operations remain keyed by their
-original generation, while only a correct committed outcome can create the baseline.
+One Epoch records the pre-competition Active Agent, ordered Challenger participants, frozen
+starting Kernel/Evidence/State, Branch and Trajectory outcomes, selected best Kernel, Agent winner,
+and publication checkpoint.
 
-Before sealing a new Campaign, Runtime calls Agate `get_env(hardware_target)`. The returned `arch`
-(for example `sm_120`) becomes the Campaign/Lineage hardware target visible to every Agent. The
-canonical returned `gpu` (for example `L20N`) is sealed separately as `agate_gpu` in the Evaluation
-Contract and is used only for Agate scheduling. Bootstrap fails closed if Agate omits either field;
-an Agent-visible hardware target is never inferred from the environment alias.
-When Agate reports an explicit accelerator backend, Runtime preserves it; otherwise Runtime infers
-CUDA, ROCm, or PPU from the canonical GPU and architecture. The backend and optional device slug are
-sealed in the Evaluation Contract. `PPU-*` and `ZW-*` targets automatically
-disable managed clock locking because PPU-SMI does not expose that operation.
+Branch names describe competition roles, not ancestry. Every Branch starts from the same frozen
+Epoch inputs. A Trajectory is an independent serial chain of Attempts within one Branch. An Attempt
+is the logical unit of one Optimizer step; automatic infrastructure retries do not create another
+Attempt.
 
-Lineage seed schema v1 requires `creation_key`, fixed `dsl`, Epoch topology, and a discriminated
-`seed`. `source_type: "artifacts"` names `agent_artifact_digest` and `kernel_artifact_digest`;
-`source_type: "revisions"` names `agent_revision_id` and `kernel_revision_id`. Optional
-`models.optimizer`, `models.evolver`, and `initial_evidence` configure the new Lineage. Runtime
-revalidates the complete Agent Bundle, independently evaluates the exact Kernel under the target
-Campaign contract, and publishes fresh `agent-v0`/`v0` identities. The CLI equivalent is
-`seed-lineage --config ... --campaign ... --spec ...`. Standard Bootstrap remains anchored by
-`base_revision.commit`; the seed operation imports no Git source and accepts only sealed CAS content.
-Campaign Bootstrap also freezes the deployment-selected full Evolver Commit. Bootstrap and Campaign
-inspection responses expose `evolver_commit`; all scheduling paths reject a different configured
-Commit before Evolver execution. A seeded Lineage inherits this Campaign-level value.
+Runtime fencing associates a renewable generation with every scheduler owner. A stale owner may
+finish local work but cannot commit a transition.
 
-`roofline` inside the Evaluation Contract remains optional. An explicit value is authoritative. If
-it is null and the deployment configures `campaign.roofline_builder`, Runtime executes the
-commit-pinned Atrex Bench converter, requires exact Shape coverage and finite non-negative W/Q/SOL
-fields, and seals the generated value before problem generalization. A retry of an existing Campaign
-reuses the sealed generated contract when all submitted non-Roofline fields are unchanged. Without
-either source, or when construction fails, Runtime preserves the Roofline-free contract and runs
-an NCU SOL Profile after every correct Agent or authoritative Eval. The two raw responses share one Gateway
-Result Artifact; Profile failure does not invalidate Eval correctness or latency.
+## Bootstrap Generations and Worker Sessions
 
-Each Lineage result retains the compatibility fields and additionally returns
-`bootstrap_attempt_id`, a structured `baseline_kernel` object containing its Revision ID, `v0`
-label, creation time, and Bootstrap producer identity, plus the initial `agent-v0` identity and
-Optimizer Artifact. The producer is intentionally separate from
-the ordinary Epoch `attempt_id` shown in the Kernel catalog.
+One stable Bootstrap Attempt may contain multiple append-only physical Generations. Each Generation
+gets a new Capability generation, Workspace, Worker Session, usage report, trace, report, operations,
+failure, and outcome. Earlier Generations are never rewritten.
 
-Core `atrex-bundle.json` schema v1 declares one repository-relative entrypoint. Runtime sets `ATREX_CORE_PHASE` to `problem_generalization`, `framework_baseline`, or `optimization_attempt` and supplies phase-specific manifest/report paths, `ATREX_USAGE_UNIT`, `ATREX_USAGE_BUDGET`, a provider-usage report destination, optional Session trace, isolated home, and scoped Gateway/Wiki authority. QoderCLI uses credits; Claude, Codex, and Pi use provider tokens. Exit 0 means completed; exit 125 means the selected provider-native quota is exhausted; every other exit is explicit. A valid schema-v2 provider-usage report is mandatory.
+Every model-backed process is a Worker Session with subject, role, Backend/model, start/end state,
+workspace, terminal diagnostic, provider usage, and optional immutable Session Artifact. Session
+identity is physical execution identity; Attempt, Bootstrap Attempt, Generalization subject, or
+Evolution subject is logical ownership.
 
-In both production modes Runtime additionally sets `HOME=/home/agent` and
-`ATREX_WORKSPACE=/home/agent/workspace`. `ATREX_SANDBOX` is `bwrap-cgroup-v2` for `sandbox` and
-`bwrap-container` for `container`. The Worker shares the surrounding network and DNS directly;
-Runtime does not inject proxy variables or restrict reachable ports. Both modes retain the bwrap
-filesystem boundary; only `sandbox` adds a per-Session cgroup.
-Any host-absolute path below the Session root is translated to its `~/workspace` equivalent before
-launch.
+Authoritative Session Artifacts retain backend-neutral `conversation.jsonl` plus normalized event
+ledgers. Claude high-frequency `system/thinking_tokens` estimate telemetry is omitted; terminal
+provider usage remains mandatory.
+
+## Evolver and Agent State
 
 Evolver `atrex-evolver-bundle.json` schema v1 declares one entrypoint. Runtime sends exactly `Run the
-versioned Evolver Bundle once.` on stdin. Evolution input schema v10 fixes parent revision, evidence
+versioned Evolver Bundle once.` on stdin. Evolution input schema v11 fixes parent revision, evidence
 checkpoint, DSL, optimizer digest, workspace paths, and a read-only `visible_agents` catalog. That
 catalog contains the Active parent, retained Lineage Agent history, and Challengers already created
 earlier in the same Epoch. Each entry includes repository path, Parent link, creator, relationship,
@@ -222,12 +79,18 @@ proposal mode, selected Agent revision, hypothesis, expected effect, exact Sourc
 changed paths, and the other visible revisions whose content the Candidate drew on.
 Trace schema v9 records Bundle commit/tree/Artifact identity, selected model, and process evidence.
 Evolver has no token cutoff; its mandatory report records complete provider usage with a null budget.
-Schema v10 has no Runtime query authority. Evolver reads current Agents,
-historical Agents, optimization summaries, latest-Epoch Conversations, and runtime state directly
-from frozen files. A historical derivation copies the selected historical Source into Candidate
+Schema v11 has no Runtime query authority. Every visible Agent is keyed by stable Lineage version
+under `input/agents/agent-vN/`, with Runtime-derived evidence under `input/evidence/agent-vN/`.
+Every version has a career summary; participants in the latest completed Epoch additionally expose
+that Epoch's Conversations and Attempt Reports. Evolver reads Source, Runtime State, summaries, and
+available Session evidence directly from frozen files. A historical derivation copies the selected historical Source into Candidate
 Source and may curate the flat common state seed from visible historical state; Runtime validates
 the declared Agent revision, the reported Source Diff, and the private Runtime State Diff without a
 Candidate Base side record.
+New revisions may combine material from multiple eligible visible Agents.
+`contributing_revision_ids` records every contributor other than the single Source base; it is
+provenance only and neither changes the Diff base nor adds an ancestry edge. Current-Epoch
+Challengers that have not competed are visible in the catalog but are ineligible contributors.
 The Agent submits this output through the read-only Bundle-local `evolution-report` command. Invalid
 drafts return structured `issues`, `request_schema`, and `recovery` without publishing; the first
 valid draft is atomically published to `scratch/evolution-report.json`. Runtime independently
@@ -242,7 +105,16 @@ exact State to every new Trajectory. The Agent Revision directly records both
 location of the State identity. Legacy revisions without the direct field remain readable through
 their Trace.
 
-## Evidence and Wiki
+## Artifacts and measurements
+
+The local CAS stores canonical manifests and payloads for Agent source, Kernel source, Runtime
+State, Evaluation Contract, Agent Problem, Gateway result, reports, traces, and Evidence. Artifacts
+are immutable. Registry rows and Gateway-control records are the authority that gives an Artifact
+domain meaning.
+
+Every candidate-bearing Gateway operation seals Kernel source before external execution. An
+`evaluate` or `profile` creates immutable operation/result and normalized measurement records.
+These facts remain valid if the Agent later restores another Kernel.
 
 Attempt Evidence schema v2 is immutable and includes only earlier Attempts from the same Branch slot
 and Trajectory. Completed Epoch Evidence preserves Challenger and Trajectory identities, summaries,
@@ -259,18 +131,100 @@ being duplicated into the Evolution workspace. The Evolver requires no live Gate
 Authoritative Session retention omits Claude `system/thinking_tokens` estimate telemetry, and the
 derived copies defensively apply the same rule to older Session Artifacts.
 
-Each new Session Artifact contains `conversation.jsonl`, a schema-versioned, unredacted transcript
-of the exact Runtime input, every retained Provider stdout event, captured Codex rollout events when
-applicable, and Runtime's terminal capture status. The record states explicitly when the CLI does
-not export its Provider-managed system Prompt. The high-frequency Claude
-`system/thinking_tokens` estimate event is omitted from `provider/stdout.stream-json` and the
-conversation, with the selection declared by `session.json.provider_event_filters`.
-`events.jsonl` retains the normalized authoritative usage/projection ledger.
+Kernel Trials group one exact Kernel Artifact with visible Gateway observations. A Trial can be
+recovered through a recorded Experiment, read by Artifact digest, and inspected without contacting
+Agate. Normalized measurements are internal durable facts, not a separate unrestricted Agent query
+surface.
 
-Wiki Query service API is version 1. Query content follows GPU Wiki's exact
-`records`/`notes` projection; stable Record IDs are the `records` mapping keys and each value is the
-complete safe served Record. Responses are frozen as interaction Artifacts before Core receives
-knowledge-only content. Runtime does not upload Query consumption, Agent history, or Session traces
-to the Wiki.
+The Kernel Revision's primary evaluation is the Runtime-selected Bootstrap or retention result.
+Comparator repeats remain separate durable measurements. Exact raw jobs are administration-visible;
+Workers receive sanitized projections.
 
-Gateway capabilities are signed, Attempt-bound, operation-limited, call-limited, expiring, revocable, and reconstructed from Registry authority. Worker-authored reports, annotations, and Agent-visible exploratory evaluations are untrusted evidence; Runtime-final Gateway outcomes and Registry transitions are authoritative.
+## Direction and Experiment Journal
+
+Directions represent research/exploration hypotheses, not only code edits. Definitions are
+immutable; status changes are append-only. At most one Direction may be in progress at a time and
+one Attempt may advance at most three distinct Directions, while proposing additional future
+Directions remains allowed.
+
+Experiments bind one Direction to exact measured `before`/`after` Kernel, Trial, and Gateway
+result identities plus factual evidence, interpretation, and action. Bootstrap establishes its
+first measured anchor with `action="baseline"`, `before=null`, and complete `after`.
+
+Journal calls synchronously validate and persist before replying. Their authority is scoped to the
+logical Attempt, so a failed physical Session or retry generation does not erase records. The
+terminal `attempt-report` snapshots the same Journal, requires no Direction to remain in progress,
+and can be retried after validation failure until the first successful write-once publication.
+Runtime, not the Agent report, decides retention.
+
+Runtime derives a Final Attempt Report by joining the Agent handoff with authoritative parent and
+Candidate outcomes, comparison, Production Gate result, correctness, latency by opaque Shape ID,
+profile evidence, and Direction-bound Findings.
+
+## Runtime State
+
+Versioned Agent source must not contain top-level `skills/` or `tools/`. Adaptive State is a
+separate Artifact:
+
+```text
+runtime-state/
+  trajectories/<N>/
+    skills/
+    tools/README.md
+```
+
+An Optimizer workspace presents one Trajectory's State as writable root `skills/` and `tools/`.
+Runtime seals the terminal contents and restores them for the next serial Attempt. Evolver receives
+frozen participant/historical State and writes one flat Candidate seed at
+`candidate/runtime-state/{skills,tools}/`. A new Agent Revision records both source and State
+digests as one logical Bundle; each new Trajectory receives an independent copy.
+
+An Ablation Lineage with ephemeral Agent State starts every Attempt with empty adaptive State.
+
+## Evidence visibility
+
+Visibility prevents information leakage across concurrent search:
+
+- Optimizer sees promoted completed history plus earlier Attempts in its own current Trajectory.
+- Optimizer does not see competing Branches while an Epoch is running.
+- After the Epoch barrier, completed winning and losing journals may inform later Direction and
+  Experiment history, but branch/selection provenance remains hidden from Optimizer tools.
+- Evolver sees frozen latest-completed-Epoch Active/Challenger summaries and Conversations,
+  historical Agent source/State summaries, and prior Evolution reports.
+- Evolver has no Gateway, Wiki, journal, or Runtime-query authority; it reads the frozen filesystem
+  and submits only through Bundle-local `evolution-report`.
+
+Detailed Registry/Evidence trees are not duplicated into Agent workspaces. Runtime materializes only
+the role-scoped files required for that Session.
+
+## Agent Bundle and Evolution
+
+Core and Evolver entry manifests each declare one repository-relative command. Runtime imports an
+exact full commit, strips Git metadata, rejects unsafe tree content, and seals the complete source.
+Runtime owns Backend/model policy and supplies phase, paths, usage, and scoped authority through the
+launch contract.
+
+Evolution input freezes current participants, visible historical Agents, Evidence, prior reports,
+DSL, and Candidate seed. One output uses:
+
+- `evolved`: new revision parented by Active;
+- `reuse`: existing visible revision unchanged;
+- `evolve_from_history`: new revision parented by a visible historical revision.
+
+Runtime validates selected source, source-relative changed paths, private State diff, same-DSL
+identity, file policy, and manifest before sealing. Evolved content is Lineage-local; Runtime never
+pushes it to the Core repository.
+
+## Capabilities and external services
+
+Gateway and Wiki Capabilities are signed, Attempt-bound, operation-limited, expiring, revocable, and
+generation-scoped. Idempotency keys replay the same committed response and reject changed requests.
+Runtime-local journal/history queries do not call Agate or consume Gateway quota.
+
+Agate credentials and private request construction stay in Runtime. GPU Wiki uses one live Query
+contract; Runtime freezes the complete interaction before returning only knowledge content to Core.
+There is no Wiki feedback/upload protocol.
+
+Provider usage is fail-closed: QoderCLI reports credits; Claude, Codex, and Pi report provider-token
+buckets. Optimizer has a configured per-Session quota. Evolver has no usage cutoff but must still
+produce a complete terminal usage report unless process failure/timeout is the primary outcome.

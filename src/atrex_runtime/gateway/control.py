@@ -8,8 +8,8 @@ import json
 import os
 import sqlite3
 import threading
-from collections.abc import Callable, Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping, Sequence
+from contextlib import AbstractContextManager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -38,7 +38,7 @@ from ..ports import (
     WorkerGatewayAuthority,
 )
 from ..registry.base import Registry
-from ..sqlite_support import configure_durable_sqlite
+from ..sqlite_support import configure_durable_sqlite, immediate_transaction
 from .control_models import (
     BootstrapGatewaySubject as BootstrapGatewaySubject,
 )
@@ -2249,17 +2249,8 @@ class SqliteGatewayControl(AttemptOutcomeSource):
     def _token_hash(token: str) -> str:
         return hashlib.sha256(token.encode()).hexdigest()
 
-    @contextmanager
-    def _transaction(self) -> Iterator[sqlite3.Connection]:
-        with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                yield self._connection
-            except BaseException:
-                self._connection.rollback()
-                raise
-            else:
-                self._connection.commit()
+    def _transaction(self) -> AbstractContextManager[sqlite3.Connection]:
+        return immediate_transaction(self._connection, self._lock)
 
     def _migrate(self) -> None:
         with self._transaction() as connection:

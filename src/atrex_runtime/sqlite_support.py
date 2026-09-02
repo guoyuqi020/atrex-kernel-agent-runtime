@@ -3,8 +3,27 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterator
+from contextlib import AbstractContextManager, contextmanager
 
 SQLITE_BUSY_TIMEOUT_MS = 30_000
+
+
+@contextmanager
+def immediate_transaction(
+    connection: sqlite3.Connection,
+    lock: AbstractContextManager[object],
+) -> Iterator[sqlite3.Connection]:
+    """Serialize one SQLite immediate transaction with rollback-on-error semantics."""
+    with lock:
+        connection.execute("BEGIN IMMEDIATE")
+        try:
+            yield connection
+        except BaseException:
+            connection.rollback()
+            raise
+        else:
+            connection.commit()
 
 
 def configure_durable_sqlite(

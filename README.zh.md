@@ -10,6 +10,11 @@ Runtime 不实现 Agent 框架。Core 和 Evolver 持有 Prompt、Tool、Workflo
 Claude/Codex/QoderCLI/Pi Adapter；Runtime 持有不可变来源、Model/Backend 绑定、Capability、评测
 策略、持久化、沙箱策略和晋升权限。
 
+即使 Optimizer 固定且完全不自进化，这层分离仍然有价值。Prompt 驱动的 Harness 可以规定 Workflow，
+也可以要求 Agent 总结实验，但 Agent 主动编写的 Journal 并不是执行过程的自动记录。Runtime 因此在事件
+发生时捕获精确 Kernel、Gateway 测量、Tool 失败、Session 及其关联；Agent Report 只补充解释，不成为
+测量事实的来源。详细理由见[设计理念](docs/design-principles.zh.md)。
+
 ## 主要生命周期
 
 ```text
@@ -70,12 +75,14 @@ bash examples/bootstrap/run.sh
 ## 文档
 
 - [文档导航](docs/README.zh.md)
+- [设计理念](docs/design-principles.zh.md)
+- [设计与实现](DESIGN.zh.md)
 - [架构与信任设计](docs/architecture.zh.md)
-- [模块设计](docs/module-design.zh.md)
 - [使用说明](docs/user-guide.zh.md)
 - [CLI、HTTP 和 Runtime Tools 接口](docs/interfaces.zh.md)
 - [配置说明](docs/configuration.zh.md)
-- [性能与正确性 Gate](docs/performance-gates.zh.md)
+- [评测与晋升](docs/evaluation.zh.md)
+- [持久协议](docs/protocols.zh.md)
 - [部署与运维](docs/operations.zh.md)
 - [生产运行脚本](scripts/production/README.zh.md)
 - [发布检查清单](docs/release-checklist.zh.md)

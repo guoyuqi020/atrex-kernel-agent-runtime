@@ -19,6 +19,7 @@
 | `serve` | `--config` | 提供健康、Gateway、Wiki 和管理 HTTP API。 |
 | `bootstrap` | `--config --campaign <file>` | 幂等创建/继续 Campaign 和初始 Lineage。 |
 | `seed-lineage` | `--config --campaign <id> --spec <file>` | 从 Artifact/Revision Root 创建 Lineage。 |
+| `seed-ablation-arm` | `--config --spec <file>` | 从源 Lineage 的 Bootstrap Baseline 创建独立 Campaign 中的非进化控制 Lineage。 |
 | `run-campaign` | `--config`，`--campaign` 或重复 `--lineage`，`--target-epoch N` | 运行到绝对 Epoch；可选 `--finalize`。 |
 | `cancel-campaign` | `--config --campaign` | 取消静止 Campaign。 |
 | `run-task-worker` | `--config` | 领取一个持久 Task；`--watch` 持续轮询。 |
@@ -302,9 +303,10 @@ Report 对外展示。缺失或非 ready 的 Handoff 会直接终结，不会运
 
 Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份按 Lineage 版本索引的冻结文件
 视图：每个可见 Agent 版本的仓库与 Runtime State 位于 `input/agents/agent-vN/`，Runtime 对它的派生结论
-位于 `input/evidence/agent-vN/`。每个版本都有优化效果汇总；只有在上一个已完成 Epoch 中参赛的两条分支
+位于 `input/evidence/agent-vN/`。每个版本都有优化效果汇总；只有在上一个已完成 Epoch 中参赛的全部分支
 还额外拥有该 Epoch 的 Conversation 与 Attempt Report。此前 Agent 创建报告
-按 `input/evolution-reports/evo-N.json` 排序并关联 Source Base/产出 Agent 路径。唯一可写的 Agent
+按 `input/evolution-reports/evo-N.json` 排序，并关联 Source Base/产出 Agent 路径、准确 Changed Source
+路径与贡献 Source 路径。唯一可写的 Agent
 组件是 `candidate/source/` 与 `candidate/runtime-state/`。
 
 `runtime-state/trajectories/<N>/{skills,tools}/` 是唯一的自适应 Skill/Tool 存储，它是 Optimizer Session
@@ -322,6 +324,9 @@ Diff 和私有 State Diff；不再存在 Candidate Base 旁路记录或 Reset �
 Evolver 使用 Bundle 本地的 `evolution-report` 命令提交终态 Draft。校验错误返回 `issues`、
 `request_schema` 与 `recovery`；失败不发布且可修正后重试。第一次成功调用原子发布
 `scratch/evolution-report.json` 并返回紧凑回执。
+对于新 Revision，报告中排序后的 `contributing_revision_ids` 列出除所选 Source Base 外，实际贡献了
+Source、Skill 或 Tool 的合格可见 Agent。这些 ID 只记录 Provenance，不改变唯一 Source Diff Base 或
+Revision Parentage。
 
 ## 外部服务 Contract
 
@@ -330,3 +335,4 @@ Evolver 使用 Bundle 本地的 `evolution-report` 命令提交终态 Draft。�
 - GPU Wiki Query 为 `POST /v1/knowledge/query`；Local Wiki 实现同一 v1 Contract。
 - 完整 Schema、Evidence Layout、版本和 Bundle 语义见[协议](protocols.zh.md)，所有部署字段见
   [配置说明](configuration.zh.md)。
+- Evaluation、Production Gate、比较、Roofline 与 SOL 语义见[评测与晋升](evaluation.zh.md)。

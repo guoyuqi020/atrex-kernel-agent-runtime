@@ -21,11 +21,23 @@ transient-service and sandbox execution. In `container` mode they never escalate
 
 ## Fixed schedule
 
-- Default absolute target: Epoch 10.
-- Epoch 1: Active only, two serial fresh Optimizer Attempts.
+- Default absolute target: Epoch 5.
+- Epoch 1: Active only, three serial fresh Optimizer Attempts.
 - Epoch 2 onward: one Evolver creates one Challenger; Active and Challenger run concurrently, with
-  two serial Attempts on each Branch.
+  three serial Attempts on each Branch.
 - Epoch completion independently compares Kernels and selects the next Active Agent.
+
+With the default `event_only=true`, each DSL also runs unevolved Ablation Campaigns. Every Arm has
+an equal budget of exactly 15 post-Bootstrap Optimizer Attempts. Bootstrap is not counted. The
+default Pool uses three Attempts per Epoch, and two additional serial-pool Arms vary that grouping:
+
+- `ablation-pooled`: 5 Epochs x 3 Attempts;
+- `ablation-pool-1`: 15 Epochs x 1 Attempt;
+- `ablation-pool-5`: 3 Epochs x 5 Attempts.
+
+The isolated and retained controls also run 5 Epochs x 3 Attempts. The generated Ablation Plan stores
+both the per-Epoch Attempt count and the derived target Epoch on each Arm. Consequently,
+`--target-epoch` controls the evolution Campaign only; it does not alter the fixed Ablation budget.
 
 `--target-epoch N` overrides the absolute target. Repeating a command resumes durable state.
 

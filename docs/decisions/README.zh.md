@@ -11,7 +11,6 @@
 - [0001](0001-agate-sdk-adapter.zh.md)：Agate SDK 适配边界
 - [0003](0003-evidence-handoff.zh.md)：不可变 Evidence 交接
 - [0007](0007-immutable-agent-traces.zh.md)：不可变原始 Agent Trace
-- [0012](0012-documentation-status-and-release-gates.zh.md)：文档权威与发布门禁
 - [0013](0013-branch-local-attempt-evidence.zh.md)：分支本地 Attempt Evidence
 - [0014](0014-failed-epoch-recovery.zh.md)：失败 Epoch 恢复
 - [0015](0015-durable-campaign-task-control-plane.zh.md)：持久 Campaign Task
@@ -23,7 +22,7 @@
 
 ## Agent、Wiki 与进化
 
-- [0021](0021-live-gpu-wiki-capability.zh.md)：实时 Wiki 查询和 Epoch 后反馈
+- [0021](0021-live-gpu-wiki-capability.zh.md)：实时、冻结、只查询 Wiki 访问
 - [0022](0022-local-wiki-test-double.zh.md)：接口兼容的本地 Wiki
 - [0027](0027-unified-epoch-evidence-view.zh.md)：按 Epoch 组织的 Evidence
 - [0028](0028-commit-only-runtime-boundary.zh.md)：仅 Commit 的 Runtime/Agent 边界

@@ -631,7 +631,9 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert "every Trajectory of the new revision" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "`secondary_criteria`" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "`incumbent_retained`" in EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "Never assume the winner was" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "`identical_kernel`" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "does not imply the retained winner's raw" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "not the complete tournament history" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "tells you which `agent-vN` competed in it" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "`current_epoch_challenger` — created earlier in the current Epoch" in (
         EVOLVER_EVIDENCE_PROMPT_TEXT

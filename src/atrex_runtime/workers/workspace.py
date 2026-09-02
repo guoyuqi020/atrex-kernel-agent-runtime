@@ -125,52 +125,6 @@ def materialize_reusable_agent_state_snapshot(
     return trajectories_by_revision
 
 
-def validate_reusable_agent_state_snapshot(
-    root: str | Path,
-    *,
-    max_files: int | None = None,
-    max_bytes: int | None = None,
-) -> None:
-    """Validate one complete `runtime-state/` snapshot at an Agent boundary."""
-    state_root = Path(root)
-    _validate_reusable_tree(state_root)
-    children = {child.name for child in state_root.iterdir()}
-    if children != {"trajectories"}:
-        raise ValueError("Agent runtime-state must contain only trajectories/")
-    trajectories = state_root / "trajectories"
-    files = 0
-    total_bytes = 0
-    for trajectory in sorted(trajectories.iterdir()):
-        if trajectory.is_symlink() or not trajectory.is_dir():
-            raise ValueError(f"Runtime-state trajectory entry is invalid: {trajectory}")
-        suffix = trajectory.name.removeprefix("trajectory-")
-        if (
-            not trajectory.name.startswith("trajectory-")
-            or len(suffix) != 8
-            or not suffix.isdigit()
-            or int(suffix) <= 0
-        ):
-            raise ValueError(f"Runtime-state trajectory name is invalid: {trajectory.name}")
-        if {child.name for child in trajectory.iterdir()} != {"skills", "tools"}:
-            raise ValueError(
-                f"Runtime-state trajectory must contain only skills/ and tools/: {trajectory}"
-            )
-        for name in ("skills", "tools"):
-            directory = trajectory / name
-            _validate_reusable_tree(directory)
-            for entry in directory.rglob("*"):
-                if entry.is_file():
-                    files += 1
-                    total_bytes += entry.stat().st_size
-                    if max_files is not None and files > max_files:
-                        raise ValueError("Agent runtime-state exceeds file limit")
-                    if max_bytes is not None and total_bytes > max_bytes:
-                        raise ValueError("Agent runtime-state exceeds byte limit")
-        readme = trajectory / "tools/README.md"
-        if readme.is_symlink() or not readme.is_file():
-            raise ValueError(f"Runtime-state trajectory tools/ must retain README.md: {trajectory}")
-
-
 def validate_reusable_agent_state_seed(
     root: str | Path,
     *,

@@ -37,14 +37,15 @@ English | [中文](release-checklist.zh.md)
 ## Operations
 
 - [ ] Capability signing key and admin token are in a secret manager and survive planned restarts.
-- [ ] Storage ownership, disk budget, backup, restore, Event export/prune, Wiki retry, and offline GC
+- [ ] Storage ownership, disk budget, backup, restore, Event export/prune, Wiki query failure, and offline GC
   are rehearsed.
 - [ ] `services.sh`, managed `campaign.sh`, and per-DSL `inspect.sh` are rehearsed with separate
   service/task workspaces.
 - [ ] Forced termination is tested during Bootstrap, Attempt evaluation, Epoch commit, Evolution,
-  Wiki delivery, and Task leasing; restart produces no duplicate authority or lost durable outcome.
+  and Task leasing; restart produces no duplicate authority or lost durable outcome.
 - [ ] Metrics/log collection, external alerting, incident owner, rollback commit, and release notes
   are ready.
 
-Do not call the release production-ready while any applicable target-environment item is open. See
-[Implementation Status](implementation-status.md) for known remaining evidence.
+Do not call the release production-ready while any applicable target-environment item is open.
+Record missing evidence and waivers in the release record described by
+[Testing and Production Acceptance](testing-and-acceptance.md).

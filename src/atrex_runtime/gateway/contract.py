@@ -169,6 +169,19 @@ class AgateEvaluationContextResolver(Protocol):
         ...
 
 
+def candidate_path_for_attempt(
+    resolver: AgateEvaluationContextResolver | None,
+    attempt_id: AttemptId,
+) -> str | None:
+    """Return the contract Candidate path when the Attempt context is available."""
+    if resolver is None:
+        return None
+    try:
+        return resolver.resolve(attempt_id).contract.candidate_path
+    except (LookupError, ValueError):
+        return None
+
+
 class RegistryAgateEvaluationContextResolver:
     """Resolve and verify a Campaign evaluation contract through the Registry and CAS."""
 

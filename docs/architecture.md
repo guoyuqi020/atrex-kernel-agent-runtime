@@ -2,75 +2,76 @@
 
 English | [中文](architecture.zh.md)
 
-Atrex Kernel Agent Runtime is a Python trusted control plane. Core and Evolver are untrusted, separately versioned Git repositories imported by full commit; GPU Wiki and Agate are external services. Host production Workers use bubblewrap plus per-Session cgroup v2 isolation. The `container` launcher instead treats a dedicated outer OCI container as the deployment boundary and has no nested systemd/cgroup dependency. The explicit `development` launcher uses only a lightweight read-only mount namespace when host CLI login state is reused; it lacks the remaining production boundaries and is never a production fallback.
+Atrex Kernel Agent Runtime is a single-node trusted Python control plane for self-evolving GPU
+Kernel Agents. Core and Evolver are separately versioned, commit-pinned Agent repositories. Agate
+is the GPU execution authority; GPU Wiki is an external query-only knowledge service.
+
+For the rationale behind these boundaries, start with [Design Principles](design-principles.md).
 
 ```mermaid
 flowchart LR
-    U["User / administration"] --> R["Runtime control plane"]
-    R --> C["Commit-pinned Core Optimizer"]
-    R --> E["Commit-pinned Evolver"]
-    C -->|"Gateway / Wiki"| R
-    C -->|"isolated netns / direct egress"| P["Provider API"]
-    R --> G["Agate Gateway"]
+    U["Operator / administration"] --> R["Atrex Kernel Agent Runtime"]
+    R --> C["Core Optimizer"]
+    R --> E["Evolver"]
+    C -->|"scoped Runtime Tools"| R
+    R --> G["Agate"]
     R --> W["GPU Wiki"]
     R --> S[("Registry + Artifact store")]
-    E -->|"full repository challenger"| R
+    C -->|"provider CLI"| P["Model provider"]
+    E -->|"provider CLI"| P
 ```
 
-## Ownership boundaries
+## Terminology
 
-Runtime owns Campaign/Epoch state, fencing, capabilities, immutable Artifacts, Backend/model policy,
-token-report validation, comparison, promotion, recovery, Wiki query freezing, process lifetime, and
-adaptive Skill/Tool persistence. Core owns its Adapter implementations, prompts, tool bindings,
-optimization workflow, and the Session behavior that authors adaptive state. Evolver owns the
-hypothesis and source choice for one same-DSL Challenger, plus repository edits when it creates a
-revision. Agate owns correctness and performance measurement. GPU Wiki is a read-only external
-knowledge source from Runtime's perspective; lineage experience is not Wiki data.
+| Term | Meaning |
+| --- | --- |
+| Campaign | Immutable operator, hardware, Evaluation Contract, Gate policy, Agent commits, and one or more DSL Lineages. |
+| Lineage | One DSL-specific, independently evolving Agent and Kernel history. |
+| Epoch | One competition starting from a frozen Active Agent, Kernel, Runtime State, and Evidence checkpoint. |
+| Branch | The Active or one Challenger Agent participating in an Epoch. |
+| Trajectory | One independent Kernel-search path inside a Branch. |
+| Attempt | One fresh Optimizer process and Session in a Trajectory. |
+| Session | One physical model-backed process execution; retries create new Sessions without rewriting logical history. |
+| Kernel Trial | One exact measured experimental Kernel; it does not consume a `vN` label. |
+| Kernel Revision | A Lineage-local retained Kernel labeled `vN`. |
+| Agent Revision | A Lineage-local Agent Bundle labeled `agent-vN`. |
+| Runtime State | Adaptive `skills/` and `tools/` associated with Agent execution, stored separately from versioned source. |
+| Artifact | Immutable content-addressed data in Runtime's local CAS. |
 
-## Private evaluation boundary
+Use these terms consistently. “Lineage” never means a parallel Trajectory, “Attempt” never means a
+provider retry, and “Agent” should be qualified as Optimizer, Evolver, Active, or Challenger when
+the role matters.
 
-The Campaign Evaluation Contract is always trusted private state. Exact Shapes, `reference.py`,
-`input.py`, Metadata, and Roofline inputs are never materialized in Optimizer, Baseline, or Evolver
-workspaces and no private host path is injected through their environment. A supplied or generated
-public Agent Problem must declare private exact cases, must use synthetic development cases, and is
-rejected if it contains private fields or copies an evaluator case.
+## Ownership and trust
 
-Gateway calls resolve the sealed contract inside Runtime. Full raw Agate jobs are preserved in the
-Artifact store for administration and authoritative selection, while Workers receive a separate
-projection: aggregate correctness and latency, per-case latency keyed only by opaque ids, and
-generic hidden-case failure text. Profiling uses one private case selected by opaque id (or a
-trusted default), and request/spec/case material is removed from the returned profile. Runtime's
-authoritative Bootstrap and retention comparators always evaluate the complete hidden set.
+- Runtime owns identities, lifecycle transitions, fencing, capabilities, private evaluation data,
+  policy, comparison, promotion, recovery, Session capture, immutable Artifacts, and adaptive State
+  persistence.
+- Core owns Optimizer prompts, workflow, Backend adapters, Runtime Tool bindings, and Agent-authored
+  Direction/Experiment/Attempt reports.
+- Evolver owns one same-DSL Agent-change hypothesis and may modify Candidate source plus the
+  Candidate Runtime State seed. It does not evaluate Kernels.
+- Agate owns compilation, correctness, profiling, and performance execution.
+- GPU Wiki supplies external knowledge. Runtime freezes each query interaction before returning
+  knowledge to Core and never uploads Agent history, query consumption, or Session traces.
 
-This protocol is identical in `development`, `container`, and `sandbox` modes. `development` prevents accidental
-disclosure through workspaces, requests, results, and environments, but remains an unisolated local
-debug mode and cannot defend against a malicious same-user process scanning host storage. Both
-`container` and `sandbox` add the same per-Session bwrap filesystem/namespace boundary by masking
-Runtime storage and all sibling Worker roots before mounting only the current workspace. `sandbox`
-additionally places each Session in a systemd-managed cgroup; `container` delegates aggregate resource
-limits to its dedicated outer OCI container.
+Worker output is untrusted evidence. Registry transitions and Runtime-selected Gateway outcomes are
+authoritative.
 
 ## Lifecycle
 
-Campaign bootstrap accepts only a separate Campaign schema-v3 definition and one full Core commit. Runtime deployment configuration owns services, Backend selection, credentials, and policy but not DSL topology or concrete model identity; the Campaign `lineages` keys are the complete initial Bootstrap DSL set and each Lineage binds its Optimizer/Evolver models. Bootstrap copies the configured full Evolver Commit into immutable Campaign state, so later scheduling and debugging reject deployment drift before resolving the Evolver Bundle. Before Agent execution, an optional trusted, commit-pinned Atrex Bench Builder fills a missing Roofline and Runtime seals it into the Campaign-shared Evaluation Contract; an existing Campaign reuses its sealed result. Runtime then imports Core once, creates or validates the shared Agent Problem, and runs `framework_baseline` sequentially for each selected DSL. A stable Bootstrap Attempt owns append-only physical execution Generations; each Generation has fresh authority and durable Session, token, schema-v12 Attempt Report, failure, workspace, operation, and result audit. Bootstrap uses the same journals and Runtime tools as an ordinary Attempt; its terminal journals, Gateway records, and reusable skill/tool seed form the initial history of every new trajectory. An active Campaign may later add an independent Lineage from sealed Agent and Kernel Artifacts; Runtime revalidates the Agent and re-evaluates the Kernel under the destination contract before creating fresh `agent-v0`/`v0` roots. The new Lineage inherits the Campaign-frozen Evolver Commit.
+### Bootstrap
 
-One Epoch snapshots its Active Agent, starting Kernel, and Evidence, then sequentially proposes `K`
-Challengers. Each Evolver invocation chooses one of three forms: create a revision from Active
-(`evolved`), reuse one historical revision unchanged (`reuse`), or create a revision from a
-historical revision (`evolve_from_history`). It can inspect every Agent revision already attached to
-the Lineage, including earlier Challengers from the same Epoch. Runtime persists proposal provenance
-on Epoch participation separately from revision ancestry. For `evolve_from_history`, a constrained
-Runtime tool atomically resets the Candidate to completed Lineage history and records the base before
-the Evolver edits it; final sealing reconciles that record, the proposal, and the actual repository
-diff. New revisions still have exactly one
-parent, so the revision graph remains a tree; reuse and promotion form a separate Epoch timeline.
-After freezing the pool, Runtime runs Active and Challenger Branches concurrently up to deployment
-policy `max_parallel_branches`. Within every admitted Branch, its `Y` independent Trajectories also
-run concurrently; each Trajectory starts from the same Epoch Kernel and serially runs `X`
-fresh-session Attempts. It
-then selects one retained Kernel across all Trajectories, promotes at most one Agent revision,
-appends one cumulative Evidence checkpoint. Thus an
-Epoch contains `(1 + K) × Y × X` Optimizer Sessions and `K` Evolver Sessions.
+Campaign schema v3 supplies the Core commit, DSL Lineages, seed Kernels, public `shape_train`
+contract, private Evaluation Contract, models, and Epoch topology. Runtime resolves the Agate
+environment, freezes the returned architecture and GPU selector, imports and seals Core, freezes
+the configured Evolver commit, and optionally builds a missing Roofline.
+
+Each DSL runs a Core `framework_baseline` Session. Bootstrap is a special Attempt: it uses the same
+Gateway, Direction, Experiment, Report, Session, and Runtime State machinery, but has no earlier
+Lineage history or incumbent Kernel. Success publishes `agent-v0`, Kernel `v0`, and Epoch-0
+Evidence. Physical Bootstrap retries are append-only Generations under one stable Bootstrap
+Attempt identity.
 
 Each session is a fresh process. Model context is never reused. Attempt Evidence contains earlier
 Attempts only from the same Trajectory. The Optimizer view contains every completed Active/Challenger
@@ -81,9 +82,10 @@ freezes versioned Agent/Kernel catalogs and every historical Kernel Artifact. Th
 separates every visible Agent version's sealed source and per-Trajectory `skills/tools`
 (`input/agents/agent-vN/`) from what Runtime derived about it (`input/evidence/agent-vN/`). Both trees
 are keyed by Lineage version, so no directory name encodes an Epoch role. Every version has an
-optimization summary; only the two branches that competed in the last completed Epoch also have that
-Epoch's Attempt conversations and Attempt reports. Each summary records the version's branch, outcome,
-and the rule that resolved the comparison. Prior
+optimization summary; only the branches that competed in the last completed Epoch also have that
+Epoch's Attempt conversations and Attempt reports. Each summary records the version's branch and
+outcome, plus the rule applied in the final pairwise selection step; with multiple Challengers that
+rule is not a complete tournament history. Prior
 Agent-creation reports are read-only files under `input/evolution-reports/`; full Evolution traces
 remain private. Detailed Epoch trees remain Runtime-private. Runtime state sits beside its
 version's source under `input/agents/`. Every
@@ -99,12 +101,95 @@ Artifacts from those digests. Wiki Query exposes the external service's complete
 `records`/`notes` projection with stable Record IDs as mapping keys. Runtime freezes each Query
 interaction but Core exposes only knowledge content. Runtime sends no post-Epoch data to the Wiki.
 
-## Security posture
+### Epoch
 
-Capabilities are scoped to an Attempt, operation set, call quota, and expiry. Signing keys remain in
-Runtime-owned environment resolution. Git import rejects unresolved revisions, links, special
-files, unapproved submodules, unsafe archives, and size-limit violations.
+Runtime snapshots the Active Agent, starting Kernel, common Runtime State, and Evidence. It invokes
+the Evolver serially to construct `K` Challengers. Each proposal may create a revision from Active,
+reuse a historical revision, or create a revision from history. Revision ancestry remains a tree;
+reuse and Epoch participation are separate provenance.
 
-The Sandbox overlays the host root read-only, masks Runtime storage and every configured Worker root, mounts only the current Session read-write at `/home/agent/workspace`, supplies private `/home`, `/tmp`, `/run`, `/dev`, and `/proc`, drops all capabilities, and unshares user/PID/IPC/UTS/cgroup namespaces. The system manager runs bwrap as a configured non-root Worker in a unique transient-service cgroup with memory, swap, CPU, and PID limits. The same system-manager identity creates and probes Worker roots directly; Runtime does not depend on root-create-then-chown, because ownership changes may be ineffective on Lima virtiofs. Cross-process locking makes the shared host check safe when several DSL Bootstrap processes start together. Workers intentionally retain the host network namespace and a read-only resolver projection, so provider CLIs use the same DNS/routing as the host and can reach host services and peer Workers. The Lima reference suite and live Claude/Codex/QoderCLI checks cover this declared boundary, while exact production-image escape and resource-exhaustion acceptance remains a release gate.
+After the pool is frozen, Active and Challenger Branches run concurrently up to
+`max_parallel_branches`. Each Branch runs `Y` Trajectories concurrently; each Trajectory runs `X`
+fresh-session Attempts serially. All participants start from the same Epoch Kernel and cannot see
+sibling in-progress work. Runtime then selects the best Kernel and independently compares Agent
+revisions. An Epoch therefore contains `(1 + K) × Y × X` Optimizer Sessions and `K` Evolver
+Sessions, excluding retries.
 
-The design is single-node and uses SQLite plus renewable Registry fencing. Multi-node scheduling, global Agent promotion, cross-Campaign sharing, and recursive Evolver self-evolution are deferred.
+Completed Evidence becomes the next Epoch checkpoint. Optimizers see every completed Epoch Branch,
+plus only earlier Attempts in their own in-progress Trajectory. Evolver sees every participant in the
+latest completed Epoch, all visible historical Agent source/State and career summaries, and earlier
+Evolution reports.
+
+### Additional roots and ablation
+
+`seed-lineage` creates an independent Lineage from sealed Agent/Kernel Artifacts or registered
+Revision IDs after Runtime revalidates the Agent and re-evaluates the Kernel under the destination
+Campaign Contract.
+
+`seed-ablation-arm` creates an unevolved control Lineage in a separate Campaign from another
+Lineage's frozen Bootstrap baseline. It sets `challenger_count=0`; `ephemeral_agent_state` controls
+whether `skills/` and `tools/` reset after every Attempt. The arm shares the source evaluation
+identity needed for comparison but has independent lifecycle and version histories.
+
+## Private evaluation boundary
+
+Exact validation Shapes, reference/input code, metadata, and Roofline remain Runtime-private in all
+launcher modes. Agents receive only a public train-domain contract and opaque Shape IDs. Runtime
+constructs Agate requests from the sealed Contract and sanitizes Worker responses. Administration
+may retrieve bounded exact Artifacts; Agent tools cannot select arbitrary Campaign, Lineage, or
+Attempt history.
+
+## Agent source and Runtime State
+
+One full Core commit is imported without executing repository content, checked for unsafe paths,
+links, special files, unresolved submodules, manifest violations, and size limits, then sealed as a
+complete Agent source Artifact. Git commit and Artifact digest are both retained: the commit names
+reviewed source provenance, while the digest names the exact validated snapshot.
+
+Optimizer Sessions mount Agent source read-only and writable `skills/`/`tools/`. Runtime seals the
+terminal State of every Session. Serial Attempts restore the preceding State. Evolution presents
+read-only Active/Challenger/historical source and State, plus a writable Candidate
+`source/` and `runtime-state/{skills,tools}/`; Runtime validates and seals both as the new Agent
+Bundle. Runtime never pushes evolved content back to the Core repository.
+
+## Storage and recovery
+
+SQLite Registry state and Gateway control records hold lifecycle authority; the local Artifact
+store holds immutable source, results, reports, traces, Evidence, and State. IDs and creation keys
+make operations idempotent. Renewable Lineage and Task fences prevent two schedulers from committing
+the same transition. Failed Epoch recovery advances a generation instead of rewriting prior
+authority. Garbage collection is bounded, offline, and dry-run by default.
+
+## Worker launch modes
+
+- `development`: trusted local debugging; no production isolation claim.
+- `container`: bubblewrap filesystem/process boundary inside a dedicated outer OCI container;
+  aggregate resource limits belong to that container.
+- `sandbox`: the same bubblewrap boundary plus a systemd-managed per-Session cgroup v2.
+
+Both production modes expose only the current workspace at `/home/agent/workspace`, mask Runtime
+storage and sibling Worker roots, drop capabilities, and preserve the surrounding host/container
+network namespace. Public egress and reachable host services are intentionally not restricted.
+
+The design deliberately defers multi-node scheduling, global cross-Lineage Agent promotion,
+cross-Campaign memory sharing, and recursive Evolver self-evolution.
+
+## Source organization
+
+| Area | Responsibility |
+| --- | --- |
+| `api/`, `cli/` | HTTP and command-line entrypoints and presentation. |
+| `composition/` | Configuration-to-object assembly only. |
+| `domain/`, `controller/` | Identities, lifecycle, scheduling, Evidence, fencing, and Tasks. |
+| `workers/` | Core/Evolver workspaces, launch, Session capture, usage, and reports. |
+| `gateway/` | Capability control, Agate adapter, private result projection, evaluation, and journals. |
+| `registry/`, `artifacts/` | Durable authority and immutable content storage. |
+| `kernel_agents/`, `git_import.py` | Safe commit import and Agent Bundle sealing. |
+| `knowledge/` | Query-only GPU Wiki client and proxy. |
+| `src/atrex-kernel-agent-{core,evolver}/` | Separately versioned Agent submodules. |
+| `third_party/atrex-bench/` | Commit-pinned trusted evaluator/builder source. |
+| `local-wiki/` | Development-only wire-compatible Wiki service. |
+
+Entrypoints call composition, composition wires application services, and domain code does not
+depend on SQLite, HTTP, subprocess, or SDK implementations. Moving code must not silently change
+persisted schemas, Artifact formats, Worker layouts, or public responses.

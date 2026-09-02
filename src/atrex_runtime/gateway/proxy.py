@@ -29,7 +29,7 @@ from ..domain.errors import (
 from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest
 from ..ports import RuntimeEventRecorder
 from ..serialization import canonical_json_digest
-from .contract import AgateEvaluationContextResolver
+from .contract import AgateEvaluationContextResolver, candidate_path_for_attempt
 from .control import SqliteGatewayControl
 from .control_models import (
     GatewayCapability,
@@ -745,7 +745,7 @@ class GatewayProxyService:
             raise ValueError("candidate exceeds decoded byte limit")
         # Evaluation forwards only the contract's candidate file, so anything else in
         # the bundle would change this address without changing what was measured.
-        selected = self._contract_candidate_path(attempt_id)
+        selected = candidate_path_for_attempt(self._contexts, attempt_id)
         if selected is not None:
             decoded = [(path, content) for path, content in decoded if path == selected]
             if not decoded:
@@ -761,15 +761,6 @@ class GatewayProxyService:
             return self._artifacts.put_directory(temporary, ArtifactKind.KERNEL)
         finally:
             shutil.rmtree(temporary, ignore_errors=True)
-
-    def _contract_candidate_path(self, attempt_id: AttemptId) -> str | None:
-        """Return the contract-declared candidate file, or None when unresolvable."""
-        if self._contexts is None:
-            return None
-        try:
-            return self._contexts.resolve(attempt_id).contract.candidate_path
-        except (KeyError, LookupError, ValueError):
-            return None
 
     @staticmethod
     def _adapter_request(

@@ -16,7 +16,7 @@ Runtime 根据本次调用冻结的可见集合和同 DSL Lineage 校验所有 S
 独立比较 Candidate 的 `source/`、`runtime-state/` 和所选 Source Base/初始 Active State Checkpoint，
 校验报告的 Source-only 修改集合，并要求 Source 或 State 至少一项真实变化。Runtime State 路径不进入
 Agent 报告；复用时 Source 与公共种子都必须保持不变。对于 `evolve_from_history`，Evolver
-用所选 `input/historical/agent-vN/` 的 Source 替换 Candidate Source，并可从可见历史状态整理公共种子。
+用所选 `input/agents/agent-vN/source/` 替换 Candidate Source，并可从可见历史状态整理公共种子。
 Runtime 校验 Base 并跨 Source 与状态种子比较最终 Diff。
 
 每个提案都可以携带有界的 `unimplemented_capabilities`。每一项说明一种 Agent 能力、预期的

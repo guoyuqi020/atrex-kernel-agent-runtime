@@ -14,7 +14,7 @@
 
 `GET /readyz` 对 Registry、Gateway Control 数据库、Agate Job Store 和 Artifact Store Staging 区执行受限读写探针。响应只包含失败的本地依赖名，不包含异常文本。`/healthz` 仍只表示存活。外部 Agate、GPU Wiki、Agent Provider、cgroup 和 GPU 被有意排除：这些依赖暂时不可用时，可信控制面仍应能够启动，以便检查和恢复。
 
-Artifact 保留是显式离线 CLI 操作。Collector 汇总 Registry 列、已提交 Gateway Outcome 和保留 Runtime Event Payload 引用的全部 Artifact Digest，再沿这些已验证 Artifact 内嵌的现存 Digest Token 求传递 CAS 闭包。它只考虑早于 Operator 指定最小年龄的不可达对象，删除前验证每个完整 CAS 对象，遇到意外 Entry 会失败，并在 Operator 指定对象上限处停止。默认行为是 dry-run。实际删除要求 `--confirm-runtime-stopped`；全部 Runtime、Worker、Bootstrap 和 Wiki Drainer 进程必须确实停止，因为该确认是运维前置条件，而不是系统自动推断的锁。
+Artifact 保留是显式离线 CLI 操作。Collector 汇总 Registry 列、已提交 Gateway Outcome 和保留 Runtime Event Payload 引用的全部 Artifact Digest，再沿这些已验证 Artifact 内嵌的现存 Digest Token 求传递 CAS 闭包。它只考虑早于 Operator 指定最小年龄的不可达对象，删除前验证每个完整 CAS 对象，遇到意外 Entry 会失败，并在 Operator 指定对象上限处停止。默认行为是 dry-run。实际删除要求 `--confirm-runtime-stopped`；全部 Runtime、Worker、Bootstrap 和 Scheduler 进程必须确实停止，因为该确认是运维前置条件，而不是系统自动推断的锁。
 
 实际执行后会发出 `artifact.gc_completed`。文件系统删除与 SQLite 审计追加之间有意不提供跨存储事务；被删除对象不在完整持久引用快照中，缺少审计 Event 也不会使其变成有引用对象。
 

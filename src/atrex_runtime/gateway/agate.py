@@ -9,8 +9,8 @@ import math
 import sqlite3
 import statistics
 import threading
-from collections.abc import Callable, Iterator, Mapping
-from contextlib import contextmanager
+from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -27,7 +27,7 @@ from ..domain.errors import (
 )
 from ..domain.ids import AttemptId, parse_attempt_id
 from ..roofline import strip_roofline_hardware_suffix
-from ..sqlite_support import configure_durable_sqlite
+from ..sqlite_support import configure_durable_sqlite, immediate_transaction
 from .batched_evaluate import ShapeBatch, ShapeBatchedEvaluateExecutor, ShapeBatchOutcome
 from .contract import (
     AgateEvaluationContext,
@@ -343,17 +343,8 @@ class SqliteAgateJobStore:
             operation=operation,
         )
 
-    @contextmanager
-    def _transaction(self) -> Iterator[sqlite3.Connection]:
-        with self._lock:
-            self._connection.execute("BEGIN IMMEDIATE")
-            try:
-                yield self._connection
-            except BaseException:
-                self._connection.rollback()
-                raise
-            else:
-                self._connection.commit()
+    def _transaction(self) -> AbstractContextManager[sqlite3.Connection]:
+        return immediate_transaction(self._connection, self._lock)
 
     def _migrate(self) -> None:
         with self._transaction() as connection:

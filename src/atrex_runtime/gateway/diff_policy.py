@@ -9,6 +9,7 @@ from pathlib import Path, PurePosixPath
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, AttemptId
 from ..domain.models import Dsl
+from ..filesystem import regular_file_map
 from ..registry.base import Registry
 from .control import SqliteGatewayControl
 
@@ -69,8 +70,8 @@ class RegistryCandidateDiffValidator:
         after = self._artifacts.verify(candidate_digest)
         if before.kind is not ArtifactKind.KERNEL or after.kind is not ArtifactKind.KERNEL:
             raise ValueError("Candidate diff policy requires Kernel artifacts")
-        before_files = self._files(before.payload_path)
-        after_files = self._files(after.payload_path)
+        before_files = regular_file_map(before.payload_path)
+        after_files = regular_file_map(after.payload_path)
         changed = {
             path
             for path in set(before_files).union(after_files)
@@ -91,14 +92,6 @@ class RegistryCandidateDiffValidator:
         )
         if rejected:
             raise ValueError(f"candidate changes disallowed paths: {rejected}")
-
-    @staticmethod
-    def _files(root: Path) -> dict[str, Path]:
-        return {
-            PurePosixPath(*path.relative_to(root).parts).as_posix(): path
-            for path in root.rglob("*")
-            if path.is_file()
-        }
 
     @staticmethod
     def _bytes(path: Path | None) -> bytes | None:

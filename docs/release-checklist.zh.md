@@ -35,11 +35,12 @@
 ## 运维
 
 - [ ] Capability Signing Key 和 Admin Token 进入 Secret Manager，并在计划重启间保持稳定。
-- [ ] 演练存储权限、磁盘预算、备份恢复、Event 导出/清理、Wiki 重试和离线 GC。
+- [ ] 演练存储权限、磁盘预算、备份恢复、Event 导出/清理、Wiki Query 故障和离线 GC。
 - [ ] 使用独立 Service/Task Workspace 演练 `services.sh`、后台 `campaign.sh` 与逐 DSL
   `inspect.sh`。
-- [ ] 在 Bootstrap、Attempt 评测、Epoch Commit、Evolution、Wiki 投递和 Task Lease 阶段强制终止；
+- [ ] 在 Bootstrap、Attempt 评测、Epoch Commit、Evolution 和 Task Lease 阶段强制终止；
   重启后不存在重复权限或丢失权威结果。
 - [ ] Metrics/日志、外部告警、Incident Owner、回滚 Commit 和 Release Notes 就绪。
 
-任何适用的目标环境项未完成时，不应宣称生产就绪。已知待补证据见[实现状态](implementation-status.zh.md)。
+任何适用的目标环境项未完成时，不应宣称生产就绪。缺失证据与豁免应记录在
+[测试与生产验收](testing-and-acceptance.zh.md)定义的 Release Record 中。

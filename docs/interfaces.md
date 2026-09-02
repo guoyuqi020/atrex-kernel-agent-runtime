@@ -21,6 +21,7 @@ All commands use `atrex-kernel-agent-runtime`. Commands that read deployment sta
 | `serve` | `--config` | Serve health, Gateway, Wiki, and administration HTTP APIs. |
 | `bootstrap` | `--config --campaign <file>` | Idempotently create/resume Campaign and initial Lineages. |
 | `seed-lineage` | `--config --campaign <id> --spec <file>` | Create a new Lineage from sealed Artifact/Revision roots. |
+| `seed-ablation-arm` | `--config --spec <file>` | Create an unevolved control Lineage in its own Campaign from a source Lineage's Bootstrap baseline. |
 | `run-campaign` | `--config`, `--campaign <id>` or repeated `--lineage <id>`, `--target-epoch N` | Resume scheduling to an absolute Epoch; optional `--finalize`. |
 | `cancel-campaign` | `--config --campaign <id>` | Cancel a quiescent Campaign. |
 | `run-task-worker` | `--config` | Claim one durable Task; `--watch` keeps polling. |
@@ -340,9 +341,10 @@ only for readability.
 Evolver has no Runtime Tool or Runtime HTTP capability. Runtime materializes one frozen filesystem
 view keyed by Lineage version: every visible Agent version's repository and runtime state under
 `input/agents/agent-vN/`, and what Runtime derived about it under `input/evidence/agent-vN/`. Every
-version has an optimization summary; only the two branches that competed in the last completed Epoch
+version has an optimization summary; only the branches that competed in the last completed Epoch
 also have that Epoch's Conversations and Attempt reports. Prior Agent-creation reports are ordered as
-`input/evolution-reports/evo-N.json` and link Source Base/produced-Agent paths. The only writable Agent components are
+`input/evolution-reports/evo-N.json` and link Source Base/produced-Agent paths, exact changed Source
+paths, and contributing Source paths. The only writable Agent components are
 `candidate/source/` and `candidate/runtime-state/`.
 
 `runtime-state/trajectories/<N>/{skills,tools}/` is the only adaptive Skill/Tool storage. It is
@@ -364,6 +366,9 @@ record or reset command.
 Evolver submits its terminal draft with the Bundle-local `evolution-report` command. Validation
 errors return `issues`, `request_schema`, and `recovery`; failures publish nothing and may be retried.
 The first success publishes `scratch/evolution-report.json` atomically and returns a compact receipt.
+For a new revision, the report's sorted `contributing_revision_ids` names eligible visible Agents
+whose Source, Skills, or Tools contributed content other than the selected Source base. These IDs
+record provenance only; they do not change the single Source Diff base or revision parentage.
 
 ## External service contracts
 
@@ -372,3 +377,5 @@ The first success publishes `scratch/evolution-report.json` atomically and retur
 - GPU Wiki query is `POST /v1/knowledge/query`. The local Wiki implements the same v1 contract.
 - Complete schema semantics, Evidence layouts, version labels, and Bundle protocols are in
   [Protocols](protocols.md); every deployment field is in [Configuration](configuration.md).
+- Evaluation, Production Gate, comparison, Roofline, and SOL semantics are in
+  [Evaluation and Promotion](evaluation.md).

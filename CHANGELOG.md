@@ -6,6 +6,9 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Added `ablation-pool-1` and `ablation-pool-5` production arms and fixed every Ablation
+  Arm to exactly 15 post-Bootstrap Optimizer Attempts. Arms derive their own target Epoch
+  from their one-, three-, or five-Attempt grouping; Bootstrap is never counted.
 - Added a required `contributing_kernel_trial_ids` field to the Optimizer's Attempt Report, naming the
   historical Kernel Trials whose code or approach the Attempt drew from. Kernel Trial identifiers are
   used because the Optimizer has no Kernel revision vocabulary and must not gain one. Both Core and
@@ -25,6 +28,14 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 - Exposed every completed Epoch branch to the Optimizer, including the ones that were not selected,
   under `epochs/N/branches/<label>/`, with each Epoch's `summary.json` naming the selected branch. The
   current Epoch still shows only the Attempt's own Trajectory and never a concurrently running sibling.
+- Consolidated the release documentation around Architecture, Configuration, Interfaces,
+  Evaluation, Operations, and durable Protocols; removed superseded design/status documents and
+  synchronized terminology with the current Campaign, Lineage, Epoch, Branch, Trajectory, Attempt,
+  Kernel Trial, Kernel Revision, and Agent Revision models.
+- Added a concise Design Principles guide explaining the separation between evolvable Agents and
+  trusted Runtime authority.
+- Removed a dead full-snapshot Agent State validator and consolidated shared Gateway result
+  projection, Candidate-path resolution, Artifact file indexing, and SQLite transaction handling.
 - Added persistent production control-plane and managed multi-DSL Campaign task scripts with
   per-DSL inspection.
 - Made Sandbox host preparation concurrency-safe and Lima-virtiofs compatible by creating Worker
@@ -40,7 +51,7 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   workspace, bound read-only from `reference_projects_root` in both bubblewrap launcher modes. An
   Attempt no longer receives the tree: reading whole upstream projects belongs to establishing a
   first implementation, while an Attempt should act on its own measured history.
-- Raised the Attempt manifest to schema 8 and stopped publishing the workspace layout in it. The
+- Raised the Attempt manifest to schema 9 and stopped publishing the workspace layout in it. The
   layout is fixed at both ends and stated in the Agent Prompt, so serializing it only compared one
   hardcoded table against another while making every layout change a breaking protocol bump. A
   Kernel Agent revision registered against an earlier schema no longer starts, so existing Lineages

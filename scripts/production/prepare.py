@@ -20,6 +20,7 @@ from typing import Any, cast
 SUPPORTED_BACKENDS = ("claude", "codex", "qodercli", "pi")
 SUPPORTED_DSLS = ("cuda", "triton", "cutedsl")
 SUPPORTED_LAUNCHER_MODES = ("sandbox", "container")
+ABLATION_OPTIMIZER_ATTEMPT_BUDGET = 15
 
 
 def _arguments() -> argparse.Namespace:
@@ -721,51 +722,85 @@ def _runtime_config(
 
 
 def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
-    """Derive both compute-matched control arms from the Campaign schedule."""
+    """Derive control arms with an equal post-Bootstrap Optimizer Attempt budget."""
     schedule = cast(dict[str, Any], policy["schedule"])
     enabled = bool(schedule.get("event_only", False))
     trajectories = int(schedule["trajectories_per_branch"])
     challengers = int(schedule["challenger_count"])
-    # Each arm mirrors the combined Active-plus-Challenger Trajectory count so it is
-    # compute-matched on its own. The configured Challenger count is used rather than the
-    # challenger_start_epoch-gated one so arm identity is stable across Epochs.
+    default_attempts = int(schedule["attempts_per_trajectory"])
+    attempt_budget = ABLATION_OPTIMIZER_ATTEMPT_BUDGET
+    # Keep one isolated replicate for every configured Active/Challenger Trajectory. The
+    # configured Challenger count is used rather than the challenger_start_epoch-gated one
+    # so arm identity is stable across Epochs.
     total = trajectories * (1 + challengers)
     arms: list[dict[str, Any]] = []
+
+    def arm(
+        *,
+        kind: str,
+        label: str,
+        attempts_per_trajectory: int,
+        ephemeral_agent_state: bool,
+    ) -> dict[str, Any]:
+        if attempt_budget % attempts_per_trajectory:
+            raise ValueError(
+                f"Ablation Arm {label} cannot spend exactly {attempt_budget} Attempts: "
+                f"{attempts_per_trajectory} Attempts per Epoch does not divide the budget"
+            )
+        return {
+            "kind": kind,
+            "label": label,
+            "trajectories_per_branch": 1,
+            "attempts_per_trajectory": attempts_per_trajectory,
+            "target_epoch_number": attempt_budget // attempts_per_trajectory,
+            "ephemeral_agent_state": ephemeral_agent_state,
+        }
+
     if enabled:
-        # Isolated: one Lineage per Trajectory, so no line ever sees another.
+        # Isolated arms remain independent replicas. Each one receives the full budget.
         arms.extend(
-            {
-                "kind": "isolated",
-                "label": f"ablation-isolated-{ordinal:02d}",
-                "trajectories_per_branch": 1,
-                "ephemeral_agent_state": True,
-            }
+            arm(
+                kind="isolated",
+                label=f"ablation-isolated-{ordinal:02d}",
+                attempts_per_trajectory=default_attempts,
+                ephemeral_agent_state=True,
+            )
             for ordinal in range(1, total + 1)
         )
-        # Pooled: one Lineage carrying every Trajectory, so Trajectories see each prior
-        # Epoch's results and every Epoch restarts from the historically best Kernel.
+        # The default Pool uses the production schedule's serial Attempt count.
         arms.append(
-            {
-                "kind": "pooled",
-                "label": "ablation-pooled",
-                "trajectories_per_branch": total,
-                "ephemeral_agent_state": True,
-            }
+            arm(
+                kind="pooled",
+                label="ablation-pooled",
+                attempts_per_trajectory=default_attempts,
+                ephemeral_agent_state=True,
+            )
         )
-        # Retained: the pooled shape but keeping Skills and Tools, so the Evolver is the
-        # only thing removed relative to the Active branch.
+        # Fixed serial pools isolate the effect of giving one unevolved Agent Lineage a
+        # short or long within-Epoch search horizon. One Trajectory makes the label equal
+        # the exact total number of Optimizer Attempts executed by the arm per Epoch.
+        arms.extend(
+            arm(
+                kind="pooled",
+                label=f"ablation-pool-{attempts}",
+                attempts_per_trajectory=attempts,
+                ephemeral_agent_state=True,
+            )
+            for attempts in (1, 5)
+        )
+        # Retained keeps Skills and Tools, so the Evolver is the only removed mechanism.
         arms.append(
-            {
-                "kind": "retained",
-                "label": "ablation-retained",
-                "trajectories_per_branch": total,
-                "ephemeral_agent_state": False,
-            }
+            arm(
+                kind="retained",
+                label="ablation-retained",
+                attempts_per_trajectory=default_attempts,
+                ephemeral_agent_state=False,
+            )
         )
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "enabled": enabled,
-        "attempts_per_trajectory": int(schedule["attempts_per_trajectory"]),
+        "optimizer_attempt_budget_per_arm": attempt_budget,
         "arms": arms,
     }
 
@@ -987,6 +1022,14 @@ def main() -> None:
                 "production workspace uses the retired shared-Campaign layout; "
                 "move it aside or choose a new --workspace"
             )
+        existing_ablation_path = workspace / "ablation.json"
+        if existing_ablation_path.is_file():
+            existing_ablation = _load_object(existing_ablation_path, "Ablation Plan")
+            if existing_ablation != _ablation_plan(policy):
+                raise SystemExit(
+                    "production workspace Ablation Plan does not match the fixed 15-Attempt "
+                    "Arm budget; choose a new --workspace"
+                )
         mutable_checkout_fields = {"core_commit", "evolver_commit", "atrex_bench_commit"}
         # Manifests created before container mode implicitly used the strict
         # systemd/cgroup sandbox.
@@ -1006,7 +1049,7 @@ def main() -> None:
         required = (
             workspace / "runtime.json",
             workspace / "local-wiki.json",
-            workspace / "ablation.json",
+            existing_ablation_path,
             *(workspace / "dsls" / dsl / "campaign.json" for dsl in SUPPORTED_DSLS),
         )
         if not all(path.is_file() for path in required):
