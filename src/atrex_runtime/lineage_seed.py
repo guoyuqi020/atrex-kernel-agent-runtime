@@ -138,6 +138,7 @@ class LineageSeedSpecV1(BaseModel):
     models: LineageSeedModelsV1 = LineageSeedModelsV1()
     challenger_count: int = Field(default=1, ge=0)
     challenger_start_epoch: int = Field(default=1, gt=0)
+    first_epoch_same_agent: bool = False
     trajectories_per_branch: int = Field(default=1, gt=0)
     attempts_per_trajectory: int = Field(gt=0)
     ephemeral_agent_state: bool = False
@@ -152,6 +153,8 @@ class LineageSeedSpecV1(BaseModel):
 
     @model_validator(mode="after")
     def _validate_seed_combination(self) -> Self:
+        if self.first_epoch_same_agent and self.challenger_count != 1:
+            raise ValueError("first_epoch_same_agent requires exactly one Challenger")
         if isinstance(self.seed, LineageBaselineSeedV1) and self.initial_evidence is not None:
             raise ValueError("a cloned Lineage baseline already carries its Bootstrap Evidence")
         return self
@@ -313,9 +316,7 @@ class LineageSeeder:
                     kernel_artifact_digest=roots.kernel_artifact_digest,
                 )
                 if outcome.artifact_digest != roots.kernel_artifact_digest:
-                    raise ValueError(
-                        "Lineage seed evaluation returned a different Kernel Artifact"
-                    )
+                    raise ValueError("Lineage seed evaluation returned a different Kernel Artifact")
                 if not outcome.correct or outcome.latency_us is None:
                     raise ValueError("Lineage seed Kernel failed authoritative evaluation")
                 if (
@@ -366,6 +367,7 @@ class LineageSeeder:
             evidence_checkpoint=evidence,
             challenger_count=spec.challenger_count,
             challenger_start_epoch=spec.challenger_start_epoch,
+            first_epoch_same_agent=spec.first_epoch_same_agent,
             trajectories_per_branch=spec.trajectories_per_branch,
             attempts_per_trajectory=spec.attempts_per_trajectory,
             next_epoch_number=1,
@@ -534,6 +536,7 @@ class LineageSeeder:
             lineage.dsl,
             lineage.challenger_count,
             lineage.challenger_start_epoch,
+            lineage.first_epoch_same_agent,
             lineage.trajectories_per_branch,
             lineage.attempts_per_trajectory,
             lineage.optimizer_model,
@@ -548,6 +551,7 @@ class LineageSeeder:
             spec.dsl,
             spec.challenger_count,
             spec.challenger_start_epoch,
+            spec.first_epoch_same_agent,
             spec.trajectories_per_branch,
             spec.attempts_per_trajectory,
             spec.models.optimizer,

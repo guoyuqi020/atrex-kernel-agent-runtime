@@ -124,9 +124,7 @@ class EpochController:
         epoch = self._registry.find_epoch(lineage_id, epoch_number)
         if epoch is None:
             lineage = self._registry.get_lineage(lineage_id)
-            challenger_count = (
-                0 if epoch_number < lineage.challenger_start_epoch else lineage.challenger_count
-            )
+            challenger_count = lineage.challengers_for_epoch(epoch_number)
             epoch = Epoch(
                 id=new_epoch_id(),
                 lineage_id=lineage.id,
@@ -187,6 +185,18 @@ class EpochController:
     async def _ensure_challengers(self, epoch: Epoch) -> None:
         lineage = self._registry.get_lineage(epoch.lineage_id)
         parent = self._registry.get_kernel_agent_revision(epoch.active_kernel_agent_revision_id)
+        if epoch.number == 1 and lineage.first_epoch_same_agent:
+            self._registry.attach_challenger(
+                EpochChallenger(
+                    epoch_id=epoch.id,
+                    challenger_ordinal=1,
+                    kernel_agent_revision_id=parent.id,
+                    base_revision_id=parent.id,
+                    proposal_type=ChallengerProposalType.REPLICA,
+                    evolution_trace_digest=None,
+                )
+            )
+            return
         for challenger_ordinal in range(
             len(epoch.challenger_kernel_agent_revision_ids) + 1,
             epoch.challenger_count + 1,
@@ -672,6 +682,11 @@ class EpochController:
         winner = scores[0]
         reason: AgentSelectionReason | None = None
         for candidate in scores[1:]:
+            if winner.kernel_agent_revision_id == candidate.kernel_agent_revision_id:
+                # Replica branches optimize independently, but cannot promote an Agent
+                # over itself. Kernel selection still covers both branches below.
+                reason = None
+                continue
             if self._agent_promotion_comparator is None:
                 selection = select_kernel_agent(
                     winner,

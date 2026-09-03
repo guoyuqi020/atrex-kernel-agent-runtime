@@ -45,10 +45,11 @@ class AgentSelectionReason(StrEnum):
 
 
 class ChallengerProposalType(StrEnum):
-    """How an Evolver selected or created one Epoch Challenger."""
+    """How Runtime or an Evolver supplied one Epoch Challenger."""
 
     EVOLVED = "evolved"
     REUSE = "reuse"
+    REPLICA = "replica"
     EVOLVE_FROM_HISTORY = "evolve_from_history"
 
 
@@ -459,6 +460,7 @@ class Lineage:
     next_epoch_number: int
     status: LineageStatus
     challenger_start_epoch: int = 1
+    first_epoch_same_agent: bool = False
     optimizer_model: str | None = None
     evolver_model: str | None = None
     # Every Attempt starts from empty Skills and Tools instead of inheriting them. Absence
@@ -473,6 +475,8 @@ class Lineage:
             raise ValueError("a lineage cannot inherit its own Bootstrap history")
         if self.challenger_start_epoch <= 0:
             raise ValueError("a lineage requires a positive Challenger start Epoch")
+        if self.first_epoch_same_agent and self.challenger_count != 1:
+            raise ValueError("first_epoch_same_agent requires exactly one Challenger")
         if self.trajectories_per_branch <= 0:
             raise ValueError("a lineage requires at least one Trajectory per Branch")
         if self.attempts_per_trajectory <= 0:
@@ -483,6 +487,12 @@ class Lineage:
         ):
             if model is not None and (not model.strip() or "\x00" in model):
                 raise ValueError(f"Lineage {role} model is invalid")
+
+    def challengers_for_epoch(self, number: int) -> int:
+        """Include the initial same-Agent replica independently of Evolver start."""
+        if number == 1 and self.first_epoch_same_agent:
+            return 1
+        return 0 if number < self.challenger_start_epoch else self.challenger_count
 
 
 @dataclass(frozen=True, slots=True)
@@ -528,11 +538,19 @@ class EpochChallenger:
     kernel_agent_revision_id: KernelAgentRevisionId
     proposal_type: ChallengerProposalType
     base_revision_id: KernelAgentRevisionId
-    evolution_trace_digest: ArtifactDigest
+    evolution_trace_digest: ArtifactDigest | None
 
     def __post_init__(self) -> None:
         if self.challenger_ordinal <= 0:
             raise ValueError("Challenger ordinal must be positive")
+        if self.proposal_type is ChallengerProposalType.REPLICA:
+            if (
+                self.evolution_trace_digest is not None
+                or self.base_revision_id != self.kernel_agent_revision_id
+            ):
+                raise ValueError("Replica requires the same Agent and no Evolution trace")
+        elif self.evolution_trace_digest is None:
+            raise ValueError("Evolver proposal requires an Evolution trace")
         if (
             self.proposal_type is ChallengerProposalType.REUSE
             and self.base_revision_id != self.kernel_agent_revision_id

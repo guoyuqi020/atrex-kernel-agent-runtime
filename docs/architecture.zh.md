@@ -113,9 +113,15 @@ Source/State 与生涯汇总，以及更早的 Evolution Report。
 `seed-lineage` 从封存的 Agent/Kernel Artifact 或已注册 Revision ID 创建独立 Lineage。Runtime 会
 重新校验 Agent，并在目标 Campaign Contract 下重评 Kernel。
 
-`seed-ablation-arm` 从已有 Lineage 的冻结 Bootstrap Baseline 创建单独 Campaign 中的非进化控制
-Lineage。它固定 `challenger_count=0`；`ephemeral_agent_state` 决定每次 Attempt 后是否清空
+`seed-ablation-arm` 从已有 Lineage 的冻结 Bootstrap Baseline 创建单独 Campaign 中的控制
+Lineage。`challenger_count` 默认 0，也可启用进化频率对照；`challenger_start_epoch` 默认 2。
+`ephemeral_agent_state` 决定每次 Attempt 后是否清空
 `skills/` 与 `tools/`。该 Arm 共享可比较的源评测身份，但生命周期和版本历史独立。
+
+启用 `first_epoch_same_agent=true` 后，首轮 Challenger 是 Runtime 创建的 Active 同版本
+`replica`，不属于一次进化。两个分支的 Attempt 和可写 State 独立，Agent Revision 不变。
+Kernel 选择覆盖两边，最优 Kernel 所属 Trajectory 的终态 State 供下一轮 Active 和 Evolver 使用；
+Replica 来源记录不包含 Evolution Trace。
 
 ## 私有评测边界
 

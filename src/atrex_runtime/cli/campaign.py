@@ -121,7 +121,7 @@ def seed_lineage(config_path: str, campaign_value: str, spec_path: str) -> None:
 
 
 def seed_ablation_arm(config_path: str, spec_path: str) -> None:
-    """Publish one unevolved control arm in its own Campaign for ablation comparison."""
+    """Publish one control arm in its own Campaign for ablation comparison."""
     settings = RuntimeSettings.from_file(config_path)
     spec = AblationArmSpecV1.from_file(spec_path)
     connection = build_agate_connection(settings.agate, os.environ)

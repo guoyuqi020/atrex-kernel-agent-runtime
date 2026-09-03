@@ -6,9 +6,16 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
-- 新增 `ablation-pool-1` 和 `ablation-pool-5` 生产对照臂，并将所有 Ablation Arm 的预算
-  固定为 Bootstrap 之后恰好 15 个 Optimizer Attempt。各 Arm 按每 Epoch 1、3 或 5 个 Attempt
-  自行派生目标 Epoch，Bootstrap 始终不计入。
+- 新增 `ablation-evolve-1` 和 `ablation-evolve-5`，分别运行 15 x 1 和 3 x 5；现有主臂标为
+  `evolve-3`（5 x 3）。三臂均为 30 次 Optimizer Attempt，分别进化 14/4/2 次。首轮同一 Agent
+  在两个独立分支运行，不调用 Evolver 或创建新 Agent Revision；从 Epoch 2 开始正常进化。
+  各臂复用同一 Bootstrap Baseline，继承模型和 Evolver
+  Commit，独立维护历史并保留 Skills/Tools。
+- 新增 `ablation-pool-1` 和 `ablation-pool-5`，默认 Pool 更名为 `ablation-pool-3`。
+  每条 Trajectory 固定运行 15 个 Bootstrap 之后的 Optimizer Attempt。三个 Pool 均为两条并行
+  Trajectory，每臂合计 30 次；Retained 默认改为与 Isolated 一一对应的 `ablation-retained-01/02`
+  独立 Campaign，各一条 Trajectory、15 次 Attempt，仅保留自己的 Skills/Tools。各 Arm 按串行 Attempt 数派生
+  目标 Epoch，Bootstrap 始终不计入。
 - 为 Optimizer 的 Attempt Report 新增必填的 `contributing_kernel_trial_ids`，列出本次 Attempt 取用过
   其代码或思路的历史 Kernel Trial。之所以用 Kernel Trial ID，是因为 Optimizer 本来就没有、也不应该
   获得 Kernel Revision 词汇。Core 与 Runtime 都只校验形状，都不去解析它是否在可见历史内，与该 Report

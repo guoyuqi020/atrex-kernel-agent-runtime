@@ -419,6 +419,7 @@ def _single_trajectory_workspace(
     *,
     ephemeral_agent_state: bool,
     bootstrap_source_lineage_id: object | None = None,
+    first_epoch_same_agent: bool = False,
 ) -> tuple[LocalAttemptWorkspaceAssembler, RunAttemptRequest, str, str]:
     """Assemble the least Registry state one prepare() call accepts."""
     optimizer = _put_text_artifact(store, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT)
@@ -505,7 +506,8 @@ def _single_trajectory_workspace(
         active_kernel_agent_revision_id=agent_id,
         best_kernel_revision_id=kernel_id,
         evidence_checkpoint=evidence,
-        challenger_count=0,
+        challenger_count=1 if first_epoch_same_agent else 0,
+        first_epoch_same_agent=first_epoch_same_agent,
         trajectories_per_branch=1,
         attempts_per_trajectory=2,
         next_epoch_number=1,
@@ -557,10 +559,10 @@ def _single_trajectory_workspace(
             lineage_id=lineage_id,
             number=1,
             active_kernel_agent_revision_id=agent_id,
-            challenger_kernel_agent_revision_ids=(),
+            challenger_kernel_agent_revision_ids=(agent_id,) if first_epoch_same_agent else (),
             starting_kernel_revision_id=kernel_id,
             evidence_checkpoint=evidence,
-            challenger_count=0,
+            challenger_count=1 if first_epoch_same_agent else 0,
             trajectories_per_branch=1,
             attempts_per_trajectory=2,
             status=EpochStatus.RUNNING,
@@ -635,6 +637,57 @@ def test_event_only_attempt_never_inherits_agent_state(tmp_path: Path) -> None:
     assert not (retried.root / "skills/vector-load.md").exists()
     assert not (tmp_path / "workspaces/.reusable" / lineage_id).exists()
     registry.close()
+
+
+def test_initial_replica_has_independent_persistent_state_and_retry(tmp_path: Path) -> None:
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        store = LocalArtifactStore(tmp_path / "artifacts")
+        assembler, request, _lineage, _agent = _single_trajectory_workspace(
+            tmp_path,
+            registry,
+            store,
+            ephemeral_agent_state=False,
+            first_epoch_same_agent=True,
+        )
+        active = assembler.prepare(request)
+        (active.root / "skills/active.md").write_text("active only")
+        active.persist_reusable_directories()
+        registry.record_attempt_runtime_state(request.attempt_id, active.seal_runtime_state(store))
+        attempt = registry.get_attempt(request.attempt_id)
+        replica_id = new_attempt_id()
+        context = json.loads((tmp_path / "source-attempt-evidence/context.json").read_text())
+        context.update(attempt_id=str(replica_id), branch="challenger", challenger_ordinal=1)
+        replica_evidence = tmp_path / "replica-evidence"
+        replica_evidence.mkdir()
+        (replica_evidence / "context.json").write_text(json.dumps(context))
+        (replica_evidence / "lessons.json").write_text('{"schema_version": 1, "annotations": []}')
+        evidence_digest = store.put_directory(replica_evidence, ArtifactKind.ATTEMPT_EVIDENCE)
+        registry.insert_attempt(
+            replace(
+                attempt,
+                id=replica_id,
+                branch=BranchRole.CHALLENGER,
+                challenger_ordinal=1,
+                attempt_evidence_digest=evidence_digest,
+                runtime_state_digest=None,
+                input_runtime_state_digest=None,
+            )
+        )
+        replica_request = replace(
+            request, attempt_id=replica_id, attempt_evidence_digest=evidence_digest
+        )
+        replica = assembler.prepare(replica_request)
+        assert replica.persistent_skills_root != active.persistent_skills_root
+        assert not (replica.root / "skills/active.md").exists()
+        (replica.root / "skills/replica.md").write_text("replica only")
+        replica.persist_reusable_directories()
+        registry.record_attempt_runtime_state(replica_id, replica.seal_runtime_state(store))
+        active_retry = assembler.prepare(request)
+        replica_retry = assembler.prepare(replica_request)
+        assert (active_retry.root / "skills/active.md").is_file()
+        assert not (active_retry.root / "skills/replica.md").exists()
+        assert (replica_retry.root / "skills/replica.md").is_file()
+        assert not (replica_retry.root / "skills/active.md").exists()
 
 
 def test_a_normal_retry_does_inherit_agent_state(tmp_path: Path) -> None:

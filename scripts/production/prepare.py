@@ -20,7 +20,7 @@ from typing import Any, cast
 SUPPORTED_BACKENDS = ("claude", "codex", "qodercli", "pi")
 SUPPORTED_DSLS = ("cuda", "triton", "cutedsl")
 SUPPORTED_LAUNCHER_MODES = ("sandbox", "container")
-ABLATION_OPTIMIZER_ATTEMPT_BUDGET = 15
+ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY = 15
 
 
 def _arguments() -> argparse.Namespace:
@@ -722,14 +722,14 @@ def _runtime_config(
 
 
 def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
-    """Derive control arms with an equal post-Bootstrap Optimizer Attempt budget."""
+    """Derive control arms with 15 post-Bootstrap Active Attempts per Trajectory."""
     schedule = cast(dict[str, Any], policy["schedule"])
     enabled = bool(schedule.get("event_only", False))
     trajectories = int(schedule["trajectories_per_branch"])
     challengers = int(schedule["challenger_count"])
     default_attempts = int(schedule["attempts_per_trajectory"])
-    attempt_budget = ABLATION_OPTIMIZER_ATTEMPT_BUDGET
-    # Keep one isolated replicate for every configured Active/Challenger Trajectory. The
+    attempt_budget = ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY
+    # Pair Isolated and Retained replicas for every configured Active/Challenger Trajectory. The
     # configured Challenger count is used rather than the challenger_start_epoch-gated one
     # so arm identity is stable across Epochs.
     total = trajectories * (1 + challengers)
@@ -741,19 +741,31 @@ def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
         label: str,
         attempts_per_trajectory: int,
         ephemeral_agent_state: bool,
+        trajectories_per_branch: int = 1,
+        challenger_count: int = 0,
     ) -> dict[str, Any]:
         if attempt_budget % attempts_per_trajectory:
             raise ValueError(
-                f"Ablation Arm {label} cannot spend exactly {attempt_budget} Attempts: "
+                f"Ablation Arm {label} cannot spend exactly {attempt_budget} Attempts "
+                "per Trajectory: "
                 f"{attempts_per_trajectory} Attempts per Epoch does not divide the budget"
             )
+        target_epoch = attempt_budget // attempts_per_trajectory
+        challenger_epochs = max(0, target_epoch - 1)
         return {
             "kind": kind,
             "label": label,
-            "trajectories_per_branch": 1,
+            "trajectories_per_branch": trajectories_per_branch,
             "attempts_per_trajectory": attempts_per_trajectory,
-            "target_epoch_number": attempt_budget // attempts_per_trajectory,
+            "target_epoch_number": target_epoch,
             "ephemeral_agent_state": ephemeral_agent_state,
+            "challenger_count": challenger_count,
+            "challenger_start_epoch": 2,
+            "first_epoch_same_agent": challenger_count > 0,
+            "optimizer_attempt_budget_total": trajectories_per_branch
+            * attempt_budget
+            * (1 + challenger_count),
+            "evolution_count": challenger_count * challenger_epochs,
         }
 
     if enabled:
@@ -767,40 +779,44 @@ def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
             )
             for ordinal in range(1, total + 1)
         )
-        # The default Pool uses the production schedule's serial Attempt count.
-        arms.append(
-            arm(
-                kind="pooled",
-                label="ablation-pooled",
-                attempts_per_trajectory=default_attempts,
-                ephemeral_agent_state=True,
-            )
-        )
-        # Fixed serial pools isolate the effect of giving one unevolved Agent Lineage a
-        # short or long within-Epoch search horizon. One Trajectory makes the label equal
-        # the exact total number of Optimizer Attempts executed by the arm per Epoch.
+        # Every Pool runs two parallel Trajectories, each with its own full budget.
+        # Labels count serial Attempts per Trajectory per Epoch, not the arm total.
         arms.extend(
             arm(
                 kind="pooled",
                 label=f"ablation-pool-{attempts}",
                 attempts_per_trajectory=attempts,
                 ephemeral_agent_state=True,
+                trajectories_per_branch=2,
             )
-            for attempts in (1, 5)
+            for attempts in (3, 1, 5)
         )
-        # Retained keeps Skills and Tools, so the Evolver is the only removed mechanism.
-        arms.append(
+        # Match each Isolated replica, retaining only its own Skills and Tools.
+        arms.extend(
             arm(
                 kind="retained",
-                label="ablation-retained",
+                label=f"ablation-retained-{ordinal:02d}",
                 attempts_per_trajectory=default_attempts,
                 ephemeral_agent_state=False,
             )
+            for ordinal in range(1, total + 1)
+        )
+        # Reuse the same frozen v0 while varying how often a new Challenger is created.
+        # The main Campaign already supplies evolve-3 under the default policy.
+        arms.extend(
+            arm(
+                kind="evolve",
+                label=f"ablation-evolve-{attempts}",
+                attempts_per_trajectory=attempts,
+                ephemeral_agent_state=False,
+                challenger_count=1,
+            )
+            for attempts in (1, 5)
         )
     return {
-        "schema_version": 3,
+        "schema_version": 4,
         "enabled": enabled,
-        "optimizer_attempt_budget_per_arm": attempt_budget,
+        "optimizer_attempt_budget_per_trajectory": attempt_budget,
         "arms": arms,
     }
 
@@ -862,6 +878,7 @@ def _campaign(
         "base_revision": {"commit": core_commit},
         "challenger_count": int(schedule["challenger_count"]),
         "challenger_start_epoch": int(schedule["challenger_start_epoch"]),
+        "first_epoch_same_agent": bool(schedule.get("first_epoch_same_agent", False)),
         "trajectories_per_branch": int(schedule["trajectories_per_branch"]),
         "attempts_per_trajectory": int(schedule["attempts_per_trajectory"]),
         "lineages": lineages,
@@ -1027,8 +1044,8 @@ def main() -> None:
             existing_ablation = _load_object(existing_ablation_path, "Ablation Plan")
             if existing_ablation != _ablation_plan(policy):
                 raise SystemExit(
-                    "production workspace Ablation Plan does not match the fixed 15-Attempt "
-                    "Arm budget; choose a new --workspace"
+                    "production workspace Ablation Plan does not match the requested Arm "
+                    "topology and 15-Attempt-per-Trajectory budget; choose a new --workspace"
                 )
         mutable_checkout_fields = {"core_commit", "evolver_commit", "atrex_bench_commit"}
         # Manifests created before container mode implicitly used the strict

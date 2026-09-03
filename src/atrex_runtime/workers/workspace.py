@@ -342,10 +342,19 @@ class LocalAttemptWorkspaceAssembler:
         if lineage.ephemeral_agent_state:
             write_empty_agent_state(root)
         else:
+            state_trajectory = attempt.trajectory_ordinal
+            if (
+                epoch.number == 1
+                and lineage.first_epoch_same_agent
+                and attempt.branch is BranchRole.CHALLENGER
+            ):
+                # One Agent ID owns two independent Branches in this Epoch. Reserve
+                # the second range of its state slots for the replica, not Active's cache.
+                state_trajectory += epoch.trajectories_per_branch
             persistent_skills, persistent_tools, persistent_lock = self._persistent_roots(
                 lineage_id=lineage.id,
                 revision=revision,
-                trajectory_ordinal=attempt.trajectory_ordinal,
+                trajectory_ordinal=state_trajectory,
                 previous_runtime_state_digest=previous_runtime_state_digest,
                 reset_from_seed=reset_persistent_scope,
                 bootstrap_seed=self._shared_bootstrap_seed(lineage),

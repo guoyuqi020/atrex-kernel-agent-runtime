@@ -71,8 +71,22 @@ def _ablation_arms(
     allow_partial: bool,
 ) -> list[dict[str, Any]]:
     """Collect each control arm's Campaign result so the comparison pairing is durable."""
-    targets = {
-        str(arm["label"]): int(arm["target_epoch_number"])
+    schedules = {
+        str(arm["label"]): {
+            "first_epoch_same_agent": bool(arm["first_epoch_same_agent"]),
+            **{
+                key: int(arm[key])
+                for key in (
+                    "target_epoch_number",
+                    "trajectories_per_branch",
+                    "attempts_per_trajectory",
+                    "challenger_count",
+                    "challenger_start_epoch",
+                    "optimizer_attempt_budget_total",
+                    "evolution_count",
+                )
+            },
+        }
         for arm in plan.get("arms", [])
     }
     arms: list[dict[str, Any]] = []
@@ -80,7 +94,7 @@ def _ablation_arms(
         if not arm_workspace.is_dir():
             continue
         try:
-            target_epoch = targets[arm_workspace.name]
+            schedule = schedules[arm_workspace.name]
         except KeyError as error:
             raise SystemExit(
                 f"{dsl} ablation arm is absent from the frozen plan: {arm_workspace.name}"
@@ -96,12 +110,12 @@ def _ablation_arms(
                     "result": None,
                     "result_path": str(path),
                     "status": "missing",
-                    "target_epoch_number": target_epoch,
+                    **schedule,
                 }
             )
             continue
         value = _load(path)
-        _validate(value, dsl=dsl, phase="campaign", target_epoch=target_epoch)
+        _validate(value, dsl=dsl, phase="campaign", target_epoch=schedule["target_epoch_number"])
         arms.append(
             {
                 "arm": arm_workspace.name,
@@ -109,7 +123,7 @@ def _ablation_arms(
                 "result": value,
                 "result_path": str(path),
                 "seed_result": _load(seed_path) if seed_path.is_file() else None,
-                "target_epoch_number": target_epoch,
+                **schedule,
             }
         )
     return arms
@@ -119,8 +133,8 @@ def main() -> None:
     arguments = _arguments()
     workspace = arguments.workspace.expanduser().resolve()
     ablation_plan = _load(workspace / "ablation.json") if arguments.phase == "campaign" else {}
-    if arguments.phase == "campaign" and ablation_plan.get("schema_version") != 3:
-        raise SystemExit("campaign summary requires Ablation Plan schema 3")
+    if arguments.phase == "campaign" and ablation_plan.get("schema_version") != 4:
+        raise SystemExit("campaign summary requires Ablation Plan schema 4")
     results: dict[str, Any] = {}
     for dsl in DSLS:
         dsl_workspace = workspace / "dsls" / dsl
@@ -143,6 +157,7 @@ def main() -> None:
         if arguments.allow_partial and not path.is_file():
             bootstrap_path = dsl_workspace / "bootstrap-result.json"
             results[dsl] = {
+                "arm": f"evolve-{campaign['attempts_per_trajectory']}",
                 "result": None,
                 "result_path": str(path),
                 "status": "missing",
@@ -160,6 +175,7 @@ def main() -> None:
             target_epoch=arguments.target_epoch,
         )
         results[dsl] = {
+            "arm": f"evolve-{campaign['attempts_per_trajectory']}",
             "campaign_id": value["campaign_id"],
             "result": value,
             "result_path": str(path),
@@ -169,8 +185,8 @@ def main() -> None:
         "schema_version": 1,
         "phase": arguments.phase,
         "target_epoch_number": arguments.target_epoch,
-        "ablation_optimizer_attempt_budget_per_arm": ablation_plan.get(
-            "optimizer_attempt_budget_per_arm"
+        "ablation_optimizer_attempt_budget_per_trajectory": ablation_plan.get(
+            "optimizer_attempt_budget_per_trajectory"
         ),
         "created_at": datetime.now(UTC).isoformat(),
         "dsls": results,

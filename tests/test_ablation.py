@@ -1,4 +1,4 @@
-"""Unevolved ablation control arms isolated in their own Campaigns."""
+"""Ablation control arms isolated in their own Campaigns."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from atrex_runtime.domain.models import Dsl
 from atrex_runtime.kernel_agents import KernelAgentRevisionBuilder
 from atrex_runtime.lineage_seed import LineageSeeder, LineageSeedSpecV1
 from atrex_runtime.ports import AttemptCandidateResult
+from atrex_runtime.presentation import ablation_arm_result_value
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
 
@@ -78,6 +79,7 @@ async def _evolution_arm(
         artifacts,
         KernelAgentRevisionBuilder(artifacts, limits=kernel_agent_limits()),
         evaluator,
+        evolver_commit="e" * 40,
         clock=lambda: NOW,
     )
     evolution = await seeder.seed_lineage(
@@ -93,6 +95,7 @@ async def _evolution_arm(
                 },
                 "challenger_count": 1,
                 "attempts_per_trajectory": 2,
+                "models": {"optimizer": "optimizer-test", "evolver": "evolver-test"},
             }
         ),
     )
@@ -137,14 +140,15 @@ async def test_ablation_arm_owns_a_separate_campaign_sharing_the_exact_contract(
         assert arm_campaign.operator == evolution_campaign.operator
         assert arm_campaign.hardware_target == evolution_campaign.hardware_target
         assert (
-            arm_campaign.evaluation_contract_digest
-            == evolution_campaign.evaluation_contract_digest
+            arm_campaign.evaluation_contract_digest == evolution_campaign.evaluation_contract_digest
         )
         assert arm_campaign.agent_problem_digest == evolution_campaign.agent_problem_digest
 
         arm_lineage = registry.get_lineage(arm.lineage.lineage_id)
         assert arm_lineage.ephemeral_agent_state is True
         assert arm_lineage.challenger_count == 0
+        assert arm_lineage.optimizer_model == "optimizer-test"
+        assert arm_lineage.evolver_model == "evolver-test"
         assert arm_lineage.trajectories_per_branch == 1
         assert arm_lineage.dsl is registry.get_lineage(evolution_lineage_id).dsl
         # Recording the shared Bootstrap is what lets the arm read that Bootstrap's
@@ -158,7 +162,69 @@ async def test_ablation_arm_owns_a_separate_campaign_sharing_the_exact_contract(
 
 
 @pytest.mark.anyio
-async def test_two_ablation_arms_are_mutually_independent(tmp_path: Path) -> None:
+@pytest.mark.parametrize("attempts,epochs,total", [(1, 15, 30), (5, 3, 30)])
+async def test_evolving_arm_preserves_baseline_and_models_with_independent_schedule(
+    tmp_path: Path,
+    attempts: int,
+    epochs: int,
+    total: int,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    evaluator = FakeEvaluator(artifacts, [])
+    with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
+        seeder, source_campaign_id, source_id = await _evolution_arm(
+            registry,
+            artifacts,
+            tmp_path,
+            evaluator,
+        )
+        arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
+        spec = AblationArmSpecV1(
+            creation_key=f"ablation-evolve-{attempts}",
+            source_lineage_id=source_id,
+            attempts_per_trajectory=attempts,
+            challenger_count=1,
+            challenger_start_epoch=2,
+            first_epoch_same_agent=True,
+            ephemeral_agent_state=False,
+        )
+        result = await arms.seed_arm(spec)
+        assert await arms.seed_arm(spec) == result
+        response = ablation_arm_result_value(result)
+        assert response["challenger_count"] == 1
+        assert response["challenger_start_epoch"] == 2
+        assert response["first_epoch_same_agent"] is True
+        lineage = registry.get_lineage(result.lineage.lineage_id)
+        assert lineage.challenger_count == 1
+        assert lineage.challenger_start_epoch == 2
+        assert lineage.attempts_per_trajectory == attempts
+        assert lineage.trajectories_per_branch == 1
+        assert lineage.ephemeral_agent_state is False
+        assert lineage.optimizer_model == "optimizer-test"
+        assert lineage.evolver_model == "evolver-test"
+        assert lineage.bootstrap_source_lineage_id == source_id
+        assert (
+            sum(
+                attempts * (1 + lineage.challengers_for_epoch(epoch))
+                for epoch in range(1, epochs + 1)
+            )
+            == total
+        )
+        assert registry.get_campaign(result.campaign_id).evolver_commit == (
+            registry.get_campaign(source_campaign_id).evolver_commit
+        )
+        assert registry.get_campaign(result.campaign_id).evolver_commit == "e" * 40
+        assert len(evaluator.calls) == 1
+        # A resumed arm cannot silently change its frozen evolution schedule.
+        with pytest.raises(ValueError, match="different"):
+            await arms.seed_arm(spec.model_copy(update={"first_epoch_same_agent": False}))
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("kind,ephemeral", [("isolated", True), ("retained", False)])
+async def test_two_ablation_arms_are_mutually_independent(
+    tmp_path: Path, kind: str, ephemeral: bool
+) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     evaluator = FakeEvaluator(artifacts, [])
     with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
@@ -172,18 +238,20 @@ async def test_two_ablation_arms_are_mutually_independent(tmp_path: Path) -> Non
         first = await arms.seed_arm(
             AblationArmSpecV1.model_validate(
                 {
-                    "creation_key": "ablation-1",
+                    "creation_key": f"ablation-{kind}-01",
                     "source_lineage_id": str(evolution_lineage_id),
-                    "attempts_per_trajectory": 2,
+                    "attempts_per_trajectory": 3,
+                    "ephemeral_agent_state": ephemeral,
                 }
             )
         )
         second = await arms.seed_arm(
             AblationArmSpecV1.model_validate(
                 {
-                    "creation_key": "ablation-2",
+                    "creation_key": f"ablation-{kind}-02",
                     "source_lineage_id": str(evolution_lineage_id),
-                    "attempts_per_trajectory": 2,
+                    "attempts_per_trajectory": 3,
+                    "ephemeral_agent_state": ephemeral,
                 }
             )
         )
@@ -193,7 +261,16 @@ async def test_two_ablation_arms_are_mutually_independent(tmp_path: Path) -> Non
         assert first.lineage.kernel_revision_id != second.lineage.kernel_revision_id
         # Identical starting point, independent identities.
         assert first.lineage.kernel_artifact_digest == second.lineage.kernel_artifact_digest
+        assert first.lineage.agent_artifact_digest == second.lineage.agent_artifact_digest
+        assert first.lineage.gateway_result_digest == second.lineage.gateway_result_digest
         assert first.lineage.latency_us == second.lineage.latency_us
+        for result in (first, second):
+            lineage = registry.get_lineage(result.lineage.lineage_id)
+            assert lineage.ephemeral_agent_state is ephemeral
+            assert lineage.trajectories_per_branch == 1
+            assert lineage.attempts_per_trajectory == 3
+            assert lineage.challenger_count == 0
+            assert lineage.bootstrap_source_lineage_id == evolution_lineage_id
         assert len(evaluator.calls) == 1
 
 

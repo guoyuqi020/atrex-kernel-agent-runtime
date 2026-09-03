@@ -187,7 +187,7 @@ atrex-kernel-agent-runtime seed-lineage \
 Runtime 会重新校验 Agent 仓库、按目标 Campaign Contract 独立评测 Kernel，并创建新的独立
 `agent-v0`/`v0` Lineage；不会改变 Campaign 冻结的 Core/Evolver Commit。
 
-## 10. 创建非进化 Ablation Arm
+## 10. 创建 Ablation Arm
 
 创建一份 Ablation v1 JSON，指定源 Lineage 与控制组拓扑：
 
@@ -212,6 +212,11 @@ atrex-kernel-agent-runtime seed-ablation-arm \
 Runtime 从源 Bootstrap Baseline 创建一个独立的单 Lineage Campaign，不创建 Challenger。使用
 `ephemeral_agent_state=true` 可在每次 Attempt 后清空自适应 Skills/Tools；设为 false 则保留串行
 State，只隔离 Evolver 修改缺失的影响。
+
+进化对照臂设置 `challenger_count=1`、`challenger_start_epoch=2`、`first_epoch_same_agent=true`、
+`ephemeral_agent_state=false`。使用返回的 Campaign ID 执行 `run-campaign --target-epoch N`。
+每分支每 Epoch 1 次跑 15 轮、3 次跑 5 轮、5 次跑 3 轮，均为 30 次 Optimizer Attempt。
+首轮两个分支使用同一 Agent，不调用 Evolver；之后生成进化的 Challenger。Bootstrap 直接复用。
 
 ## 11. 调试 Agent Workspace
 

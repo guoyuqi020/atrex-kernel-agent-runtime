@@ -38,36 +38,31 @@ def select_winning_trajectory_terminal_state(
     Kernel produced by the winning Agent. If that Agent retained no candidate, select its
     lowest-numbered Trajectory deterministically.
     """
+    branches = {
+        ("challenger", ordinal)
+        for ordinal, revision_id in enumerate(challenger_revision_ids, start=1)
+        if revision_id == winner_revision_id
+    }
     if winner_revision_id == active_revision_id:
-        branch = "active"
-        challenger_ordinal = 0
-    else:
-        try:
-            challenger_ordinal = challenger_revision_ids.index(winner_revision_id) + 1
-        except ValueError as error:
-            raise ValueError("Epoch winner is absent from its Agent catalog") from error
-        branch = "challenger"
+        branches.add(("active", 0))
+    if not branches:
+        raise ValueError("Epoch winner is absent from its Agent catalog")
 
     selected = tuple(
         attempt
         for attempt in attempts
-        if attempt.branch == branch
-        and attempt.challenger_ordinal == challenger_ordinal
+        if (attempt.branch, attempt.challenger_ordinal) in branches
         and attempt.kernel_agent_revision_id == str(winner_revision_id)
     )
     if not selected:
         raise ValueError("Winning Agent has no Attempt Runtime State")
 
     producing = next(
-        (
-            attempt
-            for attempt in selected
-            if attempt.attempt_id == best_kernel_producer_attempt_id
-        ),
+        (attempt for attempt in selected if attempt.attempt_id == best_kernel_producer_attempt_id),
         None,
     )
     if producing is not None:
-        trajectory_ordinal = producing.trajectory_ordinal
+        anchor = producing
     else:
         retained = tuple(
             attempt
@@ -75,28 +70,38 @@ def select_winning_trajectory_terminal_state(
             if attempt.accepted_as_branch_best and attempt.output_latency_us is not None
         )
         if retained:
-            trajectory_ordinal = min(
+            anchor = min(
                 retained,
                 key=lambda attempt: (
                     attempt.output_latency_us,
+                    attempt.branch,
+                    attempt.challenger_ordinal,
                     attempt.trajectory_ordinal,
                     attempt.ordinal,
                 ),
-            ).trajectory_ordinal
+            )
         else:
-            trajectory_ordinal = min(attempt.trajectory_ordinal for attempt in selected)
+            anchor = min(
+                selected,
+                key=lambda attempt: (
+                    attempt.branch,
+                    attempt.challenger_ordinal,
+                    attempt.trajectory_ordinal,
+                ),
+            )
 
     trajectory = tuple(
         attempt
         for attempt in selected
-        if attempt.trajectory_ordinal == trajectory_ordinal
+        if (attempt.branch, attempt.challenger_ordinal, attempt.trajectory_ordinal)
+        == (
+            anchor.branch,
+            anchor.challenger_ordinal,
+            anchor.trajectory_ordinal,
+        )
     )
     terminal = max(
-        (
-            attempt
-            for attempt in trajectory
-            if attempt.runtime_state_digest is not None
-        ),
+        (attempt for attempt in trajectory if attempt.runtime_state_digest is not None),
         key=lambda attempt: attempt.ordinal,
         default=None,
     )
@@ -106,11 +111,7 @@ def select_winning_trajectory_terminal_state(
     # A completed Epoch normally has a terminal checkpoint. This fallback keeps old
     # Campaigns created before terminal State capture recoverable without inventing State.
     epoch_start = min(
-        (
-            attempt
-            for attempt in trajectory
-            if attempt.input_runtime_state_digest is not None
-        ),
+        (attempt for attempt in trajectory if attempt.input_runtime_state_digest is not None),
         key=lambda attempt: attempt.ordinal,
         default=None,
     )

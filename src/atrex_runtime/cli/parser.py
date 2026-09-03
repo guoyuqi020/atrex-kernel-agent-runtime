@@ -25,7 +25,7 @@ def build_parser() -> argparse.ArgumentParser:
     seed_lineage.add_argument("--spec", required=True, help="trusted Lineage seed JSON spec")
     seed_ablation_arm = commands.add_parser(
         "seed-ablation-arm",
-        help="add an unevolved control arm in its own Campaign for ablation comparison",
+        help="add a control arm with an independent Campaign and evolution schedule",
     )
     seed_ablation_arm.add_argument("--config", required=True, help="trusted Runtime JSON config")
     seed_ablation_arm.add_argument(

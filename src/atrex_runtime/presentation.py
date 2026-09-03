@@ -270,6 +270,9 @@ def ablation_arm_result_value(result: AblationArmResult) -> dict[str, object]:
         "source_lineage_id": result.source_lineage_id,
         "trajectories_per_branch": result.trajectories_per_branch,
         "ephemeral_agent_state": result.ephemeral_agent_state,
+        "challenger_count": result.challenger_count,
+        "challenger_start_epoch": result.challenger_start_epoch,
+        "first_epoch_same_agent": result.first_epoch_same_agent,
         "lineage": lineage_seed_result_value(result.lineage),
     }
 

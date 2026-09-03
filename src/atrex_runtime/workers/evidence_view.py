@@ -178,6 +178,7 @@ def evolver_agent_optimization_summary(
     latest_epoch: JsonValue = None
     if records:
         epoch_number, _label, latest_branch, _record_attempts = records[-1]
+        shared_revision = sum(record[0] == epoch_number for record in records) > 1
         attempts = [
             attempt
             for record_epoch, _label, _branch, record_attempts in records
@@ -195,10 +196,11 @@ def evolver_agent_optimization_summary(
         raw_ordinal = latest_branch.get("challenger_ordinal")
         latest_epoch = {
             "epoch_number": epoch_number,
-            "branch": latest_branch.get("branch"),
+            "branch": "active_and_replica" if shared_revision else latest_branch.get("branch"),
             "challenger_ordinal": (
                 None
-                if not isinstance(raw_ordinal, int)
+                if shared_revision
+                or not isinstance(raw_ordinal, int)
                 or isinstance(raw_ordinal, bool)
                 or raw_ordinal <= 0
                 else raw_ordinal
@@ -294,9 +296,9 @@ def _materialize_evolver_agent_sessions(
     if not records:
         return
     latest_epoch = records[-1][0]
-    for epoch_number, _branch_label, _branch, attempts in records:
-        if epoch_number != latest_epoch:
-            continue
+    records = [record for record in records if record[0] == latest_epoch]
+    stride = _shared_agent_trajectory_stride(records)
+    for branch_index, (_epoch, _branch_label, _branch, attempts) in enumerate(records):
         for attempt in attempts:
             attempt_path = attempt.pop("_evidence_path", None)
             if not isinstance(attempt_path, str):
@@ -306,6 +308,7 @@ def _materialize_evolver_agent_sessions(
             ordinal = attempt.get("ordinal")
             if not isinstance(trajectory, int) or not isinstance(ordinal, int):
                 raise ValueError("Evolver Attempt session coordinates are invalid")
+            trajectory += branch_index * stride
             conversations = sorted(attempt_root.rglob("conversation.jsonl"))
             if not conversations:
                 continue
@@ -331,9 +334,9 @@ def _materialize_evolver_agent_reports(
     if not records:
         return
     latest_epoch = records[-1][0]
-    for epoch_number, _branch_label, _branch, attempts in records:
-        if epoch_number != latest_epoch:
-            continue
+    records = [record for record in records if record[0] == latest_epoch]
+    stride = _shared_agent_trajectory_stride(records)
+    for branch_index, (_epoch, _branch_label, _branch, attempts) in enumerate(records):
         for attempt in attempts:
             attempt_path = attempt.get("_evidence_path")
             if not isinstance(attempt_path, str):
@@ -345,6 +348,7 @@ def _materialize_evolver_agent_reports(
             ordinal = attempt.get("ordinal")
             if not isinstance(trajectory, int) or not isinstance(ordinal, int):
                 raise ValueError("Evolver Attempt report coordinates are invalid")
+            trajectory += branch_index * stride
             if report.is_symlink() or not report.is_file():
                 raise ValueError("Evolver Attempt report must be a regular file")
             trajectory_root = destination / f"trajectory-{trajectory:08d}"
@@ -353,6 +357,21 @@ def _materialize_evolver_agent_reports(
             if target.exists() or target.is_symlink():
                 raise FileExistsError(target)
             shutil.copyfile(report, target)
+
+
+def _shared_agent_trajectory_stride(
+    records: list[tuple[int, str, dict[str, JsonValue], list[dict[str, JsonValue]]]],
+) -> int:
+    """Give same-Agent Branches disjoint slots, matching their reusable State snapshots."""
+    return max(
+        (
+            cast(int, attempt["trajectory_ordinal"])
+            for _epoch, _label, _branch, attempts in records
+            for attempt in attempts
+            if isinstance(attempt.get("trajectory_ordinal"), int)
+        ),
+        default=1,
+    )
 
 
 def _evolver_agent_attempt_records(
@@ -627,11 +646,20 @@ def _append_evolver_completed_epoch(
             or ordinal <= 0
             or ordinal > len(challenger_revisions)
             or revision != challenger_revisions[ordinal - 1]
-            or proposal_type not in {"evolved", "reuse", "evolve_from_history"}
+            or proposal_type not in {"evolved", "reuse", "evolve_from_history", "replica"}
             or not isinstance(base_revision, str)
             or ordinal in proposals
         ):
             raise ValueError(f"completed Epoch {number} Challenger proposal is inconsistent")
+        if proposal_type == "replica" and (
+            number != 1
+            or revision != active_revision
+            or base_revision != active_revision
+            or raw.get("evolution_trace_digest") is not None
+        ):
+            raise ValueError(
+                "Replica must reuse the initial Active Agent without an Evolution trace"
+            )
         proposals[ordinal] = raw
     validated_attempts = _validated_completed_attempts(
         raw_attempts,

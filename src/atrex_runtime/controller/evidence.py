@@ -350,6 +350,8 @@ class LocalEvidenceAssembler:
         diff_files: list[JsonValue] = []
         epoch = self._registry.get_epoch(epoch_id)
         for proposal in self._registry.list_epoch_challengers(epoch.id):
+            if proposal.evolution_trace_digest is None:
+                continue
             from ..workers.evolution import EvolutionTraceV9
 
             evolution_artifact = self._artifacts.verify(proposal.evolution_trace_digest)

@@ -21,23 +21,51 @@ transient-service and sandbox execution. In `container` mode they never escalate
 
 ## Fixed schedule
 
-- Default absolute target: Epoch 5.
-- Epoch 1: Active only, three serial fresh Optimizer Attempts.
+- Main arm `evolve-3`: default absolute target Epoch 5 (its existing workspace stays at `dsls/DSL/`).
+- Epoch 1: Active and a replica run the same Agent revision, v0 Kernel and starting State in two
+  isolated Branches, each with three serial fresh Optimizer Attempts. No Evolver runs.
 - Epoch 2 onward: one Evolver creates one Challenger; Active and Challenger run concurrently, with
   three serial Attempts on each Branch.
 - Epoch completion independently compares Kernels and selects the next Active Agent.
 
-With the default `event_only=true`, each DSL also runs unevolved Ablation Campaigns. Every Arm has
-an equal budget of exactly 15 post-Bootstrap Optimizer Attempts. Bootstrap is not counted. The
-default Pool uses three Attempts per Epoch, and two additional serial-pool Arms vary that grouping:
+With the default `event_only=true`, each DSL also runs independent Ablation Campaigns from the same
+frozen Bootstrap v0; no extra Bootstrap or baseline measurement is needed. Unevolved controls run
+exactly 15 post-Bootstrap Optimizer Attempts per Trajectory. Pool labels specify
+serial Attempts per Trajectory per Epoch:
 
-- `ablation-pooled`: 5 Epochs x 3 Attempts;
-- `ablation-pool-1`: 15 Epochs x 1 Attempt;
-- `ablation-pool-5`: 3 Epochs x 5 Attempts.
+- `ablation-pool-3`: 2 parallel Trajectories, each 5 Epochs x 3 Attempts = 15; 30 total;
+- `ablation-pool-1`: 2 parallel Trajectories, each 15 Epochs x 1 Attempt = 15; 30 total;
+- `ablation-pool-5`: 2 parallel Trajectories, each 3 Epochs x 5 Attempts = 15; 30 total.
 
-The isolated and retained controls also run 5 Epochs x 3 Attempts. The generated Ablation Plan stores
-both the per-Epoch Attempt count and the derived target Epoch on each Arm. Consequently,
-`--target-epoch` controls the evolution Campaign only; it does not alter the fixed Ablation budget.
+By default, `ablation-retained-01/02` pair with `ablation-isolated-01/02`. Each instance owns an
+independent Campaign and one Trajectory with 5 Epochs x 3 Attempts = 15 total (30 per pair).
+Retained keeps its own Skills/Tools across Attempts; Isolated resets them. Neither runs Evolver,
+and replicas share only the frozen Bootstrap baseline, not subsequent history or mutable State.
+Replica counts follow the configured Active/Challenger Trajectory count for both kinds.
+The generated Ablation Plan stores each Arm's Trajectory count, per-Epoch Attempt
+count and derived target Epoch. `--target-epoch` controls the evolution Campaign only; it does not
+alter the fixed per-Trajectory Ablation budget.
+
+Two evolving arms retain Skills/Tools and create one Challenger per Epoch starting at Epoch 2:
+
+| Arm | Attempts per Branch per Epoch | Epochs | Optimizer Attempts total | Evolutions |
+|---|---:|---:|---:|---:|
+| `ablation-evolve-1` | 1 | 15 | 30 | 14 |
+| `evolve-3` (main, default policy) | 3 | 5 | 30 | 4 |
+| `ablation-evolve-5` | 5 | 3 | 30 | 2 |
+
+Each Branch has one Trajectory; Active and Challenger run concurrently. Active accumulates 15
+Attempts in each arm. With `first_epoch_same_agent=true`, Epoch 1 has a same-Agent replica rather
+than an evolved Challenger, so all three arms total 30 Attempts. Bootstrap and Evolver Sessions
+are excluded. The two Branches have separate mutable Skills/Tools. No new Agent revision or
+Evolution Report is created for the replica; the next Active and Evolver inherit the best-Kernel
+Trajectory's terminal State. The new arms inherit the main Lineage's models and Campaign's
+Evolver commit. `--target-epoch` overrides only the main arm, not the new arms' fixed targets.
+Arm files are under `dsls/DSL/ablation-evolve-1/` and `dsls/DSL/ablation-evolve-5/`; each contains
+`arm.json`, `seed-result.json`, `campaign.log`, and `campaign-result.json`. The task-level
+`campaign-results.json` pairs all arm results, schedules and budgets. Existing Workspaces retain
+their frozen plans; use a new Workspace to enable the new arms, paired Retained replicas and
+two-Trajectory Pool layouts.
 
 `--target-epoch N` overrides the absolute target. Repeating a command resumes durable state.
 

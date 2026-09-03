@@ -136,6 +136,7 @@ class _LineageBootstrapSpec(BaseModel):
     initial_evidence: Path
     challenger_count: int = Field(ge=0)
     challenger_start_epoch: int = Field(gt=0)
+    first_epoch_same_agent: bool = False
     trajectories_per_branch: int = Field(gt=0)
     attempts_per_trajectory: int = Field(gt=0)
     optimizer_model: str | None
@@ -192,6 +193,7 @@ class CampaignSpecV3(BaseModel):
     base_revision: GitBaseRevisionV1
     challenger_count: int = Field(default=1, ge=0)
     challenger_start_epoch: int = Field(default=1, gt=0)
+    first_epoch_same_agent: bool = False
     trajectories_per_branch: int = Field(default=1, gt=0)
     attempts_per_trajectory: int = Field(gt=0)
     lineages: dict[Dsl, CampaignLineageSpecV2]
@@ -208,6 +210,8 @@ class CampaignSpecV3(BaseModel):
 
     @model_validator(mode="after")
     def _validate_campaign(self) -> CampaignSpecV3:
+        if self.first_epoch_same_agent and self.challenger_count != 1:
+            raise ValueError("first_epoch_same_agent requires exactly one Challenger")
         if not self.lineages:
             raise ValueError("Campaign requires at least one DSL Lineage")
         supplied_contracts = sum(
@@ -236,6 +240,7 @@ class CampaignSpecV3(BaseModel):
             initial_evidence=lineage.initial_evidence,
             challenger_count=self.challenger_count,
             challenger_start_epoch=self.challenger_start_epoch,
+            first_epoch_same_agent=self.first_epoch_same_agent,
             trajectories_per_branch=self.trajectories_per_branch,
             attempts_per_trajectory=self.attempts_per_trajectory,
             optimizer_model=lineage.models.optimizer,
@@ -268,9 +273,7 @@ class CampaignSpecV3(BaseModel):
         return spec.model_copy(
             update={
                 "evaluation_contract": resolve(spec.evaluation_contract),
-                "shape_train": (
-                    None if spec.shape_train is None else resolve(spec.shape_train)
-                ),
+                "shape_train": (None if spec.shape_train is None else resolve(spec.shape_train)),
                 "agent_problem": (
                     None if spec.agent_problem is None else resolve(spec.agent_problem)
                 ),
@@ -421,8 +424,7 @@ class CampaignBootstrapper:
                 "agate_gpu": environment.gpu,
                 "accelerator_backend": environment.accelerator_backend,
                 "device_slug": environment.device_slug,
-                "lock_clocks": input_contract.lock_clocks
-                and environment.supports_clock_lock,
+                "lock_clocks": input_contract.lock_clocks and environment.supports_clock_lock,
             }
         )
         if self._gate_contract_policy is not None:
@@ -553,10 +555,7 @@ class CampaignBootstrapper:
             )
             without_roofline = {"roofline": None}
             comparable_contract = contract
-            if (
-                stored_contract.accelerator_backend is None
-                and stored_contract.device_slug is None
-            ):
+            if stored_contract.accelerator_backend is None and stored_contract.device_slug is None:
                 # Campaigns sealed before accelerator metadata was introduced remain
                 # resumable as long as no other trusted Gate field changes. A PPU
                 # clock-policy correction still differs and therefore fails closed.
@@ -682,6 +681,7 @@ class CampaignBootstrapper:
                 or existing_lineage.hardware_target != spec.hardware_target
                 or existing_lineage.challenger_count != spec.challenger_count
                 or existing_lineage.challenger_start_epoch != spec.challenger_start_epoch
+                or existing_lineage.first_epoch_same_agent != spec.first_epoch_same_agent
                 or existing_lineage.trajectories_per_branch != spec.trajectories_per_branch
                 or existing_lineage.attempts_per_trajectory != spec.attempts_per_trajectory
                 or existing_lineage.optimizer_model != spec.optimizer_model
@@ -763,6 +763,7 @@ class CampaignBootstrapper:
             evidence_checkpoint=evidence_digest,
             challenger_count=spec.challenger_count,
             challenger_start_epoch=spec.challenger_start_epoch,
+            first_epoch_same_agent=spec.first_epoch_same_agent,
             trajectories_per_branch=spec.trajectories_per_branch,
             attempts_per_trajectory=spec.attempts_per_trajectory,
             next_epoch_number=1,
@@ -799,9 +800,7 @@ class CampaignBootstrapper:
             artifact = self._artifacts.verify(current)
             if artifact.kind is not ArtifactKind.EVIDENCE:
                 raise ValueError("Lineage Evidence checkpoint has the wrong Artifact kind")
-            checkpoint = EvidenceCheckpointV1.from_file(
-                artifact.payload_path / "checkpoint.json"
-            )
+            checkpoint = EvidenceCheckpointV1.from_file(artifact.payload_path / "checkpoint.json")
             if checkpoint.through_epoch == 0:
                 return current
             if checkpoint.previous_checkpoint_digest is None:
@@ -863,6 +862,7 @@ class CampaignBootstrapper:
             existing.hardware_target,
             existing.challenger_count,
             existing.challenger_start_epoch,
+            existing.first_epoch_same_agent,
             existing.trajectories_per_branch,
             existing.attempts_per_trajectory,
             existing.optimizer_model,
@@ -873,6 +873,7 @@ class CampaignBootstrapper:
             expected.hardware_target,
             expected.challenger_count,
             expected.challenger_start_epoch,
+            expected.first_epoch_same_agent,
             expected.trajectories_per_branch,
             expected.attempts_per_trajectory,
             expected.optimizer_model,

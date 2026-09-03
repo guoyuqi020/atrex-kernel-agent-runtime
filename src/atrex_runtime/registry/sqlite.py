@@ -71,7 +71,7 @@ from ..domain.models import (
 )
 from ..sqlite_support import configure_durable_sqlite
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -479,11 +479,11 @@ class SqliteRegistry:
         self.close()
 
     @contextmanager
-    def _transaction(self) -> Iterator[None]:
+    def _transaction(self, *, migration: bool = False) -> Iterator[None]:
         with self._lock:
             self._connection.execute("BEGIN IMMEDIATE")
             try:
-                if self._require_fencing:
+                if self._require_fencing and not migration:
                     self._assert_active_fence()
                 yield
             except BaseException:
@@ -622,8 +622,7 @@ class SqliteRegistry:
                 self._connection.execute("BEGIN IMMEDIATE")
                 try:
                     if self._has_tables("kernel_agent_revisions") and (
-                        "runtime_state_digest"
-                        not in self._table_columns("kernel_agent_revisions")
+                        "runtime_state_digest" not in self._table_columns("kernel_agent_revisions")
                     ):
                         self._connection.execute(
                             "ALTER TABLE kernel_agent_revisions "
@@ -644,8 +643,7 @@ class SqliteRegistry:
                         "input_runtime_state_digest" not in self._table_columns("attempts")
                     ):
                         self._connection.execute(
-                            "ALTER TABLE attempts "
-                            "ADD COLUMN input_runtime_state_digest TEXT"
+                            "ALTER TABLE attempts ADD COLUMN input_runtime_state_digest TEXT"
                         )
                     self._connection.execute("PRAGMA user_version = 29")
                 except BaseException:
@@ -694,6 +692,44 @@ class SqliteRegistry:
                     raise
                 else:
                     self._connection.execute("COMMIT")
+            version = 31
+        if version == 31:
+            with self._transaction(migration=True):
+                if self._has_tables(
+                    "lineages"
+                ) and "first_epoch_same_agent" not in self._table_columns("lineages"):
+                    self._connection.execute(
+                        "ALTER TABLE lineages ADD COLUMN first_epoch_same_agent "
+                        "INTEGER NOT NULL DEFAULT 0 CHECK (first_epoch_same_agent IN (0, 1))"
+                    )
+                if self._has_tables("epoch_challengers"):
+                    self._connection.execute("""CREATE TABLE epoch_challengers_next (
+                        epoch_id TEXT NOT NULL REFERENCES epochs(id),
+                        challenger_ordinal INTEGER NOT NULL CHECK (challenger_ordinal > 0),
+                        kernel_agent_revision_id TEXT NOT NULL
+                            REFERENCES kernel_agent_revisions(id),
+                        proposal_type TEXT NOT NULL CHECK (proposal_type IN (
+                            'evolved', 'reuse', 'evolve_from_history', 'replica'
+                        )),
+                        base_kernel_agent_revision_id TEXT NOT NULL
+                            REFERENCES kernel_agent_revisions(id),
+                        evolution_trace_digest TEXT,
+                        PRIMARY KEY (epoch_id, challenger_ordinal),
+                        UNIQUE (epoch_id, kernel_agent_revision_id),
+                        CHECK ((proposal_type = 'replica' AND evolution_trace_digest IS NULL) OR
+                               (proposal_type != 'replica' AND evolution_trace_digest IS NOT NULL))
+                    )""")
+                    if self._connection.execute(
+                        "SELECT 1 FROM epoch_challengers LIMIT 1"
+                    ).fetchone():
+                        self._connection.execute(
+                            "INSERT INTO epoch_challengers_next SELECT * FROM epoch_challengers"
+                        )
+                    self._connection.execute("DROP TABLE epoch_challengers")
+                    self._connection.execute(
+                        "ALTER TABLE epoch_challengers_next RENAME TO epoch_challengers"
+                    )
+                self._connection.execute("PRAGMA user_version = 32")
             return
         if version == 14:
             with self._lock:
@@ -1237,6 +1273,8 @@ class SqliteRegistry:
                     challenger_count INTEGER NOT NULL CHECK (challenger_count >= 0),
                     challenger_start_epoch INTEGER NOT NULL
                         CHECK (challenger_start_epoch > 0),
+                    first_epoch_same_agent INTEGER NOT NULL DEFAULT 0
+                        CHECK (first_epoch_same_agent IN (0, 1)),
                     trajectories_per_branch INTEGER NOT NULL
                         CHECK (trajectories_per_branch > 0),
                     optimizer_model TEXT,
@@ -1304,13 +1342,15 @@ class SqliteRegistry:
                     kernel_agent_revision_id TEXT NOT NULL
                         REFERENCES kernel_agent_revisions(id),
                     proposal_type TEXT NOT NULL CHECK (proposal_type IN (
-                        'evolved', 'reuse', 'evolve_from_history'
+                        'evolved', 'reuse', 'evolve_from_history', 'replica'
                     )),
                     base_kernel_agent_revision_id TEXT NOT NULL
                         REFERENCES kernel_agent_revisions(id),
-                    evolution_trace_digest TEXT NOT NULL,
+                    evolution_trace_digest TEXT,
                     PRIMARY KEY (epoch_id, challenger_ordinal),
-                    UNIQUE (epoch_id, kernel_agent_revision_id)
+                    UNIQUE (epoch_id, kernel_agent_revision_id),
+                    CHECK ((proposal_type = 'replica' AND evolution_trace_digest IS NULL) OR
+                           (proposal_type != 'replica' AND evolution_trace_digest IS NOT NULL))
                 );
                 CREATE TABLE attempts (
                     id TEXT PRIMARY KEY,
@@ -1444,7 +1484,7 @@ class SqliteRegistry:
                     owner TEXT NOT NULL,
                     lease_expires_at TEXT NOT NULL
                 );
-                PRAGMA user_version = 31;
+                PRAGMA user_version = 32;
                 COMMIT;
                 """
             )
@@ -3039,8 +3079,8 @@ class SqliteRegistry:
                        evidence_checkpoint, attempts_per_branch, next_epoch_number, status,
                        challenger_count, challenger_start_epoch, trajectories_per_branch,
                        optimizer_model, evolver_model, ephemeral_agent_state,
-                       bootstrap_source_lineage_id
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       bootstrap_source_lineage_id, first_epoch_same_agent
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     lineage.id,
                     lineage.campaign_id,
@@ -3059,6 +3099,7 @@ class SqliteRegistry:
                     lineage.evolver_model,
                     int(lineage.ephemeral_agent_state),
                     lineage.bootstrap_source_lineage_id,
+                    int(lineage.first_epoch_same_agent),
                 ),
             )
             baseline = self.get_kernel_revision(lineage.best_kernel_revision_id)
@@ -3116,6 +3157,7 @@ class SqliteRegistry:
             evidence_checkpoint=parse_artifact_digest(_required_text(row, "evidence_checkpoint")),
             challenger_count=_required_int(row, "challenger_count"),
             challenger_start_epoch=_required_int(row, "challenger_start_epoch"),
+            first_epoch_same_agent=bool(_required_int(row, "first_epoch_same_agent")),
             trajectories_per_branch=_required_int(row, "trajectories_per_branch"),
             attempts_per_trajectory=_required_int(row, "attempts_per_branch"),
             next_epoch_number=_required_int(row, "next_epoch_number"),
@@ -3176,9 +3218,7 @@ class SqliteRegistry:
                 raise InvalidTransitionError(
                     f"Lineage {lineage.id} cannot start epoch {epoch.number}"
                 )
-            expected_challenger_count = (
-                0 if epoch.number < lineage.challenger_start_epoch else lineage.challenger_count
-            )
+            expected_challenger_count = lineage.challengers_for_epoch(epoch.number)
             if (
                 epoch.evidence_checkpoint != lineage.evidence_checkpoint
                 or epoch.challenger_count != expected_challenger_count
@@ -3226,7 +3266,11 @@ class SqliteRegistry:
             ):
                 revision = self.get_kernel_agent_revision(revision_id)
                 if revision.id == epoch.active_kernel_agent_revision_id:
-                    proposal_type = ChallengerProposalType.REUSE
+                    proposal_type = (
+                        ChallengerProposalType.REPLICA
+                        if epoch.number == 1 and lineage.first_epoch_same_agent
+                        else ChallengerProposalType.REUSE
+                    )
                     base_revision_id = revision.id
                 else:
                     if revision.parent_id is None:
@@ -3251,7 +3295,9 @@ class SqliteRegistry:
                         revision_id,
                         proposal_type,
                         base_revision_id,
-                        revision.evolution_trace_digest or epoch.evidence_checkpoint,
+                        None
+                        if proposal_type is ChallengerProposalType.REPLICA
+                        else (revision.evolution_trace_digest or epoch.evidence_checkpoint),
                     ),
                 )
             self._connection.execute(
@@ -3356,8 +3402,10 @@ class SqliteRegistry:
             base_revision_id=parse_kernel_agent_revision_id(
                 _required_text(row, "base_kernel_agent_revision_id")
             ),
-            evolution_trace_digest=parse_artifact_digest(
-                _required_text(row, "evolution_trace_digest")
+            evolution_trace_digest=(
+                None
+                if (trace := _optional_text(row, "evolution_trace_digest")) is None
+                else parse_artifact_digest(trace)
             ),
         )
 
@@ -3415,7 +3463,18 @@ class SqliteRegistry:
                 raise InvalidTransitionError(
                     "historical Challenger base was introduced in the current Epoch"
                 )
-            if challenger.proposal_type is ChallengerProposalType.REUSE:
+            if challenger.proposal_type is ChallengerProposalType.REPLICA:
+                lineage = self.get_lineage(epoch.lineage_id)
+                if not (
+                    epoch.number == 1
+                    and lineage.first_epoch_same_agent
+                    and revision.id == base.id == epoch.active_kernel_agent_revision_id
+                ):
+                    raise InvalidTransitionError(
+                        "Replica is only valid for the initial same-Agent Epoch"
+                    )
+                revision_number = _required_int(base_version, "revision_number")
+            elif challenger.proposal_type is ChallengerProposalType.REUSE:
                 if revision.id == epoch.active_kernel_agent_revision_id:
                     raise InvalidTransitionError("The current Active Agent cannot be reused")
                 version = self._connection.execute(
@@ -3975,18 +4034,14 @@ class SqliteRegistry:
             if existing == runtime_state_digest:
                 return
             if row["status"] != AttemptStatus.RUNNING:
-                raise InvalidTransitionError(
-                    f"Attempt {attempt_id} cannot record Runtime State"
-                )
+                raise InvalidTransitionError(f"Attempt {attempt_id} cannot record Runtime State")
             cursor = self._connection.execute(
                 """UPDATE attempts SET runtime_state_digest = ?
                    WHERE id = ? AND status = 'running'""",
                 (runtime_state_digest, attempt_id),
             )
             if cursor.rowcount != 1:
-                raise InvalidTransitionError(
-                    f"Attempt {attempt_id} cannot record Runtime State"
-                )
+                raise InvalidTransitionError(f"Attempt {attempt_id} cannot record Runtime State")
             self._event(
                 "attempt.runtime_state_recorded",
                 attempt_id,
@@ -4117,10 +4172,7 @@ class SqliteRegistry:
             ),
             input_runtime_state_digest=(
                 None
-                if (
-                    input_state := _optional_text(row, "input_runtime_state_digest")
-                )
-                is None
+                if (input_state := _optional_text(row, "input_runtime_state_digest")) is None
                 else parse_artifact_digest(input_state)
             ),
         )
@@ -4313,7 +4365,11 @@ class SqliteRegistry:
                 },
             )
             challengers = epoch.challenger_kernel_agent_revision_ids
-            if selection.winner_kernel_agent_revision_id in challengers:
+            if (
+                selection.winner_kernel_agent_revision_id in challengers
+                and selection.winner_kernel_agent_revision_id
+                != epoch.active_kernel_agent_revision_id
+            ):
                 self._event(
                     "kernel_agent.promoted",
                     selection.winner_kernel_agent_revision_id,

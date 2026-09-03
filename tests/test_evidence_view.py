@@ -17,9 +17,11 @@ from atrex_runtime.workers.evidence_view import (
     EVIDENCE_PROMPT_TEXT,
     EVOLVER_EVIDENCE_PROMPT_TEXT,
     EvidenceViewManifestV1,
+    _materialize_evolver_agent_reports,
     _materialize_evolver_agent_sessions,
     assemble_evolver_evidence_view,
     assemble_optimizer_evidence_view,
+    evolver_agent_optimization_summary,
 )
 
 
@@ -374,6 +376,57 @@ def _current_branch(
             },
         )
     return root
+
+
+def test_same_agent_branches_keep_both_sessions_reports_and_one_career_epoch(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    epoch = evidence / "epochs/00000001"
+    _write(
+        epoch / "summary.json",
+        {
+            "selection_reason": "incumbent_retained",
+            "branches": [
+                {
+                    "branch": "active",
+                    "challenger_ordinal": 0,
+                    "kernel_agent_revision_id": "same",
+                    "selected": True,
+                },
+                {
+                    "branch": "challenger",
+                    "challenger_ordinal": 1,
+                    "kernel_agent_revision_id": "same",
+                    "selected": True,
+                },
+            ],
+        },
+    )
+    for branch in ("active", "challenger-0001"):
+        root = epoch / "branches" / branch / "trajectories/00000001/attempts/00000001"
+        _write(root / "summary.json", {"trajectory_ordinal": 1, "ordinal": 1})
+        _write(root / "report.json", {"from": branch})
+        trace = root / "traces/run-0001/conversation.jsonl"
+        trace.parent.mkdir(parents=True)
+        trace.write_text(branch)
+    _materialize_evolver_agent_sessions(evidence, "same", tmp_path / "sessions")
+    _materialize_evolver_agent_reports(evidence, "same", tmp_path / "reports")
+    for ordinal, branch in enumerate(("active", "challenger-0001"), start=1):
+        relative = f"trajectory-{ordinal:08d}/attempt-00000001"
+        assert (tmp_path / "sessions" / f"{relative}.conversation.jsonl").read_text() == branch
+        assert json.loads((tmp_path / "reports" / f"{relative}.report.json").read_text()) == {
+            "from": branch
+        }
+    summary = evolver_agent_optimization_summary(
+        evidence,
+        "same",
+        LocalArtifactStore(tmp_path / "artifacts"),
+        version="agent-v0",
+    )
+    assert summary["latest_epoch"]["branch"] == "active_and_replica"
+    assert summary["latest_epoch"]["attempt_count"] == 2
+    assert summary["career"] == {"epoch_participation_count": 1, "win_count": 1, "loss_count": 0}
 
 
 def test_evolver_sessions_expose_only_latest_epoch_and_latest_attempt_run(

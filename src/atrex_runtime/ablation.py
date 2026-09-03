@@ -1,4 +1,4 @@
-"""Unevolved ablation control arms, each isolated in its own Campaign."""
+"""Ablation control arms, each isolated in its own Campaign."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .domain.ids import (
     CampaignId,
@@ -47,8 +47,11 @@ class AblationArmSpecV1(BaseModel):
     # One Trajectory isolates a single line. Several reproduce the Active branch mechanism:
     # every Trajectory sees each prior Epoch's results and restarts from the best Kernel.
     trajectories_per_branch: int = Field(default=1, gt=0)
+    challenger_count: int = Field(default=0, ge=0)
+    challenger_start_epoch: int = Field(default=2, gt=0)
+    first_epoch_same_agent: bool = False
     # Resetting Skills and Tools every Attempt ablates Agent-level accumulation as well.
-    # Retaining them ablates the Evolver alone, leaving the rest identical to Active.
+    # Retaining them preserves serial learning; challenger_count controls evolution separately.
     ephemeral_agent_state: bool = True
     optimizer_model: str | None = Field(default=None, min_length=1, max_length=200)
 
@@ -59,6 +62,12 @@ class AblationArmSpecV1(BaseModel):
         if not normalized or "\x00" in normalized:
             raise ValueError("ablation arm creation_key is invalid")
         return normalized
+
+    @model_validator(mode="after")
+    def _validate_replica(self) -> Self:
+        if self.first_epoch_same_agent and self.challenger_count != 1:
+            raise ValueError("first_epoch_same_agent requires exactly one Challenger")
+        return self
 
     @field_validator("source_lineage_id", mode="before")
     @classmethod
@@ -105,11 +114,14 @@ class AblationArmResult:
     source_lineage_id: LineageId
     trajectories_per_branch: int
     ephemeral_agent_state: bool
+    challenger_count: int
+    challenger_start_epoch: int
+    first_epoch_same_agent: bool
     lineage: LineageSeedResult
 
 
 class AblationArmSeeder:
-    """Publish an isolated Campaign whose single Lineage never evolves."""
+    """Publish an isolated Campaign with its own optimization/evolution schedule."""
 
     def __init__(
         self,
@@ -123,7 +135,7 @@ class AblationArmSeeder:
         self._clock = clock
 
     async def seed_arm(self, spec: AblationArmSpecV1) -> AblationArmResult:
-        """Create or idempotently recover one unevolved control arm."""
+        """Create or idempotently recover one control arm."""
         source_lineage = self._registry.get_lineage(spec.source_lineage_id)
         if source_lineage.ephemeral_agent_state:
             raise ValueError("an ablation arm cannot be cloned from another ablation arm")
@@ -152,8 +164,13 @@ class AblationArmSeeder:
                 creation_key=spec.creation_key,
                 dsl=source_lineage.dsl,
                 seed=LineageBaselineSeedV1(lineage_id=source_lineage.id),
-                models=LineageSeedModelsV1(optimizer=spec.optimizer_model),
-                challenger_count=0,
+                models=LineageSeedModelsV1(
+                    optimizer=spec.optimizer_model or source_lineage.optimizer_model,
+                    evolver=source_lineage.evolver_model,
+                ),
+                challenger_count=spec.challenger_count,
+                challenger_start_epoch=spec.challenger_start_epoch,
+                first_epoch_same_agent=spec.first_epoch_same_agent,
                 trajectories_per_branch=spec.trajectories_per_branch,
                 attempts_per_trajectory=spec.attempts_per_trajectory,
                 ephemeral_agent_state=spec.ephemeral_agent_state,
@@ -165,6 +182,9 @@ class AblationArmSeeder:
             source_lineage_id=source_lineage.id,
             trajectories_per_branch=spec.trajectories_per_branch,
             ephemeral_agent_state=spec.ephemeral_agent_state,
+            challenger_count=spec.challenger_count,
+            challenger_start_epoch=spec.challenger_start_epoch,
+            first_epoch_same_agent=spec.first_epoch_same_agent,
             lineage=lineage,
         )
 

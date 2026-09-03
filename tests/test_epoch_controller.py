@@ -245,6 +245,44 @@ def candidate(label: str, latency_us: float) -> RunAttemptResult:
 
 
 @pytest.mark.anyio
+async def test_first_epoch_same_agent_runs_two_branches_without_evolver(tmp_path: Path) -> None:
+    with SqliteRegistry(tmp_path / "runtime.db") as registry:
+        seeded = seed_lineage(
+            registry,
+            challenger_start_epoch=2,
+            first_epoch_same_agent=True,
+            attempts_per_trajectory=1,
+        )
+        evolver = FakeEvolver()
+        optimizer = BranchConcurrencyProbeOptimizer(release_at=2)
+        controller = EpochController(registry, evolver, optimizer, FakeAttemptEvidence())
+        first = await controller.run_epoch(seeded.lineage_id, 1)
+        assert optimizer.peak_running == 2
+        assert evolver.calls == []
+        attempts = registry.list_attempts(first.epoch.id)
+        assert {attempt.branch for attempt in attempts} == {
+            BranchRole.ACTIVE,
+            BranchRole.CHALLENGER,
+        }
+        assert {attempt.kernel_agent_revision_id for attempt in attempts} == {
+            seeded.active_revision_id
+        }
+        assert {attempt.input_kernel_revision_id for attempt in attempts} == {seeded.baseline.id}
+        assert len(registry.list_lineage_agent_revisions(seeded.lineage_id)) == 1
+        proposal = registry.list_epoch_challengers(first.epoch.id)[0]
+        assert proposal.proposal_type.value == "replica"
+        assert proposal.evolution_trace_digest is None
+        assert first.epoch.winner_kernel_agent_revision_id == seeded.active_revision_id
+        assert await controller.run_epoch(seeded.lineage_id, 1) == first
+        assert optimizer.calls == 2
+        lineage = registry.get_lineage(seeded.lineage_id)
+        registry.advance_lineage_evidence(lineage.id, lineage.evidence_checkpoint, digest("epoch2"))
+        second = await controller.run_epoch(seeded.lineage_id, 2)
+        assert len(evolver.calls) == 1
+        assert second.epoch.challenger_kernel_agent_revision_ids != (seeded.active_revision_id,)
+
+
+@pytest.mark.anyio
 async def test_epoch_without_challengers_runs_parallel_trajectories_from_same_kernel(
     tmp_path: Path,
 ) -> None:

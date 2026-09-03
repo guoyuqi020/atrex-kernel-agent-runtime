@@ -16,6 +16,10 @@ input/
 ```
 
 Every visible Agent revision appears exactly once, keyed by its Lineage version `agent-vN`.
+If the same Agent ran both Branches in the first Epoch, both histories appear under that version:
+Trajectory slots for the replica follow Active's slots in State, Sessions, and Reports;
+`latest_epoch.branch` is `active_and_replica`. It is a
+parallel run of the same Agent, not an Evolution; no Evolution Report exists for it.
 `input/agents/agent-vN/` is its sealed Source and accumulated per-Trajectory State;
 `input/evidence/agent-vN/` is what Runtime derived about it. No directory name encodes an Epoch role.
 
@@ -57,7 +61,8 @@ and does not explain every losing Agent individually. Never infer more than the 
   reaching the best result earlier, then more strict improvements, then more valid candidates, then
   fewer failures.
 - `incumbent_retained` — everything tied, so the incumbent Active kept its position.
-- `null` — no comparison ran, either because the Epoch had no Challenger or because it completed before
+- `null` — no comparison ran, because the Epoch had no Challenger, both Branches used the same Agent,
+  or because it completed before
   Runtime recorded reasons.
 
 A `secondary_criteria` or `incumbent_retained` result is evidence about consistency and convergence

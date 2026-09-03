@@ -6,9 +6,17 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
-- Added `ablation-pool-1` and `ablation-pool-5` production arms and fixed every Ablation
-  Arm to exactly 15 post-Bootstrap Optimizer Attempts. Arms derive their own target Epoch
-  from their one-, three-, or five-Attempt grouping; Bootstrap is never counted.
+- Added `ablation-evolve-1` and `ablation-evolve-5` with 15 x 1 and 3 x 5 schedules; the existing
+  main arm is labeled `evolve-3` (5 x 3). All total 30 Optimizer Attempts, with 14/4/2 Evolutions.
+  Epoch 1 runs the same Agent on two isolated Branches without calling Evolver or creating a new
+  Agent revision; normal evolution starts at Epoch 2. Arms reuse the same Bootstrap baseline,
+  inherit models and Evolver commit, and retain independent histories and Skills/Tools.
+- Added `ablation-pool-1` and `ablation-pool-5`, and renamed the default Pool to `ablation-pool-3`.
+  Every Trajectory runs 15 post-Bootstrap Optimizer Attempts. All three Pools run two parallel Trajectories
+  (30 total per arm). Retained now pairs with Isolated as independent `ablation-retained-01/02`
+  Campaigns by default: one Trajectory and 15 Attempts each, retaining only their own Skills/Tools.
+  Arms derive their target Epoch from
+  their serial Attempt grouping; Bootstrap is never counted.
 - Added a required `contributing_kernel_trial_ids` field to the Optimizer's Attempt Report, naming the
   historical Kernel Trials whose code or approach the Attempt drew from. Kernel Trial identifiers are
   used because the Optimizer has no Kernel revision vocabulary and must not gain one. Both Core and

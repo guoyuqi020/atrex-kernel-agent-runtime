@@ -198,7 +198,7 @@ Runtime revalidates the Agent repository, independently evaluates the Kernel aga
 Campaign contract, and creates a new independent `agent-v0`/`v0` Lineage. This does not alter the
 Campaign's frozen Core or Evolver commits.
 
-## 10. Create an unevolved ablation arm
+## 10. Create an ablation arm
 
 Create a small Ablation v1 JSON file naming a source Lineage and its control topology:
 
@@ -223,6 +223,12 @@ atrex-kernel-agent-runtime seed-ablation-arm \
 Runtime creates a separate one-Lineage Campaign from the source Bootstrap baseline with no
 Challenger. Use `ephemeral_agent_state=true` to reset adaptive Skills/Tools every Attempt; use false
 to retain serial State and isolate only the absence of Evolver changes.
+
+For an evolving control, set `challenger_count=1`, `challenger_start_epoch=2`,
+`first_epoch_same_agent=true`, and `ephemeral_agent_state=false`. Use the returned Campaign ID
+with `run-campaign --target-epoch N`. One Attempt per Branch for 15 Epochs, three for five Epochs,
+or five for three Epochs all run 30 Optimizer Attempts. Epoch 1 uses the same Agent in both Branches
+without an Evolver; later Epochs create evolved Challengers. Bootstrap is reused, not rerun.
 
 ## 11. Debug Agent workspaces
 

@@ -12,7 +12,7 @@ Example 为模板；本文解释权责与约束，不重复容易过期的全部
 | [`runtime.example.json`](../runtime.example.json) | Runtime v1 | 部署、服务、策略、Agent Backend、存储与 Launcher。 |
 | `examples/*/campaign.json` | Campaign 配置 | 算子、私有/公开 Contract、Core Commit、DSL Lineage、Model 与 Epoch 拓扑。 |
 | [`lineage-seed.example.json`](../lineage-seed.example.json) | Lineage Seed v1 | 从封存 Agent/Kernel 内容增加独立 Lineage。 |
-| Ablation Arm Spec | Ablation v1 | 从源 Lineage 的 Bootstrap Baseline 创建非进化控制 Campaign。 |
+| Ablation Arm Spec | Ablation v1 | 从源 Lineage 的 Bootstrap Baseline 创建控制 Campaign，可配置独立进化调度。 |
 
 不存在独立 Bootstrap 配置。Manifest、Report、Trace、Evidence、Journal 与 Usage File 是 Runtime
 输出，不是运维配置。
@@ -163,6 +163,10 @@ Resource Block，由外层容器持有总限制。两个 Mode 都保留所在 Ne
 Model 时委托给配置的 Backend CLI 默认值。可选 `problem_generalization_model` 只作用于 Core
 Problem Generalization。
 
+可选 `first_epoch_same_agent` 默认 false，生产进化臂启用它，并要求 `challenger_count=1`。
+Epoch 1 的 Active 与副本使用同一 Agent Revision、相同 Kernel/State 起点，可写 State 相互隔离；
+不调用 Evolver、不创建新 Agent Revision。之后遵循 `challenger_start_epoch`，该选项随 Lineage 冻结。
+
 Bootstrap 会查询 Agate。返回架构（例如 `sm_120`）对 Agent 可见；Canonical GPU Alias 单独封存
 用于 Agate 调度。
 
@@ -183,11 +187,17 @@ Runtime 在发布独立 `agent-v0`/`v0` 根之前重新校验 Agent，并在目�
 - `creation_key` 与 `source_lineage_id`；
 - `attempts_per_trajectory` 和可选 `trajectories_per_branch`；
 - `ephemeral_agent_state`（默认 true）；
+- `challenger_count`（默认 0）和 `challenger_start_epoch`（默认 2）；
+- `first_epoch_same_agent`（默认 false，要求一个 Challenger）；
 - 可选 `optimizer_model`。
 
-它创建一个独立 Campaign，其中只有一条 `challenger_count=0` Lineage。当
+它创建一个独立的单 Lineage Campaign，默认不生成 Challenger。当
 `ephemeral_agent_state=true` 时，每个 Attempt 从空的自适应 `skills/` 与 `tools/` 开始；
-设为 false 时保留源 Bootstrap Deposit 和后续串行 State，只隔离 Evolver 影响。
+设为 false 时保留源 Bootstrap Deposit 和后续串行 State。对比进化频率时使用
+`challenger_count=1`、`challenger_start_epoch=2`、`first_epoch_same_agent=true`、
+`ephemeral_agent_state=false`，调整
+`attempts_per_trajectory`。Evolver 模型及 Commit 继承自源；Optimizer 模型也默认继承，
+可显式覆盖。Baseline Outcome 直接复用，不重复测量。
 
 ## 校验规则
 

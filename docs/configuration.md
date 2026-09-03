@@ -13,7 +13,7 @@ explains ownership and invariants rather than duplicating every numeric value.
 | [`runtime.example.json`](../runtime.example.json) | Runtime v1 | Deployment, services, policy, Agent backends, storage, and launcher. |
 | `examples/*/campaign.json` | Campaign configuration | Operator, private/public contracts, Core commit, DSL Lineages, models, and Epoch topology. |
 | [`lineage-seed.example.json`](../lineage-seed.example.json) | Lineage Seed v1 | Add one independent Lineage from sealed Agent/Kernel content. |
-| Ablation Arm spec | Ablation v1 | Create an unevolved control Campaign from a source Lineage's Bootstrap baseline. |
+| Ablation Arm spec | Ablation v1 | Create a control Campaign from a source Lineage's Bootstrap baseline with an independent evolution schedule. |
 
 There is no separate Bootstrap configuration. Manifests, reports, traces, Evidence, journals, and
 usage files are Runtime outputs, not operator configuration.
@@ -174,6 +174,11 @@ Each Lineage provides optional Optimizer/Evolver model identities, `baseline_ker
 Optional `problem_generalization_model` applies only when Runtime invokes Core problem
 generalization.
 
+Optional `first_epoch_same_agent` (default false; production evolve arms enable it) requires
+`challenger_count=1`. Epoch 1 runs Active and a replica of the same Agent revision, with identical
+Kernel/State seeds and isolated mutable State. No Evolver is called and no Agent revision is created.
+Later Epochs obey `challenger_start_epoch`. The flag is frozen with the Lineage.
+
 At Bootstrap, Runtime queries Agate. The returned architecture (for example `sm_120`) is Agent
 visible; the canonical GPU alias is sealed separately for Agate scheduling.
 
@@ -196,11 +201,17 @@ publishing independent `agent-v0`/`v0` roots.
 - `creation_key` and `source_lineage_id`;
 - `attempts_per_trajectory` and optional `trajectories_per_branch`;
 - `ephemeral_agent_state` (default true);
+- `challenger_count` (default 0) and `challenger_start_epoch` (default 2);
+- `first_epoch_same_agent` (default false; requires one Challenger);
 - optional `optimizer_model`.
 
-It creates a separate Campaign with one `challenger_count=0` Lineage. When
+It creates a separate single-Lineage Campaign; by default no Challenger is generated. When
 `ephemeral_agent_state=true`, every Attempt starts with empty adaptive `skills/` and `tools/`;
-false retains the source Bootstrap deposit and later serial State, isolating Evolver impact only.
+false retains the source Bootstrap deposit and later serial State. To compare evolution frequencies,
+use `challenger_count=1`, `challenger_start_epoch=2`, `first_epoch_same_agent=true`, and
+`ephemeral_agent_state=false` with different
+`attempts_per_trajectory`. The Evolver model and commit are inherited from the source; Optimizer
+model also inherits unless explicitly overridden. The baseline outcome is reused without remeasurement.
 
 ## Validation rules
 

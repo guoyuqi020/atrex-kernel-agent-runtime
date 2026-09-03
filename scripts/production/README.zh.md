@@ -31,23 +31,47 @@ service 前自行提权；`container` 模式完全不会提权。
 - 一个 DSL Bootstrap 或运行失败不会取消或阻塞另外两个，成功结果会保留，重复执行只恢复失败
   或未完成的 Campaign；
 - 默认运行至 Epoch 5；
-- Epoch 1 只有 Active，串行运行 3 个全新 Optimizer Session；
+- Epoch 1 用同一 Agent Revision、v0 Kernel 和初始 State 并行运行 Active 与副本两个独立分支，
+  每分支串行运行 3 个全新 Optimizer Session，不调用 Evolver；
 - 从 Epoch 2 开始，每个 Epoch 开始前由一个 Evolver 生成一个 Challenger；
 - Active 和 Challenger 并行运行，各自串行运行 3 个 Attempt；
 - Epoch 结束后独立比较并选择 Agent，下一 Epoch 再生成一个 Challenger；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
 
-默认 `event_only=true` 时，每个 DSL 还会运行不包含 Evolver 的 Ablation Campaign。
-每个 Arm 都固定使用 15 个 Bootstrap 之后的 Optimizer Attempt，Bootstrap 不计入。默认 Pool
-每个 Epoch 运行 3 个 Attempt，另外两个串行 Pool Arm 只改变 Attempt 的分组方式：
+默认 `event_only=true` 时，每个 DSL 还会从同一份冻结的 Bootstrap v0 创建独立 Ablation Campaign，
+不重复 Bootstrap 或 Baseline 测量。非进化对照臂每条 Trajectory 固定运行 15 个 Optimizer Attempt，Bootstrap 不计入。
+Pool 名称中的数字表示每条 Trajectory 在每个 Epoch 串行运行的 Attempt 数：
 
-- `ablation-pooled`：5 个 Epoch x 3 个 Attempt；
-- `ablation-pool-1`：15 个 Epoch x 1 个 Attempt；
-- `ablation-pool-5`：3 个 Epoch x 5 个 Attempt。
+- `ablation-pool-3`：两条并行 Trajectory，各运行 5 个 Epoch x 3 个 Attempt = 15 次，合计 30 次；
+- `ablation-pool-1`：两条并行 Trajectory，各运行 15 个 Epoch x 1 个 Attempt = 15 次，合计 30 次；
+- `ablation-pool-5`：两条并行 Trajectory，各运行 3 个 Epoch x 5 个 Attempt = 15 次，合计 30 次。
 
-Isolated 和 Retained 对照臂同样运行 5 个 Epoch x 3 个 Attempt。生成的 Ablation Plan
-会为每个 Arm 分别保存每 Epoch Attempt 数和派生的目标 Epoch。因此 `--target-epoch`
-只控制进化 Campaign，不改变固定的 Ablation 预算。
+默认 `ablation-retained-01/02` 与 `ablation-isolated-01/02` 一一对应。每个实例是独立 Campaign，
+只有一条 Trajectory，运行 5 个 Epoch x 3 个 Attempt = 15 次，每组两个实例合计 30 次。
+Retained 跨 Attempt 保留自己的 Skills/Tools，Isolated 清空；两者均不运行 Evolver。
+实例之间仅复用冻结的 Bootstrap Baseline，不共享后续历史或可写 State。
+两类实例数量都随配置的 Active/Challenger Trajectory 总数派生。
+生成的 Ablation Plan 会保存各 Arm 的 Trajectory 数、每 Epoch Attempt 数
+和派生的目标 Epoch。`--target-epoch` 只控制进化 Campaign，不改变每条 Trajectory 的固定预算。
+
+新增两个进化臂，保留 Skills/Tools，从 Epoch 2 开始每轮生成一个 Challenger：
+
+| 臂 | 每分支每 Epoch 的 Attempts | Epoch 数 | Optimizer Attempts 总数 | Evolution 次数 |
+|---|---:|---:|---:|---:|
+| `ablation-evolve-1` | 1 | 15 | 30 | 14 |
+| `evolve-3`（默认主臂） | 3 | 5 | 30 | 4 |
+| `ablation-evolve-5` | 5 | 3 | 30 | 2 |
+
+每分支一条 Trajectory，两个分支并行；各臂 Active 累计 15 次。`first_epoch_same_agent=true`
+使首轮 Challenger 使用 Active 的同一 Agent，不调用 Evolver，因此三臂均为 30 次。
+两个分支的可写 Skills/Tools 相互隔离；副本不产生新 Agent Revision 或 Evolution Report。
+下一轮 Active 和 Evolver 从最优 Kernel 所属 Trajectory 的终态 State 开始。
+Bootstrap 和 Evolver Session 不计入 Optimizer Attempts。
+新增两臂继承主臂的模型和 Evolver Commit；`--target-epoch` 仅调整主臂，不改变新增臂的固定目标。
+主臂仍保留在 `dsls/DSL/`；新增臂分别位于 `dsls/DSL/ablation-evolve-1/` 和
+`dsls/DSL/ablation-evolve-5/`，各自包含 `arm.json`、`seed-result.json`、`campaign.log` 和
+`campaign-result.json`。任务级 `campaign-results.json` 汇总各臂结果、调度和预算。
+已有 Workspace 保留冻结的 Plan；新增进化臂、Retained 双实例和所有 Pool 的双 Trajectory 布局需要使用新 Workspace。
 
 ## 前置条件
 

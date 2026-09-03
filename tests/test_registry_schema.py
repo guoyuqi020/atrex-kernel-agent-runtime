@@ -70,9 +70,7 @@ def test_registry_migrates_schema_28_attempt_input_state_digest(tmp_path: Path) 
 
     with closing(sqlite3.connect(path)) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()
-        columns = {
-            row[1] for row in connection.execute("PRAGMA table_info(attempts)").fetchall()
-        }
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(attempts)").fetchall()}
 
     assert version == (SCHEMA_VERSION,)
     assert "input_runtime_state_digest" in columns
@@ -310,6 +308,50 @@ def test_registry_migrates_schema_30_with_null_selection_reason(tmp_path: Path) 
     assert version == (SCHEMA_VERSION,)
     assert "selection_reason" in columns
     assert reason == (None,)
+
+
+def test_registry_migrates_schema_31_preserving_proposals_and_defaults(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite"
+    epoch_id = "epoch_" + "1" * 32
+    agent_id = "agentrev_" + "2" * 32
+    trace = digest("evolution")
+    with closing(sqlite3.connect(path)) as connection:
+        connection.executescript("""
+            CREATE TABLE lineages(id TEXT PRIMARY KEY);
+            INSERT INTO lineages VALUES ('old-lineage');
+            CREATE TABLE epochs(id TEXT PRIMARY KEY);
+            CREATE TABLE kernel_agent_revisions(id TEXT PRIMARY KEY);
+            CREATE TABLE epoch_challengers(
+                epoch_id TEXT, challenger_ordinal INTEGER, kernel_agent_revision_id TEXT,
+                proposal_type TEXT, base_kernel_agent_revision_id TEXT,
+                evolution_trace_digest TEXT NOT NULL
+            );
+            PRAGMA user_version = 31;
+        """)
+        connection.execute("INSERT INTO epochs VALUES (?)", (epoch_id,))
+        connection.execute("INSERT INTO kernel_agent_revisions VALUES (?)", (agent_id,))
+        connection.execute(
+            "INSERT INTO epoch_challengers VALUES (?, 1, ?, 'reuse', ?, ?)",
+            (epoch_id, agent_id, agent_id, trace),
+        )
+        connection.commit()
+    # Schema migration must not require an acquired scheduler fence.
+    with SqliteRegistry(path, require_fencing=True) as registry:
+        assert (
+            registry.list_epoch_challengers(parse_epoch_id(epoch_id))[0].evolution_trace_digest
+            == trace
+        )
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("SELECT first_epoch_same_agent FROM lineages").fetchone() == (0,)
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        connection.execute(
+            "UPDATE epoch_challengers SET proposal_type='replica', evolution_trace_digest=NULL"
+        )
+        connection.commit()
+    with SqliteRegistry(path) as registry:
+        proposal = registry.list_epoch_challengers(parse_epoch_id(epoch_id))[0]
+        assert proposal.proposal_type is ChallengerProposalType.REPLICA
+        assert proposal.evolution_trace_digest is None
 
 
 def test_registry_binds_legacy_evolver_commit_once(tmp_path: Path) -> None:

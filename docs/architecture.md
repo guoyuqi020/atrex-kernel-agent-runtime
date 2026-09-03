@@ -126,10 +126,16 @@ Evolution reports.
 Revision IDs after Runtime revalidates the Agent and re-evaluates the Kernel under the destination
 Campaign Contract.
 
-`seed-ablation-arm` creates an unevolved control Lineage in a separate Campaign from another
-Lineage's frozen Bootstrap baseline. It sets `challenger_count=0`; `ephemeral_agent_state` controls
+`seed-ablation-arm` creates a control Lineage in a separate Campaign from another Lineage's frozen
+Bootstrap baseline. `challenger_count` defaults to 0 but can enable evolution-frequency controls;
+`challenger_start_epoch` defaults to 2. `ephemeral_agent_state` controls
 whether `skills/` and `tools/` reset after every Attempt. The arm shares the source evaluation
 identity needed for comparison but has independent lifecycle and version histories.
+
+With `first_epoch_same_agent=true`, the initial Challenger is a Runtime-created `replica` of
+the Active revision, not an Evolution. Branch identity isolates mutable State and attempts while
+the Agent revision remains unchanged. Kernel selection covers both Branches; the best producer's
+terminal Trajectory State seeds the next Active and Evolver. Replica provenance has no Evolution trace.
 
 ## Private evaluation boundary
 

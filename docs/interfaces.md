@@ -21,7 +21,7 @@ All commands use `atrex-kernel-agent-runtime`. Commands that read deployment sta
 | `serve` | `--config` | Serve health, Gateway, Wiki, and administration HTTP APIs. |
 | `bootstrap` | `--config --campaign <file>` | Idempotently create/resume Campaign and initial Lineages. |
 | `seed-lineage` | `--config --campaign <id> --spec <file>` | Create a new Lineage from sealed Artifact/Revision roots. |
-| `seed-ablation-arm` | `--config --spec <file>` | Create an unevolved control Lineage in its own Campaign from a source Lineage's Bootstrap baseline. |
+| `seed-ablation-arm` | `--config --spec <file>` | Create a control Lineage with an independent evolution schedule in its own Campaign from a source Lineage's Bootstrap baseline. |
 | `run-campaign` | `--config`, `--campaign <id>` or repeated `--lineage <id>`, `--target-epoch N` | Resume scheduling to an absolute Epoch; optional `--finalize`. |
 | `cancel-campaign` | `--config --campaign <id>` | Cancel a quiescent Campaign. |
 | `run-task-worker` | `--config` | Claim one durable Task; `--watch` keeps polling. |

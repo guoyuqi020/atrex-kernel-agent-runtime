@@ -19,7 +19,7 @@
 | `serve` | `--config` | 提供健康、Gateway、Wiki 和管理 HTTP API。 |
 | `bootstrap` | `--config --campaign <file>` | 幂等创建/继续 Campaign 和初始 Lineage。 |
 | `seed-lineage` | `--config --campaign <id> --spec <file>` | 从 Artifact/Revision Root 创建 Lineage。 |
-| `seed-ablation-arm` | `--config --spec <file>` | 从源 Lineage 的 Bootstrap Baseline 创建独立 Campaign 中的非进化控制 Lineage。 |
+| `seed-ablation-arm` | `--config --spec <file>` | 从源 Lineage 的 Bootstrap Baseline 创建独立 Campaign 中的控制 Lineage，可配置进化调度。 |
 | `run-campaign` | `--config`，`--campaign` 或重复 `--lineage`，`--target-epoch N` | 运行到绝对 Epoch；可选 `--finalize`。 |
 | `cancel-campaign` | `--config --campaign` | 取消静止 Campaign。 |
 | `run-task-worker` | `--config` | 领取一个持久 Task；`--watch` 持续轮询。 |
