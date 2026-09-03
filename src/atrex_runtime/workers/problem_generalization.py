@@ -116,14 +116,6 @@ class AgentProblemV1(BaseModel):
     coverage_regimes: tuple[dict[str, JsonValue], ...]
     development_cases: tuple[dict[str, JsonValue], ...] = ()
 
-    @field_validator("objective")
-    @classmethod
-    def _hidden_cases_are_explicit(cls, value: str) -> str:
-        lowered = value.lower()
-        if "hidden" not in lowered and "private" not in lowered:
-            raise ValueError("Agent Problem objective must state that exact cases are hidden")
-        return value
-
     @field_validator("invariants")
     @classmethod
     def _invariants_are_nonempty(cls, value: tuple[str, ...]) -> tuple[str, ...]:

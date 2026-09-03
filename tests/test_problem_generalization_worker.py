@@ -199,3 +199,33 @@ def test_agent_problem_rejects_private_structure(
             private_shapes={"private-0": {"init_kwargs": None, "input_kwargs": {"m": 17, "n": 31}}},
             max_bytes=65_536,
         )
+
+
+def test_agent_problem_objective_need_not_repeat_structured_privacy(tmp_path: Path) -> None:
+    value = {
+        "schema_version": "atrex.agent_problem.v1",
+        "objective": "Implement the recurrent operator while preserving every state write.",
+        "evaluation": {
+            "exact_cases": "private",
+            "correctness_requirement": "all evaluation cases pass",
+            "performance_requirement": "measure after correctness",
+            "development_cases_are_evaluation_cases": False,
+        },
+        "operator_contract": {},
+        "workload_profile": {},
+        "distribution_profile": {},
+        "shape_domain": {},
+        "invariants": ["preserve state semantics"],
+        "coverage_regimes": [],
+        "development_cases": [],
+    }
+    path = tmp_path / "agent_problem.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+    problem = AgentProblemV1.from_file(
+        path,
+        private_shapes={"private-0": {"init_kwargs": None, "input_kwargs": {"m": 17}}},
+        max_bytes=65_536,
+    )
+
+    assert problem.objective == value["objective"]
