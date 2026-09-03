@@ -38,54 +38,34 @@ service 前自行提权；`container` 模式完全不会提权。
 - Epoch 结束后独立比较并选择 Agent，下一 Epoch 再生成一个 Challenger；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
 
-默认 `event_only=true` 时，每个 DSL 还会从同一份冻结的 Bootstrap v0 创建独立 Ablation Campaign，
-不重复 Bootstrap 或 Baseline 测量。非进化对照臂每条 Trajectory 固定运行 15 个 Optimizer Attempt，Bootstrap 不计入。
-Pool 名称中的数字表示每条 Trajectory 在每个 Epoch 串行运行的 Attempt 数：
+默认 `event_only=true` 时，每个 DSL 共运行 7 个 Campaign 实例，含主臂。所有臂共享同一份冻结的
+Bootstrap v0，对照臂不重复 Bootstrap 或 Baseline 测量。默认均运行 5 个 Epoch，每条 Trajectory
+在每个 Epoch 串行执行 3 个 Attempt：
 
-- `ablation-pool-3`：两条并行 Trajectory，各运行 5 个 Epoch x 3 个 Attempt = 15 次，合计 30 次；
-- `ablation-pool-1`：两条并行 Trajectory，各运行 15 个 Epoch x 1 个 Attempt = 15 次，合计 30 次；
-- `ablation-pool-5`：两条并行 Trajectory，各运行 3 个 Epoch x 5 个 Attempt = 15 次，合计 30 次。
+| 臂 | 并行结构 | Optimizer Attempts 总数 | 保留 Runtime State | Evolution 次数 |
+|---|---|---:|---|---:|
+| `evolve-3`（主臂） | Active + Challenger，各一条 Trajectory | 30 | 是 | 4 |
+| `ablation-isolated-01/02` | 两个独立实例，各一条 Trajectory | 各 15，共 30 | 否 | 0 |
+| `ablation-retained-01/02` | 两个独立实例，各一条 Trajectory | 各 15，共 30 | 是 | 0 |
+| `ablation-pool-3` | 同一 Branch 内两条 Trajectory | 30 | 否 | 0 |
+| `ablation-pool-retained-3` | 同一 Branch 内两条 Trajectory | 30 | 是 | 0 |
 
-Pool 每次 Attempt 重置可写 Skills/Tools；对应的 Pool-Retained 保留它们，其余调度一致，
-均不运行 Evolver，也不创建 Challenger：
+Runtime State 包含 Memory/Docs/Skills/Tools。重置 State 时，每个目录只保留 README 模板，
+不清除 Kernel 进展或 Runtime 历史。Isolated 和 Retained 实例只共享 Bootstrap Baseline，
+不共享后续历史或可写 State；两类实例数随配置的 Active/Challenger Trajectory 总数派生。
 
-| 臂 | Trajectory 数 | 每条 Trajectory 每 Epoch 的 Attempts | Epoch 数 | Attempts 总数 |
-|---|---:|---:|---:|---:|
-| `ablation-pool-retained-1` | 2 | 1 | 15 | 30 |
-| `ablation-pool-retained-3` | 2 | 3 | 5 | 30 |
-| `ablation-pool-retained-5` | 2 | 5 | 3 | 30 |
+Pool 的 Trajectory 在同一 Epoch 内独立运行，在下一 Epoch 共享已完成历史，并从选出的最佳 Kernel
+重新开始。Pool-Retained 还继承该 Kernel 产出 Trajectory 的终态 State；State 选择继承，不合并，
+也不实时同步。所有对照臂的 Source 固定。两个 Pool 臂始终使用两条 Trajectory、每 Epoch 三次 Attempt。
 
-同一 Epoch 内，各 Trajectory 独立保留自己的可写 Skills/Tools，不实时同步。下一 Epoch 的两条
-Trajectory 从选出的最优 Kernel 及其产出 Trajectory 的终态 State 共同出发；State 选择继承，不合并。
-Agent Source 固定。`event_only=true` 时自动包含这些臂，目录为 `dsls/DSL/ablation-pool-retained-N/`。
+只有主臂运行 Evolver。`first_epoch_same_agent=true` 使首轮使用同一 Agent 的副本，不产生新
+Agent Revision 或 Evolution Report。两分支 State 独立，下一轮 Active 和 Evolver 从最佳 Kernel
+所属 Trajectory 的终态 State 开始。Bootstrap 和 Evolver Session 不计入 Optimizer Attempts。
 
-默认 `ablation-retained-01/02` 与 `ablation-isolated-01/02` 一一对应。每个实例是独立 Campaign，
-只有一条 Trajectory，运行 5 个 Epoch x 3 个 Attempt = 15 次，每组两个实例合计 30 次。
-Retained 跨 Attempt 保留自己的 Skills/Tools，Isolated 清空；两者均不运行 Evolver。
-实例之间仅复用冻结的 Bootstrap Baseline，不共享后续历史或可写 State。
-两类实例数量都随配置的 Active/Challenger Trajectory 总数派生。
-生成的 Ablation Plan 会保存各 Arm 的 Trajectory 数、每 Epoch Attempt 数
-和派生的目标 Epoch。`--target-epoch` 只控制进化 Campaign，不改变每条 Trajectory 的固定预算。
-
-新增两个进化臂，保留 Skills/Tools，从 Epoch 2 开始每轮生成一个 Challenger：
-
-| 臂 | 每分支每 Epoch 的 Attempts | Epoch 数 | Optimizer Attempts 总数 | Evolution 次数 |
-|---|---:|---:|---:|---:|
-| `ablation-evolve-1` | 1 | 15 | 30 | 14 |
-| `evolve-3`（默认主臂） | 3 | 5 | 30 | 4 |
-| `ablation-evolve-5` | 5 | 3 | 30 | 2 |
-
-每分支一条 Trajectory，两个分支并行；各臂 Active 累计 15 次。`first_epoch_same_agent=true`
-使首轮 Challenger 使用 Active 的同一 Agent，不调用 Evolver，因此三臂均为 30 次。
-两个分支的可写 Skills/Tools 相互隔离；副本不产生新 Agent Revision 或 Evolution Report。
-下一轮 Active 和 Evolver 从最优 Kernel 所属 Trajectory 的终态 State 开始。
-Bootstrap 和 Evolver Session 不计入 Optimizer Attempts。
-新增两臂继承主臂的模型和 Evolver Commit；`--target-epoch` 仅调整主臂，不改变新增臂的固定目标。
-主臂仍保留在 `dsls/DSL/`；新增臂分别位于 `dsls/DSL/ablation-evolve-1/` 和
-`dsls/DSL/ablation-evolve-5/`，各自包含 `arm.json`、`seed-result.json`、`campaign.log` 和
-`campaign-result.json`。任务级 `campaign-results.json` 汇总各臂结果、调度和预算。
-已有 Workspace 保留冻结的 Plan，准备脚本会拒绝改变 Arm 集合。启用 Pool-Retained 或其他拓扑变更
-需要使用新 Workspace，不能在恢复已有实验时改变其配置。
+主臂位于 `dsls/DSL/`，对照臂文件位于 `dsls/DSL/ablation-*/`。生成的 `ablation.json` 冻结对照臂配置，
+每条 Trajectory 固定运行 15 次 Bootstrap 之后的 Attempt；`--target-epoch` 只修改主臂目标。
+任务级 `campaign-results.json` 汇总各臂结果和预算。已有 Workspace 保留冻结的 Plan，准备脚本拒绝
+改变 Arm 集合；应用此拓扑需要新 Workspace，不会删除已有实验数据。
 
 ## 前置条件
 

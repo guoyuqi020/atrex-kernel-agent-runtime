@@ -12,20 +12,29 @@ workspace/
 │   └── evidence/               # read-only authorized history described below
 ├── agent/optimizer/            # read-only Agent implementation and built-in resources
 ├── work/kernel/                # writable candidate copied from the incumbent
-├── skills/                     # writable reusable methods
-├── tools/                      # writable reusable tools; README.md is mandatory
+├── memory/                     # search memories and lessons; README.md index
+├── docs/                       # reusable knowledge and reference notes; README.md index
+├── skills/                     # reusable procedures; README.md index
+├── tools/                      # reusable tool scripts; README.md index
 ├── sessions/                   # session capture owned by the launcher; do not modify
 └── scratch/                    # writable temporary requests, plans, recovery files, and reports
 ```
 
-`skills/` and `tools/` persist across serial Attempts in this Epoch for the same Lineage, Agent
-Revision, and Trajectory. At the next Epoch boundary, every Active Trajectory starts from an
+All four directories are writable adaptive Runtime State. They persist across serial Attempts in
+this Epoch for the same Lineage, Agent Revision, and Trajectory. At the next Epoch boundary, every Active Trajectory starts from an
 independent copy of the prior winner's best-Kernel Trajectory terminal State; every Challenger
 starts from its Evolver-sealed revision State. Parallel Trajectories have independent stores.
-Inspect both directories before creating duplicate content.
-Keep only reusable methods and implementations there—never credentials, raw traces, temporary
-requests, or one-off results. Document every reusable tool's purpose, invocation, inputs, outputs,
-side effects, dependencies, example, and limitations in `tools/README.md`.
+Bootstrap deposits seed later Attempts; retries use the latest persisted State. For reset-state
+ablation arms, all four directories start with only their README indexes on every Attempt/retry.
+Read the indexes before adding content. Whenever you add, change, rename, or remove a file, update
+that directory's `README.md` so it remains a current index of paths, purposes, and applicability.
+Use `memory/` for search experiences and decisions, `docs/` for sourced knowledge, `skills/` for
+repeatable procedures, and `tools/` for scripts. Tool entries also need invocation, inputs, outputs,
+side effects, dependencies, an example, and limitations in `tools/README.md`.
+Keep content concise and non-duplicative; link Journal and measurement identities instead of copying
+raw traces or one-off outputs. Memory and
+Docs are Agent-authored interpretations, not authoritative Journal/measurement replacements.
+Never store credentials. Temporary requests, probes, and outputs belong in `scratch/`.
 
 Controller-internal files and metadata are intentionally omitted from this Agent-facing contract.
 

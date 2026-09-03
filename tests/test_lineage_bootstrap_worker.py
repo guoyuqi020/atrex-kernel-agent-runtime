@@ -204,6 +204,10 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert not (os.stat(reference).st_mode & 0o200)
     (prepared.root / "skills/baseline.md").write_text("reuse this lesson\n")
     (prepared.root / "tools/probe.py").write_text("print('probe')\n")
+    for name in ("memory", "docs", "skills", "tools"):
+        assert (prepared.root / name / "README.md").is_file()
+        (prepared.root / name / "entry.txt").write_text(f"bootstrap {name}")
+        (prepared.root / name / "README.md").write_text(f"{name}: entry.txt")
 
     driver = CoreLineageBootstrapSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
@@ -245,6 +249,9 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     resumed = assembler.prepare(manifest)
     assert (resumed.root / "skills/baseline.md").read_text() == "reuse this lesson\n"
     assert (resumed.root / "tools/probe.py").read_text() == "print('probe')\n"
+    for name in ("memory", "docs", "skills", "tools"):
+        assert (resumed.root / name / "entry.txt").read_text() == f"bootstrap {name}"
+        assert (resumed.root / name / "README.md").read_text() == f"{name}: entry.txt"
 
 
 def test_lineage_bootstrap_rejects_the_legacy_terminal_report() -> None:

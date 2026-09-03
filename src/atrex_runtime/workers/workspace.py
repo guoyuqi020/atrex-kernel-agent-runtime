@@ -30,26 +30,41 @@ from .manifest import (
 )
 from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 
-TOOLS_README = """# Reusable tools
+REUSABLE_AGENT_DIRECTORIES = ("memory", "docs", "skills", "tools")
+REUSABLE_READMES = {
+    name: (Path(__file__).parents[1] / "templates/runtime-state" / f"{name}.md").read_text(
+        encoding="utf-8"
+    )
+    for name in REUSABLE_AGENT_DIRECTORIES
+}
 
-This directory persists across serial Attempts in the current Epoch for the same Lineage, Agent
-revision, and Trajectory. At the next Epoch boundary, every Active Trajectory starts from an
-independent copy of the prior winner's best-Kernel Trajectory terminal State. Keep only reusable
-implementation here; do not store credentials or one-off results.
 
-Whenever you add, change, rename, or remove a tool, update this README. For every tool document:
+def ensure_reusable_directories(root: Path) -> None:
+    """Fill missing State directories/indexes without overwriting Agent-authored content."""
+    if root.is_symlink():
+        raise ValueError(f"Reusable State root must not be a symlink: {root}")
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        directory = root / name
+        if directory.is_symlink():
+            raise ValueError(f"Reusable Workspace directory is invalid: {directory}")
+        directory.mkdir(mode=0o700, exist_ok=True)
+        _validate_reusable_tree(directory)
+        readme = directory / "README.md"
+        if readme.exists() and not readme.is_file():
+            raise ValueError(f"Reusable {name} README must be a regular file")
+        if not readme.exists():
+            readme.write_text(REUSABLE_READMES[name], encoding="utf-8")
 
-- path and purpose;
-- exact invocation;
-- inputs, outputs, and side effects;
-- runtime and package dependencies;
-- one minimal example;
-- known limitations or safety requirements.
 
-## Tool index
-
-No reusable tools have been added yet.
-"""
+def copy_reusable_agent_state(source: Path, destination: Path) -> None:
+    """Copy just adaptive State, upgrading older snapshots only in the writable copy."""
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        directory = source / name
+        if directory.exists() or directory.is_symlink():
+            _copy_reusable_tree(directory, destination / name)
+            make_tree_owner_writable(destination / name)
+    ensure_reusable_directories(destination)
 
 
 def materialize_reusable_agent_state_snapshot(
@@ -104,14 +119,13 @@ def materialize_reusable_agent_state_snapshot(
                     if ordinal <= 0:
                         raise ValueError(f"Reusable trajectory ordinal is invalid: {source}")
                     children = {child.name for child in source.iterdir()}
-                    if children != {"skills", "tools"}:
+                    if not children <= set(REUSABLE_AGENT_DIRECTORIES):
                         raise ValueError(
-                            f"Reusable trajectory must contain only skills/ and tools/: {source}"
+                            f"Reusable trajectory has unexpected State directories: {source}"
                         )
                     target = trajectories_root / source.name
                     target.mkdir(mode=0o700)
-                    _copy_reusable_tree(source / "skills", target / "skills")
-                    _copy_reusable_tree(source / "tools", target / "tools")
+                    copy_reusable_agent_state(source, target)
                     ordinals.append(ordinal)
             trajectories_by_revision[revision_id] = tuple(ordinals)
 
@@ -130,20 +144,22 @@ def validate_reusable_agent_state_seed(
     *,
     max_files: int | None = None,
     max_bytes: int | None = None,
+    require_complete: bool = False,
 ) -> None:
     """Validate one revision-wide Candidate seed copied into every new Trajectory."""
     state_root = Path(root)
     _validate_reusable_tree(state_root)
     present = {child.name for child in state_root.iterdir()}
-    if not present <= {"skills", "tools"}:
-        raise ValueError("Candidate runtime-state must contain only skills/ and tools/")
-    # An Artifact sealed before empty directories were recorded lost a directory the
-    # Agent left empty. Consumers recreate both before use, and the payload is
-    # immutable, so a missing one is accepted rather than repaired.
+    if not present <= set(REUSABLE_AGENT_DIRECTORIES):
+        raise ValueError("Candidate runtime-state may contain only memory/, docs/, skills/, tools/")
+    # Older immutable snapshots may lack newly introduced directories or empty ones.
+    # Normalize only materialized copies; new Candidate output must have all four indexes.
     files = 0
     total_bytes = 0
-    for name in ("skills", "tools"):
+    for name in REUSABLE_AGENT_DIRECTORIES:
         directory = state_root / name
+        if require_complete and not (directory / "README.md").is_file():
+            raise ValueError(f"Candidate runtime-state {name}/ must retain README.md")
         if not directory.exists():
             continue
         _validate_reusable_tree(directory)
@@ -207,45 +223,24 @@ class PreparedAttempt:
     manifest_path: Path
     session_root: Path
     session_id: str
-    persistent_skills_root: Path | None = None
-    persistent_tools_root: Path | None = None
+    persistent_state_root: Path | None = None
     persistent_lock_path: Path | None = None
 
     def persist_reusable_directories(self) -> None:
         """Atomically publish reusable Agent state after this physical Session exits."""
-        roots = (
-            (self.root / "skills", self.persistent_skills_root),
-            (self.root / "tools", self.persistent_tools_root),
+        persist_reusable_agent_state(
+            self.root, self.persistent_state_root, self.persistent_lock_path
         )
-        if self.persistent_lock_path is None or any(target is None for _source, target in roots):
-            return
-        self.persistent_lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.persistent_lock_path.open("a+b") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            for source, raw_target in roots:
-                assert raw_target is not None
-                _replace_reusable_tree(
-                    source,
-                    raw_target,
-                    ensure_tools_readme=source.name == "tools",
-                )
 
     def seal_runtime_state(self, artifacts: LocalArtifactStore) -> ArtifactDigest:
-        """Seal post-Session Skills/Tools as one immutable state checkpoint."""
-        skills = self.root / "skills"
-        tools = self.root / "tools"
-        if self.persistent_skills_root is None and not skills.exists():
-            skills.mkdir(mode=0o700)
-        if self.persistent_tools_root is None and not tools.exists():
-            tools.mkdir(mode=0o700)
-            (tools / "README.md").write_text(TOOLS_README, encoding="utf-8")
+        """Seal all four post-Session State directories as one immutable checkpoint."""
+        ensure_reusable_directories(self.root)
         scratch = self.root / "scratch"
         scratch.mkdir(mode=0o700, exist_ok=True)
         state = Path(tempfile.mkdtemp(prefix="runtime-state-", dir=scratch))
         try:
-            _copy_reusable_tree(skills, state / "skills")
-            _copy_reusable_tree(tools, state / "tools")
-            validate_reusable_agent_state_seed(state)
+            copy_reusable_agent_state(self.root, state)
+            validate_reusable_agent_state_seed(state, require_complete=True)
             return artifacts.put_directory(state, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE)
         finally:
             shutil.rmtree(state, ignore_errors=True)
@@ -253,10 +248,17 @@ class PreparedAttempt:
 
 def write_empty_agent_state(root: Path) -> None:
     """Lay down the empty reusable Agent state a Session with no inherited state starts from."""
-    (root / "skills").mkdir(mode=0o700)
-    tools = root / "tools"
-    tools.mkdir(mode=0o700)
-    (tools / "README.md").write_text(TOOLS_README, encoding="utf-8")
+    ensure_reusable_directories(root)
+
+
+def persist_reusable_agent_state(root: Path, destination: Path | None, lock: Path | None) -> None:
+    """Publish all adaptive directories with the same lock and persistence rules."""
+    if destination is None or lock is None:
+        return
+    with _exclusive_lock(lock):
+        ensure_reusable_directories(root)
+        for name in REUSABLE_AGENT_DIRECTORIES:
+            _replace_reusable_tree(root / name, destination / name)
 
 
 class AttemptWorkspaceAssembler(Protocol):
@@ -299,7 +301,7 @@ class LocalAttemptWorkspaceAssembler:
             raise ValueError("Attempt request disagrees with its Epoch Evidence")
         lineage = self._registry.get_lineage(epoch.lineage_id)
         campaign = self._registry.get_campaign(lineage.campaign_id)
-        # An event-only Lineage is an ablation control arm, so every Attempt starts from the
+        # An ephemeral-state Lineage is an ablation control arm, so every Attempt starts from the
         # same empty Agent state. That has to be decided before reading any prior digest:
         # attempt.runtime_state_digest is sealed after the Session, so a physical retry would
         # otherwise inherit the first run's Skills.
@@ -336,8 +338,7 @@ class LocalAttemptWorkspaceAssembler:
         root = attempt_root / f"run-{uuid4().hex}"
         root.mkdir(mode=0o700)
 
-        persistent_skills: Path | None = None
-        persistent_tools: Path | None = None
+        persistent_state: Path | None = None
         persistent_lock: Path | None = None
         if lineage.ephemeral_agent_state:
             write_empty_agent_state(root)
@@ -351,7 +352,7 @@ class LocalAttemptWorkspaceAssembler:
                 # One Agent ID owns two independent Branches in this Epoch. Reserve
                 # the second range of its state slots for the replica, not Active's cache.
                 state_trajectory += epoch.trajectories_per_branch
-            persistent_skills, persistent_tools, persistent_lock = self._persistent_roots(
+            persistent_state, persistent_lock = self._persistent_root(
                 lineage_id=lineage.id,
                 revision=revision,
                 trajectory_ordinal=state_trajectory,
@@ -359,8 +360,7 @@ class LocalAttemptWorkspaceAssembler:
                 reset_from_seed=reset_persistent_scope,
                 bootstrap_seed=self._shared_bootstrap_seed(lineage),
             )
-            _copy_reusable_tree(persistent_skills, root / "skills")
-            _copy_reusable_tree(persistent_tools, root / "tools")
+            copy_reusable_agent_state(persistent_state, root)
 
         manifest = AttemptInputManifestV9(
             attempt_id=request.attempt_id,
@@ -433,8 +433,7 @@ class LocalAttemptWorkspaceAssembler:
             manifest_path=manifest_path,
             session_root=session_root,
             session_id=f"attempt-session-{uuid4().hex}",
-            persistent_skills_root=persistent_skills,
-            persistent_tools_root=persistent_tools,
+            persistent_state_root=persistent_state,
             persistent_lock_path=persistent_lock,
         )
         if attempt.input_runtime_state_digest is None:
@@ -500,7 +499,7 @@ class LocalAttemptWorkspaceAssembler:
             return None
         return source_id, root.revision.id
 
-    def _persistent_roots(
+    def _persistent_root(
         self,
         *,
         lineage_id: object,
@@ -509,7 +508,7 @@ class LocalAttemptWorkspaceAssembler:
         previous_runtime_state_digest: ArtifactDigest | None = None,
         reset_from_seed: bool = False,
         bootstrap_seed: tuple[object, object] | None = None,
-    ) -> tuple[Path, Path, Path]:
+    ) -> tuple[Path, Path]:
         revision_id = revision.id
         parent_revision_id = revision.parent_id
         persistent = self._root / ".reusable"
@@ -554,21 +553,11 @@ class LocalAttemptWorkspaceAssembler:
                     )
                     if bootstrap.is_dir() and not bootstrap.is_symlink():
                         source_scope = bootstrap
-                if source_scope is not None:
-                    for name in ("skills", "tools"):
-                        source = source_scope / name
-                        if source.is_dir() and not source.is_symlink():
-                            _copy_reusable_tree(source, scope / name)
-            skills = scope / "skills"
-            tools = scope / "tools"
-            skills.mkdir(mode=0o700, exist_ok=True)
-            tools.mkdir(mode=0o700, exist_ok=True)
-            readme = tools / "README.md"
-            if readme.exists() and (readme.is_symlink() or not readme.is_file()):
-                raise ValueError("Reusable tools README must be a regular file")
-            if not readme.exists():
-                readme.write_text(TOOLS_README, encoding="utf-8")
-        return skills, tools, lock_path
+                if source_scope is not None and source_scope.exists():
+                    _validate_reusable_tree(source_scope)
+                    copy_reusable_agent_state(source_scope, scope)
+            ensure_reusable_directories(scope)
+        return scope, lock_path
 
     def _evolved_runtime_state_seed(
         self,
@@ -612,8 +601,6 @@ def _copy_reusable_tree(source: Path, destination: Path) -> None:
 def _replace_reusable_tree(
     source: Path,
     destination: Path,
-    *,
-    ensure_tools_readme: bool,
 ) -> None:
     _validate_reusable_tree(source)
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -621,15 +608,6 @@ def _replace_reusable_tree(
     backup = destination.parent / f".{destination.name}.previous-{uuid4().hex}"
     try:
         shutil.copytree(source, staging)
-        readme = staging / "README.md"
-        if (
-            ensure_tools_readme
-            and readme.exists()
-            and (readme.is_symlink() or not readme.is_file())
-        ):
-            raise ValueError("Reusable tools README must be a regular file")
-        if ensure_tools_readme and not readme.exists():
-            readme.write_text(TOOLS_README, encoding="utf-8")
         destination.rename(backup)
         staging.rename(destination)
     except BaseException:

@@ -742,7 +742,6 @@ def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
         attempts_per_trajectory: int,
         ephemeral_agent_state: bool,
         trajectories_per_branch: int = 1,
-        challenger_count: int = 0,
     ) -> dict[str, Any]:
         if attempt_budget % attempts_per_trajectory:
             raise ValueError(
@@ -751,7 +750,6 @@ def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
                 f"{attempts_per_trajectory} Attempts per Epoch does not divide the budget"
             )
         target_epoch = attempt_budget // attempts_per_trajectory
-        challenger_epochs = max(0, target_epoch - 1)
         return {
             "kind": kind,
             "label": label,
@@ -759,13 +757,11 @@ def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
             "attempts_per_trajectory": attempts_per_trajectory,
             "target_epoch_number": target_epoch,
             "ephemeral_agent_state": ephemeral_agent_state,
-            "challenger_count": challenger_count,
+            "challenger_count": 0,
             "challenger_start_epoch": 2,
-            "first_epoch_same_agent": challenger_count > 0,
-            "optimizer_attempt_budget_total": trajectories_per_branch
-            * attempt_budget
-            * (1 + challenger_count),
-            "evolution_count": challenger_count * challenger_epochs,
+            "first_epoch_same_agent": False,
+            "optimizer_attempt_budget_total": trajectories_per_branch * attempt_budget,
+            "evolution_count": 0,
         }
 
     if enabled:
@@ -779,30 +775,27 @@ def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
             )
             for ordinal in range(1, total + 1)
         )
-        # Every Pool runs two parallel Trajectories, each with its own full budget.
-        # Labels count serial Attempts per Trajectory per Epoch, not the arm total.
+        # Pair two-Trajectory Pools at three Attempts per Epoch, differing only in
+        # whether adaptive Runtime State survives each Attempt. Each has its full budget.
         arms.extend(
-            arm(
-                kind="pooled",
-                label=f"ablation-pool-{attempts}",
-                attempts_per_trajectory=attempts,
-                ephemeral_agent_state=True,
-                trajectories_per_branch=2,
+            (
+                arm(
+                    kind="pooled",
+                    label="ablation-pool-3",
+                    attempts_per_trajectory=3,
+                    ephemeral_agent_state=True,
+                    trajectories_per_branch=2,
+                ),
+                arm(
+                    kind="pool-retained",
+                    label="ablation-pool-retained-3",
+                    attempts_per_trajectory=3,
+                    ephemeral_agent_state=False,
+                    trajectories_per_branch=2,
+                ),
             )
-            for attempts in (3, 1, 5)
         )
-        # Pair each Pool schedule with persistent Skills/Tools, without an Evolver.
-        arms.extend(
-            arm(
-                kind="pool-retained",
-                label=f"ablation-pool-retained-{attempts}",
-                attempts_per_trajectory=attempts,
-                ephemeral_agent_state=False,
-                trajectories_per_branch=2,
-            )
-            for attempts in (1, 3, 5)
-        )
-        # Match each Isolated replica, retaining only its own Skills and Tools.
+        # Match each Isolated replica, retaining only its own adaptive Runtime State.
         arms.extend(
             arm(
                 kind="retained",
@@ -811,18 +804,6 @@ def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
                 ephemeral_agent_state=False,
             )
             for ordinal in range(1, total + 1)
-        )
-        # Reuse the same frozen v0 while varying how often a new Challenger is created.
-        # The main Campaign already supplies evolve-3 under the default policy.
-        arms.extend(
-            arm(
-                kind="evolve",
-                label=f"ablation-evolve-{attempts}",
-                attempts_per_trajectory=attempts,
-                ephemeral_agent_state=False,
-                challenger_count=1,
-            )
-            for attempts in (1, 5)
         )
     return {
         "schema_version": 4,

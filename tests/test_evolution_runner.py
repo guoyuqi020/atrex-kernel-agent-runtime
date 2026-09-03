@@ -1565,6 +1565,14 @@ published = subprocess.run(
 )
 assert published.returncode == 0, published.stdout + published.stderr
 assert json.loads(published.stdout)["status"] == "published"
+session_id = sys.argv[sys.argv.index("--session-id") + 1]
+native = Path(os.environ["HOME"]) / ".claude/projects/test" / (session_id + ".jsonl")
+native.parent.mkdir(parents=True, exist_ok=True)
+native.write_text(json.dumps({"type": "assistant", "sessionId": session_id,
+    "message": {"id": "integration-response", "role": "assistant", "content": [], "usage": {
+        "input_tokens": 16, "output_tokens": 5,
+        "cache_read_input_tokens": 2, "cache_creation_input_tokens": 1
+    }}}) + "\\n")
 print(json.dumps({
     "type": "result",
     "usage": {

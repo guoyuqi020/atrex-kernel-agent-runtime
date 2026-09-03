@@ -216,7 +216,7 @@ atrex-kernel-agent-runtime seed-ablation-arm \
 ```
 
 Runtime 从源 Bootstrap Baseline 创建一个独立的单 Lineage Campaign，不创建 Challenger。使用
-`ephemeral_agent_state=true` 可在每次 Attempt 后清空自适应 Skills/Tools；设为 false 则保留串行
+`ephemeral_agent_state=true` 可在每次 Attempt 后清空自适应 Memory/Docs/Skills/Tools；设为 false 则保留串行
 State，只隔离 Evolver 修改缺失的影响。
 
 进化对照臂设置 `challenger_count=1`、`challenger_start_epoch=2`、`first_epoch_same_agent=true`、
@@ -236,15 +236,17 @@ atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$L
 只用于可信调试。Optimizer Runtime Tools 与 Evolver 的只读文件系统输入 Contract 见
 [接口说明](interfaces.zh.md)。
 
-每个 Optimizer Workspace 都包含可写的 `skills/` 与 `tools/`。Session 退出时，Runtime 会封存其
+每个 Optimizer Workspace 都包含可写的 `memory/`（搜索记忆）、`docs/`（知识）、`skills/`（技能流程）
+和 `tools/`（工具脚本），各自包含 `README.md` 索引。Session 退出时，Runtime 会封存其
 准确终态，并把 Artifact Digest 记录到生产它的 Attempt。后续串行 Attempt 从该 State 继续，本地缓存
 丢失后也能准确重建。Framework Bootstrap 初始化 `agent-v0` State。Evolver 从最近完成 Epoch 获胜
 分支中、产出最佳 Kernel 的 Trajectory 在该 Epoch 最后一个 Attempt 后的终态 State 开始；下一
 Epoch 的 Active Branch 从完全相同的 State 开始。每个新 Agent
 Revision 都把 Source 与 State 一起封存为
 一个逻辑 Bundle，每条新 Trajectory 获得独立 State 副本。
-每个持久工具的调用方法、输入输出、依赖、示例和限制都必须同步写入
-`tools/README.md`。
+新增、修改、重命名或删除内容时，模型必须同步更新对应 README 中的路径、用途和适用范围；工具还需
+说明调用方法、输入输出、依赖、示例和限制。四目录遵循相同的继承与清空策略。旧快照仅在复制时补齐
+缺失目录和索引，不改写已存储 Artifact。这些笔记由 Agent 编写，不替代权威 Journal 和 Gateway 结果。
 
 ## 12. 恢复与维护
 

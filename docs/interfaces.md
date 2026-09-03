@@ -347,11 +347,11 @@ also have that Epoch's Conversations and Attempt reports. Prior Agent-creation r
 paths, and contributing Source paths. The only writable Agent components are
 `candidate/source/` and `candidate/runtime-state/`.
 
-`runtime-state/trajectories/<N>/{skills,tools}/` is the only adaptive Skill/Tool storage. It is
+`runtime-state/trajectories/<N>/{memory,docs,skills,tools}/` is the adaptive State storage. It is
 non-versioned state accumulated by Optimizer Sessions and scoped to one Agent revision and
 Trajectory. Top-level `skills/` and `tools/` are reserved and rejected in versioned Agent source.
 Evolver reads frozen state and may curate one flat Candidate seed at
-`candidate/runtime-state/{skills,tools}/`, or revise the versioned Prompt, Workflow, memory policy,
+`candidate/runtime-state/{memory,docs,skills,tools}/`, or revise the versioned Prompt, Workflow, memory policy,
 or implementation that governs future use. Runtime seals Candidate source and state independently.
 Every new Revision records both Digests as one logical Bundle and copies that exact State into every
 new Trajectory.
@@ -367,7 +367,7 @@ Evolver submits its terminal draft with the Bundle-local `evolution-report` comm
 errors return `issues`, `request_schema`, and `recovery`; failures publish nothing and may be retried.
 The first success publishes `scratch/evolution-report.json` atomically and returns a compact receipt.
 For a new revision, the report's sorted `contributing_revision_ids` names eligible visible Agents
-whose Source, Skills, or Tools contributed content other than the selected Source base. These IDs
+whose Source or Runtime State contributed content other than the selected Source base. These IDs
 record provenance only; they do not change the single Source Diff base or revision parentage.
 
 ## External service contracts

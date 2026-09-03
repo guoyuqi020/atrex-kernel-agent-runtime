@@ -309,10 +309,10 @@ Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份�
 路径与贡献 Source 路径。唯一可写的 Agent
 组件是 `candidate/source/` 与 `candidate/runtime-state/`。
 
-`runtime-state/trajectories/<N>/{skills,tools}/` 是唯一的自适应 Skill/Tool 存储，它是 Optimizer Session
+`runtime-state/trajectories/<N>/{memory,docs,skills,tools}/` 是自适应 State 存储，它是 Optimizer Session
 积累的非版本化状态，作用域是某个 Agent Revision 的某条 Trajectory。根级 `skills/` 和 `tools/`
 是保留路径，在版本化 Agent Source 中会被拒绝。Evolver 可把冻结状态整理为唯一一份扁平的
-`candidate/runtime-state/{skills,tools}/` 种子，也可修改版本化 Prompt、Workflow、Memory Policy 或实现，
+`candidate/runtime-state/{memory,docs,skills,tools}/` 种子，也可修改版本化 Prompt、Workflow、Memory Policy 或实现，
 以改进未来 Session 的状态使用方式。Runtime 始终分别封存 Candidate Source 与 State，并把两者组合为
 同一个不可变 Agent Bundle；所有新 Trajectory 都从该 Bundle 的 State 初始化。
 
@@ -325,7 +325,7 @@ Evolver 使用 Bundle 本地的 `evolution-report` 命令提交终态 Draft。�
 `request_schema` 与 `recovery`；失败不发布且可修正后重试。第一次成功调用原子发布
 `scratch/evolution-report.json` 并返回紧凑回执。
 对于新 Revision，报告中排序后的 `contributing_revision_ids` 列出除所选 Source Base 外，实际贡献了
-Source、Skill 或 Tool 的合格可见 Agent。这些 ID 只记录 Provenance，不改变唯一 Source Diff Base 或
+Source 或 Runtime State 的合格可见 Agent。这些 ID 只记录 Provenance，不改变唯一 Source Diff Base 或
 Revision Parentage。
 
 ## 外部服务 Contract

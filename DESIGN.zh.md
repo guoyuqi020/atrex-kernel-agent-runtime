@@ -408,7 +408,7 @@ Bootstrap 依次执行：
 ### 6.3 一个 Optimizer Attempt
 
 每个 Attempt 都启动新的物理 Agent Session，不继承 Provider 对话上下文。Runtime 物化的 Workspace
-包含只读 Agent Source、当前 Kernel、公开问题和授权 Evidence，以及根级可写 `skills/`、`tools/`、
+包含只读 Agent Source、当前 Kernel、公开问题和授权 Evidence，以及根级可写 `memory/`、`docs/`、`skills/`、`tools/`、
 `scratch/`。已完成 Epoch 的 Active 与所有失败 Challenger Branch 都按 Branch 保留，Epoch Summary 标明
 当时的获胜分支；当前 Epoch 中仍只暴露同一 Trajectory 的较早 Attempt，并发兄弟 Branch 和私有
 Evaluation 输入不可见。
@@ -627,11 +627,11 @@ Candidate 是由两部分组成的逻辑 Agent Bundle：
 | 部分 | 含义 | Evolver 的权限 |
 | --- | --- | --- |
 | Agent Source | 版本化的 Prompt、Workflow、配置和 Agent 实现 | 可以增加、修改、重构或删除内容 |
-| Runtime State | Optimizer 在运行中积累的 `skills/` 和 `tools/` | 可以继承、整理、补充或删除，作为新 Revision 的初始 State |
+| Runtime State | Optimizer 在运行中积累的 `memory/`、`docs/`、`skills/` 和 `tools/`，每个目录维护 README 索引 | 可以继承、整理、补充或删除，作为新 Revision 的初始 State |
 
-Evolver 可以把反复有效的经验固化进 Source，也可以把仍需验证的能力保留在 Skill/Tool State 中；可以增加
+Evolver 可以把反复有效的经验固化进 Source，也可以把仍需验证的能力保留在自适应 Runtime State 中；可以增加
 新工具或 Workflow，也可以删除冗余指令以减少无意义的上下文和 Token 消耗。它不局限于一个 Base 的
-内容：在 Evidence 支持时，可以从多个可见 Agent 分别取用 Source、Skill 或 Tool 并融合进同一个
+内容：在 Evidence 支持时，可以从多个可见 Agent 分别取用 Source 或 Runtime State 并融合进同一个
 Candidate。它不能改变 Lineage DSL、评测协议、Runtime Policy、Capability 或冻结 Evidence，也不能调用
 Gateway 评测 Candidate Agent。
 

@@ -95,10 +95,10 @@ The Agent submits this output through the read-only Bundle-local `evolution-repo
 drafts return structured `issues`, `request_schema`, and `recovery` without publishing; the first
 valid draft is atomically published to `scratch/evolution-report.json`. Runtime independently
 revalidates the published report and Candidate after the Agent exits.
-Per-Trajectory `runtime-state/trajectories/<N>/{skills,tools}/` is the only adaptive Skill/Tool
+Per-Trajectory `runtime-state/trajectories/<N>/{memory,docs,skills,tools}/` is the adaptive State
 storage and belongs to non-versioned Lineage state. Top-level `skills/` and `tools/` are reserved and
 invalid in versioned Agent source. Evolver may curate the flat
-`candidate/runtime-state/{skills,tools}/` seed directly or change the versioned mechanism governing
+`candidate/runtime-state/{memory,docs,skills,tools}/` seed directly or change the versioned mechanism governing
 future state use. Runtime seals complete Source and State for every new Revision and copies that
 exact State to every new Trajectory. The Agent Revision directly records both
 `optimizer_digest` and `runtime_state_digest`; the Evolution Trace is provenance, not the only
@@ -169,17 +169,22 @@ separate Artifact:
 ```text
 runtime-state/
   trajectories/<N>/
-    skills/
+    memory/README.md
+    docs/README.md
+    skills/README.md
     tools/README.md
 ```
 
-An Optimizer workspace presents one Trajectory's State as writable root `skills/` and `tools/`.
+An Optimizer workspace presents one Trajectory's State as writable root `memory/`, `docs/`, `skills/`,
+and `tools/`. Each README indexes that directory and must track additions, edits, renames, and removals.
 Runtime seals the terminal contents and restores them for the next serial Attempt. Evolver receives
 frozen participant/historical State and writes one flat Candidate seed at
-`candidate/runtime-state/{skills,tools}/`. A new Agent Revision records both source and State
+`candidate/runtime-state/{memory,docs,skills,tools}/`. A new Agent Revision records both source and State
 digests as one logical Bundle; each new Trajectory receives an independent copy.
 
-An Ablation Lineage with ephemeral Agent State starts every Attempt with empty adaptive State.
+An Ablation Lineage with ephemeral Agent State starts every Attempt with only the four README indexes.
+All four directories are sealed together and share the same inheritance and isolation rules.
+Adaptive Docs are distinct from implementation documentation inside versioned Source.
 
 ## Evidence visibility
 

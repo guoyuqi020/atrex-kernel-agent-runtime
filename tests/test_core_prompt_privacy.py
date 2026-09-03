@@ -282,8 +282,12 @@ def test_execution_prompts_require_depositing_reusable_knowledge() -> None:
     assert "an empty deposit must be a decision, not an omission" in attempt
 
     bootstrap = " ".join(prompts["framework_baseline"].split())
-    assert "Before finishing, write what you had to discover to" in bootstrap
-    assert "re-derives the same facts from scratch" in bootstrap
+    assert "before finishing" in bootstrap
+    for prompt in (attempt, bootstrap):
+        for directory in ("memory", "docs", "skills", "tools"):
+            assert f"`{directory}/`" in prompt
+        assert "README.md" in prompt
+        assert "rename" in prompt and "remove" in prompt
     # Permission-only wording is what made the deposit optional in practice.
     for prompt in (attempt, bootstrap):
         assert "may be saved under" not in prompt

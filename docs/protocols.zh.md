@@ -81,9 +81,9 @@ Challenger 虽会出现在 Catalog 中，但不能作为贡献者。
 Agent 通过只读 Bundle 内的本地 `evolution-report` 命令提交该输出。无效 Draft 返回结构化
 `issues`、`request_schema` 与 `recovery` 且不发布；第一个有效 Draft 原子写入
 `scratch/evolution-report.json`。Agent 退出后 Runtime 再独立校验报告和 Candidate。
-按 Trajectory 划分的 `runtime-state/trajectories/<N>/{skills,tools}/` 是唯一的自适应 Skill/Tool 存储，
+按 Trajectory 划分的 `runtime-state/trajectories/<N>/{memory,docs,skills,tools}/` 保存自适应 State，
 属于非版本化 Lineage 状态。根级 `skills/` 和 `tools/` 在版本化 Agent Source 中无效。Evolver 可直接
-整理扁平的 `candidate/runtime-state/{skills,tools}/` 公共种子，也可修改控制未来状态使用方式的版本化
+整理扁平的 `candidate/runtime-state/{memory,docs,skills,tools}/` 公共种子，也可修改控制未来状态使用方式的版本化
 机制。Runtime 始终独立封存 Candidate Source 与 State，并把两者组合为同一个不可变 Agent Bundle；
 所有新 Trajectory 都从该 Bundle 的 State 初始化。State 是否相对输入发生修改不影响封存。Agent
 Revision 直接记录 `optimizer_digest` 与 `runtime_state_digest`；Evolution Trace 是来源证据，而不是
@@ -142,13 +142,17 @@ Report。
 ```text
 runtime-state/
   trajectories/<N>/
-    skills/
+    memory/README.md
+    docs/README.md
+    skills/README.md
     tools/README.md
 ```
 
-Optimizer Workspace 把一条 Trajectory 的 State 展示为根级可写 `skills/` 与 `tools/`。Runtime
+Optimizer Workspace 把一条 Trajectory 的 State 展示为根级可写 `memory/`、`docs/`、`skills/` 和 `tools/`。
+各目录 README 必须随内容的新增、修改、重命名和删除同步更新。四目录整体封存，遵循相同的继承与隔离
+规则；清空状态的消融臂每次只保留四份 README 模板。自适应 Docs 与 Source 内的实现文档相互独立。Runtime
 封存终态内容并为下一个串行 Attempt 恢复。Evolver 获得冻结 Participant/Historical State，并在
-`candidate/runtime-state/{skills,tools}/` 编写一份扁平 Candidate Seed。新 Agent Revision 同时
+`candidate/runtime-state/{memory,docs,skills,tools}/` 编写一份扁平 Candidate Seed。新 Agent Revision 同时
 记录 Source 与 State Digest，作为一个逻辑 Bundle；每条新 Trajectory 得到独立副本。
 
 启用 Ephemeral Agent State 的 Ablation Lineage 会让每个 Attempt 从空 Adaptive State 开始。

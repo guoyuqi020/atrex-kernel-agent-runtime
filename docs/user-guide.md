@@ -227,7 +227,7 @@ atrex-kernel-agent-runtime seed-ablation-arm \
 ```
 
 Runtime creates a separate one-Lineage Campaign from the source Bootstrap baseline with no
-Challenger. Use `ephemeral_agent_state=true` to reset adaptive Skills/Tools every Attempt; use false
+Challenger. Use `ephemeral_agent_state=true` to reset adaptive Memory/Docs/Skills/Tools every Attempt; use false
 to retain serial State and isolate only the absence of Evolver changes.
 
 For an evolving control, set `challenger_count=1`, `challenger_start_epoch=2`,
@@ -248,7 +248,8 @@ atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$L
 Use them only for trusted debugging. Optimizer Runtime Tools and the Evolver's read-only filesystem
 input contract are documented in [Interface Reference](interfaces.md).
 
-Every Optimizer Workspace contains writable `skills/` and `tools/` directories. At Session exit,
+Every Optimizer Workspace contains writable `memory/` (search experiences), `docs/` (knowledge),
+`skills/` (procedures), and `tools/` (scripts), each with a `README.md` index. At Session exit,
 Runtime seals their exact terminal contents and records the Artifact Digest on the producing
 Attempt. The next serial Attempt continues from that State and can reconstruct it after local cache
 loss. Framework Bootstrap initializes the `agent-v0` State. Evolver starts from the State captured
@@ -256,8 +257,11 @@ after the last Attempt of the latest completed Epoch winner's best-Kernel Trajec
 Epoch's Active Branch starts from the exact same State; every new
 Agent Revision seals its Source
 and State together as one logical Bundle, and each new trajectory receives an independent State
-copy. Keep `tools/README.md` synchronized with every saved
-tool's invocation, inputs, outputs, dependencies, example, and limitations.
+copy. Adding, editing, renaming, or deleting content requires updating its directory's README with
+paths, purposes, and applicability; Tools also document invocation, inputs, outputs, dependencies,
+examples, and limitations. All four follow the same inheritance/reset policy. Older snapshots gain
+missing directories/indexes only when copied, without changing their stored Artifacts. These notes
+are Agent-authored; the Runtime Journal and Gateway results remain authoritative.
 
 ## 12. Recovery and maintenance
 

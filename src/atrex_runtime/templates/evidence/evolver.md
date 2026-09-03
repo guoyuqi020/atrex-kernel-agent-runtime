@@ -7,7 +7,7 @@ do not infer them.
 input/
 ├── agents/agent-vN/
 │   ├── source/
-│   └── runtime-state/trajectories/<ordinal>/{skills,tools}/
+│   └── runtime-state/trajectories/<ordinal>/{memory,docs,skills,tools}/
 ├── evidence/agent-vN/
 │   ├── optimization-summary.json
 │   ├── sessions/trajectory-NNNNNNNN/attempt-NNNNNNNN.conversation.jsonl
@@ -104,7 +104,7 @@ you need to re-derive. It covers versioned Source only: an empty array means tha
 Runtime State alone, and a `reuse` proposal is always empty. It tells you *which* files moved, not
 *what* changed inside them—diff the two named Source trees for that.
 
-`contributing_source_paths` names the other Agents whose Source, Skills, or Tools that Evolution drew
+`contributing_source_paths` names the other Agents whose Source or Runtime State that Evolution drew
 content from, and is empty when it drew from none. It is provenance, not parentage: `parent` remains the
 single Source base the diff was measured against.
 
@@ -115,8 +115,14 @@ optimization summaries. Bootstrap and unavailable legacy reports have no file.
 
 Source under `input/agents/` is a sealed read-only snapshot. The complete
 `candidate/source/` copy is writable and is the versioned Agent code you may freely modify.
-Runtime State is non-versioned adaptive `skills/` and `tools/` accumulated independently by
+Runtime State is adaptive `memory/`, `docs/`, `skills/`, and `tools/` accumulated independently by
 Trajectory; it may be narrow, stale, or wrong.
+
+Each directory has a mandatory `README.md` index. Memory holds search experiences and decisions;
+Docs holds reusable knowledge; Skills holds procedures; Tools holds scripts. Whenever Candidate
+content changes, update the corresponding index, including removals and renames. Keep indexes and
+content concise and non-duplicative. These are Agent-authored materials, not authoritative results.
+Versioned Source may contain its own implementation documentation; it is separate from adaptive Docs.
 
 The Candidate starts with the complete Source of the `parent: true` Agent and one flat
 `candidate/runtime-state/` seed. Runtime selects the latest completed Epoch's winning Agent and

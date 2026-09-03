@@ -676,9 +676,9 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert manifest.role == "evolver"
     assert not (control_root / "evidence-instructions.md").exists()
     assert EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "non-versioned adaptive `skills/` and" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "adaptive `memory/`, `docs/`, `skills/`, and `tools/`" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "`candidate/source/` copy is writable" in EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "runtime-state/trajectories/<ordinal>/{skills,tools}/" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "{memory,docs,skills,tools}/" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "candidate/runtime-state/" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "revision seed" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "every Trajectory of the new revision" in EVOLVER_EVIDENCE_PROMPT_TEXT

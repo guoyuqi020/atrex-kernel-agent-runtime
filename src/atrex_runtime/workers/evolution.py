@@ -60,7 +60,8 @@ from .session_trace import enforce_session_trace_retention
 from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 from .token_usage import ProviderUsageReportV2, UsageUnit
 from .workspace import (
-    TOOLS_README,
+    copy_reusable_agent_state,
+    ensure_reusable_directories,
     materialize_reusable_agent_state_snapshot,
     resolve_revision_runtime_state_seed,
     validate_reusable_agent_state_seed,
@@ -807,14 +808,9 @@ class EvolutionWorkspaceAssembler:
             self._artifacts,
         ) or resolve_revision_runtime_state_seed(self._artifacts, revision)
         if active_runtime_state_seed is None:
-            (candidate_runtime_state / "skills").mkdir(parents=True)
-            (candidate_runtime_state / "tools").mkdir()
-            (candidate_runtime_state / "tools/README.md").write_text(
-                TOOLS_README,
-                encoding="utf-8",
-            )
+            ensure_reusable_directories(candidate_runtime_state)
         else:
-            shutil.copytree(active_runtime_state_seed, candidate_runtime_state)
+            copy_reusable_agent_state(active_runtime_state_seed, candidate_runtime_state)
         candidate_runtime_state_base = control_state_root / "candidate-runtime-state-base"
         shutil.copytree(candidate_runtime_state, candidate_runtime_state_base)
         make_tree_read_only(candidate_runtime_state_base)
@@ -1597,6 +1593,7 @@ class EvolverBundleRunner(EvolverRunner):
             path,
             max_files=self._kernel_agent_limits.max_bundle_files,
             max_bytes=self._kernel_agent_limits.max_bundle_bytes,
+            require_complete=True,
         )
         return self._artifacts.put_directory(
             path,

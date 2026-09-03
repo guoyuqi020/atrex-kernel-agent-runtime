@@ -456,7 +456,7 @@ Bootstrap then:
 
 Every Attempt launches a fresh physical Agent Session and does not inherit Provider conversation
 context. Runtime materializes read-only Agent Source, the current Kernel, public problem, authorized
-Evidence, root-level writable `skills/`, `tools/`, and `scratch/`. Active and every losing Challenger
+Evidence, root-level writable `memory/`, `docs/`, `skills/`, `tools/`, and `scratch/`. Active and every losing Challenger
 Branch from completed Epochs remain keyed by Branch, and each Epoch summary identifies the selected
 Branch. During the current Epoch, only earlier Attempts from the same Trajectory are exposed;
 concurrent sibling Branches and private evaluation inputs remain invisible.
@@ -685,12 +685,12 @@ A Candidate is one logical Agent Bundle with two separately sealed components:
 | Component | Meaning | Evolver authority |
 | --- | --- | --- |
 | Agent Source | Versioned Prompts, Workflow, configuration, and Agent implementation | Add, modify, refactor, or remove content |
-| Runtime State | `skills/` and `tools/` accumulated by Optimizer during execution | Inherit, curate, extend, or remove content to seed the new Revision |
+| Runtime State | `memory/`, `docs/`, `skills/`, and `tools/` accumulated by Optimizer during execution, each with a maintained README index | Inherit, curate, extend, or remove content to seed the new Revision |
 
 Evolver may consolidate repeatedly useful behavior into Source, leave capabilities that still need
-validation in Skill/Tool State, add a Tool or Workflow, or remove redundant instructions to reduce
+validation in adaptive Runtime State, add a Tool or Workflow, or remove redundant instructions to reduce
 unproductive context and token use. It is not limited to material from one base: when Evidence
-supports it, Source, Skills, and Tools from several visible Agents may be combined into one Candidate.
+supports it, Source and Runtime State from several visible Agents may be combined into one Candidate.
 It cannot change the Lineage DSL, evaluation protocol, Runtime Policy, capabilities, or frozen
 Evidence, and it cannot call Gateway to evaluate the Candidate Agent.
 

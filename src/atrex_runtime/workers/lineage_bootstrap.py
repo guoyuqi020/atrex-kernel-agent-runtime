@@ -31,7 +31,11 @@ from .attempt_report import AttemptReportV12
 from .core import CoreOptimizerProcessConfig
 from .core_phase import CorePhaseRunner, PreparedCorePhase
 from .launcher import WorkerLauncher, validate_worker_environment
-from .workspace import TOOLS_README, _copy_reusable_tree, _replace_reusable_tree
+from .workspace import (
+    copy_reusable_agent_state,
+    ensure_reusable_directories,
+    persist_reusable_agent_state,
+)
 
 LINEAGE_BOOTSTRAP_MANIFEST_VERSION: Literal[2] = 2
 _RUNTIME_KEYS = {
@@ -126,28 +130,14 @@ class PreparedLineageBootstrap:
     root: Path
     manifest_path: Path
     session_root: Path
-    persistent_skills_root: Path | None = None
-    persistent_tools_root: Path | None = None
+    persistent_state_root: Path | None = None
     persistent_lock_path: Path | None = None
 
     def persist_reusable_directories(self) -> None:
         """Publish reusable Bootstrap state as the seed for later trajectories."""
-        roots = (
-            (self.root / "skills", self.persistent_skills_root),
-            (self.root / "tools", self.persistent_tools_root),
+        persist_reusable_agent_state(
+            self.root, self.persistent_state_root, self.persistent_lock_path
         )
-        if self.persistent_lock_path is None or any(target is None for _source, target in roots):
-            return
-        self.persistent_lock_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.persistent_lock_path.open("a+b") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
-            for source, raw_target in roots:
-                assert raw_target is not None
-                _replace_reusable_tree(
-                    source,
-                    raw_target,
-                    ensure_tools_readme=source.name == "tools",
-                )
 
 
 class LineageBootstrapWorkspaceAssembler:
@@ -198,8 +188,7 @@ class LineageBootstrapWorkspaceAssembler:
         (root / "scratch").mkdir(mode=0o700)
         # Stays empty on the host; the Sandbox binds the pinned reference tree over it.
         (root / paths.reference).mkdir(mode=0o500)
-        persistent_skills = None
-        persistent_tools = None
+        persistent_state = None
         persistent_lock = None
         if self._reusable_root is not None:
             scope = (
@@ -212,25 +201,16 @@ class LineageBootstrapWorkspaceAssembler:
             persistent_lock.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             with persistent_lock.open("a+b") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
-                persistent_skills = scope / "skills"
-                persistent_tools = scope / "tools"
-                persistent_skills.mkdir(parents=True, exist_ok=True, mode=0o700)
-                persistent_tools.mkdir(parents=True, exist_ok=True, mode=0o700)
-                readme = persistent_tools / "README.md"
-                if not readme.exists():
-                    readme.write_text(TOOLS_README, encoding="utf-8")
-                _copy_reusable_tree(persistent_skills, root / "skills")
-                _copy_reusable_tree(persistent_tools, root / "tools")
+                persistent_state = scope
+                ensure_reusable_directories(scope)
+                copy_reusable_agent_state(scope, root)
         else:
-            (root / "skills").mkdir(mode=0o700)
-            (root / "tools").mkdir(mode=0o700)
-            (root / "tools/README.md").write_text(TOOLS_README, encoding="utf-8")
+            ensure_reusable_directories(root)
         return PreparedLineageBootstrap(
             root,
             manifest_path,
             session_root,
-            persistent_skills,
-            persistent_tools,
+            persistent_state,
             persistent_lock,
         )
 
