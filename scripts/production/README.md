@@ -37,6 +37,20 @@ serial Attempts per Trajectory per Epoch:
 - `ablation-pool-1`: 2 parallel Trajectories, each 15 Epochs x 1 Attempt = 15; 30 total;
 - `ablation-pool-5`: 2 parallel Trajectories, each 3 Epochs x 5 Attempts = 15; 30 total.
 
+Pool resets writable Skills/Tools between Attempts. The matching Pool-Retained arms keep them,
+with the same schedules and no Evolver or Challenger:
+
+| Arm | Trajectories | Attempts per Trajectory per Epoch | Epochs | Total Attempts |
+|---|---:|---:|---:|---:|
+| `ablation-pool-retained-1` | 2 | 1 | 15 | 30 |
+| `ablation-pool-retained-3` | 2 | 3 | 5 | 30 |
+| `ablation-pool-retained-5` | 2 | 5 | 3 | 30 |
+
+Within an Epoch, each Trajectory retains its own writable Skills/Tools without live synchronization.
+At the next Epoch, both restart from the selected best Kernel and its producing Trajectory's terminal
+State. State is selected, not merged. Source stays fixed. These arms are included automatically when
+`event_only=true`, under `dsls/DSL/ablation-pool-retained-N/`.
+
 By default, `ablation-retained-01/02` pair with `ablation-isolated-01/02`. Each instance owns an
 independent Campaign and one Trajectory with 5 Epochs x 3 Attempts = 15 total (30 per pair).
 Retained keeps its own Skills/Tools across Attempts; Isolated resets them. Neither runs Evolver,
@@ -64,8 +78,8 @@ Evolver commit. `--target-epoch` overrides only the main arm, not the new arms' 
 Arm files are under `dsls/DSL/ablation-evolve-1/` and `dsls/DSL/ablation-evolve-5/`; each contains
 `arm.json`, `seed-result.json`, `campaign.log`, and `campaign-result.json`. The task-level
 `campaign-results.json` pairs all arm results, schedules and budgets. Existing Workspaces retain
-their frozen plans; use a new Workspace to enable the new arms, paired Retained replicas and
-two-Trajectory Pool layouts.
+their frozen plans; preparation rejects a changed Arm set. Use a new Workspace to enable
+Pool-Retained or other topology changes rather than changing an existing experiment on resume.
 
 `--target-epoch N` overrides the absolute target. Repeating a command resumes durable state.
 

@@ -275,10 +275,10 @@ async def test_two_ablation_arms_are_mutually_independent(
 
 
 @pytest.mark.anyio
-async def test_the_three_arm_kinds_differ_only_in_pooling_and_agent_state(
+async def test_control_arms_cross_pooling_and_agent_state_retention(
     tmp_path: Path,
 ) -> None:
-    """Isolated drops sharing and state, pooled drops state, retained drops only the Evolver."""
+    """Pool-Retained completes the pooling/state-retention controls; none evolves."""
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     evaluator = FakeEvaluator(artifacts, [])
     with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
@@ -291,8 +291,9 @@ async def test_the_three_arm_kinds_differ_only_in_pooling_and_agent_state(
         arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
         shapes = {
             "isolated": {"trajectories_per_branch": 1, "ephemeral_agent_state": True},
-            "pooled": {"trajectories_per_branch": 4, "ephemeral_agent_state": True},
-            "retained": {"trajectories_per_branch": 4, "ephemeral_agent_state": False},
+            "pooled": {"trajectories_per_branch": 2, "ephemeral_agent_state": True},
+            "retained": {"trajectories_per_branch": 1, "ephemeral_agent_state": False},
+            "pool-retained": {"trajectories_per_branch": 2, "ephemeral_agent_state": False},
         }
         seeded = {
             kind: await arms.seed_arm(
@@ -316,11 +317,11 @@ async def test_the_three_arm_kinds_differ_only_in_pooling_and_agent_state(
             assert lineage.challenger_count == 0
             assert lineage.bootstrap_source_lineage_id == evolution_lineage_id
 
-        assert len({arm.campaign_id for arm in seeded.values()}) == 3
+        assert len({arm.campaign_id for arm in seeded.values()}) == 4
         # Every arm starts from the identical frozen baseline, measured exactly once.
         assert len({arm.lineage.kernel_artifact_digest for arm in seeded.values()}) == 1
         assert len({arm.lineage.latency_us for arm in seeded.values()}) == 1
-        assert len({arm.lineage.kernel_revision_id for arm in seeded.values()}) == 3
+        assert len({arm.lineage.kernel_revision_id for arm in seeded.values()}) == 4
         assert len(evaluator.calls) == 1
 
 

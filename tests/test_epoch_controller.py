@@ -392,17 +392,19 @@ async def test_event_only_lineage_runs_unevolved_on_its_own_kernel_line(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("ephemeral_agent_state", [True, False])
 async def test_pooled_event_only_lineage_pools_every_trajectory_into_one_baseline(
     tmp_path: Path,
+    ephemeral_agent_state: bool,
 ) -> None:
-    """The pooled arm's next-Epoch baseline is the best Kernel across all Trajectories."""
+    """Pool and Pool-Retained select the best Kernel across all Trajectories."""
     registry = SqliteRegistry(tmp_path / "runtime.db")
     seeded = seed_lineage(
         registry,
         challenger_count=0,
         trajectories_per_branch=2,
         attempts_per_trajectory=2,
-        ephemeral_agent_state=True,
+        ephemeral_agent_state=ephemeral_agent_state,
     )
     evolver = FakeEvolver()
     optimizer = ScriptedOptimizer(

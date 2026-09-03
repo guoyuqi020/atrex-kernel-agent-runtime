@@ -46,6 +46,19 @@ Pool 名称中的数字表示每条 Trajectory 在每个 Epoch 串行运行的 A
 - `ablation-pool-1`：两条并行 Trajectory，各运行 15 个 Epoch x 1 个 Attempt = 15 次，合计 30 次；
 - `ablation-pool-5`：两条并行 Trajectory，各运行 3 个 Epoch x 5 个 Attempt = 15 次，合计 30 次。
 
+Pool 每次 Attempt 重置可写 Skills/Tools；对应的 Pool-Retained 保留它们，其余调度一致，
+均不运行 Evolver，也不创建 Challenger：
+
+| 臂 | Trajectory 数 | 每条 Trajectory 每 Epoch 的 Attempts | Epoch 数 | Attempts 总数 |
+|---|---:|---:|---:|---:|
+| `ablation-pool-retained-1` | 2 | 1 | 15 | 30 |
+| `ablation-pool-retained-3` | 2 | 3 | 5 | 30 |
+| `ablation-pool-retained-5` | 2 | 5 | 3 | 30 |
+
+同一 Epoch 内，各 Trajectory 独立保留自己的可写 Skills/Tools，不实时同步。下一 Epoch 的两条
+Trajectory 从选出的最优 Kernel 及其产出 Trajectory 的终态 State 共同出发；State 选择继承，不合并。
+Agent Source 固定。`event_only=true` 时自动包含这些臂，目录为 `dsls/DSL/ablation-pool-retained-N/`。
+
 默认 `ablation-retained-01/02` 与 `ablation-isolated-01/02` 一一对应。每个实例是独立 Campaign，
 只有一条 Trajectory，运行 5 个 Epoch x 3 个 Attempt = 15 次，每组两个实例合计 30 次。
 Retained 跨 Attempt 保留自己的 Skills/Tools，Isolated 清空；两者均不运行 Evolver。
@@ -71,7 +84,8 @@ Bootstrap 和 Evolver Session 不计入 Optimizer Attempts。
 主臂仍保留在 `dsls/DSL/`；新增臂分别位于 `dsls/DSL/ablation-evolve-1/` 和
 `dsls/DSL/ablation-evolve-5/`，各自包含 `arm.json`、`seed-result.json`、`campaign.log` 和
 `campaign-result.json`。任务级 `campaign-results.json` 汇总各臂结果、调度和预算。
-已有 Workspace 保留冻结的 Plan；新增进化臂、Retained 双实例和所有 Pool 的双 Trajectory 布局需要使用新 Workspace。
+已有 Workspace 保留冻结的 Plan，准备脚本会拒绝改变 Arm 集合。启用 Pool-Retained 或其他拓扑变更
+需要使用新 Workspace，不能在恢复已有实验时改变其配置。
 
 ## 前置条件
 

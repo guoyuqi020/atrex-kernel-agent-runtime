@@ -74,6 +74,7 @@ def _ablation_arms(
     schedules = {
         str(arm["label"]): {
             "first_epoch_same_agent": bool(arm["first_epoch_same_agent"]),
+            "ephemeral_agent_state": bool(arm["ephemeral_agent_state"]),
             **{
                 key: int(arm[key])
                 for key in (

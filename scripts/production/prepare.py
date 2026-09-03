@@ -791,6 +791,17 @@ def _ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
             )
             for attempts in (3, 1, 5)
         )
+        # Pair each Pool schedule with persistent Skills/Tools, without an Evolver.
+        arms.extend(
+            arm(
+                kind="pool-retained",
+                label=f"ablation-pool-retained-{attempts}",
+                attempts_per_trajectory=attempts,
+                ephemeral_agent_state=False,
+                trajectories_per_branch=2,
+            )
+            for attempts in (1, 3, 5)
+        )
         # Match each Isolated replica, retaining only its own Skills and Tools.
         arms.extend(
             arm(
