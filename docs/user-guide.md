@@ -145,6 +145,12 @@ records. `list-evaluations`/`show-evaluation --source --result` expose every exp
 Runtime-authoritative evaluated Kernel/result pair. `list-bootstrap-runs` and `show-bootstrap-run`
 expose all physical Bootstrap generations, including failed generations.
 
+Claude Session Artifacts include native main/child transcripts under `provider/claude-session.raw-jsonl` and `provider/claude-subagents/`. The normalized `events.jsonl` links each response's latest usage to its `message_id` and `source_path`; use the native message content to associate tool calls. Check `session.json.response_usage_complete` before treating response totals as a complete attribution of the terminal bill. Missing/unreconciled counters remain partial. Never add the stdout and native copies together, or add terminal usage to response usage. A response can contain multiple tool calls: these counters are per-response, not independently billed per-tool costs.
+
+The sealed `conversation.jsonl` is a reading view: Claude native content takes precedence over duplicate stdout messages. Distinct thinking/text/tool blocks remain intact; uncovered stdout content, diagnostics, compaction boundaries, and terminal results remain visible. Duplicate initial prompts and native queue/title/file-history bookkeeping are omitted from this view only. The live view still follows stdout until sealing. Raw Provider files and the normalized usage index are unchanged.
+
+This capture requires updated Core/Evolver Bundle commits. Existing Campaigns pin their Bundle revisions, so restarting Runtime alone does not upgrade them. Historical traces captured with native persistence disabled cannot recover missing response counters from session totals.
+
 ## 8. Run production tasks
 
 The production scripts separate the persistent control plane from operator tasks. Start Runtime

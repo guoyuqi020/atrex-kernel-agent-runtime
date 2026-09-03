@@ -1,0 +1,1 @@
+{"operation": "dev", "command": "python3 inspect_mma.py", "file_paths": ["scratch/inspect_mma.py"], "intent": "inspect", "note": "Dump SM120 FP8 warp MMA atom classes and blackwell helpers + cutlass example tree"}

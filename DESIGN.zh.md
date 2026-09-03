@@ -8,7 +8,7 @@
 
 ## 1. 结论摘要
 
-AKA 已经具备 Long Horizon Journal、Recovery、Supervisor Verification 等完整机制；问题不是再缺少一套更严格的 Workflow，而是 Optimizer 同时承担了过多职责：它既要探索 Kernel，又要遵守固定流程、调用评测、解释结果、更新跨 Session 状态并生成交接文件。Supervisor 可以独立验证最终 Candidate，却不能仅凭控制面记录完整重建中间探索过程。执行事实、Agent 分析和当前搜索状态因而仍部分耦合在 Agent 主动维护的协议中，带来上下文膨胀、历史状态漂移、记录遗漏以及运行过程难以观测等问题。
+AKA 已经具备 Long Horizon Journal、Recovery、Supervisor Verification 等完整机制，但 Optimizer 仍同时承担 Kernel 探索、固定流程、工具调用、结果解释、跨 Session 状态维护和交接协议。终态独立验证并不会自动形成统一的中间探索记录。执行事实、Agent 分析和当前搜索状态仍部分耦合在 Agent 主动维护的协议中，增加了上下文和信息关联成本，也带来状态过期或记录不完整的风险。
 
 Atrex Runtime 的核心判断是：可信事实不应依赖 Agent 在长 Session 结束时回忆和转述，也不应通过增加更多 Prompt 约束来获得。Runtime 因此不接管 Kernel 搜索 Workflow，而是在 Sandbox 外建立稳定控制面，形成以下权责边界：
 
@@ -21,11 +21,11 @@ Atrex Runtime 的核心判断是：可信事实不应依赖 Agent 在长 Session
 
 Agent 自进化也不是运行中的 Optimizer 原地改写自己。每个 Evolver Session 产生一个版本化 Challenger：它可以修改 Agent Source 中的 Prompt、Workflow 与实现，也可以整理 Runtime State 中的 Skill 和 Tool，还可以复用、继续修改或有依据地融合多个历史 Agent。Candidate 只有在下一 Epoch 的真实 Kernel 优化竞争中胜出才会成为新的 Active；失败版本及其 Evidence 继续保留在该 DSL Lineage 中，可供审计、回滚和后续再利用。
 
-因此，Runtime 不保证 Agent 一定生成更快的 Kernel。它解决的是另一组基础问题：系统能否知道 Agent 实际做了什么，测量是否可信，Agent 修改是否真的更有效，历史结论能否被重新解释，以及运行失败后能否从已持久化的事实继续。只有先建立这条可信边界，Kernel Agent 的长期运行与自进化才是可比较、可归因、可恢复的工程过程。
+Runtime 不保证 Kernel 一定更快，也不保证 Agent 能力一定提高。它提供可追溯的执行记录、独立控制的比较和已持久化的恢复点，使历史结论能够被检查和修正。这些是验证优化与演化假设的基础，而不是某次 Agent 修改有效的证明。
 
 ## 2. 当前 AKA 的核心局限
 
-### 2.1 强制 Workflow Prompt 导致流程僵化和上下文膨胀
+### 2.1 强制 Workflow Prompt 增加流程负担与上下文成本
 
 AKA 当前同时维护 Fast Episode 和 Full Episode。Fast Episode 规定固定次数的
 `plan -> implement -> evaluator` Trial、每次 Plan 的 Reviewer、每 Trial 一次评测及严格 Handoff；
@@ -70,14 +70,12 @@ Ends 和 Open Directions；但这仍把跨版本状态归并交给了模型。�
 仍开放、哪些已结束、由什么 Experiment 结束”的权威视图。严格地说，旧摘要并非历史事实错误，而是
 缺少后来状态变化的历史快照；同时，最新摘要也只是最新一次 Agent 申报的压缩结果，并不天然保证完整。
 
-AKA 已支持 bounded same-session Handoff Recovery、Worktree 恢复和 interrupted outcome。这些机制能
-继续执行、保留已写入的工作区和 Journal，但无法还原从未上报的 Kernel 修改、Gateway 输出或失败。
-Recovery 可以修复“没有正确结束”，不能保证恢复“此前实际发生过什么”。
+AKA 已支持 bounded same-session Handoff Recovery、Worktree 恢复和 interrupted outcome，并能保留已写入的工作区和 Journal。未进入 Journal 的事件仍可能从 Provider Trace、Evaluator 日志或源码文件中重建，但需要额外整理，且未必能恢复精确的关联关系。只有原始证据也未保留时，才可能无法恢复；交接不完整本身不等于永久丢失。
 
 文件交接本身不是问题。问题是少数总结文件同时承担了“下一轮上下文入口”“历史事实说明”和“当前
 状态索引”三种职责。随着 Episode 数量增长，系统只能不断扩张上下文，或继续压缩并损失细节。
 
-### 2.3 中间实验事实依赖 Agent 申报，既不完整也不权威
+### 2.3 中间 Journal 依赖 Agent 申报，缺少与原始结果的强制绑定
 
 最新版 AKA 已经不要求 Agent 在 Episode 结束时直接写 canonical memory，而是要求在每个决定性实验
 之后调用 Journal CLI。这个改动把“一次终态回忆”改进为“运行中多次记录”，但当前链路仍然是：
@@ -96,9 +94,7 @@ Agent 判断实验是否值得记录
 声明。问题集中在中间过程：Journal 中的 `correctness`、`performance`、`latency_us`、瓶颈和 Decision
 仍由 Agent 从工具输出转述；格式校验只能证明 JSON 合法，不能证明它与原始结果完全一致。
 
-因此，Agent 忘记调用、在调用前崩溃、遗漏失败实验、错误抄写 Latency/Kernel Hash，或者在上下文压缩
-后丢失前期探索，都会形成永久缺口。`memory/live.json` 只是 Journal 镜像，不是独立事实来源。原始测量
-事实与 Agent 分析仍然混合在同一条申报链路中。
+Agent 忘记调用、在记录前崩溃、遗漏失败实验或抄错 Latency/Kernel Hash，都可能使结构化 Journal 不完整或与原始输出不一致。补建这些关联取决于其他位置是否保留了原始证据。`memory/live.json` 是 Journal 镜像，不会独立验证其中的声明；这条申报链路仍混合了测量转述与 Agent 分析。
 
 ## 3. Agent 与 Harness 自进化的相关研究
 
@@ -307,14 +303,13 @@ Agent 文件和 Supervisor 中的控制职责：
 | 事件 | Runtime 自动持久化 | Agent 负责补充 |
 | --- | --- | --- |
 | Gateway 调用 | Operation、请求绑定、Candidate Kernel Artifact、Job/Result、正确性、Latency、Profile、错误和重试 | 为什么调用、如何解释结果 |
-| Kernel 修改实验 | `before`/`after` 的精确 Kernel Artifact 与 Gateway Result 引用 | Hypothesis、Evidence 解释、Action 与 Lesson |
+| Agent 提交的 Kernel 修改实验 | 已校验的 `before`/`after` Kernel Artifact 与 Gateway Result 引用 | Hypothesis、Evidence 解释、Action 与 Lesson |
 | Session | Backend、Model、Workspace、Conversation、Event Ledger、Usage、终态和失败 | 无需自行总结完整对话 |
-| Agent 运行 | Parent Kernel、全部测量、Journal、终态提名与 Finalization | 终态 Report 中的工程叙述和 Findings |
+| Agent 运行 | Parent Kernel、经 Gateway 取得的测量、已接受的 Journal 记录、终态提名与 Finalization | 终态 Report 中的工程叙述和 Findings |
 | Evolution | 输入 Agent Catalog/Evidence、Candidate Source/State、Trace 与 Report | 进化假设、期望效果、未实现能力 |
 | 晋升 | Comparator、Gate、Winner、版本和祖先关系 | 无 Agent Authority |
 
-核心约束是：Agent Analysis 可以缺失、出错或被未来 Agent 推翻；已经发生的执行事实不能因此丢失或被
-改写。
+权责约束是 Agent Analysis 不能改写已经持久化的执行记录。Gateway Result 在代理边界记录，Direction 与 Experiment 的语义仍需 Agent 提交。Runtime 无法推断所有未提交的本地修改或研究结论；Direction 当前视图反映的是已登记的状态变化，不保证覆盖全部探索。结果的权威性说明其来源可追溯，不等于 Evaluator 没有缺陷或测量没有噪声。
 
 ### 5.5 小结：Runtime 如何回应 AKA 的核心局限
 
@@ -323,18 +318,16 @@ Runtime 不是用一套更长的固定 Workflow 替换 AKA Workflow，而是把 
 
 | AKA 的核心局限 | Runtime 的设计回应 |
 | --- | --- |
-| Workflow 依赖大量强制 Prompt/Skill 指令，运行成本高且难以适配任务 | Runtime 只固定安全、评测、持久化和晋升边界；研究方向、Kernel Workflow、Skill 和 Tool 仍由 Sandbox 内 Agent 决定，并可作为 Agent Source/State 演化。 |
-| 跨 Session 状态主要依赖 Agent 在结束前生成的 Memory、Plan、Profile 等总结文件 | Runtime 在执行发生时保存 Conversation、工具事件、Kernel Artifact、Gateway Result 和 Journal；后续 Evidence 由这些记录机械组装，不要求 Agent 从压缩后的上下文重建全部历史。 |
-| 历史摘要同时承担历史事实、当前状态和下一轮入口，旧 Open Direction 容易过期或相互矛盾 | Direction 与 Experiment 使用稳定 ID 和追加式状态变化；当前视图由 Runtime 从完整历史生成，旧记录无需被 Agent 反复改写。 |
+| 强制 Prompt/Skill 协议增加维护工作，未必适合所有任务 | Runtime 固定安全、评测、持久化和晋升边界；研究 Workflow、Skill 和 Tool 仍由 Agent 决定，并可作为 Source/State 演化。 |
+| Canonical Memory 汇总 Agent 申报的 Journal，详细历史仍分散保存 | Runtime 捕获 Conversation 与 Gateway 记录，并持久化 Agent 提交的 Journal 更新；后续 Evidence 从这些记录组装，不仅依赖终态回忆。 |
+| 历史 Direction 快照需要跨版本归并，才能区分过去状态与当前状态 | 稳定 ID 与追加式 Direction Event 支持 Runtime 从已登记变化生成当前视图；仍依赖 Agent 提交更新并正确表达语义。 |
 | Journal Evaluation 和 Profile 解释依赖 Agent 主动转述，可能遗漏或失真 | Runtime 代理 Gateway 调用并自动封存原始 Result 与标准化 Measurement；Agent Analysis 单独保存，可以被未来 Agent 重新解释。 |
-| Memory/Report 格式错误可能让整个运行结果被废弃并触发昂贵 Recovery | Journal 工具逐次校验并立即持久化；终态 Report 校验失败可以修正后重试，已发生的 Session、Kernel 和测量不会随 Report 失败而丢失。 |
-| 运行过程近似黑盒，只能在 Episode 结束后查看少数交接文件 | Registry、Artifact、Session、Journal 和 Evaluation 在运行中持续可查询，CLI/HTTP 可以按 Agent、Kernel 和 Session 检查进度、成本、结果与失败。 |
+| 无效交接可能需要修正或 Recovery，能够重建多少过程取决于原始证据是否保留 | Journal 更新逐次校验并持久化；终态 Report 被拒绝后允许修正重试，不因此作废已持久化的 Kernel 和测量记录。 |
+| Trace、Telemetry、Journal 与 Evaluator 输出已存在，但需要跨文件关联和解析 | CLI/HTTP 统一关联已持久化的 Agent、Kernel、Session、Journal 与 Evaluation 身份，支持进度和结果查询。 |
 | Agent 修改没有独立身份、公平对照、晋升和回滚机制 | Runtime 分别封存 Agent Source 与 Runtime State，在相同冻结输入下隔离运行 Candidate，并由 Sandbox 外 Comparator 决定晋升；旧版本、失败 Evidence 和恢复点保持可用。 |
 | Agent 同时接触可变代码、评测协议和结果解释，信任边界模糊 | Sandbox 只持有公开输入和限域 Capability；私有评测、权威事实、Registry 与版本裁决由 Runtime 掌握。文件/进程隔离由 Runtime 提供，网络边界仍由部署环境负责。 |
 
-因此，Runtime 解决的不是“怎样保证 Agent 一定生成更快的 Kernel”，而是“怎样知道它实际做了什么、
-结果是否可信、修改是否真的更好，以及失败后能否继续”。Kernel 搜索质量仍取决于 Agent 和 Model；
-Runtime 提供的是让这种搜索能够被观测、比较、归因、恢复和演化的可信基础。
+Runtime 为复核已记录的动作、测量、比较和恢复点提供依据，Kernel 搜索质量仍取决于 Agent 和 Model。崩溃边界的记录完整性、恢复正确性及隔离约束，需要相应的集成测试、故障注入和安全测试验证；成功完成优化运行本身不能证明这些保证。
 
 ## 6. 当前 Runtime 中 Agent 如何运行
 
@@ -657,11 +650,7 @@ Candidate 获胜。
 
 #### Candidate 如何被评估与晋升
 
-配置的每个 Challenger 对应一个独立 Agent Revision 和 Branch。下一 Epoch 中，Active 与 Challenger
-共享冻结的起始 Kernel、Evidence、Evaluation Contract、Model/预算策略和 Gate Policy，但分别使用自己
-的 Source 与 Runtime State；每个 Branch 可以再展开相同数量的 Trajectory 和 Attempt。Candidate 的价值
-由它实际完成 Kernel 优化后产生的权威结果判断，而不是由 Evolution Report、代码 Diff 或 Evolver 的
-自评决定。
+配置的每个 Challenger 对应一个独立 Agent Revision 和 Branch。下一 Epoch 中，Active 与 Challenger 共享冻结的起始 Kernel、Evidence、Evaluation Contract、Model/预算策略和 Gate Policy，但分别使用自己的 Source 与 Runtime State；每个 Branch 可以再展开相同数量的 Trajectory 和 Attempt。晋升依照配置的比较规则和实际 Kernel 测量结果，而非 Evolution Report、代码 Diff 或 Evolver 自评。赢得一个 Epoch 只说明本轮选择结果；要将稳定收益归因于 Agent 设计，而非采样或测量噪声，仍需重复受控实验。
 
 Epoch 结束时，Runtime 分别完成 Kernel Retention 和 Agent Promotion。获胜 Agent 成为下一轮 Active，
 其选定 Trajectory 终态成为新的规范 Runtime State；失败 Challenger 及其 Source、State、Conversation、
@@ -693,5 +682,8 @@ AKA 当前已经是一个具备 Journal、Recovery 和 Supervisor Verification �
 而是进一步完成权责分离：执行事实在边界自动持久化，Agent 只提供可被重新解释的分析，版本与晋升由
 稳定控制面决定。
 
-在此基础上，Agent 自进化被限制为 Lineage 内、同 DSL、可回滚、可比较的 Agent Bundle 实验。即使
-最终证明某些场景不需要自进化，这套 Runtime 仍然提供可靠的测量、历史、恢复和可观测性价值。
+在此边界上，Agent 自进化是一种 Lineage 内、同 DSL、具有明确版本、比较和恢复机制的 Bundle 实验。这些机制使假设可被检验，不意味着自进化必然有效。
+
+在已归档的 [Fused MoE FP8 实验](experiments/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/report.md)中，retained 不使用 Evolver；同一 DSL 内与 AKA 从相同 Bootstrap Kernel seed 开始，排除 Bootstrap 后，其总 Token 比两遍 AKA 少 41.8%，最终最佳延迟与各 DSL 两遍 AKA 中的较好结果相近。Trace 也显示 AKA 承担了更多工具、Profile 维护和历史状态重建工作。这支持 Runtime 的设计动机及本次配置的实际收益，但不能把全部节省因果归给某一个机制。
+
+本次实验没有分离 Prompt 简化、工具封装、Journal 结构和运行态复用的独立作用，Episode/Attempt 数也不代表相同推理预算；过期 Direction 错误和 Journal 与 Evaluator 失配的发生率亦未被系统统计。已完成的 Evolver Session、版本和选择记录说明竞争流程能够运行，但 evolve 在三个 DSL 上未表现出一致的性能优势。稳定演化收益与跨算子泛化仍未验证。

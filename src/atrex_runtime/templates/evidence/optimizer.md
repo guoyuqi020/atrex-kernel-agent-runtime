@@ -80,8 +80,10 @@ Beyond each completed Epoch's `summary.json` branch list, there are no generated
 aggregated lessons, or measurement projections in this tree. Read directories in numeric order. Each
 historical Attempt exposes only its final report and latest sealed backend-neutral
 `conversation.jsonl`; all physical retries remain in controller storage. Conversation files may
-contain sensitive raw model/tool content. Retention omits only high-frequency Claude thinking-token
-estimate telemetry.
+contain sensitive model/tool content without redaction. Claude reading views prefer native content
+over duplicate stdout and omit internal queue/title/file-history bookkeeping and thinking-token
+estimates. Distinct content blocks, uncovered stdout, errors, compaction boundaries, and terminal
+results remain visible.
 
 ## Trust and measurement reuse
 

@@ -8,7 +8,7 @@ The AKA analysis uses upstream commit `d2ff1df`, checked out under `third_party/
 
 ## 1. Executive summary
 
-AKA already provides a Long Horizon Journal, recovery, Supervisor verification, and other substantial mechanisms. Its limitation is not the absence of a stricter Workflow. The Optimizer is still asked to carry too many responsibilities at once: explore Kernels, obey a prescribed process, invoke evaluation, interpret results, maintain cross-Session state, and generate handoff files. A Supervisor can independently verify the terminal Candidate, but the control plane alone cannot reconstruct the complete intermediate search. Execution facts, Agent analysis, and current search state therefore remain partly coupled through an Agent-maintained protocol, causing context growth, historical-state drift, missing records, and limited runtime observability.
+AKA already provides a Long Horizon Journal, recovery, Supervisor verification, and other substantial mechanisms. The Optimizer nevertheless combines Kernel exploration with prescribed phases, tool invocation, result interpretation, cross-Session state, and handoff protocols. Independent terminal verification does not automatically create a unified record of intermediate exploration. Execution facts, Agent analysis, and current search state remain partly coupled through Agent-maintained protocols, increasing context and reconciliation costs and creating risks of stale state or incomplete records.
 
 Atrex Runtime starts from one central conclusion: trusted facts must not depend on an Agent recalling and narrating them at the end of a long Session, and adding more Prompt constraints is not a reliable substitute. Runtime does not take over the Kernel search Workflow. It establishes a stable control plane outside the Sandbox with the following authority boundary:
 
@@ -21,11 +21,11 @@ At execution time, one Campaign may create an independent Lineage for each DSL. 
 
 Agent evolution is likewise not an Optimizer rewriting itself while it runs. Each Evolver Session produces one versioned Challenger. It may change Prompt, Workflow, or implementation in Agent Source; curate Skills and Tools in Runtime State; or reuse, continue from, and deliberately combine several historical Agents. A Candidate becomes the new Active only by winning real Kernel-optimization competition in the next Epoch. Losing versions and their Evidence remain in the DSL Lineage for audit, rollback, and future reuse.
 
-Runtime therefore does not guarantee that an Agent will produce a faster Kernel. It addresses a different foundation: whether the system can know what the Agent actually did, trust the measurement, determine whether an Agent modification is genuinely more effective, reinterpret historical conclusions, and continue from persisted facts after failure. Only with this boundary can long-running Kernel optimization and Agent evolution become comparable, attributable, and recoverable engineering processes.
+Runtime does not guarantee a faster Kernel or a genuinely stronger Agent. It provides traceable execution records, independently controlled comparisons, and persisted recovery points, so historical conclusions can be checked and revised. These are foundations for testing optimization and evolution hypotheses, not proof that any particular Agent change is beneficial.
 
 ## 2. Core limitations of current AKA
 
-### 2.1 Binding Workflow Prompts make execution rigid and inflate context
+### 2.1 Binding Workflow Prompts add process and context overhead
 
 AKA currently maintains Fast and Full episodes. Fast episodes prescribe a fixed number of
 `plan -> implement -> evaluator` trials, plan reviewers, one evaluation per trial, and a strict
@@ -79,16 +79,13 @@ summary is not false as historical evidence; it is an immutable snapshot that la
 transitions. The newest summary is also only the latest compressed Agent report and is not
 guaranteed to be complete.
 
-AKA supports bounded same-session handoff recovery, worktree recovery, and interrupted outcomes.
-These mechanisms can continue execution and retain already-written workspace and Journal data. They
-cannot reconstruct a Kernel change, Gateway output, or failure that was never reported. Recovery
-can fix “did not finish correctly”; it cannot guarantee recovery of “what actually happened.”
+AKA supports bounded same-session handoff recovery, worktree recovery, and interrupted outcomes. These mechanisms retain already-written workspace and Journal data. An event absent from the Journal may still be recoverable from Provider traces, Evaluator logs, or source files, but that requires additional reconstruction and may not recover its exact associations. If the original evidence is also absent, exact reconstruction may be impossible; incomplete handoff alone does not establish permanent loss.
 
 File handoff is not itself the problem. The problem is that a small set of summary files must serve
 as the next context entry point, the explanation of historical fact, and the current-state index.
 As episodes grow, the system must either expand context indefinitely or compress away detail.
 
-### 2.3 Intermediate experimental facts depend on Agent reporting and are neither complete nor authoritative
+### 2.3 Intermediate Journal records depend on Agent reporting without enforced binding to original results
 
 Current AKA no longer asks the Agent to write canonical memory at episode completion. Instead, the
 Agent must call the Journal CLI after every decisive experiment. This replaces one terminal recall
@@ -110,10 +107,7 @@ such as `correctness`, `performance`, `latency_us`, bottleneck, and decision are
 retelling of tool output. Schema validation proves that JSON is well-formed, not that it faithfully
 represents the original result.
 
-If the Agent forgets, crashes before the call, omits a failed experiment, copies latency or a Kernel
-hash incorrectly, or loses an earlier event during context compaction, the gap is permanent.
-`memory/live.json` is a Journal mirror, not an independent source of fact. Raw measurement facts and
-Agent analysis remain mixed in the same reporting chain.
+If the Agent forgets a call, crashes before recording, omits a failure, or miscopies a latency or Kernel hash, the structured Journal may be incomplete or inconsistent with the original output. Recovering the missing association then depends on separately retained evidence. `memory/live.json` mirrors the Journal rather than independently verifying its claims; the reporting chain still mixes measurement transcription with Agent analysis.
 
 ## 3. Related research on Agent and Harness evolution
 
@@ -348,14 +342,13 @@ authority boundary with Agent analysis that may later be corrected:
 | Event | Runtime-owned durable data | Agent-owned interpretation |
 | --- | --- | --- |
 | Gateway call | Operation, request binding, Candidate Kernel Artifact, Job/Result, correctness, latency, profile, errors, and retry | Why it was called and what the result means |
-| Kernel experiment | Exact `before`/`after` Kernel Artifact and Gateway Result references | Hypothesis, evidence interpretation, action, and lesson |
+| Submitted Kernel experiment | Validated `before`/`after` Kernel Artifact and Gateway Result references | Hypothesis, evidence interpretation, action, and lesson |
 | Session | Backend, Model, Workspace, conversation, Event ledger, usage, terminal state, and failure | No requirement to reconstruct the full conversation |
-| Agent run | Parent Kernel, every measurement, Journal, terminal nomination, and Finalization | Engineering narrative and Findings in the terminal Report |
+| Agent run | Parent Kernel, Gateway-mediated measurements, accepted Journal records, terminal nomination, and Finalization | Engineering narrative and Findings in the terminal Report |
 | Evolution | Input Agent catalog/Evidence, Candidate Source/State, Trace, and Report | Evolution hypothesis, expected effect, and unimplemented capability |
 | Promotion | Comparator, Gate, winner, version, and ancestry | No Agent authority |
 
-Agent analysis can be omitted, wrong, or overturned later. An executed fact cannot disappear or be
-rewritten because of that analysis.
+The authority rule is that Agent analysis cannot rewrite already-persisted execution records. Gateway results are captured at the proxy boundary; Direction and Experiment semantics still require Agent submission. Runtime cannot infer every unsubmitted local edit or research conclusion, and its current Direction view represents recorded transitions rather than guaranteed coverage of all exploration. Authoritative results establish provenance; they do not establish that the Evaluator is defect-free or the measurement noiseless.
 
 ### 5.5 Summary: how Runtime addresses AKA's core limitations
 
@@ -364,20 +357,16 @@ the control responsibilities that should not depend on voluntary Agent complianc
 
 | AKA core limitation | Runtime design response |
 | --- | --- |
-| Workflow depends on extensive mandatory Prompt/Skill instructions, increasing cost and reducing task fit | Runtime fixes only safety, evaluation, persistence, and promotion boundaries. Research direction, Kernel Workflow, Skills, and Tools remain Agent decisions inside the Sandbox and may evolve as Agent Source/State. |
-| Cross-Session state primarily depends on Memory, Plan, Profile, and similar summaries generated before Agent exit | Runtime captures conversations, tool events, Kernel Artifacts, Gateway Results, and Journal records as execution occurs. Later Evidence is mechanically assembled from those records instead of reconstructed from compressed Agent context. |
-| Historical summaries simultaneously serve as fact record, current-state index, and next-round entry point, so old open Directions easily become stale or contradictory | Directions and Experiments have stable IDs and append-only state changes. Runtime derives the current view from complete history without asking the Agent to rewrite old records. |
+| Mandatory Prompt/Skill protocols add maintenance work and may not fit every task | Runtime fixes safety, evaluation, persistence, and promotion boundaries; research Workflow, Skills, and Tools remain Agent decisions and may evolve as Source/State. |
+| Canonical Memory summarizes Agent-submitted Journal records, while detailed history remains distributed | Runtime captures conversations and Gateway records and persists submitted Journal updates. Later Evidence is assembled from those records instead of relying only on terminal recall. |
+| Historical Direction snapshots require cross-version reconciliation to distinguish past state from current state | Stable IDs and append-only Direction Events let Runtime derive a current view from recorded transitions; Agent submission and semantic accuracy are still required. |
 | Journal Evaluation and Profile interpretation depend on Agent narration and may be incomplete or distorted | Runtime proxies Gateway calls and automatically seals original Results plus normalized Measurements. Agent Analysis is stored separately and may be reinterpreted later. |
-| A malformed Memory or Report can discard the run and trigger expensive Recovery | Journal tools validate and persist each update immediately. A rejected terminal Report can be corrected and retried, while completed Sessions, Kernels, and measurements remain intact. |
-| Execution is largely opaque until an Episode ends and a small set of handoff files appears | Registry, Artifacts, Sessions, Journal, and Evaluation remain queryable during execution. CLI/HTTP views expose progress, cost, outcome, and failure by Agent, Kernel, and Session. |
+| Invalid handoff can require correction or Recovery, while retained raw evidence determines what can be reconstructed | Journal updates are validated and persisted individually. Terminal Report rejection permits correction and retry without invalidating already-persisted Kernel and measurement records. |
+| Traces, telemetry, Journals, and Evaluator outputs exist but require cross-file correlation and parsing | CLI/HTTP views join persisted Agent, Kernel, Session, Journal, and Evaluation identities for progress and outcome queries. |
 | Agent modifications lack independent identity, fair controls, promotion, and rollback | Runtime seals Agent Source and Runtime State separately, executes Candidates in isolation under matched frozen inputs, and leaves promotion to an external Comparator. Previous versions, failure Evidence, and recovery points remain available. |
 | Mutable code, evaluation protocol, and result interpretation share an ambiguous trust boundary | The Sandbox receives only public inputs and scoped capabilities. Runtime owns private evaluation, authoritative facts, Registry, and version decisions. Runtime provides filesystem/process isolation; deployment remains responsible for the network boundary. |
 
-Runtime therefore does not answer “how can an Agent be guaranteed to generate a faster Kernel?” It
-answers “what did the Agent actually do, are the results trustworthy, is the modification genuinely
-better, and can execution continue after failure?” Search quality still depends on the Agent and
-Model. Runtime provides the trusted substrate that makes the search observable, comparable,
-attributable, recoverable, and evolvable.
+Runtime provides a basis for reviewing recorded actions, measurements, comparisons, and recovery points; Kernel search quality still depends on the Agent and Model. Completeness at crash boundaries, recovery correctness, and isolation enforcement require targeted integration, fault-injection, and security tests. Successful optimization runs alone do not verify those guarantees.
 
 ## 6. How Agents run in the current Runtime
 
@@ -722,12 +711,7 @@ immutable Agent Revision. Evolver cannot declare its Candidate a winner.
 
 #### How a Candidate is evaluated and promoted
 
-Every configured Challenger becomes an independent Agent Revision and Branch. In the next Epoch,
-Active and Challengers share the frozen starting Kernel, Evidence, Evaluation Contract, Model/budget
-policy, and Gate Policy, while each uses its own Source and Runtime State. Every Branch may expand
-into the same configured number of Trajectories and Attempts. Candidate value is determined by the
-authoritative outcomes of the Kernel optimization it actually performs—not by the Evolution Report,
-source diff, or Evolver self-assessment.
+Every configured Challenger becomes an independent Agent Revision and Branch. In the next Epoch, Active and Challengers share the frozen starting Kernel, Evidence, Evaluation Contract, Model/budget policy, and Gate Policy, while each uses its own Source and Runtime State. Every Branch may expand into the same configured number of Trajectories and Attempts. Promotion uses measured Kernel outcomes under the configured comparison rules, not the Evolution Report, source diff, or Evolver self-assessment. Winning one Epoch establishes that selection outcome; repeated controlled runs are still needed to attribute a stable gain to Agent design rather than sampling or measurement noise.
 
 At Epoch completion, Runtime performs Kernel Retention and Agent Promotion separately. The winning
 Agent becomes the next Active and the selected terminal Trajectory State becomes the new canonical
@@ -765,6 +749,8 @@ protocol. Atrex Runtime completes the authority separation: facts are persisted 
 boundary, Agent analysis remains reinterpretable, and stable control-plane code owns version and
 promotion.
 
-On this boundary, Agent evolution is restricted to Lineage-local, same-DSL, rollback-safe,
-comparable Agent Bundle experiments. Even if some deployments ultimately do not need self-evolution,
-the Runtime still provides reliable measurement, history, recovery, and observability.
+Agent evolution on this boundary is a Lineage-local, same-DSL Bundle experiment with explicit version, comparison, and recovery mechanisms. Those mechanisms make hypotheses testable; they do not establish that evolution is always useful.
+
+In the archived [Fused MoE FP8 experiment](experiments/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/report.md), retained ran without an Evolver. Within each DSL it used the same Bootstrap Kernel seed as AKA; excluding Bootstrap, retained consumed 41.8% fewer total Tokens than two AKA runs while reaching final best latencies comparable to the better AKA result for each DSL. The traces also show more tool/profiling maintenance and historical-state reconstruction in AKA. This supports the Runtime design motivation and an observed benefit of the tested configuration, not a causal attribution of all savings to one mechanism.
+
+The study does not isolate the effects of Prompt simplification, tool encapsulation, Journal structure, or state reuse, and Episode/Attempt counts do not establish matched inference budgets. It also does not systematically measure stale-Direction errors or Journal-to-Evaluator discrepancies. Completed evolution sessions and version/selection records demonstrate that the competition workflow ran, but evolve showed no consistent performance advantage across the three DSLs. Stable evolution benefits and cross-operator generalization remain unverified.

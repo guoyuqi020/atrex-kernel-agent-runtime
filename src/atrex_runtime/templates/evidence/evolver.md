@@ -193,9 +193,11 @@ results in the optimization summary.
 ## Conversation JSONL
 
 Each line is one increasing-sequence record. Relevant types are `session_start`, Runtime `message`,
-Backend `provider_event`/`provider_text`/`provider_binary`, and terminal `session_end`. The stream is
-unredacted except that high-frequency Claude thinking-token estimates may be omitted. Use it to
-understand behavior and tool use, not as performance Evidence.
+Backend `provider_event`/`provider_text`/`provider_binary`, and terminal `session_end`. Content is
+unredacted. Claude reading views prefer native content over duplicate stdout, omit internal
+queue/title/file-history bookkeeping and thinking-token estimates, and preserve distinct content
+blocks, uncovered stdout, errors, compaction boundaries, and terminal results. Use them to understand
+behavior and tool use, not as performance Evidence.
 
 ## Session context
 

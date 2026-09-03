@@ -1,0 +1,4 @@
+PROTO2 mma_orig max_err=199.0
+PROTO2 mma_swap max_err=0.0
+PROTO2 mapping=swap
+PROTO2_VERDICT PASS

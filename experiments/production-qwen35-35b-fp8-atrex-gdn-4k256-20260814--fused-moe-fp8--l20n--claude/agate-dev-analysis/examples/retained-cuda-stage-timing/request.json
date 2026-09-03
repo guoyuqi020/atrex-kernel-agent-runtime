@@ -1,0 +1,6 @@
+{
+  "operation": "dev",
+  "command": "python3 stage_ab_probe.py 8192 4096",
+  "file_paths": ["scratch/stage_ab_probe.py", "scratch/baseline_kernel.py"],
+  "intent": "custom_harness"
+}

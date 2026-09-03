@@ -1,0 +1,203 @@
+{
+  "retained_linked_request_counts": {
+    "linked_unique_command": 514,
+    "uploads_scratch": 424,
+    "uploads_tools": 254,
+    "unlinked": 96,
+    "no_file_paths": 14,
+    "explicit_ncu_command": 1,
+    "ambiguous_command": 6
+  },
+  "retained_script_families_calls_overlap": {
+    "moe_check_probe.py": 59,
+    "moe_stress_probe.py": 7,
+    "harness_compare.py": 6,
+    "probe_moe_correctness.py": 9,
+    "bench_moe_latency.py": 66,
+    "moe_ood_probe.py": 33,
+    "ab_harness.py": 5,
+    "paired_ab_probe.py": 31,
+    "stage_ab_probe.py": 20,
+    "moe_bitwise_ab_probe.py": 27,
+    "fwd_latency_ab_probe.py": 8
+  },
+  "retained_by_dsl": {
+    "cuda": {
+      "uploads_scratch": 166,
+      "uploads_tools": 127,
+      "moe_check_probe.py": 59,
+      "moe_stress_probe.py": 7,
+      "moe_ood_probe.py": 33,
+      "stage_ab_probe.py": 20,
+      "moe_bitwise_ab_probe.py": 27,
+      "fwd_latency_ab_probe.py": 8
+    },
+    "cutedsl": {
+      "uploads_scratch": 160,
+      "harness_compare.py": 6,
+      "ab_harness.py": 5,
+      "uploads_tools": 25,
+      "paired_ab_probe.py": 31
+    },
+    "triton": {
+      "uploads_tools": 102,
+      "probe_moe_correctness.py": 9,
+      "uploads_scratch": 98,
+      "bench_moe_latency.py": 66
+    }
+  },
+  "retained_tools_reuse_final_archive_snapshots": {
+    "triton/tools/probe_moe_correctness.py": {
+      "attempts": 38,
+      "epochs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "jobs": 102,
+      "final_content_hashes": 1
+    },
+    "triton/tools/bench_moe_latency.py": {
+      "attempts": 35,
+      "epochs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "jobs": 66,
+      "final_content_hashes": 1
+    },
+    "cuda/tools/moe_check_probe.py": {
+      "attempts": 25,
+      "epochs": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        10
+      ],
+      "jobs": 59,
+      "final_content_hashes": 1
+    },
+    "cuda/tools/moe_ood_probe.py": {
+      "attempts": 22,
+      "epochs": [
+        3,
+        4,
+        5,
+        6,
+        8,
+        9,
+        10
+      ],
+      "jobs": 29,
+      "final_content_hashes": 1
+    },
+    "cuda/tools/moe_bitwise_ab_probe.py": {
+      "attempts": 15,
+      "epochs": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "jobs": 27,
+      "final_content_hashes": 2
+    },
+    "cutedsl/tools/paired_ab_probe.py": {
+      "attempts": 14,
+      "epochs": [
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "jobs": 23,
+      "final_content_hashes": 1
+    },
+    "cuda/tools/stage_ab_probe.py": {
+      "attempts": 10,
+      "epochs": [
+        6,
+        7,
+        8,
+        9
+      ],
+      "jobs": 17,
+      "final_content_hashes": 1
+    },
+    "cuda/tools/fwd_latency_ab_probe.py": {
+      "attempts": 5,
+      "epochs": [
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "jobs": 8,
+      "final_content_hashes": 1
+    },
+    "cuda/tools/moe_stress_probe.py": {
+      "attempts": 2,
+      "epochs": [
+        1
+      ],
+      "jobs": 7,
+      "final_content_hashes": 1
+    },
+    "triton/tools/h2h_vs_reference.py": {
+      "attempts": 2,
+      "epochs": [
+        1,
+        5
+      ],
+      "jobs": 2,
+      "final_content_hashes": 1
+    }
+  },
+  "aka_explicit_ncu_or_driver_commands": {
+    "profile": 573,
+    "dev": 392,
+    "auto": 23
+  },
+  "aka_by_dsl": {
+    "cuda": {
+      "explicit_dev": 250,
+      "profile": 296,
+      "observed_fallback": 86
+    },
+    "triton": {
+      "explicit_dev": 287,
+      "profile": 184,
+      "observed_fallback": 59
+    },
+    "cutedsl": {
+      "explicit_dev": 333,
+      "profile": 246,
+      "observed_fallback": 81
+    }
+  }
+}

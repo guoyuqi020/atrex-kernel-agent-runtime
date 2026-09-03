@@ -1,0 +1,9 @@
+PROBE tokens=512 max_abs_err=2.38419e-07 max_rel_err=0.135973 bad_elements=0 shape_ok=True dtype_ok=True
+PROBE_VERDICT PASS
+PROBE tokens=2048 max_abs_err=2.38419e-07 max_rel_err=0.130385 bad_elements=0 shape_ok=True dtype_ok=True
+PROBE_VERDICT PASS
+SKEW1 max_abs_err=7.15256e-07 bad=0 shape_ok=True dtype_ok=True
+SKEW2 max_abs_err=1.66893e-06 bad=0 shape_ok=True dtype_ok=True
+OOD max_abs_err=2.38419e-07 bad=0 shape_ok=True dtype_ok=True
+TIMING tokens=2048 avg_ms=2.276
+STRESS_VERDICT PASS

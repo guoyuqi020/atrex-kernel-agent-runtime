@@ -1,0 +1,1 @@
+python tools/sandbox.py --hardware L20N --kind dev --no-sync -- bash -c "python profiles/episode_14/harness/mma_roofline_probe.py && echo '--- BW ---' && python tools/bench_bandwidth.py --size-bytes 536870912" 2>&1 | tail -15

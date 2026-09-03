@@ -1,0 +1,1 @@
+echo '{"operation":"dev","command":"python3 mma_proto2.py","file_paths":["scratch/mma_proto2.py"],"intent":"custom_harness","job_timeout_s":600}' > scratch/req_dev_proto3.json && python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/req_dev_proto3.json

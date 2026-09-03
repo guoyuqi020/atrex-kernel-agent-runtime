@@ -1,0 +1,14 @@
+ "bias_cancelled_delta_mean_us": 5.57,
+ "slot_bias_estimate_us": 0.68,
+ "phase1_delta_stdev_us": 178.54,
+ "phase2_delta_stdev_us": 176.73,
+ "corrected_se_us": 16.22
+}
+__ATREX_SANDBOX_OUTPUT_BEGIN__
+ "bias_cancelled_delta_mean_us": -35.8,
+ "slot_bias_estimate_us": 5.86,
+ "phase1_delta_stdev_us": 166.4,
+ "phase2_delta_stdev_us": 173.09,
+ "corrected_se_us": 15.5
+}
+__ATREX_SANDBOX_OUTPUT_BEGIN__

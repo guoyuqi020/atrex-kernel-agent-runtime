@@ -1,0 +1,5 @@
+{"device": "NVIDIA RTX PRO 5000 72GB Blackwell"}
+{"T": 450, "equal": false, "max_abs_diff": 0.0126953125, "cand_med_us": 974.368005990982, "inc_med_us": 960.8480036258698, "speedup": 0.9861}
+{"T": 512, "equal": false, "max_abs_diff": 0.01141357421875, "cand_med_us": 981.6800057888031, "inc_med_us": 966.2719964981079, "speedup": 0.9843}
+{"T": 4096, "equal": false, "max_abs_diff": 0.013671875, "cand_med_us": 1439.5679831504822, "inc_med_us": 1512.9440426826477, "speedup": 1.051}
+{"T": 8192, "equal": false, "max_abs_diff": 0.0146484375, "cand_med_us": 2467.26393699646, "inc_med_us": 2542.896032333374, "speedup": 1.0307}

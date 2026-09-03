@@ -1,0 +1,8 @@
+{
+  "operation": "dev",
+  "command": "python3 paired_ab_probe.py",
+  "file_paths": ["tools/paired_ab_probe.py", "scratch/kernel_incumbent.py"],
+  "job_timeout_s": 600,
+  "note": "in-pod paired A/B gate: fused gemm1 candidate vs incumbent v8 (torch.equal + interleaved median timing, T=450/512/4096/8192)",
+  "intent": "custom_harness"
+}

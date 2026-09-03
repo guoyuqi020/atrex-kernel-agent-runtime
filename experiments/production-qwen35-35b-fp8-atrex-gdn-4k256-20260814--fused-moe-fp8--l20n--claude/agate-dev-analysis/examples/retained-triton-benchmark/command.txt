@@ -1,0 +1,1 @@
+python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/dev-bench-warps16.json > scratch/dev-bench-warps16-result.json

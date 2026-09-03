@@ -1,0 +1,41 @@
+{
+  "instance": "AKA-1",
+  "dsl": "cutedsl",
+  "episode": 13,
+  "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0013-926ba888/d0af34ea-236f-4242-8960-33b3858e838a.jsonl",
+  "line": 1001,
+  "output_lines": [
+    1002
+  ],
+  "requested_kind": "dev",
+  "observed_routes": [],
+  "dev_job_ids": [],
+  "files": [
+    {
+      "source": "AKA/atrex-runs.with-traces/atrex-runs/kernel_opt_fused_moe_fp8_cutedsl_l20n_production/.atrex_long_horizon/episodes/e0013/archive/worktree_files/profiles/episode_13/harness/paired_time_driver.py",
+      "copy": "paired_time_driver.py",
+      "kind": "final_episode_snapshot",
+      "sha256": "a4d1cc397054eea35623c3d9af02a44e658b02a0106cb009065a247413bcc464",
+      "bytes": 6402
+    },
+    {
+      "copy": "at-call/profiles/episode_13/harness/paired_time_driver.py",
+      "kind": "literal_trace_reconstruction",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0013-926ba888/d0af34ea-236f-4242-8960-33b3858e838a.jsonl",
+      "write_edit_lines": [
+        899
+      ],
+      "before_call_line": 1001,
+      "sha256": "a4d1cc397054eea35623c3d9af02a44e658b02a0106cb009065a247413bcc464",
+      "bytes": 6402
+    },
+    {
+      "source": "AKA/atrex-runs.with-traces/atrex-runs/kernel_opt_fused_moe_fp8_cutedsl_l20n_production/.atrex_long_horizon/episodes/e0013/archive/worktree_files/profiles/episode_13/harness/incumbent_kernel.py",
+      "copy": "incumbent_kernel.py",
+      "kind": "final_episode_snapshot",
+      "sha256": "ba349bdc53a7953e6bbcceeb49400c45602ea9c34c5cc6382c3195e32ac72ff4",
+      "bytes": 40737
+    }
+  ],
+  "snapshot_note": "Commands/results are exact visible Trace text. Helper files are end-of-Episode snapshots; not a claim of identical content at every invocation. AKA framework files and remote injected inputs are not reconstructed."
+}

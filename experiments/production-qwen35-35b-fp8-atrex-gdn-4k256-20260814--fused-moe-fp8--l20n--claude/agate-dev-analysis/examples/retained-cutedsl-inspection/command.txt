@@ -1,0 +1,4 @@
+cat > scratch/req-dev-inspect2.json <<'EOF'
+{"operation": "dev", "command": "python3 inspect_mma.py", "file_paths": ["scratch/inspect_mma.py"], "intent": "inspect", "note": "Dump SM120 FP8 warp MMA atom classes and blackwell helpers + cutlass example tree"}
+EOF
+python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/req-dev-inspect2.json > scratch/out-dev-inspect2.json; echo "exit=$?"; wc -c scratch/out-dev-inspect2.json

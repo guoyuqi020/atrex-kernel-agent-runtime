@@ -1,0 +1,55 @@
+{
+  "dsl": "cuda",
+  "epoch": 5,
+  "trajectory": 2,
+  "iteration": 2,
+  "attempt_id": "attempt_0f8166862c664137819a691fa730949b",
+  "job_id": "dv_f0e52965ac28",
+  "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/b5b3977ce93246e70119b1e2bbd4fc3f81c80e38b6907aa677f5ca14ae43d984/payload/conversation.jsonl",
+  "workspace": "runtime/workspace-full-20260902.unpacked/production/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/state/attempt-workspaces/attempt_0f8166862c664137819a691fa730949b/run-f1908ac8eaf34fcd98fb99db51dde410",
+  "kernel_artifact_digest": "sha256:724093e17ad50ff801f179a0802f7f7c9cfb22ecd3a80a3978ea5744665a18e0",
+  "gateway_result_digest": "sha256:e1b9c19c300afdf62c7dea7b2b0c2b3842321d6aac265f8a92a191d6af4d51d5",
+  "trace_line": 229,
+  "result_lines": [
+    232,
+    239
+  ],
+  "files": [
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/state/attempt-workspaces/attempt_0f8166862c664137819a691fa730949b/run-f1908ac8eaf34fcd98fb99db51dde410/scratch/dev-stage-ab.json",
+      "copy": "request.json",
+      "kind": "final_request_file",
+      "sha256": "7f71ccbf8e37122e27f5c15de8d8c2560e4740958e3004c60c1bcf4e5411792e",
+      "bytes": 184
+    },
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/state/attempt-workspaces/attempt_0f8166862c664137819a691fa730949b/run-f1908ac8eaf34fcd98fb99db51dde410/scratch/stage_ab_probe.py",
+      "copy": "stage_ab_probe.py",
+      "kind": "final_workspace_snapshot",
+      "sha256": "575383b09f8d8905eeaebb1989f5eeec56953ba20c353701f63596a3873a9bb1",
+      "bytes": 4550
+    },
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/state/attempt-workspaces/attempt_0f8166862c664137819a691fa730949b/run-f1908ac8eaf34fcd98fb99db51dde410/scratch/baseline_kernel.py",
+      "copy": "baseline_kernel.py",
+      "kind": "final_workspace_snapshot",
+      "sha256": "125e32cf5cb2952141e98422aa94c4e7ca9bbb3979bd43d0a3a0d2966b6d1383",
+      "bytes": 60250
+    },
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/724093e17ad50ff801f179a0802f7f7c9cfb22ecd3a80a3978ea5744665a18e0/payload/kernel.py",
+      "copy": "kernel.py",
+      "kind": "immutable_kernel_artifact",
+      "sha256": "f7bfe98603ef98e4add3570b2ec58d7b6023c706c9c568c332e3f8d9b8875c3c",
+      "bytes": 62501
+    },
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/e1b9c19c300afdf62c7dea7b2b0c2b3842321d6aac265f8a92a191d6af4d51d5/payload/value.json",
+      "copy": "result.json",
+      "kind": "immutable_gateway_result",
+      "sha256": "8cf9028b8621ceadb9fa3053b251a1867bd2d48d6dc75786381f794c5258d4ce",
+      "bytes": 2639
+    }
+  ],
+  "snapshot_note": "Request and helper files are end-of-Attempt snapshots, not guaranteed per-call upload bytes. Kernel/result are frozen artifacts. command.txt is original Trace text. Examples are evidence, not runnable production recipes."
+}

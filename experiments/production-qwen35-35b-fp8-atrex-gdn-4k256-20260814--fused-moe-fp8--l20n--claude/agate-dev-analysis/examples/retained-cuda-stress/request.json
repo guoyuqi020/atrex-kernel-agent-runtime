@@ -1,0 +1,7 @@
+{
+  "operation": "dev",
+  "command": "python3 moe_check_probe.py 512 && python3 moe_check_probe.py 2048 && python3 moe_stress_probe.py 2048",
+  "file_paths": ["tools/moe_check_probe.py", "tools/moe_stress_probe.py"],
+  "intent": "custom_harness",
+  "note": "single-pass register-cached k_quant_act: probes at 512/2048 tokens + skew/OOD stress"
+}

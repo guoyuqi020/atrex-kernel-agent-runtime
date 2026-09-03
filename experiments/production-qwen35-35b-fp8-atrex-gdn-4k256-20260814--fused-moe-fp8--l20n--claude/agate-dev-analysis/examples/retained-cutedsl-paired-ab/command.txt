@@ -1,0 +1,1 @@
+PYTHONPATH=agent/optimizer/src python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/req-ab-fused.json

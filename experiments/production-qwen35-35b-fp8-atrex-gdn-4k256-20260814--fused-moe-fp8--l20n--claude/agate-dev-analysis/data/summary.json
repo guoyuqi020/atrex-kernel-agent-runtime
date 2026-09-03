@@ -1,0 +1,64 @@
+{
+  "scope": {
+    "archive_root": "/Users/guoyuqi/atrex-runs/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude",
+    "index_sha256": "717438eb1b678f7d5e0379e2ee5e0f56e91221e09a9b8e4164b3dd938e2607c1",
+    "diagnostics": {
+      "AKA_sessions": 114,
+      "retained_sessions": 120,
+      "retained_dev_request_invocations_with_final_json": 608,
+      "retained_final_dev_request_files": 484,
+      "retained_dev_records": 616,
+      "retained_dev_records_linked_to_request": 520,
+      "retained_dev_records_multiple_call_matches": 9
+    }
+  },
+  "retained": {
+    "by_dsl": {
+      "cuda": 290,
+      "cutedsl": 210,
+      "triton": 116
+    },
+    "exit_codes": {
+      "0": 527,
+      "1": 77,
+      "2": 7,
+      "None": 1,
+      "3": 3,
+      "141": 1
+    },
+    "job_status": {
+      "succeeded": 615,
+      "rejected": 1
+    },
+    "unique_jobs": 615,
+    "nonzero_exit_failure_tags": {
+      "api_mismatch": 19,
+      "other_or_not_visible": 21,
+      "other_exception": 26,
+      "compilation": 4,
+      "illegal_memory_access": 16,
+      "assertion": 1,
+      "missing_file": 1
+    }
+  },
+  "aka": {
+    "requested_kinds": {
+      "profile": 726,
+      "dev": 870,
+      "auto": 34
+    },
+    "requested_kind_by_dsl": {
+      "cuda/profile": 296,
+      "cuda/dev": 250,
+      "cutedsl/dev": 333,
+      "triton/profile": 184,
+      "triton/dev": 287,
+      "cutedsl/profile": 246,
+      "triton/auto": 29,
+      "cuda/auto": 5
+    },
+    "observed_fallback_calls": 226,
+    "unique_observed_dev_jobs": 679,
+    "calls_with_background": 1058
+  }
+}

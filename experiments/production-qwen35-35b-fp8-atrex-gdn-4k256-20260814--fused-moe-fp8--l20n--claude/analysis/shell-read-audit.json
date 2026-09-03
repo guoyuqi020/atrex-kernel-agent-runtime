@@ -1,0 +1,4365 @@
+{
+  "method": "Heuristic whole-call exclusive buckets, prioritized as written in classify(); includes writer-only false positives from original utility-name label. Commands are never executed. Token exposure reuses the compaction-aware replay estimator. Top-five call references per bucket are included, not raw text.",
+  "groups": {
+    "AKA": {
+      "total": {
+        "calls": 9793,
+        "visible_tokens": 5872972,
+        "command_total_tokens": 30946995,
+        "result_total_tokens": 146112887,
+        "total_tokens": 177059882
+      },
+      "buckets": {
+        "history_plan_report_files": {
+          "calls": 931,
+          "visible_tokens": 748085,
+          "command_total_tokens": 3560874,
+          "result_total_tokens": 24438289,
+          "total_tokens": 27999163
+        },
+        "harness_framework_code": {
+          "calls": 1549,
+          "visible_tokens": 944677,
+          "command_total_tokens": 2395196,
+          "result_total_tokens": 26228323,
+          "total_tokens": 28623519
+        },
+        "gpu_execution_and_filter": {
+          "calls": 1762,
+          "visible_tokens": 679757,
+          "command_total_tokens": 3949471,
+          "result_total_tokens": 12883015,
+          "total_tokens": 16832486
+        },
+        "wiki_query_and_filter": {
+          "calls": 150,
+          "visible_tokens": 378935,
+          "command_total_tokens": 1022798,
+          "result_total_tokens": 9602072,
+          "total_tokens": 10624870
+        },
+        "cli_help": {
+          "calls": 567,
+          "visible_tokens": 206782,
+          "command_total_tokens": 1012148,
+          "result_total_tokens": 6470514,
+          "total_tokens": 7482662
+        },
+        "skills_docs_files": {
+          "calls": 410,
+          "visible_tokens": 191354,
+          "command_total_tokens": 1660890,
+          "result_total_tokens": 4298247,
+          "total_tokens": 5959137
+        },
+        "measurement_and_task_logs": {
+          "calls": 1274,
+          "visible_tokens": 861100,
+          "command_total_tokens": 3637237,
+          "result_total_tokens": 20211695,
+          "total_tokens": 23848932
+        },
+        "experiment_helper_code": {
+          "calls": 210,
+          "visible_tokens": 126804,
+          "command_total_tokens": 405476,
+          "result_total_tokens": 3520729,
+          "total_tokens": 3926205
+        },
+        "control_command_and_filter": {
+          "calls": 896,
+          "visible_tokens": 336591,
+          "command_total_tokens": 1868111,
+          "result_total_tokens": 8142259,
+          "total_tokens": 10010370
+        },
+        "kernel_implementation_files": {
+          "calls": 502,
+          "visible_tokens": 270952,
+          "command_total_tokens": 1018606,
+          "result_total_tokens": 8865984,
+          "total_tokens": 9884590
+        },
+        "write_only_name_match": {
+          "calls": 211,
+          "visible_tokens": 325437,
+          "command_total_tokens": 4591904,
+          "result_total_tokens": 2838041,
+          "total_tokens": 7429945
+        },
+        "directory_environment_listing": {
+          "calls": 220,
+          "visible_tokens": 59051,
+          "command_total_tokens": 341898,
+          "result_total_tokens": 1609685,
+          "total_tokens": 1951583
+        },
+        "operator_contract": {
+          "calls": 27,
+          "visible_tokens": 23073,
+          "command_total_tokens": 53096,
+          "result_total_tokens": 886252,
+          "total_tokens": 939348
+        },
+        "journal_api_and_filter": {
+          "calls": 228,
+          "visible_tokens": 184644,
+          "command_total_tokens": 2943847,
+          "result_total_tokens": 817870,
+          "total_tokens": 3761717
+        },
+        "reference_library_code": {
+          "calls": 671,
+          "visible_tokens": 377151,
+          "command_total_tokens": 1831326,
+          "result_total_tokens": 11390740,
+          "total_tokens": 13222066
+        },
+        "session_or_protocol_recovery": {
+          "calls": 109,
+          "visible_tokens": 127639,
+          "command_total_tokens": 507198,
+          "result_total_tokens": 3412149,
+          "total_tokens": 3919347
+        },
+        "other_mixed_reads": {
+          "calls": 76,
+          "visible_tokens": 30940,
+          "command_total_tokens": 146919,
+          "result_total_tokens": 497023,
+          "total_tokens": 643942
+        }
+      },
+      "exact_repeats_within_session": {
+        "same_command_extra_calls": 124,
+        "same_command_extra_token_exposure": 1183048,
+        "same_command_and_result_extra_calls": 5,
+        "same_command_and_result_extra_token_exposure": 106615
+      }
+    },
+    "retained": {
+      "total": {
+        "calls": 3384,
+        "visible_tokens": 2583788,
+        "command_total_tokens": 11104025,
+        "result_total_tokens": 56564575,
+        "total_tokens": 67668600
+      },
+      "buckets": {
+        "directory_environment_listing": {
+          "calls": 224,
+          "visible_tokens": 128515,
+          "command_total_tokens": 297902,
+          "result_total_tokens": 4162352,
+          "total_tokens": 4460254
+        },
+        "cli_help": {
+          "calls": 76,
+          "visible_tokens": 20356,
+          "command_total_tokens": 101421,
+          "result_total_tokens": 500163,
+          "total_tokens": 601584
+        },
+        "journal_api_and_filter": {
+          "calls": 225,
+          "visible_tokens": 154454,
+          "command_total_tokens": 636705,
+          "result_total_tokens": 2684751,
+          "total_tokens": 3321456
+        },
+        "measurement_and_task_logs": {
+          "calls": 137,
+          "visible_tokens": 71245,
+          "command_total_tokens": 231481,
+          "result_total_tokens": 1253803,
+          "total_tokens": 1485284
+        },
+        "skills_docs_files": {
+          "calls": 418,
+          "visible_tokens": 613245,
+          "command_total_tokens": 652247,
+          "result_total_tokens": 16864106,
+          "total_tokens": 17516353
+        },
+        "history_plan_report_files": {
+          "calls": 202,
+          "visible_tokens": 250287,
+          "command_total_tokens": 388927,
+          "result_total_tokens": 8270500,
+          "total_tokens": 8659427
+        },
+        "write_only_name_match": {
+          "calls": 924,
+          "visible_tokens": 638615,
+          "command_total_tokens": 6593906,
+          "result_total_tokens": 5040427,
+          "total_tokens": 11634333
+        },
+        "kernel_implementation_files": {
+          "calls": 488,
+          "visible_tokens": 283316,
+          "command_total_tokens": 940194,
+          "result_total_tokens": 8471309,
+          "total_tokens": 9411503
+        },
+        "gpu_execution_and_filter": {
+          "calls": 66,
+          "visible_tokens": 32928,
+          "command_total_tokens": 144748,
+          "result_total_tokens": 655364,
+          "total_tokens": 800112
+        },
+        "other_mixed_reads": {
+          "calls": 86,
+          "visible_tokens": 78570,
+          "command_total_tokens": 134036,
+          "result_total_tokens": 1387814,
+          "total_tokens": 1521850
+        },
+        "session_or_protocol_recovery": {
+          "calls": 143,
+          "visible_tokens": 73758,
+          "command_total_tokens": 427393,
+          "result_total_tokens": 1389425,
+          "total_tokens": 1816818
+        },
+        "harness_framework_code": {
+          "calls": 232,
+          "visible_tokens": 127388,
+          "command_total_tokens": 305276,
+          "result_total_tokens": 2903239,
+          "total_tokens": 3208515
+        },
+        "wiki_query_and_filter": {
+          "calls": 28,
+          "visible_tokens": 35907,
+          "command_total_tokens": 59476,
+          "result_total_tokens": 934569,
+          "total_tokens": 994045
+        },
+        "experiment_helper_code": {
+          "calls": 133,
+          "visible_tokens": 75028,
+          "command_total_tokens": 188864,
+          "result_total_tokens": 2045567,
+          "total_tokens": 2234431
+        },
+        "control_command_and_filter": {
+          "calls": 2,
+          "visible_tokens": 176,
+          "command_total_tokens": 1449,
+          "result_total_tokens": 1186,
+          "total_tokens": 2635
+        }
+      },
+      "exact_repeats_within_session": {
+        "same_command_extra_calls": 1,
+        "same_command_extra_token_exposure": 2364
+      }
+    }
+  },
+  "top_calls": [
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "2b4f84bc-2910-425c-8d1e-1aea5abe8a7b",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0007-3149d99b/2b4f84bc-2910-425c-8d1e-1aea5abe8a7b.jsonl",
+      "line": 19,
+      "tool_id": "toolu_b6e5eb2417774c48910a019d",
+      "command_sha256": "8ec02c36fd5cda7a9a61dab2b2376a11b9690772d75ab671beb3ba18d6c393d0",
+      "result_sha256": "6e5ad54d034b1d8295e42265886dc9f02796b92003290a8566abb7d632a84b61",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 5305,
+      "command_total_tokens": 1804,
+      "result_total_tokens": 427923,
+      "total_tokens": 429727
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "6899104c-823f-4814-803e-e9e8041db0fd",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0012-165cd491/6899104c-823f-4814-803e-e9e8041db0fd.jsonl",
+      "line": 19,
+      "tool_id": "toolu_3b58124904964fc681f69469",
+      "command_sha256": "d192455803ebbc9f5e43d4f9db9238f8700677bd051bfe659472afab479f49ed",
+      "result_sha256": "71ed19be7d0063fed1774356281cbb7984afc922bac86bac20da9bd6e7fae5a1",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6311,
+      "command_total_tokens": 285,
+      "result_total_tokens": 353136,
+      "total_tokens": 353421
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "23506316-96ef-4fca-87e2-07ac893e4350",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0005-e2ff858e/23506316-96ef-4fca-87e2-07ac893e4350.jsonl",
+      "line": 31,
+      "tool_id": "toolu_428a8cb681f74b2dacdb2fa4",
+      "command_sha256": "481a8a7f08b09916bc9ec4fb3b941b0e05754b607d8c27c85381231e09e3a9ce",
+      "result_sha256": "ee71c65537b2906473d897a0b424c08e0a05a622ffbc84c8bbcee1071bbfa17a",
+      "flags": [
+        "inline_python",
+        "python_json",
+        "python_read",
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4182,
+      "command_total_tokens": 2607,
+      "result_total_tokens": 323622,
+      "total_tokens": 326229
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "edd541fd-be56-48f1-8512-103dbc971312",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0008-70b7b2e7/edd541fd-be56-48f1-8512-103dbc971312.jsonl",
+      "line": 21,
+      "tool_id": "toolu_bb2f38b5966044b2b90a7047",
+      "command_sha256": "7e014b20cf04f97fb3fa6708ec48c1c26ea4ae3883727d8612f3d347655c1532",
+      "result_sha256": "108addd3ac33355ee03ff04f6af20101b67e6815b50c40b7b802e5d654acf16e",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6209,
+      "command_total_tokens": 2496,
+      "result_total_tokens": 314211,
+      "total_tokens": 316707
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "801a5a7c-2e3e-40d6-a0c6-46c54e898c1d",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0011-08c64556/801a5a7c-2e3e-40d6-a0c6-46c54e898c1d.jsonl",
+      "line": 23,
+      "tool_id": "toolu_eff4a8faff454f63a8967c02",
+      "command_sha256": "ea41e74e98410ac04b5e0b4d82183f4188f5fa9ebec1b92c50903bcb1a817bd8",
+      "result_sha256": "f450bf08c83514cc06925cae44bc54ec9580ab0ceea4b628248af0fba9cda07d",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4342,
+      "command_total_tokens": 365,
+      "result_total_tokens": 312264,
+      "total_tokens": 312629
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "a63a18bd-bb07-4b7a-b5a1-40316d97a226",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0019-90c2f208/a63a18bd-bb07-4b7a-b5a1-40316d97a226.jsonl",
+      "line": 413,
+      "tool_id": "toolu_d8cdbd7e9f264b49948a6ec6",
+      "command_sha256": "819bce59edd8bb89a5042df7f2e9ac2c791d2fd4af38dc40d331c165e8093a97",
+      "result_sha256": "feacfe7392c53777f67df3881b512d4ce09eb9521961a6d60d6e52effa054b49",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4151,
+      "command_total_tokens": 2655,
+      "result_total_tokens": 238148,
+      "total_tokens": 240803
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "8bb0efc6-b66a-42ce-9f44-cea6a84fd013",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0008-3e8f6256/8bb0efc6-b66a-42ce-9f44-cea6a84fd013.jsonl",
+      "line": 102,
+      "tool_id": "toolu_1c368bf168504b7a82362956",
+      "command_sha256": "249a01b54f6edf761b5987ba76058036320011566e37c6f6d4a669c145fd383f",
+      "result_sha256": "feacfe7392c53777f67df3881b512d4ce09eb9521961a6d60d6e52effa054b49",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4112,
+      "command_total_tokens": 336,
+      "result_total_tokens": 225830,
+      "total_tokens": 226166
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "55f3cd86-e247-4ea0-8dd0-ebe8b3987eec",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-12b93f3f/55f3cd86-e247-4ea0-8dd0-ebe8b3987eec.jsonl",
+      "line": 937,
+      "tool_id": "toolu_823000b0b59843fc83f12fdd",
+      "command_sha256": "25f2183172793109ca21ee8d6dc60d4ab099e59c9e58df7acdf2176d6efb830d",
+      "result_sha256": "d78c2b49c5901237d24722575f6b22e5e07328fc335b29b88fd0f52529dcd6ea",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 2925,
+      "command_total_tokens": 3000,
+      "result_total_tokens": 213490,
+      "total_tokens": 216490
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "fa232f26-aa8f-439e-a3f4-90aad8f1bb8b",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0009-b8db0196/fa232f26-aa8f-439e-a3f4-90aad8f1bb8b.jsonl",
+      "line": 148,
+      "tool_id": "toolu_2e1b19c421ad413494cb3f10",
+      "command_sha256": "249a01b54f6edf761b5987ba76058036320011566e37c6f6d4a669c145fd383f",
+      "result_sha256": "feacfe7392c53777f67df3881b512d4ce09eb9521961a6d60d6e52effa054b49",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4112,
+      "command_total_tokens": 276,
+      "result_total_tokens": 184770,
+      "total_tokens": 185046
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "5b66bf85-23c2-46f8-9d5c-9b94546fdf09",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0013-1b00bc4b/5b66bf85-23c2-46f8-9d5c-9b94546fdf09.jsonl",
+      "line": 144,
+      "tool_id": "toolu_6e83a187c20d4a10a0c515e2",
+      "command_sha256": "249a01b54f6edf761b5987ba76058036320011566e37c6f6d4a669c145fd383f",
+      "result_sha256": "feacfe7392c53777f67df3881b512d4ce09eb9521961a6d60d6e52effa054b49",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4112,
+      "command_total_tokens": 246,
+      "result_total_tokens": 164240,
+      "total_tokens": 164486
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "6d1d011a-793a-45e0-b44f-cfc670ddf483",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0016-d932ade8/6d1d011a-793a-45e0-b44f-cfc670ddf483.jsonl",
+      "line": 531,
+      "tool_id": "toolu_390e04c67c854975b589692e",
+      "command_sha256": "9ca43b22fa855ff142be3b9ed521d60c7cfc43418de179ca6112586e277a46f6",
+      "result_sha256": "559e31b896707d353882da5f5594992039bebf8702c46578e128452679dedd34",
+      "flags": [
+        "aka_sandbox",
+        "aka_sandbox_profile",
+        "gpu_entry",
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 9592,
+      "command_total_tokens": 4284,
+      "result_total_tokens": 475400,
+      "total_tokens": 479684
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "1f6d4a8c-64a8-45c7-83bc-3f1f244d847a",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0007-e8fdfc87/1f6d4a8c-64a8-45c7-83bc-3f1f244d847a.jsonl",
+      "line": 318,
+      "tool_id": "toolu_458a34b09ad14053b2517fad",
+      "command_sha256": "fdb6789bedb1d7b41f51bd103a25ab3e60bf420a107b2ddae0d80edd560d2649",
+      "result_sha256": "0e18d4babdc7fa388512c360f005bdb0cbf4490d52dbde0338a0c818b3b0e20a",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "head",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 8263,
+      "command_total_tokens": 2183,
+      "result_total_tokens": 295344,
+      "total_tokens": 297527
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "792079dd-647a-4425-b960-3cd2a334f394",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0003-3c0e57b1/792079dd-647a-4425-b960-3cd2a334f394.jsonl",
+      "line": 685,
+      "tool_id": "toolu_6aa8b6887bf34a15a779c45f",
+      "command_sha256": "2772a69d4cf7fadd76fcc72d6695a86b2732bc9380ae9098b7db051c7d15adb0",
+      "result_sha256": "1c65cd0030420ad9fc052bb6ced538f8f850194367a918edac94262e7b7f9d65",
+      "flags": [
+        "aka_sandbox",
+        "aka_sandbox_run",
+        "gpu_entry",
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3996,
+      "command_total_tokens": 3190,
+      "result_total_tokens": 224637,
+      "total_tokens": 227827
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "2b4f84bc-2910-425c-8d1e-1aea5abe8a7b",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0007-3149d99b/2b4f84bc-2910-425c-8d1e-1aea5abe8a7b.jsonl",
+      "line": 687,
+      "tool_id": "toolu_bad12fa02f844af9b2d84ae7",
+      "command_sha256": "f6029a20bb19520f588577cbe73399d264dd242b8de5269c3e148f6b202c8545",
+      "result_sha256": "0ebe309e8a99fe2fea62b137c0a6e32b4b10cd77a285a3a9e2d01a7774bb5bab",
+      "flags": [
+        "aka_sandbox",
+        "aka_sandbox_dev",
+        "gpu_entry",
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6011,
+      "command_total_tokens": 1960,
+      "result_total_tokens": 202470,
+      "total_tokens": 204430
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "2e386a95-eeec-4160-82fb-43ec7f5d246a",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0003-308b05bd/2e386a95-eeec-4160-82fb-43ec7f5d246a.jsonl",
+      "line": 129,
+      "tool_id": "toolu_62d8137617d549dd877de620",
+      "command_sha256": "d02275fab8e7ef0abe5952d6b3da3f680420a6908a8f7de97b8dd0145cd7bb2f",
+      "result_sha256": "81ce30c6fe6938717db22c687d5f3b2dde3659c500447f0d40ce3d4fc6d1b818",
+      "flags": [
+        "aka_sandbox",
+        "aka_sandbox_dev",
+        "gpu_entry",
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 8251,
+      "command_total_tokens": 6175,
+      "result_total_tokens": 192096,
+      "total_tokens": 198271
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "7ae918bf-9580-48a8-8dc9-b0b0ff9ac84d",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0009-fc9648a0/7ae918bf-9580-48a8-8dc9-b0b0ff9ac84d.jsonl",
+      "line": 246,
+      "tool_id": "toolu_dca96757b03844878914c176",
+      "command_sha256": "0eee52536a0cefdc80058f738a803abb71e9d97d481a55a15688680cadaeabb1",
+      "result_sha256": "71209d9f742e8df0c6ac421be92bf0a44c871a58e1d1f508d2b8b01a93dd63f5",
+      "flags": [
+        "aka_wiki",
+        "file_content_write_signal",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 8441,
+      "command_total_tokens": 20708,
+      "result_total_tokens": 494527,
+      "total_tokens": 515235
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "51b069be-cec4-4bb7-bd08-5caced358518",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0003-0be4b217/51b069be-cec4-4bb7-bd08-5caced358518.jsonl",
+      "line": 404,
+      "tool_id": "toolu_f6f0e1bca997499d87af686c",
+      "command_sha256": "4ab64297e1b88a7460d7e1326e89862e16b99b6a993de08da331c3b5d6563686",
+      "result_sha256": "814e693645ed9c1a75abb2bbb80506674187516df17c927357abb66c415d673c",
+      "flags": [
+        "aka_wiki",
+        "file_content_write_signal",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "cat",
+        "head",
+        "tail"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 8327,
+      "command_total_tokens": 25550,
+      "result_total_tokens": 382984,
+      "total_tokens": 408534
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "fda3779a-3620-46b4-8065-b6eacf15ab86",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-a94fe9c0/fda3779a-3620-46b4-8065-b6eacf15ab86.jsonl",
+      "line": 480,
+      "tool_id": "toolu_87b7fa68adba46ed93d7be87",
+      "command_sha256": "a15562fb599aeb3db555de47935fa3b0d04af165fd0a043d794dee5dddf38890",
+      "result_sha256": "6ef7eed3d1ee4b83079f122b9507b0d13985fcf00f8dff91345b34d9684551f6",
+      "flags": [
+        "aka_wiki",
+        "shell_read_or_filter"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6205,
+      "command_total_tokens": 9982,
+      "result_total_tokens": 368684,
+      "total_tokens": 378666
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "fda3779a-3620-46b4-8065-b6eacf15ab86",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-a94fe9c0/fda3779a-3620-46b4-8065-b6eacf15ab86.jsonl",
+      "line": 475,
+      "tool_id": "toolu_f808a228301b4e9b96f68826",
+      "command_sha256": "8d27e46bae94ed58f590619c9343f1f7f4e50bf9f8c84769179507f1fba527a4",
+      "result_sha256": "c22e9a6c67787bed37fe99f062cc65acdb8d34cfcfe06bca838f9b80f03895a8",
+      "flags": [
+        "aka_wiki",
+        "file_content_write_signal",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 5974,
+      "command_total_tokens": 54054,
+      "result_total_tokens": 317192,
+      "total_tokens": 371246
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "ff6bbd6b-5455-402f-9d4e-92ae47a182f8",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0014-9aab1fef/ff6bbd6b-5455-402f-9d4e-92ae47a182f8.jsonl",
+      "line": 327,
+      "tool_id": "toolu_fcdcf78f5cea4f4993a0b5b0",
+      "command_sha256": "cd89e29e79dc62e331cb1ea8abf4a387c4842e9492a98f3b6c3efebfcee61ece",
+      "result_sha256": "21c57596091bbb6185026f5ca730ab91dda7bd4de643a6402485c4d9d962058c",
+      "flags": [
+        "aka_wiki",
+        "file_content_write_signal",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6438,
+      "command_total_tokens": 25300,
+      "result_total_tokens": 322812,
+      "total_tokens": 348112
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "d66f99bf-0c85-44dd-b0ea-5a7c93dbb9ba",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0006-3f4babdf/d66f99bf-0c85-44dd-b0ea-5a7c93dbb9ba.jsonl",
+      "line": 76,
+      "tool_id": "toolu_a40aacf9d7904836ba16cf30",
+      "command_sha256": "8defa61031f8c7968c9ec36161147c19abe6128115e6be91e33148b61c64c98f",
+      "result_sha256": "cc8e033145edc6e2b97b2487bacd372c10bde7aa8a612b0bdfdf6af8eeb053c7",
+      "flags": [
+        "aka_sandbox",
+        "gpu_entry",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1735,
+      "command_total_tokens": 1485,
+      "result_total_tokens": 92232,
+      "total_tokens": 93717
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "7eb5d9b0-0a93-4c75-97d6-596669415a8b",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0005-d97216f7/7eb5d9b0-0a93-4c75-97d6-596669415a8b.jsonl",
+      "line": 72,
+      "tool_id": "toolu_d807fcc6c31c4f10933a517f",
+      "command_sha256": "8defa61031f8c7968c9ec36161147c19abe6128115e6be91e33148b61c64c98f",
+      "result_sha256": "cc8e033145edc6e2b97b2487bacd372c10bde7aa8a612b0bdfdf6af8eeb053c7",
+      "flags": [
+        "aka_sandbox",
+        "gpu_entry",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1735,
+      "command_total_tokens": 1485,
+      "result_total_tokens": 92232,
+      "total_tokens": 93717
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "e20f48ca-0346-45ad-8314-0fd14fc977b6",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0006-8d7d083d/e20f48ca-0346-45ad-8314-0fd14fc977b6.jsonl",
+      "line": 311,
+      "tool_id": "toolu_067bea59e1ac4cccba022eb3",
+      "command_sha256": "b95cb2830ddf83484282273625cc5c9e2c5c9193c20f34a6e3e835cf0678d158",
+      "result_sha256": "c2dbb3172b7aadae57b19cd9b1cbd9bd8855a06369fb877711883925c1e9fccd",
+      "flags": [
+        "aka_journal",
+        "journal_report_union",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "head",
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1694,
+      "command_total_tokens": 4940,
+      "result_total_tokens": 81549,
+      "total_tokens": 86489
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "f8a17ec0-f5b9-4144-b93f-0bbb8b8f743c",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0013-9b56efaf/f8a17ec0-f5b9-4144-b93f-0bbb8b8f743c.jsonl",
+      "line": 127,
+      "tool_id": "toolu_41eb2aad389f4dbdad7db273",
+      "command_sha256": "2c506832b94de89080b6b098e381f39209b959dd241f89c7d88d008fe1311a1d",
+      "result_sha256": "127f4f7cfeae81d376ecd90855890eaae2b3eb0623e9a131288e886474684129",
+      "flags": [
+        "aka_sandbox",
+        "gpu_entry",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1451,
+      "command_total_tokens": 1320,
+      "result_total_tokens": 77058,
+      "total_tokens": 78378
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "66261234-0227-4848-bd23-a154bac9434b",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0018-d25de35e/66261234-0227-4848-bd23-a154bac9434b.jsonl",
+      "line": 120,
+      "tool_id": "toolu_7195ff2accf449d5822fe854",
+      "command_sha256": "da1e3013c6dcd334d76d83ca7d7fd1880cb827504ba120b5c352378a01953427",
+      "result_sha256": "69f1e7d3d954168ef8adf5e62ef1f42eb1e40d245e256e0ebfc219069bb911de",
+      "flags": [
+        "aka_journal",
+        "journal_report_union",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1740,
+      "command_total_tokens": 19557,
+      "result_total_tokens": 50520,
+      "total_tokens": 70077
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "6b6a9337-da7a-40ab-a63c-d831760e6374",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0014-155b4015/6b6a9337-da7a-40ab-a63c-d831760e6374.jsonl",
+      "line": 551,
+      "tool_id": "toolu_abeb966cc0b24158bd1a9999",
+      "command_sha256": "760d1aa054e5211cc70c99f18a5c6d746887be032112db1dc5a0f619720245de",
+      "result_sha256": "f9583d61239c29dfed2a0aaa3517011e37515865ccd1dd6424237cd472a313ff",
+      "flags": [
+        "file_content_write_signal",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "cat",
+        "wc"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3022,
+      "command_total_tokens": 219876,
+      "result_total_tokens": 720,
+      "total_tokens": 220596
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "60dc0dd0-df72-4bc6-bc95-f87202c57fc7",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0010-8a5a3db2/60dc0dd0-df72-4bc6-bc95-f87202c57fc7.jsonl",
+      "line": 84,
+      "tool_id": "toolu_b8fbadd561084b0b9c5ee0a1",
+      "command_sha256": "f62834d8a152c54f7b5de1241c6c5c1e0b347b69fc774e991c494602e006b776",
+      "result_sha256": "1e498d011e1a2dabaf3790cb6fbc6b9e69c21964ec1413249cfa69c83b5fe6d1",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2552,
+      "command_total_tokens": 1008,
+      "result_total_tokens": 139370,
+      "total_tokens": 140378
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "2b4f84bc-2910-425c-8d1e-1aea5abe8a7b",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0007-3149d99b/2b4f84bc-2910-425c-8d1e-1aea5abe8a7b.jsonl",
+      "line": 98,
+      "tool_id": "toolu_6becb558eeae45f0a7d41dd2",
+      "command_sha256": "c1195295c3f6e3435d209831c7ce1883c152490e7dfec03600dbcb951982541f",
+      "result_sha256": "020dacd01ed409b0afa85eee4a8155ae4f62ca935eb30722b691147858cf1501",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "cat",
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 5,
+      "shell_parsed": true,
+      "visible_tokens": 1767,
+      "command_total_tokens": 4680,
+      "result_total_tokens": 108480,
+      "total_tokens": 113160
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "8c497ef5-48f3-450b-8026-40b032357fd0",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0008-bb601d12/8c497ef5-48f3-450b-8026-40b032357fd0.jsonl",
+      "line": 351,
+      "tool_id": "toolu_0a7b360f90244783b0091a5b",
+      "command_sha256": "8f5bcd56e83d6c945d43aa1e56c2f0dd8988ffce9976f4b07f693e51762a4098",
+      "result_sha256": "a394d2af383d13e21b9f5d194ab3ed7f201b62f88dee353132082370e3187e71",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 1627,
+      "command_total_tokens": 6237,
+      "result_total_tokens": 94736,
+      "total_tokens": 100973
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "68ec3c92-ee06-4c9c-9b64-18c45b4d8929",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0004-ad5ab266/68ec3c92-ee06-4c9c-9b64-18c45b4d8929.jsonl",
+      "line": 339,
+      "tool_id": "toolu_16d0dbc886f34ba497f5ccc4",
+      "command_sha256": "bd42bed011d2cf04beb7b0b6bc552974b9c10b3a6e48d4cb8cc1303aa4bc3f9a",
+      "result_sha256": "5c173d750e92d6479faabbf063e2211dbcb1d1c16ba93c0921647993a2e79b19",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1479,
+      "command_total_tokens": 4140,
+      "result_total_tokens": 96492,
+      "total_tokens": 100632
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "a63a18bd-bb07-4b7a-b5a1-40316d97a226",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0019-90c2f208/a63a18bd-bb07-4b7a-b5a1-40316d97a226.jsonl",
+      "line": 658,
+      "tool_id": "toolu_f4f80d07dbf34e2a95ae1be8",
+      "command_sha256": "5fe9ec3a91286896c5f49d5cc9a7876c5e642963453a46e6df96d8a633f2ed45",
+      "result_sha256": "e3ba924d0f14f92032255b4842819046ec7e9aff3c6b6686475798a269e3450e",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3429,
+      "command_total_tokens": 1710,
+      "result_total_tokens": 320634,
+      "total_tokens": 322344
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "122aecbb-f002-4fa8-b0c6-d9e5313a8c76",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0019-c1a9d865/122aecbb-f002-4fa8-b0c6-d9e5313a8c76.jsonl",
+      "line": 456,
+      "tool_id": "toolu_9ea53982ef62480c96e3a742",
+      "command_sha256": "9e80f884b2392b09702750e5e762e82180b4c041372eedebced99d9415342c3a",
+      "result_sha256": "8554bbcc42496c5863688a820fab0baf0f402d54894fec7c5b3514f75ff2294f",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6809,
+      "command_total_tokens": 3840,
+      "result_total_tokens": 316263,
+      "total_tokens": 320103
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "122aecbb-f002-4fa8-b0c6-d9e5313a8c76",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0019-c1a9d865/122aecbb-f002-4fa8-b0c6-d9e5313a8c76.jsonl",
+      "line": 510,
+      "tool_id": "toolu_5324399e490b456894120fd5",
+      "command_sha256": "0991012069af5d3f87df774dd0e55c2a3763230dd941a65fca4be7b64fd03943",
+      "result_sha256": "f2dfd7847415a463ab5ac2963d408541b89a9d9ab05ae2edd9f07cab277b4c98",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 8385,
+      "command_total_tokens": 3040,
+      "result_total_tokens": 307285,
+      "total_tokens": 310325
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "e2063f4c-c553-45d4-8587-6745a86a1e50",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0015-4ab75ab3/e2063f4c-c553-45d4-8587-6745a86a1e50.jsonl",
+      "line": 827,
+      "tool_id": "toolu_45e4dd03a44047baac2fcff0",
+      "command_sha256": "0ccf47080dc486586763069b284d6c9e2f69a3eaf8f64ed9b8902c52f44a02ac",
+      "result_sha256": "40a74de512d0207bb9db44b0d0d5c15b78c19b288ae9f9a2cd580fae409f5e42",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "cat",
+        "wc"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 9377,
+      "command_total_tokens": 9996,
+      "result_total_tokens": 299739,
+      "total_tokens": 309735
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "fda3779a-3620-46b4-8065-b6eacf15ab86",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-a94fe9c0/fda3779a-3620-46b4-8065-b6eacf15ab86.jsonl",
+      "line": 418,
+      "tool_id": "toolu_d21a49c45df846f3b99f9fff",
+      "command_sha256": "c60c5a31ec4181faf681ce4df07c4857c89e1d4799afefec173b78b9a676db71",
+      "result_sha256": "a1b26a0b9872245501e192c2422029fe08bba215ed6257966c648a900d02f11d",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4042,
+      "command_total_tokens": 1386,
+      "result_total_tokens": 305824,
+      "total_tokens": 307210
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "35b187d6-2239-4d2c-a339-53ca561469b3",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-a1f2b675/35b187d6-2239-4d2c-a339-53ca561469b3.jsonl",
+      "line": 143,
+      "tool_id": "toolu_5a5f046fa32243f5bd143d09",
+      "command_sha256": "44b4f6c05f6b31f93c84fa82e0070030f78cc52194f498f8c4d3a11838b056d3",
+      "result_sha256": "24121d866940b1538a6ea17ea1bd218e8db1d3a0074f53b728fc2e30dd94f2a5",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "cat",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 2164,
+      "command_total_tokens": 1586,
+      "result_total_tokens": 128280,
+      "total_tokens": 129866
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "35b187d6-2239-4d2c-a339-53ca561469b3",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-a1f2b675/35b187d6-2239-4d2c-a339-53ca561469b3.jsonl",
+      "line": 180,
+      "tool_id": "toolu_9ef575e6184243a4a1395e3b",
+      "command_sha256": "1578763240b175077b4ebbf9ba69605aebcbdba2d74857f7a659877a1b976f70",
+      "result_sha256": "2141237fd132d789e8776f2c03f18d96e4d0577f3523f1e18b9a32fc22ef988e",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "grep",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 2206,
+      "command_total_tokens": 2499,
+      "result_total_tokens": 107850,
+      "total_tokens": 110349
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "55f3cd86-e247-4ea0-8dd0-ebe8b3987eec",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-12b93f3f/55f3cd86-e247-4ea0-8dd0-ebe8b3987eec.jsonl",
+      "line": 965,
+      "tool_id": "toolu_913fd74dbefd43faa94cf0e3",
+      "command_sha256": "a0deb3c4f231a6d9e5cd2df1b606fc707f01cc384571e4836a472a4f3167eee4",
+      "result_sha256": "df201f75ab901878408887d5c170df54750c2ee2aaadda32305d5c69b510999a",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1413,
+      "command_total_tokens": 2044,
+      "result_total_tokens": 99720,
+      "total_tokens": 101764
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "35b187d6-2239-4d2c-a339-53ca561469b3",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-a1f2b675/35b187d6-2239-4d2c-a339-53ca561469b3.jsonl",
+      "line": 185,
+      "tool_id": "toolu_74d5b2afb4824257b852c78b",
+      "command_sha256": "dbfaba5f7c34b267b7115bb09fbb91d60d644d79cdf5f450a6cadd720c000c8a",
+      "result_sha256": "66f59c8acea9f5953a7ed0e750a25b4226b4802de85187de98383f0e9a943d38",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1428,
+      "command_total_tokens": 800,
+      "result_total_tokens": 69188,
+      "total_tokens": 69988
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "8249266d-5434-41b2-b8d1-f854bcc34b2f",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0011-59e3b054/8249266d-5434-41b2-b8d1-f854bcc34b2f.jsonl",
+      "line": 122,
+      "tool_id": "toolu_488cf74340af431fb51890ed",
+      "command_sha256": "8c9dab324e5897a5c531548932a002123b21bdc23284fef43cf48c83aad50745",
+      "result_sha256": "3ee7f308c729be2d3d92d24b22904867f742f430e47c29b9d5cef71951aec185",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2350,
+      "command_total_tokens": 450,
+      "result_total_tokens": 67715,
+      "total_tokens": 68165
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "7eb8a518-6205-42e3-b746-56b3a4528479",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-29fd816f/7eb8a518-6205-42e3-b746-56b3a4528479.jsonl",
+      "line": 955,
+      "tool_id": "toolu_38f40f0b881e48288346e580",
+      "command_sha256": "1cd975dd6d1f06bd03e271d6d0cde426cb203822be588b07f54bf2fa1e987534",
+      "result_sha256": "3f120ce77998620c040c0a83f3a510d11e48c7dbe5b3dd6f960604b72407a18e",
+      "flags": [
+        "aka_control_union",
+        "git",
+        "git_diff",
+        "shell_read_or_filter"
+      ],
+      "bucket": "control_command_and_filter",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6019,
+      "command_total_tokens": 810,
+      "result_total_tokens": 318212,
+      "total_tokens": 319022
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "203b3061-a17d-42c7-8f66-2687b290b73c",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0010-da18ce01/203b3061-a17d-42c7-8f66-2687b290b73c.jsonl",
+      "line": 364,
+      "tool_id": "toolu_231fed608847449eb4745369",
+      "command_sha256": "af13c9b2165fd572f0b54aeaff55a6dd4fad480cd3b72f3623361b5f99626a9b",
+      "result_sha256": "8cdf335071ff866c4a88da1f7cf432e77e4d4a63a078577c9901f99f9c8dc712",
+      "flags": [
+        "aka_control_union",
+        "git",
+        "git_diff",
+        "shell_read_or_filter"
+      ],
+      "bucket": "control_command_and_filter",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 5541,
+      "command_total_tokens": 360,
+      "result_total_tokens": 243452,
+      "total_tokens": 243812
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "dddc797d-672b-4f25-9da0-b6ab7f3e4cf8",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0014-f6fbadda/dddc797d-672b-4f25-9da0-b6ab7f3e4cf8.jsonl",
+      "line": 763,
+      "tool_id": "toolu_a60cb444738a4233839e05c9",
+      "command_sha256": "de7865183c3ddfab2096a9bdabb4cbdfccf3d6e6d98be4195abb69dda7ab08bb",
+      "result_sha256": "f1d45908e9a02f33dc191349dc2c4f9be05cbf132ecfb2d6870da1ef3f128683",
+      "flags": [
+        "aka_control_union",
+        "git",
+        "git_diff",
+        "shell_read_or_filter"
+      ],
+      "bucket": "control_command_and_filter",
+      "text_programs": [
+        "awk",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 3584,
+      "command_total_tokens": 1456,
+      "result_total_tokens": 195690,
+      "total_tokens": 197146
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "dddc797d-672b-4f25-9da0-b6ab7f3e4cf8",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0014-f6fbadda/dddc797d-672b-4f25-9da0-b6ab7f3e4cf8.jsonl",
+      "line": 760,
+      "tool_id": "toolu_d665c8917ff64109a8f3eba8",
+      "command_sha256": "72452bca4715682eb578b74eb4898deaa72983baf39725889e56c790606bbbe7",
+      "result_sha256": "9d75dd38d32b5ba66bcd7bf7c72c4b9abc0df5ccae92df115f5d402ac3fe2fce",
+      "flags": [
+        "aka_control_union",
+        "git",
+        "git_diff",
+        "shell_read_or_filter"
+      ],
+      "bucket": "control_command_and_filter",
+      "text_programs": [
+        "awk",
+        "grep",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 3119,
+      "command_total_tokens": 2166,
+      "result_total_tokens": 172536,
+      "total_tokens": 174702
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "e2063f4c-c553-45d4-8587-6745a86a1e50",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0015-4ab75ab3/e2063f4c-c553-45d4-8587-6745a86a1e50.jsonl",
+      "line": 798,
+      "tool_id": "toolu_998a7292c1804383bcf94f44",
+      "command_sha256": "f351936f08a3346c5e75387f9b98641ae51187629530223f7825813396897cde",
+      "result_sha256": "c4629f83b28a61fa6cc8b7916f268dc9ba26b08a0869de89b75ee73b6ad8826f",
+      "flags": [
+        "aka_control_union",
+        "git",
+        "git_diff",
+        "shell_read_or_filter"
+      ],
+      "bucket": "control_command_and_filter",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4493,
+      "command_total_tokens": 370,
+      "result_total_tokens": 161388,
+      "total_tokens": 161758
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "7eb8a518-6205-42e3-b746-56b3a4528479",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-29fd816f/7eb8a518-6205-42e3-b746-56b3a4528479.jsonl",
+      "line": 1193,
+      "tool_id": "toolu_6cdac16cb52a489c85fbdb06",
+      "command_sha256": "7448e66c68b5b1f7d47022b63f7aaf292bfa300cb5ab4690ace727905d5ca4a2",
+      "result_sha256": "38bac50af9093b3cca2451866686a8716c4b3ce5df64fbb87e1afe22a9dba336",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6301,
+      "command_total_tokens": 884,
+      "result_total_tokens": 207075,
+      "total_tokens": 207959
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "a63a18bd-bb07-4b7a-b5a1-40316d97a226",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0019-90c2f208/a63a18bd-bb07-4b7a-b5a1-40316d97a226.jsonl",
+      "line": 724,
+      "tool_id": "toolu_e78d4746e53b43eb9da23959",
+      "command_sha256": "0e4c87da6360ee68e898104b5af06ab5ca78a90c8a0312ad97eb1357ad4a5a93",
+      "result_sha256": "fac8e083d4df8b45cc6eee64aad53425475e87ad3352c3374c16254ba25f86da",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "grep",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 2060,
+      "command_total_tokens": 7544,
+      "result_total_tokens": 159408,
+      "total_tokens": 166952
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "a63a18bd-bb07-4b7a-b5a1-40316d97a226",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0019-90c2f208/a63a18bd-bb07-4b7a-b5a1-40316d97a226.jsonl",
+      "line": 765,
+      "tool_id": "toolu_2932191e85844bebb1fd4db4",
+      "command_sha256": "b0179b44e9d5d906cc0d947349fc65e72f1b0b44257786bc688076b1c9f21555",
+      "result_sha256": "0d879bdd651bb436d4f71354736f217a1c689de38ef9a80545fe829880ff3bb7",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1788,
+      "command_total_tokens": 3650,
+      "result_total_tokens": 125136,
+      "total_tokens": 128786
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "249eec70-a744-411a-99c8-d13972295ec4",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0012-0e20bbc3/249eec70-a744-411a-99c8-d13972295ec4.jsonl",
+      "line": 874,
+      "tool_id": "toolu_150bd68e66d5402c82e797f5",
+      "command_sha256": "22176f0b2f095ada816ec6fd46de28aafd71d71c77c6d9283d0f9e5d2a7cfec8",
+      "result_sha256": "948d00bb1e952b51f15e11f5e39137a51fb04514402b1320f8e9dac41e1a7d5b",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1907,
+      "command_total_tokens": 4608,
+      "result_total_tokens": 115605,
+      "total_tokens": 120213
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "d8623c2b-ec19-4378-aba1-b6bd707459cd",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0002-e215a199/d8623c2b-ec19-4378-aba1-b6bd707459cd.jsonl",
+      "line": 67,
+      "tool_id": "toolu_9b6678f5275c4ff28019274f",
+      "command_sha256": "fe8a343df168ea9ccabbf7d4efa056d4ba0a01d1423e727fc584edb9f5931275",
+      "result_sha256": "ce54c51e1ef106337e95b042a246788a70471ef3eaf1fc4718ea7d73dd78c58e",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1712,
+      "command_total_tokens": 748,
+      "result_total_tokens": 113967,
+      "total_tokens": 114715
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "d4f896e3-2573-4558-ab68-e78f5d4a6c8c",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0008-a6d0c7c5/d4f896e3-2573-4558-ab68-e78f5d4a6c8c.jsonl",
+      "line": 351,
+      "tool_id": "toolu_98f80206a4e646779206e911",
+      "command_sha256": "f9868bae7bc56a2f73b9118e6774a90cc8e781f76aed062f1663cf7640fe30ff",
+      "result_sha256": "76d7b372e672d40f8c20477de28675d4d39cde2aa381d9999a3b7f75b0803aeb",
+      "flags": [
+        "aka_journal",
+        "file_content_write_signal",
+        "journal_report_union",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 2867,
+      "command_total_tokens": 71440,
+      "result_total_tokens": 195951,
+      "total_tokens": 267391
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "d2df267e-24df-4367-992b-556e8dc68d88",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0003-6bec7356/d2df267e-24df-4367-992b-556e8dc68d88.jsonl",
+      "line": 1054,
+      "tool_id": "toolu_1d7dcbc601094e13ada69457",
+      "command_sha256": "784aeca51a5b3154a4402649d6fe5bb2d5345248257a9da7991519ba87b11ae3",
+      "result_sha256": "8617b2f35b6f48316e6c67f7070287dd5033f1ee798f9c56e9866e6da131331a",
+      "flags": [
+        "aka_journal",
+        "file_content_write_signal",
+        "journal_report_union",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 5137,
+      "command_total_tokens": 40840,
+      "result_total_tokens": 160524,
+      "total_tokens": 201364
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "4ad17868-86f8-4ae7-b198-3b977691a3b8",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-8871f3d3/4ad17868-86f8-4ae7-b198-3b977691a3b8.jsonl",
+      "line": 471,
+      "tool_id": "toolu_1a2d7dacf6784e19a8a5c6e6",
+      "command_sha256": "ddb39980cbf5b1b5d4d43929d6a8c9f64ab6bc7d6da801c5ca683fd063671e35",
+      "result_sha256": "4ff03b4f8a65d4511492a185eda6d486ab68bfd1d0e16b7e205ae02f9b5b34ff",
+      "flags": [
+        "aka_journal",
+        "file_content_write_signal",
+        "journal_report_union",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 3723,
+      "command_total_tokens": 63024,
+      "result_total_tokens": 128061,
+      "total_tokens": 191085
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "35b187d6-2239-4d2c-a339-53ca561469b3",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-a1f2b675/35b187d6-2239-4d2c-a339-53ca561469b3.jsonl",
+      "line": 706,
+      "tool_id": "toolu_be0bc4045bbd47ec8f6a98d6",
+      "command_sha256": "71e8e7b09a7533007743fdf5804aa4bffc6853c7db8b14bf66436a74665a95c4",
+      "result_sha256": "8016f1d146cbced8d935f16e7a904e6b16c756c808a755d34c7207934f12cc2d",
+      "flags": [
+        "aka_journal",
+        "file_content_write_signal",
+        "inline_python",
+        "journal_report_union",
+        "python_json",
+        "python_read",
+        "python_write_or_copy",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 3603,
+      "command_total_tokens": 55862,
+      "result_total_tokens": 132548,
+      "total_tokens": 188410
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "e5e54f34-b653-43eb-b20d-fcbb69e0f702",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0006-8d8ad775/e5e54f34-b653-43eb-b20d-fcbb69e0f702.jsonl",
+      "line": 315,
+      "tool_id": "toolu_5a58a76542c643b1a2867f31",
+      "command_sha256": "bb7bf16cf8e4eae74777ecf736ba95e673daf9bf0bb6e8e42aebdeae17f1c594",
+      "result_sha256": "adc180def3621ec60a2f7b6eb7b3698611838ed7dac32c9e92caea878b4caa64",
+      "flags": [
+        "aka_journal",
+        "file_content_write_signal",
+        "journal_report_union",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 2470,
+      "command_total_tokens": 54210,
+      "result_total_tokens": 104704,
+      "total_tokens": 158914
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "98862147-f89c-4cd5-8078-fdbdb651d60d",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0010-e5dbd293/98862147-f89c-4cd5-8078-fdbdb651d60d.jsonl",
+      "line": 339,
+      "tool_id": "toolu_f06d9c8d54274e4f8a372904",
+      "command_sha256": "8a7e518bc86f44752cc1c7c5733dbc06919deec7239c0f9ed024de4d517ea8cf",
+      "result_sha256": "bbf0988c04cc0614c004b39aa69df120c01a474aac987c73c60f5d41b2939623",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 5,
+      "shell_parsed": true,
+      "visible_tokens": 1033,
+      "command_total_tokens": 4810,
+      "result_total_tokens": 61376,
+      "total_tokens": 66186
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "801a5a7c-2e3e-40d6-a0c6-46c54e898c1d",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0011-08c64556/801a5a7c-2e3e-40d6-a0c6-46c54e898c1d.jsonl",
+      "line": 72,
+      "tool_id": "toolu_8701310f806d4425b4abd588",
+      "command_sha256": "46e8950f94f0da7f878411f7843115b8d2d4cf8c2c7bee49ae24d26a1e8ae1a1",
+      "result_sha256": "758ea3aae57fa93c9549790b75fa99fa2375568ef999d90f703fa78351e737b7",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "cat",
+        "grep",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 870,
+      "command_total_tokens": 3315,
+      "result_total_tokens": 52416,
+      "total_tokens": 55731
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "a63a18bd-bb07-4b7a-b5a1-40316d97a226",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0019-90c2f208/a63a18bd-bb07-4b7a-b5a1-40316d97a226.jsonl",
+      "line": 137,
+      "tool_id": "toolu_679d0d74f4474085b5116ae0",
+      "command_sha256": "de9b7b6f8dc1c71bbee85393238ad4bdade6368d529d7b487c1e0d0d0bcd6937",
+      "result_sha256": "24da6f9f3a9db367edb263cd3c3a2dda36ded2018063e6a62266c04b1b40df9d",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "cat",
+        "grep",
+        "head",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 4,
+      "shell_parsed": true,
+      "visible_tokens": 849,
+      "command_total_tokens": 3132,
+      "result_total_tokens": 45315,
+      "total_tokens": 48447
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "60dc0dd0-df72-4bc6-bc95-f87202c57fc7",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0010-8a5a3db2/60dc0dd0-df72-4bc6-bc95-f87202c57fc7.jsonl",
+      "line": 151,
+      "tool_id": "toolu_50ef25a8f825423ba81653a8",
+      "command_sha256": "65f7b45f4cbc23811abd79b7b634f900f2878eec45149013300897123cabf92f",
+      "result_sha256": "ee1829fe8383327436b59cdfb1cd741bdfe1b9a95cf64612d9fff68a7b26873f",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "cat",
+        "grep",
+        "head",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 5,
+      "shell_parsed": true,
+      "visible_tokens": 1110,
+      "command_total_tokens": 4257,
+      "result_total_tokens": 42462,
+      "total_tokens": 46719
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "5b79e864-e1c3-4bd1-b9e3-ec7b060831cc",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0017-005b6f3f/5b79e864-e1c3-4bd1-b9e3-ec7b060831cc.jsonl",
+      "line": 1940,
+      "tool_id": "toolu_5a2e7344ee1d4c77a00cfdc1",
+      "command_sha256": "9c28d6d65ac192e2a35b7a61b1e169aefb18079da9952fcc47fe739d612759da",
+      "result_sha256": "2b06e6ce2522cb32ce8a674ca7288b0a0b496119d88e24219b5d489f1a2aa583",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 895,
+      "command_total_tokens": 2444,
+      "result_total_tokens": 43248,
+      "total_tokens": 45692
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "a63a18bd-bb07-4b7a-b5a1-40316d97a226",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0019-90c2f208/a63a18bd-bb07-4b7a-b5a1-40316d97a226.jsonl",
+      "line": 16,
+      "tool_id": "toolu_d5f2500eaf3b430dbd62ad47",
+      "command_sha256": "c20673ad5fc6b4493104cb16fb2769e89bf8cdcab90d82dcc7363eeca95f648c",
+      "result_sha256": "e91be4a6274d4562980f3f73683eb5df7e39124b19fcfad1fb90c85fd13627ee",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "operator_contract",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1148,
+      "command_total_tokens": 664,
+      "result_total_tokens": 93480,
+      "total_tokens": 94144
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "462c0d04-114d-45ab-b678-5d51b6bac3da",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0002-a85919cb/462c0d04-114d-45ab-b678-5d51b6bac3da.jsonl",
+      "line": 33,
+      "tool_id": "toolu_580716f05e0e4156bee765e7",
+      "command_sha256": "53e0966739b6461b61489f023b2f50af3858e15b31a648c0ce68c2eb1ea27c9a",
+      "result_sha256": "e91be4a6274d4562980f3f73683eb5df7e39124b19fcfad1fb90c85fd13627ee",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "operator_contract",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1181,
+      "command_total_tokens": 2870,
+      "result_total_tokens": 78660,
+      "total_tokens": 81530
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "fda3779a-3620-46b4-8065-b6eacf15ab86",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-a94fe9c0/fda3779a-3620-46b4-8065-b6eacf15ab86.jsonl",
+      "line": 34,
+      "tool_id": "toolu_7ac3a69d3c3c472e87d1e777",
+      "command_sha256": "c20673ad5fc6b4493104cb16fb2769e89bf8cdcab90d82dcc7363eeca95f648c",
+      "result_sha256": "e91be4a6274d4562980f3f73683eb5df7e39124b19fcfad1fb90c85fd13627ee",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "operator_contract",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1148,
+      "command_total_tokens": 560,
+      "result_total_tokens": 78660,
+      "total_tokens": 79220
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "60dc0dd0-df72-4bc6-bc95-f87202c57fc7",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0010-8a5a3db2/60dc0dd0-df72-4bc6-bc95-f87202c57fc7.jsonl",
+      "line": 78,
+      "tool_id": "toolu_730ec17a6bb4491c83fe1b9b",
+      "command_sha256": "a9a4c171c3c68496bccb6bccd19cfec0c2afae41db0114f79144a6fec1950b03",
+      "result_sha256": "e91be4a6274d4562980f3f73683eb5df7e39124b19fcfad1fb90c85fd13627ee",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "operator_contract",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1153,
+      "command_total_tokens": 741,
+      "result_total_tokens": 63840,
+      "total_tokens": 64581
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "7eb8a518-6205-42e3-b746-56b3a4528479",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-29fd816f/7eb8a518-6205-42e3-b746-56b3a4528479.jsonl",
+      "line": 37,
+      "tool_id": "toolu_84ad431ab3654be1bc1d1872",
+      "command_sha256": "4b4a4fd98fc5ec6d41509d3a4c2ed3ab0abed19a3a82b99b8f21406b94a9f281",
+      "result_sha256": "9204830aa3d9c5cd8af5a54194787b0879d534920403e4ccc7d6eb8ede0dd41e",
+      "flags": [
+        "explicit_error",
+        "shell_read_or_filter"
+      ],
+      "bucket": "operator_contract",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1167,
+      "command_total_tokens": 715,
+      "result_total_tokens": 62316,
+      "total_tokens": 63031
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "d769dc1e-de76-4297-93d1-be0f6bb33e3d",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0019-cc51ec28/d769dc1e-de76-4297-93d1-be0f6bb33e3d.jsonl",
+      "line": 134,
+      "tool_id": "toolu_ac00ea4053d3457ebefd2820",
+      "command_sha256": "b442f9412f11c386b2ba3f315c3f4fe25290f2998fc423d7f4759463f41d4d47",
+      "result_sha256": "c10116118c1857796216e79c7e6fc1a0dd486ccb9ff9500fc39879657c7db181",
+      "flags": [
+        "aka_control_union",
+        "aka_journal",
+        "aka_phase_marker",
+        "journal_report_union",
+        "shell_read_or_filter"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 3363,
+      "command_total_tokens": 46436,
+      "result_total_tokens": 79217,
+      "total_tokens": 125653
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "8c497ef5-48f3-450b-8026-40b032357fd0",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0008-bb601d12/8c497ef5-48f3-450b-8026-40b032357fd0.jsonl",
+      "line": 411,
+      "tool_id": "toolu_14cf982d13ea4ad9b489a5d2",
+      "command_sha256": "5d62ca95c7e089c0d1b6ec70c2801ee8efad13a6f5c42273d58f3d07f65fb1de",
+      "result_sha256": "07138b3db92b2bdf8e04b2cb4902e0a53876e443d3119fece29cdd6627c54c78",
+      "flags": [
+        "aka_journal",
+        "journal_report_union",
+        "shell_read_or_filter"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2161,
+      "command_total_tokens": 38352,
+      "result_total_tokens": 64014,
+      "total_tokens": 102366
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "d66f99bf-0c85-44dd-b0ea-5a7c93dbb9ba",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0006-3f4babdf/d66f99bf-0c85-44dd-b0ea-5a7c93dbb9ba.jsonl",
+      "line": 73,
+      "tool_id": "toolu_e5b57f119edf42da957516cc",
+      "command_sha256": "2f0dcb46c1f91a23fa26c4259b3bc1f42605a608c7f52eef22877c6f031b63a8",
+      "result_sha256": "b816d0fec4a696cdfd749f26d4540823339e43d073097d2183e9888dff7ff66b",
+      "flags": [
+        "aka_control_union",
+        "aka_journal",
+        "aka_phase_marker",
+        "journal_report_union",
+        "shell_read_or_filter"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1172,
+      "command_total_tokens": 30464,
+      "result_total_tokens": 34540,
+      "total_tokens": 65004
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "fda3779a-3620-46b4-8065-b6eacf15ab86",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-a94fe9c0/fda3779a-3620-46b4-8065-b6eacf15ab86.jsonl",
+      "line": 438,
+      "tool_id": "toolu_e5c62abe4f7647d9b72055b3",
+      "command_sha256": "ef8c5446ec5fb7a9d1109d3c479c784484d0ec4e70632dcd37c50a1f135ffe43",
+      "result_sha256": "9eba2d9b08f6acc0159d9796208173971e592f365baa8a0ca2a7eb949415c411",
+      "flags": [
+        "aka_journal",
+        "file_content_write_signal",
+        "journal_report_union",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "cat",
+        "tail"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 893,
+      "command_total_tokens": 63648,
+      "result_total_tokens": 639,
+      "total_tokens": 64287
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "fa232f26-aa8f-439e-a3f4-90aad8f1bb8b",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0009-b8db0196/fa232f26-aa8f-439e-a3f4-90aad8f1bb8b.jsonl",
+      "line": 354,
+      "tool_id": "toolu_e1321c7becce461a8166bad7",
+      "command_sha256": "54bd49e5710f9e41b86f72ed850ceabc18bc035a6ed778b48c0fc42cc274b004",
+      "result_sha256": "06e25e721d5d69e30c5702abbc75a29f6fa85cb303e1663a27ad8bc8eb8ea685",
+      "flags": [
+        "aka_journal",
+        "journal_report_union",
+        "shell_read_or_filter"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 860,
+      "command_total_tokens": 61050,
+      "result_total_tokens": 2555,
+      "total_tokens": 63605
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "55f3cd86-e247-4ea0-8dd0-ebe8b3987eec",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-12b93f3f/55f3cd86-e247-4ea0-8dd0-ebe8b3987eec.jsonl",
+      "line": 128,
+      "tool_id": "toolu_a92e087346f84778b79d4b19",
+      "command_sha256": "acb6b511e94269c908d9b7f6c43debc543e49b1a65c0ecb5708020d0a1ad83e5",
+      "result_sha256": "e50bd4f594782659be9c18f61a53cac77bb0fdc45eb421f4c1cf67f5e8a7e3d9",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "reference_library_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4436,
+      "command_total_tokens": 1961,
+      "result_total_tokens": 228748,
+      "total_tokens": 230709
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "55f3cd86-e247-4ea0-8dd0-ebe8b3987eec",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-12b93f3f/55f3cd86-e247-4ea0-8dd0-ebe8b3987eec.jsonl",
+      "line": 120,
+      "tool_id": "toolu_447d8c5fe382472fb8f3cd21",
+      "command_sha256": "c57005eee778d61524206e5fb2be79a98c490db26f3ee18c09bae8ef1084c86a",
+      "result_sha256": "37bb0eb8d9ce775e264a6639c7c8b77d0a617f9f9a630bd59299856e8a3e4b99",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "reference_library_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4083,
+      "command_total_tokens": 1925,
+      "result_total_tokens": 218592,
+      "total_tokens": 220517
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "55f3cd86-e247-4ea0-8dd0-ebe8b3987eec",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-12b93f3f/55f3cd86-e247-4ea0-8dd0-ebe8b3987eec.jsonl",
+      "line": 112,
+      "tool_id": "toolu_4ab0cd8cb5924f5dbf9ea94d",
+      "command_sha256": "a309f40257e7b009d6ff4e1b36decf800f62fed97f622e99474aa1676aa60a40",
+      "result_sha256": "e73c0823dbb3371bea7f90cd29ac18cb3e4a2cd5283fa662c97686df216d5077",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "reference_library_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3440,
+      "command_total_tokens": 1995,
+      "result_total_tokens": 190680,
+      "total_tokens": 192675
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "55f3cd86-e247-4ea0-8dd0-ebe8b3987eec",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-12b93f3f/55f3cd86-e247-4ea0-8dd0-ebe8b3987eec.jsonl",
+      "line": 125,
+      "tool_id": "toolu_e95c01de48f34b1c9c0838b9",
+      "command_sha256": "768277e1ac4055a3979e524fe86f0f0aba7232fb0771cd7c323c2c39908e44c2",
+      "result_sha256": "15c6cca710d9cd46ce1dc27b59867fa02986253c995c199acdd64971b0205d05",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "reference_library_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3428,
+      "command_total_tokens": 1944,
+      "result_total_tokens": 179776,
+      "total_tokens": 181720
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "55f3cd86-e247-4ea0-8dd0-ebe8b3987eec",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-12b93f3f/55f3cd86-e247-4ea0-8dd0-ebe8b3987eec.jsonl",
+      "line": 117,
+      "tool_id": "toolu_034f72ce1eb44794a4b3c162",
+      "command_sha256": "86c45d02e4a66240f9c9edeb1ae384a835aac6c97dba884f3f41370eeb2ed7db",
+      "result_sha256": "0620be4233d3d6977feb9c2278c8335253049680a42a3f72d08e1de96a359ba6",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "reference_library_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2770,
+      "command_total_tokens": 1960,
+      "result_total_tokens": 150425,
+      "total_tokens": 152385
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "f8a17ec0-f5b9-4144-b93f-0bbb8b8f743c",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0013-9b56efaf/f8a17ec0-f5b9-4144-b93f-0bbb8b8f743c.jsonl",
+      "line": 689,
+      "tool_id": "toolu_636d727db14d46499f9f3ed5",
+      "command_sha256": "f773b22df3c205dc810b0098c7bf4272740a42231c637fa37c6efb7737ddc6d0",
+      "result_sha256": "4edb226039303e9c3793d056e50d30a3939182275698df1913af2bd844968805",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 6315,
+      "command_total_tokens": 6500,
+      "result_total_tokens": 397760,
+      "total_tokens": 404260
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "e20f48ca-0346-45ad-8314-0fd14fc977b6",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0006-8d7d083d/e20f48ca-0346-45ad-8314-0fd14fc977b6.jsonl",
+      "line": 356,
+      "tool_id": "toolu_9229bc114f8e4b02bddf0176",
+      "command_sha256": "11e31ccd81935620e6ccd5c64519e7789071824cc45f7a46892fb306bbbd8e3b",
+      "result_sha256": "8377022bf3c60d2c3761eee1ce0512205de86ba778bf4f802e88750a9bc81c7e",
+      "flags": [
+        "inline_python",
+        "python_read",
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 4,
+      "shell_parsed": true,
+      "visible_tokens": 8371,
+      "command_total_tokens": 16254,
+      "result_total_tokens": 327344,
+      "total_tokens": 343598
+    },
+    {
+      "group": "AKA",
+      "dsl": "cuda",
+      "session": "b394f601-d29a-41e5-a252-af8f190ea24f",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0009-8afa1228/b394f601-d29a-41e5-a252-af8f190ea24f.jsonl",
+      "line": 334,
+      "tool_id": "toolu_622744873dab424d9448f234",
+      "command_sha256": "e85235dd472755cb3f1c374356546a49360e7a2c5c495216bbcec86ac60e0afd",
+      "result_sha256": "0eb19112569431bdfebd2aa9b019c6c0d5c53282b92c5ea6966424458b830fbd",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 6,
+      "shell_parsed": true,
+      "visible_tokens": 6815,
+      "command_total_tokens": 12643,
+      "result_total_tokens": 301116,
+      "total_tokens": 313759
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "9204870a-36cc-4a54-ba64-52864384af82",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0017-40b0c6c5/9204870a-36cc-4a54-ba64-52864384af82.jsonl",
+      "line": 341,
+      "tool_id": "toolu_8eaf18ccc2934b6f898b0d62",
+      "command_sha256": "f3b2ba0f4ca630a260d7f35e682ccff0316fd349a950eb7bfbd1f8071679bc9b",
+      "result_sha256": "1325f81d80cfe26d8e80f3d3ae0853e4afe8c4ee5411dbc23ab4ee5fc7f447e2",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 3550,
+      "command_total_tokens": 5600,
+      "result_total_tokens": 189750,
+      "total_tokens": 195350
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "fa232f26-aa8f-439e-a3f4-90aad8f1bb8b",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0009-b8db0196/fa232f26-aa8f-439e-a3f4-90aad8f1bb8b.jsonl",
+      "line": 742,
+      "tool_id": "toolu_0691ad931c2a41f0bc5fe830",
+      "command_sha256": "91e4914e1dd94424b21c6aebaacd0da70fbfc880bbac7bec4ab93e08ea1a8002",
+      "result_sha256": "79c9e6db4990344d819f9f9cd427c556c0a92115446989078222a070cbd2bb41",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 6915,
+      "command_total_tokens": 4089,
+      "result_total_tokens": 189672,
+      "total_tokens": 193761
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "e20f48ca-0346-45ad-8314-0fd14fc977b6",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0006-8d7d083d/e20f48ca-0346-45ad-8314-0fd14fc977b6.jsonl",
+      "line": 221,
+      "tool_id": "toolu_81ce7d372e8d42428238f158",
+      "command_sha256": "cab5b49a76707ee74b1b886d5d77743958b8d89772155cc5deafff58a9d7b983",
+      "result_sha256": "de5b71482648d6333bd1349d1f74328481112cb238098ad9f8b76056f93f8144",
+      "flags": [
+        "inline_python",
+        "python_json",
+        "python_read",
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4212,
+      "command_total_tokens": 3614,
+      "result_total_tokens": 47208,
+      "total_tokens": 50822
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "62f7a69d-1090-4601-b2be-91eeee37ca47",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0018-8e4b7237/62f7a69d-1090-4601-b2be-91eeee37ca47.jsonl",
+      "line": 544,
+      "tool_id": "toolu_39e74702bfad4ccba4eab85e",
+      "command_sha256": "b5f729bcca98539d1981619a67ddb5558f1473f948c4a68501d4d8345ccb2f78",
+      "result_sha256": "71e0e1adc5dfb6cead2a869f3180c426baea54161ed129a8556c47e473302e6b",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 4,
+      "shell_parsed": true,
+      "visible_tokens": 855,
+      "command_total_tokens": 5264,
+      "result_total_tokens": 41855,
+      "total_tokens": 47119
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "122aecbb-f002-4fa8-b0c6-d9e5313a8c76",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0019-c1a9d865/122aecbb-f002-4fa8-b0c6-d9e5313a8c76.jsonl",
+      "line": 483,
+      "tool_id": "toolu_c903cdeebb9e4432a2be09a7",
+      "command_sha256": "72e11466771b06431db26f5fa69a6e43faed11a93082c74457d0045873593971",
+      "result_sha256": "0e9d12b8e503dcf96ad7055f6eecc8449cadb403a7933ef3ee0ab5a1163c25ff",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1080,
+      "command_total_tokens": 1176,
+      "result_total_tokens": 43132,
+      "total_tokens": 44308
+    },
+    {
+      "group": "AKA",
+      "dsl": "triton",
+      "session": "66261234-0227-4848-bd23-a154bac9434b",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0018-d25de35e/66261234-0227-4848-bd23-a154bac9434b.jsonl",
+      "line": 90,
+      "tool_id": "toolu_3618115f5a934dbd93cd8d2d",
+      "command_sha256": "937fdcd0c5c150420a944dfe75292caabc4957bfd014a297b764596cde9a4c8a",
+      "result_sha256": "af6846495f2b68a8e0fddabfe7e25dce25ff1e50195c53d0068fa7654a18b122",
+      "flags": [
+        "explicit_error",
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "cat",
+        "grep"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 814,
+      "command_total_tokens": 705,
+      "result_total_tokens": 36754,
+      "total_tokens": 37459
+    },
+    {
+      "group": "AKA",
+      "dsl": "cutedsl",
+      "session": "f1750709-1685-44ff-87ee-e50e7da3f09e",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0016-fbe65af7/f1750709-1685-44ff-87ee-e50e7da3f09e.jsonl",
+      "line": 108,
+      "tool_id": "toolu_c211cd2314d943a1bb7dd603",
+      "command_sha256": "a9ef668d057822b283c2e2c987e82cd2c003d38bae174085b88662576fefd6c6",
+      "result_sha256": "20670eb4020134f0092d57688235d64f2d32713f1d6ad545e1a11222b818c58b",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "cat",
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 4,
+      "shell_parsed": true,
+      "visible_tokens": 859,
+      "command_total_tokens": 1209,
+      "result_total_tokens": 24600,
+      "total_tokens": 25809
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_a764886f67e44e55807d9a0ea1dfd8d2",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/11b88e367875bb11f87102aa76635975b71e90beb219a609c359e9b40f06b3fe/payload/conversation.jsonl",
+      "line": 222,
+      "tool_id": "toolu_37a124b67ac449ea84158a41",
+      "command_sha256": "a5f4d6deccc9ac51c977969900e2e542fce8d40c4626fce8a9457b69379aa80b",
+      "result_sha256": "957c2eb6b244008b6dcdc061726ad4ecaa4ec868beb7f22162b8848ffd41abdb",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 7425,
+      "command_total_tokens": 1980,
+      "result_total_tokens": 317340,
+      "total_tokens": 319320
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_737fa56534ad4f1784b4104af48b8d81",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/c9ab3a3e71f36307fe0cc0dd41fe7ad3831b72e83db4778bed457846b112567b/payload/conversation.jsonl",
+      "line": 29,
+      "tool_id": "toolu_b252d43286ff4962adfbf551",
+      "command_sha256": "a2ea42949ea30f08e98eeea7eeec1b09a4054c26e81c65314ece29efaa10f502",
+      "result_sha256": "063b60989a761c631134e72c2a25e178c1d1f08ed362611f39deef2933f28aa2",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 2319,
+      "command_total_tokens": 1488,
+      "result_total_tokens": 107536,
+      "total_tokens": 109024
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_68e9c16fcc184f27836aac84db59e98c",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/2d569fb1edf7e5e14c7356e113dc2d8801c247755f7d8baa6fe91583c04e2ddf/payload/conversation.jsonl",
+      "line": 9,
+      "tool_id": "toolu_a4b34b5d2aec4bccaff75bd5",
+      "command_sha256": "ebcad72ef2f613170d0c4d48795b021127390f2b246534600f771083cbcd0450",
+      "result_sha256": "2fad7b0bbc962da6dab51d249a9805760a8377e390204a365f61bac05723fbbc",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1604,
+      "command_total_tokens": 1848,
+      "result_total_tokens": 102440,
+      "total_tokens": 104288
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_1d91d5c2dad244c083fef3a91f7f36ec",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/622fdf45166105d0c0d3722fb9b392263ed8b61bba329bd325747f24cebd1107/payload/conversation.jsonl",
+      "line": 13,
+      "tool_id": "toolu_583b412a9cb1427eb6423496",
+      "command_sha256": "cb03612d61c356d6f6e660f28f34bdc21afffe66dc174c6569e2a12a8cd7619f",
+      "result_sha256": "32300074b3a063feeab6f03b6753fa2c856d969de9dc3b60a4cb6f6a542962d1",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1978,
+      "command_total_tokens": 1628,
+      "result_total_tokens": 83463,
+      "total_tokens": 85091
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_296fe6bb456a4bb680afcf2237eb9d3b",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/4a28055a2aa702c2b31322504c80d738ac5d2d5a83e35070f68ec3f0f0511915/payload/conversation.jsonl",
+      "line": 19,
+      "tool_id": "toolu_7123eb137569415c95317869",
+      "command_sha256": "2edd8a780bafe517272f9147de6193e6c942ee5c034ad934316022ebf9c171e3",
+      "result_sha256": "348cc921358bbff0046091ad6e918c9c6f70d83d5f768ee5733b08dc0a3480f0",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "directory_environment_listing",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1958,
+      "command_total_tokens": 817,
+      "result_total_tokens": 81438,
+      "total_tokens": 82255
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_147c18f3b8e7491495ef0f85946cad33",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/2769542e8a8db6e50019bbe06fb90a5a9eb85e8cfe16b7af0e07cf3fd6420330/payload/conversation.jsonl",
+      "line": 46,
+      "tool_id": "toolu_fe193ba492cd46e096923095",
+      "command_sha256": "48f067bb777865f08b94cdc1edd7dd565d36b363b34c0905a5b4016913cdd526",
+      "result_sha256": "a93ab2e02a388d3c68c937398c1b428ded0c05a05eddb5dafdb4bd930ef01165",
+      "flags": [
+        "runtime_--help",
+        "runtime_cli",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 675,
+      "command_total_tokens": 5040,
+      "result_total_tokens": 34869,
+      "total_tokens": 39909
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_b9864ee037134e17aa05a41374aa1873",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/4fdcc3b776e384a861feb04d6f85800674393343bec3aa45f9490b6b5ec3d5f3/payload/conversation.jsonl",
+      "line": 320,
+      "tool_id": "toolu_83cef3a0474147a4a1544ca9",
+      "command_sha256": "736a13d3564d2ec6c285cca3ba69bd9783081ff4df25879b0221e540f27ae124",
+      "result_sha256": "cf5f6f6210b69bd1524a018e37d3e7f5302a8c5d24b15fbdfeac378233e480ce",
+      "flags": [
+        "runtime_--help",
+        "runtime_cli",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1400,
+      "command_total_tokens": 704,
+      "result_total_tokens": 28728,
+      "total_tokens": 29432
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_ea2350eb185c4476897a31c1116d9962",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/0558b705329b5608c804e8e9de2da3d21d8948f52675513acfb667a82a829d51/payload/conversation.jsonl",
+      "line": 449,
+      "tool_id": "toolu_c5bfa50c94e544328859759e",
+      "command_sha256": "144a9856fe29f63e5f4f094187c009722ab2c28d3889add75c599efa2a54926e",
+      "result_sha256": "a89ad33579d03e5e3b5c4eac8d8251efbb3bcd6de55d9556ce055773eb497c5e",
+      "flags": [
+        "runtime_--help",
+        "runtime_cli",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 6,
+      "shell_parsed": true,
+      "visible_tokens": 2365,
+      "command_total_tokens": 806,
+      "result_total_tokens": 27636,
+      "total_tokens": 28442
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_7e796319ff524804ab8206fc1e4e3b93",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/6501cd253e1d20bfca8849f8de20a284260f1e4d9d19f9cc35953961d75c8f20/payload/conversation.jsonl",
+      "line": 52,
+      "tool_id": "toolu_c8ab0cf967674106a34c81fb",
+      "command_sha256": "dee9ab81d01f210392a3d68bd263a9b8324f175030e7a1c8dcbde9ff5e55d7cf",
+      "result_sha256": "db10773937acebd8d05fe20f6ad01ede78bbca1bb4d6632af2335a364586a28a",
+      "flags": [
+        "runtime_$c",
+        "runtime_cli",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 484,
+      "command_total_tokens": 3315,
+      "result_total_tokens": 20950,
+      "total_tokens": 24265
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_39ac8defe3ca4c8b88124baff3677f45",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/6c95a5c191b287d9a69a8396ede5257b288228fd0bf5daa966fbf5bd6c21b955/payload/conversation.jsonl",
+      "line": 748,
+      "tool_id": "toolu_cbe7316722884774a41143d6",
+      "command_sha256": "855d30c25e696ee0f59be05a30291ad0029b9f4e8ae77c791ededd99676eda3d",
+      "result_sha256": "eeb3db9c920d6de24532a4d665867ad8f77bf61539db7bd195ce9bf42710d93a",
+      "flags": [
+        "journal_report_union",
+        "runtime_cli",
+        "runtime_record-experiment",
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "cli_help",
+      "text_programs": [
+        "cat",
+        "grep",
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 5,
+      "shell_parsed": true,
+      "visible_tokens": 490,
+      "command_total_tokens": 3550,
+      "result_total_tokens": 20531,
+      "total_tokens": 24081
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_7e796319ff524804ab8206fc1e4e3b93",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/6501cd253e1d20bfca8849f8de20a284260f1e4d9d19f9cc35953961d75c8f20/payload/conversation.jsonl",
+      "line": 57,
+      "tool_id": "toolu_20bbe57774224557810998e4",
+      "command_sha256": "e679b52cd2d58ff90890ae65982473cfa1d6f55113833ab2328476855261e9d7",
+      "result_sha256": "9089c6a0ec3442aac48fa01b70fd25eb57919588d1c2dda4b0d169ff6596ca63",
+      "flags": [
+        "file_content_write_signal",
+        "journal_report_union",
+        "runtime_cli",
+        "runtime_list-experiments",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "cat",
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 2550,
+      "command_total_tokens": 3000,
+      "result_total_tokens": 122010,
+      "total_tokens": 125010
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_7e796319ff524804ab8206fc1e4e3b93",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/6501cd253e1d20bfca8849f8de20a284260f1e4d9d19f9cc35953961d75c8f20/payload/conversation.jsonl",
+      "line": 55,
+      "tool_id": "toolu_d34399ef6fe44cf1975ed38a",
+      "command_sha256": "012e34e56e413f96a16fbae80c383ed90791feccc2220b34758ab8f4c499921f",
+      "result_sha256": "afcc48a5e6c3f32178ccfa2391c253ab50be9f26ac081997f114722de1b869c7",
+      "flags": [
+        "file_content_write_signal",
+        "journal_report_union",
+        "runtime_cli",
+        "runtime_list-directions",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 2293,
+      "command_total_tokens": 2850,
+      "result_total_tokens": 109564,
+      "total_tokens": 112414
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_b1c19540408f45938d36f7f0fba1356f",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/f99a5c86239d193aac203dc3f7f6b9e06797c63ee9796b90dc602760da0e9c3e/payload/conversation.jsonl",
+      "line": 64,
+      "tool_id": "toolu_34242cc36652496782f8d475",
+      "command_sha256": "34eefa621780ec6b3e43911351c544c242c90e379f4592aa8fbcc3ffc71b653f",
+      "result_sha256": "9b3b9a1f26dd8d76ea59f582129d0f68967020c5db9634583ff9fda1dd0f9ca8",
+      "flags": [
+        "inline_python",
+        "journal_report_union",
+        "python_json",
+        "python_read",
+        "runtime_cli",
+        "runtime_list-experiments",
+        "shell_read_or_filter"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1757,
+      "command_total_tokens": 5063,
+      "result_total_tokens": 100440,
+      "total_tokens": 105503
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_1c80793f4b3545ce8975b02768da08ce",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/b28e6fbe2af9c92878763d0b6d5795f4d5c2b1a8e8fbc41531c5b46183ce9d56/payload/conversation.jsonl",
+      "line": 211,
+      "tool_id": "toolu_820ca0fa236a4926bb712077",
+      "command_sha256": "48500aadeb85277d0a43d464c42f99ac5311e7e8a34d3b2adf7ee0443cd45dc5",
+      "result_sha256": "5cbb2622669af34877ec236c2ddd52928a3b68380bd3166330e522b8e9bad565",
+      "flags": [
+        "journal_report_union",
+        "runtime_cli",
+        "runtime_list-experiments",
+        "shell_read_or_filter"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 3051,
+      "command_total_tokens": 1380,
+      "result_total_tokens": 87145,
+      "total_tokens": 88525
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_3814359cef714e4c9edca6320c68f04e",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/9311d19d6ed8ab4fc980cfa6d6b578dfcf503331137aa88106dbf6381a8a8940/payload/conversation.jsonl",
+      "line": 52,
+      "tool_id": "toolu_bcbb86c1a6ff4ebe92cea0ce",
+      "command_sha256": "261dc0159a1931a2df75733bafee9f49e84e219cd7f77a54fae8d7d0bc7b4552",
+      "result_sha256": "3e52cc68b688e77a8fb2e86959298d79c48e14a9e928d7c6f0ec4f4bd2157b95",
+      "flags": [
+        "file_content_write_signal",
+        "inline_python",
+        "journal_report_union",
+        "python_json",
+        "python_read",
+        "runtime_cli",
+        "runtime_list-experiments",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "journal_api_and_filter",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2517,
+      "command_total_tokens": 3286,
+      "result_total_tokens": 72330,
+      "total_tokens": 75616
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_60a6218bb5c84f308692c693ca4fbe6d",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/5a3939801d66ec9685a335b4f56569aaf44e7d506e5daf46cea0b7725082b248/payload/conversation.jsonl",
+      "line": 102,
+      "tool_id": "toolu_6026ea53747844b49955bb79",
+      "command_sha256": "a601a6d74bd3315ae8abbd2a4cb2375c33ae0bda977e54e8dca98009bf0a27fc",
+      "result_sha256": "d8cd232182a991243be6761a50680dc17e8c39bf155f02d7bd25d96bb0665a5c",
+      "flags": [
+        "shell_read_or_filter",
+        "sleep"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "cat",
+        "head",
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 4,
+      "shell_parsed": true,
+      "visible_tokens": 4168,
+      "command_total_tokens": 1536,
+      "result_total_tokens": 94392,
+      "total_tokens": 95928
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_e374e6ec834a4157bf40f08cc2e8381b",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/6783b71f88492b53efbafa2ef662c1c47d373f3edc18c689391738934d4872ba/payload/conversation.jsonl",
+      "line": 113,
+      "tool_id": "toolu_f5825ea2183743aa8b2def7b",
+      "command_sha256": "ef3d9b1d6ebc08ae18ac5d57355129154929298866db8353452d91c5fbff586e",
+      "result_sha256": "4d59bf2b71f4716a94d86db7a18e833d93c255565c2bb121478927430a0316a2",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "cat",
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1431,
+      "command_total_tokens": 3904,
+      "result_total_tokens": 86310,
+      "total_tokens": 90214
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_d8f288032f1f4493b43e6eae0192708f",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/3cb58dd7438ecc839933348fc01d79d22cc4ad09196ca9b2e4188624f0f5ecb4/payload/conversation.jsonl",
+      "line": 184,
+      "tool_id": "toolu_da9946a91ccd4ef5816ee849",
+      "command_sha256": "3a40a011804e2fb7acb4edd9b406d0c97d1fca0deb36efbcf55af482b7f83e97",
+      "result_sha256": "c0a67a34d9e9090c9875c7e06a8c0e43a439b9d5c28b678ffcdd7f7778a2eb75",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "cut",
+        "grep"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 3019,
+      "command_total_tokens": 1290,
+      "result_total_tokens": 86304,
+      "total_tokens": 87594
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_c69114f3db964c58a9c7167659a1fea5",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/f8dc0ffd3ab79042685e67f667cd7a168e761d0b66a96964d1a4b519869950bb/payload/conversation.jsonl",
+      "line": 176,
+      "tool_id": "toolu_9db41b4239a947b0bbbc5dc3",
+      "command_sha256": "79929d9476483fa492d72301840a8277e34db2b57a70aebec22cd5c9c0307562",
+      "result_sha256": "5b90b5ea4d73832c6ed78a28242b1ca94b88cd0ec62bb2f155f7f9f810c84b62",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "cat",
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1429,
+      "command_total_tokens": 3472,
+      "result_total_tokens": 83753,
+      "total_tokens": 87225
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_1d6c6b1b04ef4d4db4763465deff67e7",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/991791d709d3df3680585d987bfa11930d4667fa1b973f11583115eadb593b51/payload/conversation.jsonl",
+      "line": 176,
+      "tool_id": "toolu_84566f740e904faf8ffa883a",
+      "command_sha256": "2733080ced95c4a5741b29a8f08d7fa5b4e2ebec0e0d25d4b26fa7604056ebe3",
+      "result_sha256": "e1862d51350e5e2cd6dadb6a1d40482cb2751c382e66fc679c1cf47adf7954fa",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "measurement_and_task_logs",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2480,
+      "command_total_tokens": 1508,
+      "result_total_tokens": 67984,
+      "total_tokens": 69492
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_60c677891fb14d28a69d92ecaacd1069",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/60d19b02844308849f0c5478388d0d033dbffe1cfe932bd35b094cc4b89c5bb1/payload/conversation.jsonl",
+      "line": 43,
+      "tool_id": "toolu_2d240acbad27407796652c03",
+      "command_sha256": "c809d6d8f35619930a7874d6075f7044dbda5dbe88c06a9d4c3174cffd4a6026",
+      "result_sha256": "6be9d6ab80f98aae85eb8a7842f5eceec4bf491f0c546d3aeeb4160002be7403",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6591,
+      "command_total_tokens": 248,
+      "result_total_tokens": 401807,
+      "total_tokens": 402055
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_9cbec80458c44e6dab6104a103df2471",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/be08a9753f31efc046a1176d35353d1632671eb47e94becef765b659778bfeb7/payload/conversation.jsonl",
+      "line": 12,
+      "tool_id": "toolu_c8ad33e60af544b792b2f5ac",
+      "command_sha256": "5da1baee3375980807ab99dba33085ade995c3ec02cc888ca32138c3ffd92e18",
+      "result_sha256": "3abace71cb7873b642f45e1055d85e963e49cedf6cef6a327b57bd9325c725c1",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 7099,
+      "command_total_tokens": 416,
+      "result_total_tokens": 361641,
+      "total_tokens": 362057
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_d8d863a2d03a44058216867c94529163",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/bf5318118f199484d9b9bd78450ede64deda38460a3c22bf7f59946cac1922e0/payload/conversation.jsonl",
+      "line": 23,
+      "tool_id": "toolu_80da5f17e64941458e28dbfc",
+      "command_sha256": "f41dca7bbf3794de8a010446460488085cc438ef337b8249936f5b0d4142a2b8",
+      "result_sha256": "7f419bcd6cce313f034463e18f3781a09fe2bee54d4b4a84a3374b37ad11dec6",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 5868,
+      "command_total_tokens": 660,
+      "result_total_tokens": 345563,
+      "total_tokens": 346223
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_7e796319ff524804ab8206fc1e4e3b93",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/6501cd253e1d20bfca8849f8de20a284260f1e4d9d19f9cc35953961d75c8f20/payload/conversation.jsonl",
+      "line": 19,
+      "tool_id": "toolu_b416a04a2509489b9ba8fdcf",
+      "command_sha256": "f41dca7bbf3794de8a010446460488085cc438ef337b8249936f5b0d4142a2b8",
+      "result_sha256": "7f419bcd6cce313f034463e18f3781a09fe2bee54d4b4a84a3374b37ad11dec6",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 5868,
+      "command_total_tokens": 638,
+      "result_total_tokens": 333849,
+      "total_tokens": 334487
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_d57c870990df4f74b555dda316e6b269",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/4d138dc8bf1102b5e25d4d8465d228990bc639027eec0e2cf3464c35845ffa40/payload/conversation.jsonl",
+      "line": 18,
+      "tool_id": "toolu_05d9c536c2b648028d47dacf",
+      "command_sha256": "a351310d7dbbd57d3df1e85dc11ddd8820269e1c773c0c65e6a2c01ee8bcbbd6",
+      "result_sha256": "6fa02e893c456b07ec14c3e5498b505fb4da4df9be66ccd7eb72139b1587b68f",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "skills_docs_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6723,
+      "command_total_tokens": 1323,
+      "result_total_tokens": 321408,
+      "total_tokens": 322731
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_68dd44f1ea7c4f70b03da826411e3fd7",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/d3cd2fa710df467a76294785ca40f81e4e819d554b71ebf42da6c6fd5efb8221/payload/conversation.jsonl",
+      "line": 16,
+      "tool_id": "toolu_04705503b3b7481f8a1e1ae0",
+      "command_sha256": "0bdfc9046bc23207035259533dab6f614cf601514de58cc38899aec537ff2049",
+      "result_sha256": "1b011d0b39cfd7a00c203cc101321ba4356bc5f6d42788426d537e410ded68d0",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 6530,
+      "command_total_tokens": 1716,
+      "result_total_tokens": 331347,
+      "total_tokens": 333063
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_7afd776f010e46758374598d4c8024e2",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/239077a6ac553ec23c6b93260e60066af86a747d1d41bf2fcad6af8d2b1ead2e/payload/conversation.jsonl",
+      "line": 63,
+      "tool_id": "toolu_d30d73d86438431bae97d0c4",
+      "command_sha256": "47a61f7bc6e31ac6d2b00edec14421ab5bf3458b3a1f93193cf1be40e1d25635",
+      "result_sha256": "9af3ed4de7284effc85f2b12c06db4ef8fef9eb24c64fc76eac3eb194f0ccb63",
+      "flags": [
+        "inline_python",
+        "python_json",
+        "python_read",
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 7506,
+      "command_total_tokens": 4715,
+      "result_total_tokens": 295640,
+      "total_tokens": 300355
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_73ff673d58354a85b8d3578a2a70c40c",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/66d80dcd5d7fa9aab187e034ecb71583d19b3133f925459631d03e92f108eef9/payload/conversation.jsonl",
+      "line": 646,
+      "tool_id": "toolu_b680c6365d794cbaa29d7393",
+      "command_sha256": "a61410755c5f1a18f9cac2dc8b297caabfd7051f34ed7a589dbb76e0ff4c4d66",
+      "result_sha256": "78088b983202b18fe57df684b163be7f6d430811b4406b0bf4243c294b9c9c6e",
+      "flags": [
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4598,
+      "command_total_tokens": 4026,
+      "result_total_tokens": 294905,
+      "total_tokens": 298931
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_948a654f1839466295234637572be4cb",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/1aef909d540c4a104c454a1468e30d85776cc7638a6b2acf0c6c32e3c5ca4c5b/payload/conversation.jsonl",
+      "line": 62,
+      "tool_id": "toolu_4085ccf3d4704087beba7151",
+      "command_sha256": "b0d1bb4e09e036bdf11189265bf210df958f7bdc6cc21815f96dc969bb511c0f",
+      "result_sha256": "20ddd25d146ec09fb0c98607076ffc72e47cdacc3d18869f50102f11aa056afa",
+      "flags": [
+        "file_content_write_signal",
+        "inline_python",
+        "python_read",
+        "python_write_or_copy",
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 9600,
+      "command_total_tokens": 3100,
+      "result_total_tokens": 285000,
+      "total_tokens": 288100
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_03262d0718ab41fba3ef624174be972e",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/8c48af86df894b642e9601ac2296f8d6e12bd5bc769b39cb3176f320c01d16b4/payload/conversation.jsonl",
+      "line": 49,
+      "tool_id": "toolu_033b02c25b974ff197796011",
+      "command_sha256": "92bc1f8964d1fa3df069d276ddf323d0ce970feded6882c816cdf1f0a0f1d30a",
+      "result_sha256": "51bbd5ffe7e16fe26843258c2f82f0f137a02c399260da40437d2a656e02d691",
+      "flags": [
+        "inline_python",
+        "python_json",
+        "python_read",
+        "shell_discovery",
+        "shell_read_or_filter"
+      ],
+      "bucket": "history_plan_report_files",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 7563,
+      "command_total_tokens": 7068,
+      "result_total_tokens": 272949,
+      "total_tokens": 280017
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_7e796319ff524804ab8206fc1e4e3b93",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/6501cd253e1d20bfca8849f8de20a284260f1e4d9d19f9cc35953961d75c8f20/payload/conversation.jsonl",
+      "line": 65,
+      "tool_id": "toolu_3efbc1c75b214f99aa7ae5cb",
+      "command_sha256": "95ee1bf8fdf048e12f419b2502e2d49dda6b305735bb5a3f6bf87958e653a32e",
+      "result_sha256": "19a0520534aa238afa6d617158f3103bee75d32105b7d030ae2d055db4b1450a",
+      "flags": [
+        "file_content_write_signal",
+        "runtime_cli",
+        "runtime_wiki-query",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 5932,
+      "command_total_tokens": 3648,
+      "result_total_tokens": 275232,
+      "total_tokens": 278880
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_16358839dfa04863a1fb4c98151097be",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/a1b572d4df21aca265f21b748ac45e1a64d58b1016bff1e3ff35a627ae73980c/payload/conversation.jsonl",
+      "line": 156,
+      "tool_id": "toolu_0762a712263448ac86ef2de0",
+      "command_sha256": "322bb1c45e8a173584ec89f38102c925b32a6076986134b702575d059bbe7937",
+      "result_sha256": "b80d7f9b6cc660e0e86665fcc3d67e6ed9aeb0b7a4f325331ec1efdbca309362",
+      "flags": [
+        "file_content_write_signal",
+        "journal_report_union",
+        "runtime_cli",
+        "runtime_load-experiment",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 4094,
+      "command_total_tokens": 4428,
+      "result_total_tokens": 138985,
+      "total_tokens": 143413
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_1f6bd8e4399545778962b20337d7b4b9",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/f97604576ede1334c8eba6fdddcb62a392737ffb2fdee51c159c6cd09decf22e/payload/conversation.jsonl",
+      "line": 590,
+      "tool_id": "toolu_ca18a3978f8545bc8842a259",
+      "command_sha256": "1190bc9b44aa5779b6e4bbf7f6b82e32175034c8c741353a6ea76d51e852de2c",
+      "result_sha256": "0935e1f39919d6b5db277de0dbe3d7dbf12682d4e9df995a28cc5b3c0301880e",
+      "flags": [
+        "file_content_write_signal",
+        "gpu_entry",
+        "runtime_cli",
+        "runtime_gateway-execute",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 2,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 2300,
+      "command_total_tokens": 12214,
+      "result_total_tokens": 128283,
+      "total_tokens": 140497
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_4dda4c9a1033455ba39538f94d4111b3",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/3c177c9bb7a014e31139c4c802e3722a5595d1b8878557b965b712ef25ae9144/payload/conversation.jsonl",
+      "line": 113,
+      "tool_id": "toolu_6f1cc016ee5c4a9cbdac1ae4",
+      "command_sha256": "68441137f84c56d590c87b21a8d61a7e88f18b8aa784d5ff261b90e9c0e785fc",
+      "result_sha256": "b5947934375e4d49c9a10205f44a5cc2602d75ee40a43d08ebad55201513110e",
+      "flags": [
+        "file_content_write_signal",
+        "gpu_entry",
+        "runtime_cli",
+        "runtime_gateway-execute",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 6389,
+      "command_total_tokens": 2838,
+      "result_total_tokens": 131460,
+      "total_tokens": 134298
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_ea2350eb185c4476897a31c1116d9962",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/0558b705329b5608c804e8e9de2da3d21d8948f52675513acfb667a82a829d51/payload/conversation.jsonl",
+      "line": 184,
+      "tool_id": "toolu_268b46341c71454ab278d35a",
+      "command_sha256": "4aa6e076ccf475c59865a1bfd00e37698895c32b2b38480721b3804f73513257",
+      "result_sha256": "41fcee73aa1a983b35a4a6234c2bae550a0ffee968f6b4958f23c5047baf9fc7",
+      "flags": [
+        "file_content_write_signal",
+        "gpu_entry",
+        "runtime_cli",
+        "runtime_gateway-execute",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "write_only_name_match",
+      "text_programs": [
+        "cat"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 0,
+      "shell_parsed": true,
+      "visible_tokens": 2236,
+      "command_total_tokens": 5989,
+      "result_total_tokens": 110396,
+      "total_tokens": 116385
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_94e92acced454f5a981067da5e0405a3",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/95bf5c5d9c17844990a8c9f2ac33f83b55f1d20ef908f905b4a0251f886ef469/payload/conversation.jsonl",
+      "line": 149,
+      "tool_id": "toolu_4f5e191ec2664b6cb9f3d3c5",
+      "command_sha256": "b16a953ded4bfcda2903b7b29015ebedcfcd36f410b9265e7e7286742de4799d",
+      "result_sha256": "91a1eb19582d44dde8400b97ee8fd8be980661dd159bf6dc99379f031cc3d47d",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "grep",
+        "head",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 6524,
+      "command_total_tokens": 3976,
+      "result_total_tokens": 354915,
+      "total_tokens": 358891
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_9136e0578fde430e9ab7831176a7e40c",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/e1a34d945cc6211a33055364e4a783a4c1d9fa4d86f76870976f2854a023224a/payload/conversation.jsonl",
+      "line": 201,
+      "tool_id": "toolu_b1715dc7e7624142a3ebb123",
+      "command_sha256": "148e1dcab86607ba25ff1b29f403934d557677c5ea266c899f69cb23510e1430",
+      "result_sha256": "f059ac22264a558da3e9d93376317b8fe68d45cec297134a0f141d6f4230f5d5",
+      "flags": [
+        "shell_diff_or_hash",
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 4493,
+      "command_total_tokens": 1692,
+      "result_total_tokens": 205022,
+      "total_tokens": 206714
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_52053ce55f9f46efa1e59b8c7e3368ed",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/1a27d004eaab2e02df45a76979e918b7952231769eb848500dc512ec80f63cba/payload/conversation.jsonl",
+      "line": 161,
+      "tool_id": "toolu_e8fbbafb2ea34bacb0c60354",
+      "command_sha256": "8fc429a7e4669b42d049bd2f3ae297745a466bc58679d687ee91b64b4d0abad5",
+      "result_sha256": "73438fd766388a7ba4de372df1993430ed6b58e607c97a1ff599b524242f7eee",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3309,
+      "command_total_tokens": 1140,
+      "result_total_tokens": 194110,
+      "total_tokens": 195250
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_52053ce55f9f46efa1e59b8c7e3368ed",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/1a27d004eaab2e02df45a76979e918b7952231769eb848500dc512ec80f63cba/payload/conversation.jsonl",
+      "line": 164,
+      "tool_id": "toolu_12dd4dc8a3ee40619efb370a",
+      "command_sha256": "24e6d131fe83f07d48afbf79a68ade9df2b3fc1e8540c65c2c911a20d4479428",
+      "result_sha256": "715504e95796c9ef66f6f27abff5c59bfdf38dca11cc82a4d5ff91f5a932eeef",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2664,
+      "command_total_tokens": 1121,
+      "result_total_tokens": 153410,
+      "total_tokens": 154531
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_257b3d44765c45e4bffaa73b9c5df09f",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/2039a358751b14fd99cd740a58b2c18294d4c16ed59de89015684b5bcc2ce2f8/payload/conversation.jsonl",
+      "line": 365,
+      "tool_id": "toolu_7f916bec131d4fafaf710d52",
+      "command_sha256": "19641f65060d1612d3ddee5c4910218b5492ba522043efa9bcdecb9de694f3d4",
+      "result_sha256": "928d4caa9e2c06f148c39605de92284fdc141bac7e4de7e7be53542dceaef1f8",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "kernel_implementation_files",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1672,
+      "command_total_tokens": 2844,
+      "result_total_tokens": 127608,
+      "total_tokens": 130452
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_d8d863a2d03a44058216867c94529163",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/bf5318118f199484d9b9bd78450ede64deda38460a3c22bf7f59946cac1922e0/payload/conversation.jsonl",
+      "line": 143,
+      "tool_id": "toolu_b58c16ecdd124c7fbaf13a91",
+      "command_sha256": "f5f6d4f44d5b7151455aaae10ece89bd5ee4bf924d18562e80eefaff8e7bad46",
+      "result_sha256": "49302dcd98e75e4d6ce500321a5b8c388915906c4d35d19e60b6bc0b8bcd1414",
+      "flags": [
+        "gpu_entry",
+        "runtime_cli",
+        "runtime_gateway-execute",
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3503,
+      "command_total_tokens": 868,
+      "result_total_tokens": 104250,
+      "total_tokens": 105118
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_bf649e074891488b90eb3fd9c26903f5",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/5b6a59aed1d79cf0fcb6921997930894ab97a9fb6b680713f58a6261769565fd/payload/conversation.jsonl",
+      "line": 83,
+      "tool_id": "toolu_ada3e6847ba742719d4438c9",
+      "command_sha256": "0399c685750161afef708f20d07b3c724d90da933897967e6c032edd32854535",
+      "result_sha256": "c2a8fde516f6c8f2d68996e6abda33074b6b7b87ee80745c674e7a949728e81b",
+      "flags": [
+        "file_content_write_signal",
+        "gpu_entry",
+        "runtime_cli",
+        "runtime_gateway-execute",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "cat",
+        "tail"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2988,
+      "command_total_tokens": 2550,
+      "result_total_tokens": 96129,
+      "total_tokens": 98679
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_d8d863a2d03a44058216867c94529163",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/bf5318118f199484d9b9bd78450ede64deda38460a3c22bf7f59946cac1922e0/payload/conversation.jsonl",
+      "line": 104,
+      "tool_id": "toolu_2df5f314d13d4bd2b5aeb4ec",
+      "command_sha256": "796953eb84a5bb57b42723ff55b2471a60102f2d8f87682e1511abedac1c9f78",
+      "result_sha256": "aa5a0bba6116c26ccd822f1a21ed9f3680fc4afb6848341a9e3a61b88b866fef",
+      "flags": [
+        "gpu_entry",
+        "runtime_cli",
+        "runtime_gateway-execute",
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1948,
+      "command_total_tokens": 1080,
+      "result_total_tokens": 74919,
+      "total_tokens": 75999
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_cbbb5596fd1b4cc2b91bdca02cdb2b92",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/b74cc45857d36cff1feae6736cc68bc9d4dd4d89e5f4581278818567ee58196e/payload/conversation.jsonl",
+      "line": 162,
+      "tool_id": "toolu_0c574079e5484446a496daed",
+      "command_sha256": "2e79d917230e005d32a289fb50a7aaa6dd93644dd19723a1f2df01da3ad3663a",
+      "result_sha256": "7c569bfc4234bb3123e3ef9b580f480bcf75f8cf1a99f413deda806f6c9014a7",
+      "flags": [
+        "gpu_entry",
+        "runtime_cli",
+        "runtime_gateway-execute",
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1787,
+      "command_total_tokens": 1290,
+      "result_total_tokens": 73794,
+      "total_tokens": 75084
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_c69114f3db964c58a9c7167659a1fea5",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/f8dc0ffd3ab79042685e67f667cd7a168e761d0b66a96964d1a4b519869950bb/payload/conversation.jsonl",
+      "line": 523,
+      "tool_id": "toolu_7303d30ddbd245e8b8f7c03c",
+      "command_sha256": "e2b2ed57a905eeb42a34697e199228a9dbba9e25584388dc1d8c055eb7d91960",
+      "result_sha256": "5e403acbc145a94bfd62a3c7e0deb65f0fe6b896ef12a26cabea17c3a5042b85",
+      "flags": [
+        "gpu_entry",
+        "runtime_cli",
+        "runtime_gateway-execute",
+        "shell_read_or_filter"
+      ],
+      "bucket": "gpu_execution_and_filter",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1148,
+      "command_total_tokens": 1334,
+      "result_total_tokens": 50355,
+      "total_tokens": 51689
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_e05a410587994adcb3a168fab6747e7c",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/31a36d6b804497c72365b2e2efbd81b75cc7ee3fe30b80922063a9c84dca2dad/payload/conversation.jsonl",
+      "line": 98,
+      "tool_id": "toolu_67430cd37133401e9fc0052f",
+      "command_sha256": "0ef860ac365bfa23efa82e469cbdfc87b4bd62b616f0d53321d5bd49c204b1aa",
+      "result_sha256": "6c6e8be984f29496ddee48b6057848651d8ae7e7d1e1627346b4bbfe8f3dab28",
+      "flags": [
+        "shell_diff_or_hash",
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3614,
+      "command_total_tokens": 1058,
+      "result_total_tokens": 161595,
+      "total_tokens": 162653
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_b10c38bb4170473f95111bdbf4f9b657",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/2057338aac771eeef1465437fbab98edb252f7d66881ca2dd6948e544a424176/payload/conversation.jsonl",
+      "line": 252,
+      "tool_id": "toolu_429ad239af8b4d6e92b6c3a0",
+      "command_sha256": "98a3fdde5d739469bed246e5a2c25152698deff0b2f299e23d8fdec1d398d01c",
+      "result_sha256": "900a96378eadc90b6374f10544a8c953fc10ef076a7a221a4d6dc94ac2e76daa",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 2364,
+      "command_total_tokens": 2013,
+      "result_total_tokens": 73696,
+      "total_tokens": 75709
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_a6fb27f2eb3f4aaea76569b22b43f2f3",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/cea222f23a0dcf0820bb377047499d198f8bb4ce3a05435edf9844afee127eb5/payload/conversation.jsonl",
+      "line": 330,
+      "tool_id": "toolu_24996b5de2494a4e9d971554",
+      "command_sha256": "cac2349d21cb44679d0d3bcf492dc4c6bde8314925ead769b4b01f35c058a22b",
+      "result_sha256": "29caa940411f07d9a645b468c880bd480781eedc7e68bc359fe21dc5cf31e3d8",
+      "flags": [
+        "shell_file_change",
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "cat",
+        "grep"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 4596,
+      "command_total_tokens": 629,
+      "result_total_tokens": 72944,
+      "total_tokens": 73573
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_90758f766a674647adf3588b2c3866d1",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/c38aaddac55b000bba397d178d8d88b38b4ca5c04345588a0b6f7eb37f5f9be6/payload/conversation.jsonl",
+      "line": 244,
+      "tool_id": "toolu_b18985230d6840849097cd7a",
+      "command_sha256": "405c6468322af89c4c8f1fa12a2980cc9cf9542de9ca29242228836c7131b557",
+      "result_sha256": "b087bbe20aba8a2eac1adb34f00c0067646d88ea4cee7ff5081a87959e6e17ad",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "cat",
+        "grep",
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 4672,
+      "command_total_tokens": 600,
+      "result_total_tokens": 64848,
+      "total_tokens": 65448
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_590ec248d7b74a7c9e90c9286f04b448",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/23d82d334df9137a766844df3b969297f5df8f5ddf1fc7ff7e3c233d0e012ec1/payload/conversation.jsonl",
+      "line": 22,
+      "tool_id": "toolu_ae2a6cded5e046519b54f2f0",
+      "command_sha256": "dc16f07bb7e92e581dbf341d9437bcd851a3053102357ea14ce700fefeb14991",
+      "result_sha256": "5d02fd7ae1cd26af364172e0ecd0b35c8cdeae704f10fe780ec691940f733354",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "other_mixed_reads",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 3,
+      "shell_parsed": true,
+      "visible_tokens": 1098,
+      "command_total_tokens": 1924,
+      "result_total_tokens": 54111,
+      "total_tokens": 56035
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_296fe6bb456a4bb680afcf2237eb9d3b",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/4a28055a2aa702c2b31322504c80d738ac5d2d5a83e35070f68ec3f0f0511915/payload/conversation.jsonl",
+      "line": 82,
+      "tool_id": "toolu_7e4eaf9aaf4947c1bce995c0",
+      "command_sha256": "7227b0fe1334a8500e7bbb3a780e523e6c03eef1c15454ad42582aa3d7965fcb",
+      "result_sha256": "58ecc9c93d83f7cdf76cd3e7ef4f576c72411b43462e544117e71be523bc7a66",
+      "flags": [
+        "inline_python",
+        "python_json",
+        "python_read",
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 5555,
+      "command_total_tokens": 6786,
+      "result_total_tokens": 132350,
+      "total_tokens": 139136
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_1d91d5c2dad244c083fef3a91f7f36ec",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/622fdf45166105d0c0d3722fb9b392263ed8b61bba329bd325747f24cebd1107/payload/conversation.jsonl",
+      "line": 70,
+      "tool_id": "toolu_5a57b638d2f141faa92334ad",
+      "command_sha256": "758fe51eecf467f7b2ca294532d899f6bf00fa1837a78937e1fe8b0a2908156f",
+      "result_sha256": "f23144a5b4b634cc08a02aa025a5935c2ccc5d33b4731d8e39613cc446f548ec",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 4,
+      "shell_parsed": true,
+      "visible_tokens": 2545,
+      "command_total_tokens": 3993,
+      "result_total_tokens": 77568,
+      "total_tokens": 81561
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_23760f3c4b3e4365ad1e8aa9a1126fc2",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/ed234f15d9878f7043b05aec066c20f58da1ea4c28d8176f17096686a9730b72/payload/conversation.jsonl",
+      "line": 93,
+      "tool_id": "toolu_55cb5e539fde4c2f933f7f2d",
+      "command_sha256": "6fc77f1741e97460409882d3ca349abcf4e1685ec750d18c4f041755cbcdb8bd",
+      "result_sha256": "ad203039550484a77bc101da778fb441904aa0278374b97f0e9f54547e6c7444",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "awk",
+        "grep",
+        "head",
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 4,
+      "shell_parsed": true,
+      "visible_tokens": 3456,
+      "command_total_tokens": 1978,
+      "result_total_tokens": 74140,
+      "total_tokens": 76118
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_db9f686f46d5414da2744fa171c859fa",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/4e806012fd420c25da25496a3711c8ff277801dc01bdcbba2f7fd770c926c1bf/payload/conversation.jsonl",
+      "line": 131,
+      "tool_id": "toolu_db4d2b523ed94360889eb698",
+      "command_sha256": "086f3cc8567646828df128aea2a8c12040017d2841986e9431eff1ef217d36a6",
+      "result_sha256": "827f9e72e29c58eaa6b1f5125d1a5ddae41dc00ea2d33e0bb272d30f732df45f",
+      "flags": [
+        "explicit_error",
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 4,
+      "shell_parsed": true,
+      "visible_tokens": 2498,
+      "command_total_tokens": 2688,
+      "result_total_tokens": 54878,
+      "total_tokens": 57566
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_737fa56534ad4f1784b4104af48b8d81",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/c9ab3a3e71f36307fe0cc0dd41fe7ad3831b72e83db4778bed457846b112567b/payload/conversation.jsonl",
+      "line": 104,
+      "tool_id": "toolu_8b3e0eaf27554eb58aaa84a9",
+      "command_sha256": "11467a100e2bd5cf27295d104c13674a59ead6a4e36b6082e5b0cc5df48ea3d9",
+      "result_sha256": "47ff688ef652cd58d1df4cd4cb30e94637de50f18c4dcde58b295602eb5879db",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "session_or_protocol_recovery",
+      "text_programs": [
+        "grep",
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1662,
+      "command_total_tokens": 3584,
+      "result_total_tokens": 48050,
+      "total_tokens": 51634
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_3814359cef714e4c9edca6320c68f04e",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/9311d19d6ed8ab4fc980cfa6d6b578dfcf503331137aa88106dbf6381a8a8940/payload/conversation.jsonl",
+      "line": 190,
+      "tool_id": "toolu_d926615d446e4722a010ebb5",
+      "command_sha256": "e41f80b548e8e2c72fb2efbdfdf21435b14c712782a4f315dc99a88be23ee2b7",
+      "result_sha256": "60d999fa1795d68f4a268ee0c74b2d621eac54122827fea20e6899823660fc22",
+      "flags": [
+        "file_content_write_signal",
+        "runtime_cli",
+        "runtime_kernel-trial-show",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1975,
+      "command_total_tokens": 14280,
+      "result_total_tokens": 102483,
+      "total_tokens": 116763
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_04ae1d437b874a95bd81bb0eb23c30dd",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/054c2733aad350e98d8a77163598d88b094ad596d3791aec43e24d8f92d51939/payload/conversation.jsonl",
+      "line": 67,
+      "tool_id": "toolu_627d05d02a3848bfb95531f5",
+      "command_sha256": "e677fb23b59e8e1176b9bb13f7581ff974c5a49fdd896297621b71c92116a51e",
+      "result_sha256": "3fa2b2dab7027b3d1f36b2eef91d93d086754abb422c152046ab252a5786bfbd",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3599,
+      "command_total_tokens": 561,
+      "result_total_tokens": 114624,
+      "total_tokens": 115185
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_e1c118ed6f0d4e43a09787dbefda7d97",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/159c1e39dbcd6166c53b75e5b2fc62385899729ca53eee34a46c1ea20554aa3f/payload/conversation.jsonl",
+      "line": 104,
+      "tool_id": "toolu_bfcfc256ce2b462b946cf19b",
+      "command_sha256": "008fce6ac1ff894c3d6b21bbf75f967102ac588d7aa42c1212fb0782e69b4a39",
+      "result_sha256": "b8d4bef43bd0650bc4a193f8aaccfa7e83e09cd201a26e68ec8fe703244f9cfe",
+      "flags": [
+        "file_content_write_signal",
+        "inline_python",
+        "python_json",
+        "python_read",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2351,
+      "command_total_tokens": 7830,
+      "result_total_tokens": 95788,
+      "total_tokens": 103618
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_6c747536b0634f93b865a14751633b4b",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/1526d29c25739655403981557ebbbb06d78c4f836ae23751873ef6950c707a8c/payload/conversation.jsonl",
+      "line": 135,
+      "tool_id": "toolu_4f84133f3008486ca57d5f23",
+      "command_sha256": "729e1524dd720992e855546ebbb42691e4eaecb9981311dff72518f57a12e49d",
+      "result_sha256": "fd49cd7fe6e8d5ffa7719ae69e8addf5805ead16d350f23743c3c7397a81a082",
+      "flags": [
+        "file_content_write_signal",
+        "runtime_cli",
+        "runtime_gateway-result-read",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3327,
+      "command_total_tokens": 6060,
+      "result_total_tokens": 90625,
+      "total_tokens": 96685
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_056f2365b95b4b5ebe038ee132a6ef1a",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/90111bac3ff1a1d93e5d4b524db96092eb2e36ce8bfe9b5f0059250d979e1e9c/payload/conversation.jsonl",
+      "line": 46,
+      "tool_id": "toolu_43e4118574a54c1d81fa1fca",
+      "command_sha256": "4ffb7ae7defe94ac529046bdd3b7b6bb4da885905b0682b96be80163773787f2",
+      "result_sha256": "048a514e22b3c7810b55c1bf70b8ca56e139651cb0a0ebced04d1f155bed7c45",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "harness_framework_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1665,
+      "command_total_tokens": 728,
+      "result_total_tokens": 90860,
+      "total_tokens": 91588
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_f0a815d56acb4a6d89eeb36aa42720fe",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/a203bcc294488b7307ae32b5e02865211be75c00a20668458cbd362b810d8688/payload/conversation.jsonl",
+      "line": 222,
+      "tool_id": "toolu_9b182773249a49d0bbf4f529",
+      "command_sha256": "ed424d4d776ea3e93d1020a943457ff15e947032ca75a7f8fb0e750444f6b082",
+      "result_sha256": "f0ad6f5b42c620e838998ab91903cbbcfeb76649eb319279ea05f6f71ffee951",
+      "flags": [
+        "runtime_cli",
+        "runtime_wiki-query",
+        "shell_read_or_filter"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 7458,
+      "command_total_tokens": 2475,
+      "result_total_tokens": 400302,
+      "total_tokens": 402777
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_73af75e2d865494fbf48468236372152",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/fe8b76efff368e6bcbf8028962432e08e58616e935625b020f311527e1dac2ac/payload/conversation.jsonl",
+      "line": 101,
+      "tool_id": "toolu_e183d3b511fe402fa3e939aa",
+      "command_sha256": "e1de48e0d34db72445608cab22ac65b27995a12bf8555bc11f7ebc45f488e559",
+      "result_sha256": "83ce16b6c06cd8a1c600d56845f8895d2a94067efbfbc70caf84bb532ee22f6f",
+      "flags": [
+        "file_content_write_signal",
+        "runtime_cli",
+        "runtime_wiki-query",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1912,
+      "command_total_tokens": 3551,
+      "result_total_tokens": 95940,
+      "total_tokens": 99491
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_ef76bdc9673c4862b157999b30300d62",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/097edcde6bca056e9347b2566487ff8ecfc5f869da9b86843b99a521fdfbc299/payload/conversation.jsonl",
+      "line": 245,
+      "tool_id": "toolu_9427648ab39c40899ecf17d1",
+      "command_sha256": "88744d8f2267b81629c4cf3167f2d41e207161f616ae8a4c51c8ebbeeb1748c2",
+      "result_sha256": "665a5e2a87e6e72f595b270ae49f015dfeb193c58a3573332a07731bb032884c",
+      "flags": [
+        "file_content_write_signal",
+        "runtime_cli",
+        "runtime_wiki-query",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3141,
+      "command_total_tokens": 2825,
+      "result_total_tokens": 72672,
+      "total_tokens": 75497
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_fc6f9d932ca14c74baac07fdd606e7f4",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/db9d233a3555a33e1b904bbce4c66ddeb0614d6b047552a85efa88a900daa310/payload/conversation.jsonl",
+      "line": 92,
+      "tool_id": "toolu_29629c597e304c6c8752f0ab",
+      "command_sha256": "f1e29c664807e24454d14f21548b1222ded67fa1f54bdf60f53b40c92328aafb",
+      "result_sha256": "a4f7a6688ee27fe057726468180b418fb8e77345237a3126d9cc7c6cfed30f8a",
+      "flags": [
+        "file_content_write_signal",
+        "runtime_cli",
+        "runtime_wiki-query",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2826,
+      "command_total_tokens": 2187,
+      "result_total_tokens": 71370,
+      "total_tokens": 73557
+    },
+    {
+      "group": "retained",
+      "dsl": "triton",
+      "session": "workersession_fc6f9d932ca14c74baac07fdd606e7f4",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/db9d233a3555a33e1b904bbce4c66ddeb0614d6b047552a85efa88a900daa310/payload/conversation.jsonl",
+      "line": 87,
+      "tool_id": "toolu_89142013a62a4a0089cc8bd0",
+      "command_sha256": "934afa43fe40620a399d94013e90bcd5926547a0794069ed0cc4146fc494db12",
+      "result_sha256": "ba4619b197ad6532ee043aff784c412c4cbcf95dd73747e91904306beb6adbbd",
+      "flags": [
+        "file_content_write_signal",
+        "runtime_cli",
+        "runtime_wiki-query",
+        "shell_read_or_filter",
+        "shell_text_write"
+      ],
+      "bucket": "wiki_query_and_filter",
+      "text_programs": [
+        "cat",
+        "head"
+      ],
+      "writer_matches": 1,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1471,
+      "command_total_tokens": 2548,
+      "result_total_tokens": 37260,
+      "total_tokens": 39808
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_296fe6bb456a4bb680afcf2237eb9d3b",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/4a28055a2aa702c2b31322504c80d738ac5d2d5a83e35070f68ec3f0f0511915/payload/conversation.jsonl",
+      "line": 245,
+      "tool_id": "toolu_64cd9546d4714e0a860efa04",
+      "command_sha256": "74e91d536391cee85ca78c1af232d646c26e422980b42218532d94a26fdb2a9c",
+      "result_sha256": "1ac0352d63fa44e997511f7a4d7881ac1be8392a8c410b38316abf0ee12e666b",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1202,
+      "command_total_tokens": 1848,
+      "result_total_tokens": 89528,
+      "total_tokens": 91376
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_296fe6bb456a4bb680afcf2237eb9d3b",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/4a28055a2aa702c2b31322504c80d738ac5d2d5a83e35070f68ec3f0f0511915/payload/conversation.jsonl",
+      "line": 276,
+      "tool_id": "toolu_b47470608e3c457fb2df2861",
+      "command_sha256": "fab2ee5405d26016c018cd6e1f4865bd12459919bcddd488fdd15dfd789e743a",
+      "result_sha256": "5f072b02c9d11c3fe640851f4c65880f66de8585446b67778c0214e09f81ec5c",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 2,
+      "shell_parsed": true,
+      "visible_tokens": 1288,
+      "command_total_tokens": 1587,
+      "result_total_tokens": 86020,
+      "total_tokens": 87607
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_04ae1d437b874a95bd81bb0eb23c30dd",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/054c2733aad350e98d8a77163598d88b094ad596d3791aec43e24d8f92d51939/payload/conversation.jsonl",
+      "line": 84,
+      "tool_id": "toolu_47f96605a81e49c3a8e1987f",
+      "command_sha256": "cb26243cc534ee5584a560249bb5b7614138ae74b1070749b015b2b0a49a92fd",
+      "result_sha256": "bba184074768b0517fade909b3f87a7c6f5991ba28a07c16f9e0bb2155ac9023",
+      "flags": [
+        "shell_diff_or_hash",
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 3211,
+      "command_total_tokens": 896,
+      "result_total_tokens": 85833,
+      "total_tokens": 86729
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_620069931e414057a64c352c15b06264",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/a4e8b6aaf793133229008c898ea16d7ed48c35e2b11d8cd7510cb393f916278f/payload/conversation.jsonl",
+      "line": 155,
+      "tool_id": "toolu_11d1f4b2bcd44ef89a8e747b",
+      "command_sha256": "ce2af17e4f26ec0735d467013c97dec62562e77637578198e5f0def100f98325",
+      "result_sha256": "ac9c89f87aeb3e0085b98a38be61239f5b6800df64ece2964c6b31786f5eefaa",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 1679,
+      "command_total_tokens": 630,
+      "result_total_tokens": 68224,
+      "total_tokens": 68854
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_d681c067ea014418bb19ca434d07f6a1",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/b5b3977ce93246e70119b1e2bbd4fc3f81c80e38b6907aa677f5ca14ae43d984/payload/conversation.jsonl",
+      "line": 169,
+      "tool_id": "toolu_13e35c032d9e491aa9b0a44f",
+      "command_sha256": "f8dd9ca57ecb0f6641b8458106a173d3a97d962af33db46a15ea61fbdbe50b0b",
+      "result_sha256": "2b999b0530b9fbdc1d35ce08387eb88a02502b56e59f367fef30bfc00ab89916",
+      "flags": [
+        "shell_read_or_filter"
+      ],
+      "bucket": "experiment_helper_code",
+      "text_programs": [
+        "sed"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 2699,
+      "command_total_tokens": 350,
+      "result_total_tokens": 64440,
+      "total_tokens": 64790
+    },
+    {
+      "group": "retained",
+      "dsl": "cuda",
+      "session": "workersession_620069931e414057a64c352c15b06264",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/a4e8b6aaf793133229008c898ea16d7ed48c35e2b11d8cd7510cb393f916278f/payload/conversation.jsonl",
+      "line": 231,
+      "tool_id": "toolu_d28136edf79140afaf67b726",
+      "command_sha256": "fa9573156bc2954c0c86c1313698e0c246607989955306d73eedf8a180d63a30",
+      "result_sha256": "556fb252050d67a0210015b2afb85e2ed42cf8700fb9d1db9e3f26b89cf29c49",
+      "flags": [
+        "aka_control_union",
+        "git",
+        "git_status",
+        "shell_diff_or_hash",
+        "shell_file_change",
+        "shell_read_or_filter"
+      ],
+      "bucket": "control_command_and_filter",
+      "text_programs": [
+        "head"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 76,
+      "command_total_tokens": 825,
+      "result_total_tokens": 1032,
+      "total_tokens": 1857
+    },
+    {
+      "group": "retained",
+      "dsl": "cutedsl",
+      "session": "workersession_ea2350eb185c4476897a31c1116d9962",
+      "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/0558b705329b5608c804e8e9de2da3d21d8948f52675513acfb667a82a829d51/payload/conversation.jsonl",
+      "line": 345,
+      "tool_id": "toolu_39bbc4a4bf644f98882b62ad",
+      "command_sha256": "5ae364b009d213e8975904be11e8a20bee8d29f71a06833bca377097d5c09297",
+      "result_sha256": "8412e1972b0394f6b51b8c18de111fb7f6639eda4de02d5b6580bdbb62d9d8a8",
+      "flags": [
+        "aka_control_union",
+        "git",
+        "git_diff",
+        "shell_diff_or_hash",
+        "shell_read_or_filter"
+      ],
+      "bucket": "control_command_and_filter",
+      "text_programs": [
+        "tail"
+      ],
+      "writer_matches": 0,
+      "reader_matches": 1,
+      "shell_parsed": true,
+      "visible_tokens": 100,
+      "command_total_tokens": 624,
+      "result_total_tokens": 154,
+      "total_tokens": 778
+    }
+  ],
+  "index_sha256": "3512881923854ad9901aa4500a6add2046bfe38dc53ad99ca6dfa754d08530d6"
+}

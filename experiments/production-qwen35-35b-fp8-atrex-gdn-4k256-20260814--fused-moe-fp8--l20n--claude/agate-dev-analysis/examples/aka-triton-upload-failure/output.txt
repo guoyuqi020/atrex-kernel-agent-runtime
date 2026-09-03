@@ -1,0 +1,5 @@
+[sandbox] gateway_kind=dev hardware=L20N files=0 payload=0.1 KiB transport=inline atrex_runtime=0.0 KiB command='bash -c \'python profiles/episode_14/harness/mma_roofline_probe.py && echo \'"\'"\'--- BW ---\'"\'"\' && python tools/bench_bandwidth.py --size-bytes 536870912\''
+submitted job_id=dv_6c3b2b773665; polling...
+
+agate: the job ran but YOUR COMMAND failed (exit=2). job status='succeeded' describes the pod, not your command.
+python: can't open file '/tmp/agate-dv_6c3b2b773665/workspace/profiles/episode_14/harness/mma_roofline_probe.py': [Errno 2] No such file or directory

@@ -1,0 +1,55 @@
+{
+  "dsl": "cutedsl",
+  "epoch": 4,
+  "trajectory": 2,
+  "iteration": 2,
+  "attempt_id": "attempt_3638d2292f874b66b6dda4bc059e0566",
+  "job_id": "dv_4f1a85c8d14c",
+  "trace": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/1a27d004eaab2e02df45a76979e918b7952231769eb848500dc512ec80f63cba/payload/conversation.jsonl",
+  "workspace": "runtime/workspace-full-20260902.unpacked/production/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/state/attempt-workspaces/attempt_3638d2292f874b66b6dda4bc059e0566/run-480eae1877a347ca968598c34d76066b",
+  "kernel_artifact_digest": "sha256:cf2ce6582b2af4972b42c6fa4c178a5ccd0b8ae850318d75b291dd1041949e39",
+  "gateway_result_digest": "sha256:7593848e39389ff425a1cc31f3336c8e08b6254585eba127536bce72835ca41d",
+  "trace_line": 282,
+  "result_lines": [
+    285,
+    299
+  ],
+  "files": [
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/state/attempt-workspaces/attempt_3638d2292f874b66b6dda4bc059e0566/run-480eae1877a347ca968598c34d76066b/scratch/req-ab-fused.json",
+      "copy": "request.json",
+      "kind": "final_request_file",
+      "sha256": "9d874789dcc9e1b456ce247c27b63708f769642bc9b95bbac40b0bd8693fcebe",
+      "bytes": 337
+    },
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/state/attempt-workspaces/attempt_3638d2292f874b66b6dda4bc059e0566/run-480eae1877a347ca968598c34d76066b/tools/paired_ab_probe.py",
+      "copy": "paired_ab_probe.py",
+      "kind": "final_workspace_snapshot",
+      "sha256": "968bfeb4712b435e4691407666032d482ed4f4cd0354aed531ee79bb848d308d",
+      "bytes": 3651
+    },
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/production-qwen35-35b-fp8-atrex-gdn-4k256-20260814--fused-moe-fp8--l20n--claude/state/attempt-workspaces/attempt_3638d2292f874b66b6dda4bc059e0566/run-480eae1877a347ca968598c34d76066b/scratch/kernel_incumbent.py",
+      "copy": "kernel_incumbent.py",
+      "kind": "final_workspace_snapshot",
+      "sha256": "5490dfd78b09fbe6366b5c6730bf23a488f9ca2fb8e9735af820801cc242e481",
+      "bytes": 42020
+    },
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/cf2ce6582b2af4972b42c6fa4c178a5ccd0b8ae850318d75b291dd1041949e39/payload/kernel.py",
+      "copy": "kernel.py",
+      "kind": "immutable_kernel_artifact",
+      "sha256": "62f85b453eb0a2b946651ce2e34f5da11f92350942694b4ed58a54872e30f059",
+      "bytes": 71369
+    },
+    {
+      "source": "runtime/workspace-full-20260902.unpacked/production/control-l20n/state/artifacts/sha256/7593848e39389ff425a1cc31f3336c8e08b6254585eba127536bce72835ca41d/payload/value.json",
+      "copy": "result.json",
+      "kind": "immutable_gateway_result",
+      "sha256": "e5f62050c606e95e5895a7d7ecfbde6f1235fca72dbcb129898b0335d18656a8",
+      "bytes": 1171
+    }
+  ],
+  "snapshot_note": "Request and helper files are end-of-Attempt snapshots, not guaranteed per-call upload bytes. Kernel/result are frozen artifacts. command.txt is original Trace text. Examples are evidence, not runnable production recipes."
+}

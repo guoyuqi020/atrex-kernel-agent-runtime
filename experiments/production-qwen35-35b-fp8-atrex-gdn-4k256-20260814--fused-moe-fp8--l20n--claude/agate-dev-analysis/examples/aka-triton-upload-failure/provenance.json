@@ -1,0 +1,39 @@
+{
+  "instance": "AKA-2",
+  "dsl": "triton",
+  "episode": 14,
+  "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0014-ed00df8c/e02e50b7-9d1d-41f9-8378-c8c433aa3e9a.jsonl",
+  "line": 354,
+  "output_lines": [
+    355
+  ],
+  "requested_kind": "dev",
+  "observed_routes": [
+    "dev"
+  ],
+  "dev_job_ids": [
+    "dv_6c3b2b773665"
+  ],
+  "files": [
+    {
+      "source": "AKA/atrex-runs2.with-traces/atrex-runs2/kernel_opt_fused_moe_fp8_triton_l20n_production/.atrex_long_horizon/episodes/e0014/archive/worktree_files/profiles/episode_14/harness/mma_roofline_probe.py",
+      "copy": "mma_roofline_probe.py",
+      "kind": "final_episode_snapshot",
+      "sha256": "d5eb9c0819128ab5deb81fc565eed9cda1bbfa29e09e85713031669810d5e2a5",
+      "bytes": 10706
+    },
+    {
+      "copy": "at-call/profiles/episode_14/harness/mma_roofline_probe.py",
+      "kind": "literal_trace_reconstruction",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0014-ed00df8c/e02e50b7-9d1d-41f9-8378-c8c433aa3e9a.jsonl",
+      "write_edit_lines": [
+        333,
+        339
+      ],
+      "before_call_line": 354,
+      "sha256": "09957163baa95156fbbcdfe11612dbd89911e1699376ba54ac985364f76df093",
+      "bytes": 9582
+    }
+  ],
+  "snapshot_note": "Commands/results are exact visible Trace text. Helper files are end-of-Episode snapshots; not a claim of identical content at every invocation. AKA framework files and remote injected inputs are not reconstructed."
+}

@@ -137,6 +137,12 @@ atrex-kernel-agent-runtime list-worker-sessions --config runtime.json --campaign
 `list-evaluations`/`show-evaluation --source --result` 展示每次探索性和 Runtime 权威 Kernel/Result。
 `list-bootstrap-runs`/`show-bootstrap-run` 展示所有物理 Bootstrap Generation，包括失败记录。
 
+Claude Session Artifact 在 `provider/claude-session.raw-jsonl` 和 `provider/claude-subagents/` 中保留原生主/子会话。规范化 `events.jsonl` 通过 `message_id`、`source_path` 将每个响应的最新 usage 关联回原始消息及工具调用。使用逐响应统计前应检查 `session.json.response_usage_complete`；缺失或与终态总账无法核对的计数仍标为 partial。不要重复累加 stdout/native 副本，也不要把终态总账加到逐响应用量上。一个响应可能包含多个工具调用：这些计数属于响应，并不是每个工具独立计费的用量。
+
+封存后的 `conversation.jsonl` 是阅读视图：Claude 优先使用原生内容，省去已被完整覆盖的 stdout 消息副本，保留不同的 thinking/text/tool 内容块、未被覆盖的 stdout 内容、诊断、压缩边界和终态结果。重复的初始 Prompt，以及原生队列、标题、文件历史等内部管理事件只从阅读视图中省去。封存前的实时视图仍跟随 stdout。原始 Provider 文件及规范化 usage 索引不变。
+
+该采集能力需要更新后的 Core/Evolver Bundle Commit。现有 Campaign 冻结了 Bundle Revision，单独重启 Runtime 不会自动升级。历史运行如果禁用了原生持久化，无法从 Session 总量还原缺失的逐响应计数。
+
 ## 8. 运行生产任务
 
 生产脚本推荐把常驻控制面与算子任务分开。先启动一次 Runtime 和 Wiki：

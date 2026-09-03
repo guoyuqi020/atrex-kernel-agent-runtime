@@ -1,0 +1,23 @@
+{
+  "instance": "AKA-1",
+  "dsl": "triton",
+  "episode": 15,
+  "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-a94fe9c0/fda3779a-3620-46b4-8065-b6eacf15ab86.jsonl",
+  "line": 976,
+  "output_lines": [
+    977
+  ],
+  "requested_kind": "auto",
+  "observed_routes": [],
+  "dev_job_ids": [],
+  "files": [
+    {
+      "source": "AKA/atrex-runs.with-traces/atrex-runs/kernel_opt_fused_moe_fp8_triton_l20n_production/.atrex_long_horizon/episodes/e0015/archive/worktree_files/profiles/episode_15/harness/collect_ncu.sh",
+      "copy": "collect_ncu.sh",
+      "kind": "final_episode_snapshot",
+      "sha256": "3d80b60bbcac3396d69207d9b42dc4eed6a4d17b097fc04dca4af0f6f1cf6ae8",
+      "bytes": 7044
+    }
+  ],
+  "snapshot_note": "Commands/results are exact visible Trace text. Helper files are end-of-Episode snapshots; not a claim of identical content at every invocation. AKA framework files and remote injected inputs are not reconstructed."
+}

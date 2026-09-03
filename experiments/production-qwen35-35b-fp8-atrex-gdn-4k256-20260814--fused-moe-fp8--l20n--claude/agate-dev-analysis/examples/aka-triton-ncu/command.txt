@@ -1,0 +1,1 @@
+python tools/sandbox.py --hardware L20N --no-sync -- env PROFILE_SHAPE_ID=0 PROFILE_ITERS=6 PROFILE_WARMUP=2 bash profiles/episode_15/harness/collect_ncu.sh profiles/episode_15/shape-0-v16a time '' profile_driver.py > /tmp/ep15_v16a_sweep.log 2>&1; grep "^KERNEL _" /tmp/ep15_v16a_sweep.log

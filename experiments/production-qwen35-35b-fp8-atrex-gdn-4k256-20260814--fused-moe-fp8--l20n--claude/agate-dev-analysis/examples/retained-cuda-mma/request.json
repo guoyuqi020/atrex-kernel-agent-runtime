@@ -1,0 +1,1 @@
+{"operation":"dev","command":"python3 mma_proto2.py","file_paths":["scratch/mma_proto2.py"],"intent":"custom_harness","job_timeout_s":600}

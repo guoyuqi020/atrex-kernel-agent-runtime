@@ -1,0 +1,3401 @@
+{
+  "method": {
+    "scope": "AKA optimization, nested subagents and policy review; excludes Bootstrap",
+    "usage": "Last observed usage per assistant message.id; no cross-file duplicate IDs",
+    "pricing_cny_per_million_snapshot_2026_09_02": {
+      "input_tokens": 12,
+      "cache_read_input_tokens": 1,
+      "cache_creation_input_tokens": 15,
+      "output_tokens": 36
+    },
+    "unknown_usage": {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "total_tokens": 221597,
+      "reason": "Timed-out policy review; only total is available",
+      "cost_bounds": "All cache read (minimum) through all output (maximum)"
+    }
+  },
+  "groups": {
+    "AKA-1/cuda": {
+      "input_tokens": 16800,
+      "cache_read_input_tokens": 266001891,
+      "cache_creation_input_tokens": 8526446,
+      "output_tokens": 3165875,
+      "unknown_tokens": 0,
+      "total_tokens": 277711012,
+      "cost_cny_min": 508.071681,
+      "cost_cny_max": 508.071681
+    },
+    "AKA-1/cutedsl": {
+      "input_tokens": 20682,
+      "cache_read_input_tokens": 334863334,
+      "cache_creation_input_tokens": 10432550,
+      "output_tokens": 4097469,
+      "unknown_tokens": 0,
+      "total_tokens": 349414035,
+      "cost_cny_min": 639.108652,
+      "cost_cny_max": 639.108652
+    },
+    "AKA-1/triton": {
+      "input_tokens": 19098,
+      "cache_read_input_tokens": 312034332,
+      "cache_creation_input_tokens": 9634879,
+      "output_tokens": 3401377,
+      "unknown_tokens": 0,
+      "total_tokens": 325089686,
+      "cost_cny_min": 579.236265,
+      "cost_cny_max": 579.236265
+    },
+    "AKA-2/cuda": {
+      "input_tokens": 23352,
+      "cache_read_input_tokens": 374235349,
+      "cache_creation_input_tokens": 11242666,
+      "output_tokens": 4136928,
+      "unknown_tokens": 0,
+      "total_tokens": 389638295,
+      "cost_cny_min": 692.084971,
+      "cost_cny_max": 692.084971
+    },
+    "AKA-2/triton": {
+      "input_tokens": 14052,
+      "cache_read_input_tokens": 218159104,
+      "cache_creation_input_tokens": 6998745,
+      "output_tokens": 2631435,
+      "unknown_tokens": 221597,
+      "total_tokens": 228024933,
+      "cost_cny_min": 418.26216,
+      "cost_cny_max": 426.018055
+    },
+    "AKA-2/cutedsl": {
+      "input_tokens": 20390,
+      "cache_read_input_tokens": 325186152,
+      "cache_creation_input_tokens": 13120749,
+      "output_tokens": 3701084,
+      "unknown_tokens": 0,
+      "total_tokens": 342028375,
+      "cost_cny_min": 655.481091,
+      "cost_cny_max": 655.481091
+    }
+  },
+  "traces": [
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0004-eedbe526/0b89c52f-fc82-48ea-be2e-f3f93d77c07a.jsonl",
+      "trace_sha256": "5133bed435d1126e095c150b858aa3fb742fe80cb03210329fe83a65c1fd1b27",
+      "responses": 116,
+      "usage": {
+        "input_tokens": 696,
+        "cache_read_input_tokens": 12532746,
+        "cache_creation_input_tokens": 315502,
+        "output_tokens": 129696
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0011-08c64556/801a5a7c-2e3e-40d6-a0c6-46c54e898c1d.jsonl",
+      "trace_sha256": "568995b04c5dd42e20a95a30b921978d609124035dd3d4739611a04bcd0d2d5b",
+      "responses": 189,
+      "usage": {
+        "input_tokens": 1134,
+        "cache_read_input_tokens": 18994963,
+        "cache_creation_input_tokens": 644931,
+        "output_tokens": 250363
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0015-76dec354/86f948a5-aeac-4f2e-bcdd-3aab85572f93.jsonl",
+      "trace_sha256": "adf5791ca090b838dcfba5ee281cdd203fe450ec4841e9a0815a99ae4e7fe27f",
+      "responses": 124,
+      "usage": {
+        "input_tokens": 744,
+        "cache_read_input_tokens": 11799588,
+        "cache_creation_input_tokens": 406629,
+        "output_tokens": 173032
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0018-7a896672/1a4271cb-2a11-4166-b6f0-6d15d81844d3.jsonl",
+      "trace_sha256": "004644d4c2d8d2e4ecc5c27555948e3f554bb6c4b5c366697e317a3621d54a5b",
+      "responses": 184,
+      "usage": {
+        "input_tokens": 1104,
+        "cache_read_input_tokens": 16916093,
+        "cache_creation_input_tokens": 1145651,
+        "output_tokens": 236693
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0018-7a896672/1a4271cb-2a11-4166-b6f0-6d15d81844d3/subagents/agent-ab8796f0dcdd3f0ae.jsonl",
+      "trace_sha256": "16d6a42f052a65459f7b2d3db7919924af6f7e8eb1917f535eb969014378ed4f",
+      "responses": 2,
+      "usage": {
+        "input_tokens": 12,
+        "cache_read_input_tokens": 7473,
+        "cache_creation_input_tokens": 47857,
+        "output_tokens": 20054
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0002-a85919cb/462c0d04-114d-45ab-b678-5d51b6bac3da.jsonl",
+      "trace_sha256": "07411005eb2f9c12c0ea93b8bb5898bd3d275c394a445d3262ef2c2e87eaf4be",
+      "responses": 120,
+      "usage": {
+        "input_tokens": 720,
+        "cache_read_input_tokens": 11300105,
+        "cache_creation_input_tokens": 271570,
+        "output_tokens": 117422
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0010-c0b2ab68/71de64d0-52a9-4bb6-b588-e5816de35f8b.jsonl",
+      "trace_sha256": "913016c674c6853bb2721fc8bc3b6ce4dff68b4fcf5310b35c2c377463e5604e",
+      "responses": 145,
+      "usage": {
+        "input_tokens": 870,
+        "cache_read_input_tokens": 14949436,
+        "cache_creation_input_tokens": 418436,
+        "output_tokens": 187202
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0017-40b0c6c5/9204870a-36cc-4a54-ba64-52864384af82.jsonl",
+      "trace_sha256": "4a6090ec3f96a78c01839ee8a3f09d1ff46e1c2deeaa3d4b0af88f0d00163bbe",
+      "responses": 168,
+      "usage": {
+        "input_tokens": 1008,
+        "cache_read_input_tokens": 17377802,
+        "cache_creation_input_tokens": 532695,
+        "output_tokens": 206103
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0017-40b0c6c5/9204870a-36cc-4a54-ba64-52864384af82/subagents/agent-a77f3dd9ebf89f40b.jsonl",
+      "trace_sha256": "95a117d23d389ba1c87435d8b3db30e643ea1693777c0fa1d7ddf183205afe0b",
+      "responses": 13,
+      "usage": {
+        "input_tokens": 78,
+        "cache_read_input_tokens": 737592,
+        "cache_creation_input_tokens": 87145,
+        "output_tokens": 17648
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0016-d932ade8/6d1d011a-793a-45e0-b44f-cfc670ddf483.jsonl",
+      "trace_sha256": "0b43438632f6a4093d71a0e755a584dec1b37a132154b615d007f9ce1dd61b49",
+      "responses": 151,
+      "usage": {
+        "input_tokens": 906,
+        "cache_read_input_tokens": 16262929,
+        "cache_creation_input_tokens": 587585,
+        "output_tokens": 283903
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0006-3f4babdf/d66f99bf-0c85-44dd-b0ea-5a7c93dbb9ba.jsonl",
+      "trace_sha256": "a63c54efe5c53ff7fa3b76e365c27bffbc12ce1e7f1e89e1ed55406a0d9e9830",
+      "responses": 152,
+      "usage": {
+        "input_tokens": 912,
+        "cache_read_input_tokens": 16049869,
+        "cache_creation_input_tokens": 465944,
+        "output_tokens": 146504
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0010-e5dbd293/98862147-f89c-4cd5-8078-fdbdb651d60d.jsonl",
+      "trace_sha256": "3386ea9e2072983ac3cdba56c0869222cb9cc779d24edeb73098ea35cbf6e581",
+      "responses": 139,
+      "usage": {
+        "input_tokens": 834,
+        "cache_read_input_tokens": 13619224,
+        "cache_creation_input_tokens": 366278,
+        "output_tokens": 143279
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0014-9a090675/3885e497-d605-4f09-a02a-ee971a259c05.jsonl",
+      "trace_sha256": "152575b701e59d780a7911ea3ba1a8941439a006c090a677a93e67cce22456c2",
+      "responses": 182,
+      "usage": {
+        "input_tokens": 1092,
+        "cache_read_input_tokens": 18610661,
+        "cache_creation_input_tokens": 573982,
+        "output_tokens": 206621
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0013-26239a6f/a6729177-d463-44ee-a151-018f980e0f4b.jsonl",
+      "trace_sha256": "0c9354646413d51df702782c000f8fd352c9d489db04765f2f3173195f9a347d",
+      "responses": 134,
+      "usage": {
+        "input_tokens": 804,
+        "cache_read_input_tokens": 13403955,
+        "cache_creation_input_tokens": 412175,
+        "output_tokens": 151707
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-12b93f3f/55f3cd86-e247-4ea0-8dd0-ebe8b3987eec.jsonl",
+      "trace_sha256": "0328351a9452f4447050b0f071de3d6977f0c1bbb9a25ae389e3b889908d223c",
+      "responses": 274,
+      "usage": {
+        "input_tokens": 1644,
+        "cache_read_input_tokens": 26960082,
+        "cache_creation_input_tokens": 714980,
+        "output_tokens": 278976
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0005-1ed4d6ef/953c8342-4870-4dea-b641-d3c270264bfd.jsonl",
+      "trace_sha256": "18415ee3d3f7d10a2c26588b5e3c8241e1a9f254b9f94d8f9fe033307068514b",
+      "responses": 116,
+      "usage": {
+        "input_tokens": 696,
+        "cache_read_input_tokens": 10734635,
+        "cache_creation_input_tokens": 294235,
+        "output_tokens": 95062
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0002-a8ed6968/15b15068-4cc8-4e12-b439-d43378cac50f.jsonl",
+      "trace_sha256": "a4939f17fb466c644a9b21d67560d8f283d2f67c96fd72cac71ef46fe8cc4cca",
+      "responses": 184,
+      "usage": {
+        "input_tokens": 1104,
+        "cache_read_input_tokens": 16148338,
+        "cache_creation_input_tokens": 557726,
+        "output_tokens": 283563
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0003-eaa7b3c0/e3629386-92fa-4b7b-b851-08abb9241cf3.jsonl",
+      "trace_sha256": "d333658a57e962bd3cd91b8ef7daa32138a259623f1d9644cad5632809be2a43",
+      "responses": 41,
+      "usage": {
+        "input_tokens": 246,
+        "cache_read_input_tokens": 3798330,
+        "cache_creation_input_tokens": 132423,
+        "output_tokens": 37412
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0018-85b89d33/b8c65172-3fb4-4b63-b1dc-f9682c2d1e2d.jsonl",
+      "trace_sha256": "4e5cc95de8bebbdb1974365b118a5276a09cab585a20db92f106013e92577c13",
+      "responses": 265,
+      "usage": {
+        "input_tokens": 1590,
+        "cache_read_input_tokens": 25072816,
+        "cache_creation_input_tokens": 606677,
+        "output_tokens": 243951
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0013-926ba888/d0af34ea-236f-4242-8960-33b3858e838a.jsonl",
+      "trace_sha256": "1cc797a1f9e41154c6c12a1e9fb6e3ae38c23beccf49f6b133e9511fed7737ce",
+      "responses": 226,
+      "usage": {
+        "input_tokens": 1356,
+        "cache_read_input_tokens": 23878992,
+        "cache_creation_input_tokens": 512021,
+        "output_tokens": 246220
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0004-aeef9a5b/f984584a-db4e-4778-8135-27fedc9f45ee.jsonl",
+      "trace_sha256": "89f8411b71650e2beb0cfa644472d0cbbecf0b9614051e6cf1574006da3e3dad",
+      "responses": 164,
+      "usage": {
+        "input_tokens": 984,
+        "cache_read_input_tokens": 16581312,
+        "cache_creation_input_tokens": 431652,
+        "output_tokens": 191325
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0004-aeef9a5b/f984584a-db4e-4778-8135-27fedc9f45ee/subagents/agent-ae0ccb8e1ff77508c.jsonl",
+      "trace_sha256": "f99efd910aee30923472f6a7fc87549e2552b3068820a459cc26da88d2d80c10",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 238167,
+        "cache_creation_input_tokens": 91365,
+        "output_tokens": 5044
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0017-99b41159/1c94859f-00dc-4a22-8d2d-07b92e657cca.jsonl",
+      "trace_sha256": "d0cb8a61fe84295e890e18c2329767931448beecb8f3518b948a90dc36cb695c",
+      "responses": 147,
+      "usage": {
+        "input_tokens": 882,
+        "cache_read_input_tokens": 14552529,
+        "cache_creation_input_tokens": 315162,
+        "output_tokens": 135874
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-29fd816f/7eb8a518-6205-42e3-b746-56b3a4528479.jsonl",
+      "trace_sha256": "fad53c524db00b34ee4ff951073b6b06d677fc78c77c1f91d2e35994ceed9d73",
+      "responses": 280,
+      "usage": {
+        "input_tokens": 1680,
+        "cache_read_input_tokens": 29082856,
+        "cache_creation_input_tokens": 828455,
+        "output_tokens": 314953
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0007-3313dc05/4ea79eb4-b743-40ac-bff6-2a00e58dd962.jsonl",
+      "trace_sha256": "98474484571ee09ee701a8fc8171f31b6a8f2e93ac7143584b0d583d712e7698",
+      "responses": 152,
+      "usage": {
+        "input_tokens": 912,
+        "cache_read_input_tokens": 14862921,
+        "cache_creation_input_tokens": 408612,
+        "output_tokens": 151009
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0007-e8fdfc87/1f6d4a8c-64a8-45c7-83bc-3f1f244d847a.jsonl",
+      "trace_sha256": "c5b49178104bf102261e96fa4a366267cb0f1d204499275aadbec2ea6ce9f5f5",
+      "responses": 128,
+      "usage": {
+        "input_tokens": 768,
+        "cache_read_input_tokens": 11317372,
+        "cache_creation_input_tokens": 389500,
+        "output_tokens": 175370
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0001-8c52a2a3/2c12ee34-fd33-4c03-a8ad-bbe0173730a0.jsonl",
+      "trace_sha256": "f8d86cd54c10286d7e5ea4ed6b64fefec583b757c5d6a7c04d43866882e5ae23",
+      "responses": 130,
+      "usage": {
+        "input_tokens": 780,
+        "cache_read_input_tokens": 13392291,
+        "cache_creation_input_tokens": 440215,
+        "output_tokens": 156357
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-a94fe9c0/fda3779a-3620-46b4-8065-b6eacf15ab86.jsonl",
+      "trace_sha256": "ea1eb879b081c42663a476085cad2d39cd3a3421c9ba2e57de333b5de54ac481",
+      "responses": 239,
+      "usage": {
+        "input_tokens": 1434,
+        "cache_read_input_tokens": 25520931,
+        "cache_creation_input_tokens": 517018,
+        "output_tokens": 222994
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0008-70b7b2e7/edd541fd-be56-48f1-8512-103dbc971312.jsonl",
+      "trace_sha256": "839502fca2749e37bccb1c46d882c7715c6e0c42e90972bc6049a32183f5a365",
+      "responses": 177,
+      "usage": {
+        "input_tokens": 1062,
+        "cache_read_input_tokens": 17633881,
+        "cache_creation_input_tokens": 426598,
+        "output_tokens": 189456
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0002-dae5f8be/e9fba28b-0016-462b-b0ef-46500d3f7e38.jsonl",
+      "trace_sha256": "de89d7f417cf1e9070c553ddf346b5635672e5691f4355d034d1c849cded633d",
+      "responses": 143,
+      "usage": {
+        "input_tokens": 858,
+        "cache_read_input_tokens": 14760938,
+        "cache_creation_input_tokens": 425567,
+        "output_tokens": 147511
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0006-77fb3464/d35fbefe-d418-477a-b647-7235973905e1.jsonl",
+      "trace_sha256": "d5143842ea8b0d8151db3da3177829170a680e5fc355dbff5df18b597b6a2911",
+      "responses": 135,
+      "usage": {
+        "input_tokens": 810,
+        "cache_read_input_tokens": 12426651,
+        "cache_creation_input_tokens": 388826,
+        "output_tokens": 158214
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0003-42c00f4c/534598d4-0c8f-4480-9935-aa897469d866.jsonl",
+      "trace_sha256": "85418d93197518b9ee7de23db90c8386c570eefc1dbc62a982447c4330d84f20",
+      "responses": 17,
+      "usage": {
+        "input_tokens": 102,
+        "cache_read_input_tokens": 1136676,
+        "cache_creation_input_tokens": 101289,
+        "output_tokens": 18022
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0012-0767d93e/60aced47-0251-4186-a85d-af53921d13a6.jsonl",
+      "trace_sha256": "07fc6a4a63d31d0bb925306617ebe50bc728c2e5b1907f4ae4b8759ca7c77e3e",
+      "responses": 115,
+      "usage": {
+        "input_tokens": 690,
+        "cache_read_input_tokens": 11400439,
+        "cache_creation_input_tokens": 295812,
+        "output_tokens": 101472
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0009-ab7091c8/93ccd04c-f7d1-4920-9148-5a7b2d3654f6.jsonl",
+      "trace_sha256": "b0cab00f8e7c12b28bc0c30d70cac9cd583fc3985f2f95b7d2aac8e7c349af15",
+      "responses": 245,
+      "usage": {
+        "input_tokens": 1470,
+        "cache_read_input_tokens": 26621590,
+        "cache_creation_input_tokens": 583267,
+        "output_tokens": 286876
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0011-3280ad56/30892517-c280-487a-b92b-f767d2ed9370.jsonl",
+      "trace_sha256": "841b67b4f92b5f39cddfaaa06213f14cc60eee7998f1a7a73e521b7683444c6a",
+      "responses": 131,
+      "usage": {
+        "input_tokens": 786,
+        "cache_read_input_tokens": 13681732,
+        "cache_creation_input_tokens": 370437,
+        "output_tokens": 154817
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0017-9e4bf3b0/612e21a2-1dde-4749-b21b-36285134d707.jsonl",
+      "trace_sha256": "aab29674fce745c186a0d7daa59cdf27b6ab36bbc69dc6de131d80048ba53b2d",
+      "responses": 119,
+      "usage": {
+        "input_tokens": 714,
+        "cache_read_input_tokens": 12488511,
+        "cache_creation_input_tokens": 362608,
+        "output_tokens": 144377
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0012-0e20bbc3/249eec70-a744-411a-99c8-d13972295ec4.jsonl",
+      "trace_sha256": "a2861efe4c4ae1e795b687e778a2f8da794592c56faea8bee32dbc7a8694f5cc",
+      "responses": 231,
+      "usage": {
+        "input_tokens": 1386,
+        "cache_read_input_tokens": 22500299,
+        "cache_creation_input_tokens": 583689,
+        "output_tokens": 216827
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0008-a6d0c7c5/d4f896e3-2573-4558-ab68-e78f5d4a6c8c.jsonl",
+      "trace_sha256": "9b8a9e5db22333f59fe03f14a5ef644ef369995e28375681f440dbb38ec61f6b",
+      "responses": 167,
+      "usage": {
+        "input_tokens": 1002,
+        "cache_read_input_tokens": 17856989,
+        "cache_creation_input_tokens": 355319,
+        "output_tokens": 152055
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0012-045d7137/3a42dc20-020a-4316-8148-f968b6675280.jsonl",
+      "trace_sha256": "e890c6850c61ed6e3ed00e4caffd4907aef47ad2ffbb2ab225627cfac858ab27",
+      "responses": 210,
+      "usage": {
+        "input_tokens": 1260,
+        "cache_read_input_tokens": 21297165,
+        "cache_creation_input_tokens": 558993,
+        "output_tokens": 223465
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0014-4dbd189d/17998456-cfe9-4adc-9a24-87f24840f4f4.jsonl",
+      "trace_sha256": "58a7f86034eed1923c9155c27fb100a9d5d23026ab033569dc7d65dbb0fd5793",
+      "responses": 64,
+      "usage": {
+        "input_tokens": 384,
+        "cache_read_input_tokens": 6961457,
+        "cache_creation_input_tokens": 296844,
+        "output_tokens": 105517
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0008-4793e438/d68c2e37-7fa5-467b-973e-5d82020d7bb9.jsonl",
+      "trace_sha256": "232ead50b1fe29c9d93f686788e037297021eaca2d6b1e6520cd937a7d53b53a",
+      "responses": 107,
+      "usage": {
+        "input_tokens": 642,
+        "cache_read_input_tokens": 9308836,
+        "cache_creation_input_tokens": 292026,
+        "output_tokens": 79465
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0007-adc6e469/ebd24d7b-3de0-418e-83b3-8a61c9e3e380.jsonl",
+      "trace_sha256": "409c25a656b082e2e81d165f9e53525546fb393a088990470212876adfe94355",
+      "responses": 103,
+      "usage": {
+        "input_tokens": 618,
+        "cache_read_input_tokens": 10464422,
+        "cache_creation_input_tokens": 370521,
+        "output_tokens": 161390
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0018-8e4b7237/62f7a69d-1090-4601-b2be-91eeee37ca47.jsonl",
+      "trace_sha256": "85663ddb3adc996228e26e212faa5bac742090f9c82b73f6652d56b8752bf204",
+      "responses": 189,
+      "usage": {
+        "input_tokens": 1134,
+        "cache_read_input_tokens": 17893706,
+        "cache_creation_input_tokens": 544064,
+        "output_tokens": 223206
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0018-8e4b7237/62f7a69d-1090-4601-b2be-91eeee37ca47/subagents/agent-ad528699ff331a007.jsonl",
+      "trace_sha256": "f84286e1519fefc2cd3350e04d8c574312fe77b9e708ff585cd1006905c44db0",
+      "responses": 51,
+      "usage": {
+        "input_tokens": 306,
+        "cache_read_input_tokens": 2406038,
+        "cache_creation_input_tokens": 98702,
+        "output_tokens": 38231
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0001-98c7e9c0/dabd3345-2804-4e96-b4f5-51b9a17be2cf.jsonl",
+      "trace_sha256": "e2012dd19ed59a0bc2e2dfc04f5944632f82b3b566454c13ec0f518207d12ed1",
+      "responses": 106,
+      "usage": {
+        "input_tokens": 636,
+        "cache_read_input_tokens": 10116406,
+        "cache_creation_input_tokens": 307123,
+        "output_tokens": 156429
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0004-713301c2/62ded771-1858-49c0-b3c4-1d45ca6bf1b4.jsonl",
+      "trace_sha256": "359ccde01b70a334da9c4751d70958c54bfd1de92a85f4a8b4dee712c31a092c",
+      "responses": 160,
+      "usage": {
+        "input_tokens": 960,
+        "cache_read_input_tokens": 15876944,
+        "cache_creation_input_tokens": 411726,
+        "output_tokens": 148028
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0009-b8db0196/fa232f26-aa8f-439e-a3f4-90aad8f1bb8b.jsonl",
+      "trace_sha256": "5d22fe8d7877365e493c8cccc8a4d95f01e45e1560d217efa16c32fabcc0530a",
+      "responses": 188,
+      "usage": {
+        "input_tokens": 1128,
+        "cache_read_input_tokens": 19185974,
+        "cache_creation_input_tokens": 435720,
+        "output_tokens": 184341
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0003-308b05bd/2e386a95-eeec-4160-82fb-43ec7f5d246a.jsonl",
+      "trace_sha256": "06ef5d5664a6ebcbdd1bac9e1e57c7b26ecd8e3bb06cd545fdba25466b126ead",
+      "responses": 115,
+      "usage": {
+        "input_tokens": 690,
+        "cache_read_input_tokens": 10953212,
+        "cache_creation_input_tokens": 308644,
+        "output_tokens": 110685
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0005-bcafd670/a1ed75a5-c9ad-4a40-b1ee-5d0e70415d04.jsonl",
+      "trace_sha256": "1bec6f5f961cf3c1c3f4e0483c95a11ad1c3fce01d16620d9c53ad5afd11bb82",
+      "responses": 183,
+      "usage": {
+        "input_tokens": 1098,
+        "cache_read_input_tokens": 16297563,
+        "cache_creation_input_tokens": 389893,
+        "output_tokens": 169127
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0011-59e3b054/8249266d-5434-41b2-b8d1-f854bcc34b2f.jsonl",
+      "trace_sha256": "9ec37712f2aae7b99594e8be2cc3be631fc9ba17aad3831b56d0017c2bc3f04e",
+      "responses": 179,
+      "usage": {
+        "input_tokens": 1074,
+        "cache_read_input_tokens": 17915057,
+        "cache_creation_input_tokens": 548583,
+        "output_tokens": 202315
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0010-da18ce01/203b3061-a17d-42c7-8f66-2687b290b73c.jsonl",
+      "trace_sha256": "70bff51dccde60f63e5030b0b7f4fde7587839aaef37241c9323559b6cc60012",
+      "responses": 121,
+      "usage": {
+        "input_tokens": 726,
+        "cache_read_input_tokens": 11144216,
+        "cache_creation_input_tokens": 390524,
+        "output_tokens": 171497
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0019-36027fd3/f4af0a57-306f-4606-816d-e3cc4818622c.jsonl",
+      "trace_sha256": "ff8c46c6d5ea101faf6dee5321de9844f78b83d0ca74027fc14b5e424e61dc1f",
+      "responses": 138,
+      "usage": {
+        "input_tokens": 828,
+        "cache_read_input_tokens": 13336069,
+        "cache_creation_input_tokens": 363653,
+        "output_tokens": 132922
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0019-4a8a912c/162a33f5-b14c-4677-9e0e-b7e2b8436794.jsonl",
+      "trace_sha256": "617a648a8a8a5536bf758f0702b81b68fabe1042c883777233b1ae8fbf297cac",
+      "responses": 88,
+      "usage": {
+        "input_tokens": 528,
+        "cache_read_input_tokens": 8766905,
+        "cache_creation_input_tokens": 258201,
+        "output_tokens": 80700
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0009-8afa1228/b394f601-d29a-41e5-a252-af8f190ea24f.jsonl",
+      "trace_sha256": "db3b00285972ad4d76da47dcba541195bae6393544572c74b8990d3d7cc15524",
+      "responses": 165,
+      "usage": {
+        "input_tokens": 990,
+        "cache_read_input_tokens": 17850392,
+        "cache_creation_input_tokens": 466307,
+        "output_tokens": 190514
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0016-4f2836cb/bc3e2e33-44b2-434c-a229-16fb3b13e5b5.jsonl",
+      "trace_sha256": "8efe64d2c8320b325e24d9b344f652b4055584d266bbe3a18c41df935d9fe201",
+      "responses": 195,
+      "usage": {
+        "input_tokens": 1170,
+        "cache_read_input_tokens": 20768055,
+        "cache_creation_input_tokens": 593779,
+        "output_tokens": 246070
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0015-6e09b649/7954f3d7-a233-4ecf-b4a6-99cd930645a2.jsonl",
+      "trace_sha256": "b345b0a0fe00ef387ff74fc15a61d13d1f634cf7fa8945fde66ff09ff8e2739d",
+      "responses": 97,
+      "usage": {
+        "input_tokens": 582,
+        "cache_read_input_tokens": 10037893,
+        "cache_creation_input_tokens": 302856,
+        "output_tokens": 125595
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0005-e2ff858e/23506316-96ef-4fca-87e2-07ac893e4350.jsonl",
+      "trace_sha256": "281dfd71728be4285d01be0164caebc141dab15b6f21348df950f0c95d191066",
+      "responses": 224,
+      "usage": {
+        "input_tokens": 1344,
+        "cache_read_input_tokens": 23236064,
+        "cache_creation_input_tokens": 583986,
+        "output_tokens": 264019
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0016-9b7f04df/a767083f-e79f-4da4-b9e0-8f2beafe5ef5.jsonl",
+      "trace_sha256": "dc8e2cbb25680d8577b5afac49ec59abc6ca2b05942a30e90eb1159d782026dc",
+      "responses": 120,
+      "usage": {
+        "input_tokens": 720,
+        "cache_read_input_tokens": 12186635,
+        "cache_creation_input_tokens": 462120,
+        "output_tokens": 162531
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0019-cc51ec28/d769dc1e-de76-4297-93d1-be0f6bb33e3d.jsonl",
+      "trace_sha256": "4925b47f9f41a6deeac9a1f38e1f6cf73683ffb395690ac15516b9158a9bdceb",
+      "responses": 172,
+      "usage": {
+        "input_tokens": 1032,
+        "cache_read_input_tokens": 17127640,
+        "cache_creation_input_tokens": 553516,
+        "output_tokens": 254924
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0013-9b56efaf/f8a17ec0-f5b9-4144-b93f-0bbb8b8f743c.jsonl",
+      "trace_sha256": "d1b648ec5daba1c4ae8b0a4afdd481c93dd1b2f7378bdbe04563484390cf7bfa",
+      "responses": 204,
+      "usage": {
+        "input_tokens": 1224,
+        "cache_read_input_tokens": 22078713,
+        "cache_creation_input_tokens": 466909,
+        "output_tokens": 214203
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-root-atrex-runs--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0014-9aab1fef/ff6bbd6b-5455-402f-9d4e-92ae47a182f8.jsonl",
+      "trace_sha256": "c434001862e18d298ac271bc3032608ee9fff51793eb64a66ae9d10970491594",
+      "responses": 227,
+      "usage": {
+        "input_tokens": 1362,
+        "cache_read_input_tokens": 22333439,
+        "cache_creation_input_tokens": 669234,
+        "output_tokens": 206611
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-pnts5ndk/8facf027-a19e-4090-bb2a-a193f339623e.jsonl",
+      "trace_sha256": "af56def5c14c506d661f6b30cb1a9a5a1e3df26c384b36d1f4e8ebed4db9aa5c",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 194898,
+        "cache_creation_input_tokens": 37371,
+        "output_tokens": 7669
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-4vdqg-cw/18220371-f716-4a0e-a4fa-9876b337ec4c.jsonl",
+      "trace_sha256": "7f377fdb72cefc3ce3a3a8a897d78a7dec58455d9dbde3ba81956f7933891368",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 150854,
+        "cache_creation_input_tokens": 45670,
+        "output_tokens": 11258
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-0dl-lw9x/7f0e2acf-2fb5-4cfc-92b6-973553c88cfd.jsonl",
+      "trace_sha256": "73ff8f4c15436880bd8e7c353dda28403835351a175d7396cb8ef2451be08b05",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 208960,
+        "cache_creation_input_tokens": 38961,
+        "output_tokens": 8162
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-fnfttrfu/5cf0941a-785f-4131-9958-5c55fa67030d.jsonl",
+      "trace_sha256": "2966c70c0a9bca3d15e4c7100d20569a7b4476328a22a9eb60c55aff96d924d9",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 141775,
+        "cache_creation_input_tokens": 35430,
+        "output_tokens": 5491
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-9biofr1u/f8240fae-c856-4adf-a3a0-a4c20a93684d.jsonl",
+      "trace_sha256": "bda2185b29e35492fa56db9626f3702ca00c89c2ec878ab43351203b6e9cca37",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 170717,
+        "cache_creation_input_tokens": 43503,
+        "output_tokens": 8568
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-c6mym2o0/df99e858-20dd-461e-a919-33e06e5f8029.jsonl",
+      "trace_sha256": "a08916736b36c0e26519ab00949b8de9be6187d92511ef7f6610bd4445c4d2f8",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 216632,
+        "cache_creation_input_tokens": 40838,
+        "output_tokens": 7626
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-tf6j9apz/3faa4f09-82d9-4145-8185-57089ad66e59.jsonl",
+      "trace_sha256": "eac92383e1d88f30274652373c43bca6e161435ce38cbb00f539ab39240dcfcd",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 230167,
+        "cache_creation_input_tokens": 37343,
+        "output_tokens": 6975
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-4duscaz9/9cba9eac-308e-405f-9833-12941355e01d.jsonl",
+      "trace_sha256": "6207e1e6dcbc54076e1988ff7ece048e2fe1f93a2d9b32018438373f09a78c09",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 157303,
+        "cache_creation_input_tokens": 36003,
+        "output_tokens": 6353
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-rbh87n20/0dac25fd-f75f-4b11-80dd-2971fc7ec5ac.jsonl",
+      "trace_sha256": "9d16738b5afac1b637ed25a113259318158e655dbbf1dea6f93e485fc4cb1b91",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 263543,
+        "cache_creation_input_tokens": 47215,
+        "output_tokens": 9973
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-gip8shvx/956a0be1-0364-4f3e-be7c-d735b7bbc938.jsonl",
+      "trace_sha256": "8e2a7546c671835338857b00698e6c299ddf1abb1a236771e98ec8e1aed57951",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 169513,
+        "cache_creation_input_tokens": 37380,
+        "output_tokens": 7506
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-6qfjivq-/4b1496e8-25bf-40a6-8938-5fdfbb1fc06d.jsonl",
+      "trace_sha256": "5b8b0021163018af3ef0771d6daff5e34bfeb4f865e252292828f184a7c1359c",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 192896,
+        "cache_creation_input_tokens": 46736,
+        "output_tokens": 8558
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-u9l2oc5l/b1fc4c4d-ec46-45fe-bd35-136106eb91b6.jsonl",
+      "trace_sha256": "7347919758e42d849a236cc6f5f499414569550d2923390a2f8259cd289fc27f",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 176806,
+        "cache_creation_input_tokens": 39995,
+        "output_tokens": 6071
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-zu8wde11/5b3fe2ba-d1db-4133-bb99-19ca63932cb0.jsonl",
+      "trace_sha256": "c6ffa287306d0fa2f4a1577cb806f1c6fc193fdbe4c82e61062ca90d2be69df8",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 108683,
+        "cache_creation_input_tokens": 34764,
+        "output_tokens": 5414
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-aux8qtou/71c56f81-76a1-494e-b662-154ccccb92a3.jsonl",
+      "trace_sha256": "e4ca81d790a9849e703557ffce46cc3db711d021c10db1400322b6d2c59b568a",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 142975,
+        "cache_creation_input_tokens": 41378,
+        "output_tokens": 8181
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-g30wt-06/3b6d0776-eeaf-45bc-97c3-9db6918279cf.jsonl",
+      "trace_sha256": "5505958842da52db0b1d6407c35cb89e8d6f2038bb9efc218d091670dcf7ea9f",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 197119,
+        "cache_creation_input_tokens": 39134,
+        "output_tokens": 8914
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-1r5netua/35a9e406-c90e-4172-8a35-bb44781cb93d.jsonl",
+      "trace_sha256": "ba7bfeb72167aad3db25ace465093db75b203cf8561a9589a297b3f699cfd675",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 149546,
+        "cache_creation_input_tokens": 44479,
+        "output_tokens": 7502
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-syl4rmry/60e85441-900b-493f-9599-fc2e66d70450.jsonl",
+      "trace_sha256": "e5c6d9332cf3db84dcee21b5fc49f5ca1f6fe6db629012dfed5d6ab175f689e5",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 132729,
+        "cache_creation_input_tokens": 35168,
+        "output_tokens": 5514
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-hli4-0ca/34b6b732-d95c-43e1-9239-883cccdc5cd5.jsonl",
+      "trace_sha256": "8ec19b8e55ad48ad2198d36d88ba969a31a2302793d20a88a703b23a2ec0a181",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 168020,
+        "cache_creation_input_tokens": 40955,
+        "output_tokens": 5968
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-u429ipw6/ab86a0ee-4f6f-448a-95ce-52f3eb6b0ea8.jsonl",
+      "trace_sha256": "abed1cbb49fbc983d117d62a8ec2fcda1cbeca633cd29ab354e8c4484e7eda72",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 191218,
+        "cache_creation_input_tokens": 44516,
+        "output_tokens": 7657
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-5q2nvfet/f6aeef08-7e78-421e-8098-53294854b20a.jsonl",
+      "trace_sha256": "311e47863b36d1afab39dcde17a9f35a42f7ac2ecfef88b62588078f372ca522",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 199414,
+        "cache_creation_input_tokens": 48675,
+        "output_tokens": 11244
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-wdq5w0pm/ca24e74c-f265-4851-9dcb-6df5a6f06b3c.jsonl",
+      "trace_sha256": "a4e65ac143cf77c0d01d874e66228ec7934cb2ce95e44b41d9a9aa03bdb09bb4",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 143088,
+        "cache_creation_input_tokens": 41412,
+        "output_tokens": 6643
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-ka010fd9/bb4e3681-8f58-41c3-b337-b76bf3d73849.jsonl",
+      "trace_sha256": "b1bc6607b80233f22abb806cbdcfd04af2a0b2f03dc962f8de8db6db82997185",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 149079,
+        "cache_creation_input_tokens": 43440,
+        "output_tokens": 6397
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-ixxxe8b4/f5055c4f-1b4f-463c-9b7d-8d4f14a92ab7.jsonl",
+      "trace_sha256": "65d65759e78b5266b1a68cd084825599b82fdf95a854f03cf4cca96bfc49ebc2",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 133057,
+        "cache_creation_input_tokens": 35402,
+        "output_tokens": 5875
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-9-htbyp4/4d9ddd8f-e90d-43aa-ae1f-9dd147a2de2d.jsonl",
+      "trace_sha256": "7e29dfb281249ede12ef25d9695351a8cc299de20e6ab8dd9f3ecb01136514f4",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 150850,
+        "cache_creation_input_tokens": 46140,
+        "output_tokens": 8711
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-w48jgh7x/eba8b701-9f1c-4014-8dd5-896562b696e9.jsonl",
+      "trace_sha256": "6c8a2a8e3d19e3dc0e496aea64fddf4e684ba67d1f0be654ea8e8b7b8243eca7",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 123442,
+        "cache_creation_input_tokens": 43421,
+        "output_tokens": 8096
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-f-1j5q43/7162b272-effe-4738-bc9e-8313f6865fc5.jsonl",
+      "trace_sha256": "a2b8522b5563f49348984a12a05e0c9f084482327e62122b4e74f6815d01c061",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 177325,
+        "cache_creation_input_tokens": 46460,
+        "output_tokens": 7160
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-k9fr-2nd/60e73fda-a7e6-4278-9041-8985b834f85f.jsonl",
+      "trace_sha256": "4656896c5802bc14bad7b6daf1e300b01fecabdeed7699cb82e4673947b1b092",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 117761,
+        "cache_creation_input_tokens": 39987,
+        "output_tokens": 6575
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-9bc30bhf/c5857bf9-76a9-481f-8b30-75d3b34007b0.jsonl",
+      "trace_sha256": "f0cdf83d7794bff17a24d8fcad03b601813cfcced8ba7f1dd1f7f4a0132fc86b",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 161038,
+        "cache_creation_input_tokens": 41581,
+        "output_tokens": 8030
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-f81d6f3a/2cd9fb48-9cff-407d-8a59-790cb2cfa081.jsonl",
+      "trace_sha256": "04a47ed5d00fce8cde0e3738ba61725f48c6f809f9f31404a6a7f3996e928dc9",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 221852,
+        "cache_creation_input_tokens": 42491,
+        "output_tokens": 11190
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-6vt5p7xo/d86616aa-2d9e-4e24-9e07-ee0ca97a90d6.jsonl",
+      "trace_sha256": "19fc1098c880ff15cc02a65fdfd115f8bcfe9a2986a2b61be3c201f3057f1916",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 184395,
+        "cache_creation_input_tokens": 43580,
+        "output_tokens": 9098
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-48bl4644/ae3a2150-b006-481b-97eb-e323755667ce.jsonl",
+      "trace_sha256": "a03beb4737bc0b947fab92b6093f64ea3e7a2ec555d52a6a3016cdb47a67e08c",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 231681,
+        "cache_creation_input_tokens": 49188,
+        "output_tokens": 8484
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-e3sxm7wf/fb89f43d-f812-40b3-bcec-618624508a58.jsonl",
+      "trace_sha256": "0b6423cb74536a7f34ad7a8fa6ca11df715a8943271a36558e9f0155c619829e",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 143262,
+        "cache_creation_input_tokens": 40173,
+        "output_tokens": 5626
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-zwl8otdp/83388f81-86da-44ae-96c8-d8c432f849a4.jsonl",
+      "trace_sha256": "023b8fada90e1aa3a6646913be2de246e736dac6f450559267be45341f3ee34c",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 124663,
+        "cache_creation_input_tokens": 44225,
+        "output_tokens": 8139
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-zsx610nq/ee6fa287-c1a4-4d2c-a864-a34ad453df1e.jsonl",
+      "trace_sha256": "a23bb44a1609be6143abdc4594d2044168eccb2279218870530223a345f34fa3",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 205314,
+        "cache_creation_input_tokens": 49963,
+        "output_tokens": 8570
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-rps24mhs/82d24053-7c53-4d81-82a2-574dcec3f633.jsonl",
+      "trace_sha256": "80d63925f2cceef794d6f00e82ab1a97a8e4366f9cbb275fefb7972f385742b8",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 194615,
+        "cache_creation_input_tokens": 37814,
+        "output_tokens": 6047
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-mdvdohbc/f557e76b-b7df-466e-a6c2-b4f9dd97fdcb.jsonl",
+      "trace_sha256": "a520d7fcf49cb33796123d186465cedbe14a10046a200b645c2195b50db7f947",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 174846,
+        "cache_creation_input_tokens": 44315,
+        "output_tokens": 6079
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-pu4kvix0/95436929-a382-4527-8226-ede48bd7bc64.jsonl",
+      "trace_sha256": "e4c7af54c2f38676cd1b483792f3cb7c1cc8c0be3cd4b4973a0994519fd90915",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 133372,
+        "cache_creation_input_tokens": 48192,
+        "output_tokens": 6708
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-fs7l7i2j/1904390d-3645-4e1a-a40b-ba34631dd15b.jsonl",
+      "trace_sha256": "0dfd85db38fb5d574900ea7477023175f3b1c1994c7ee95620cc0852d9e3cd6e",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 209025,
+        "cache_creation_input_tokens": 49428,
+        "output_tokens": 6925
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-z4pjkqfw/470c2810-f2f8-476e-9ea8-8442067808b7.jsonl",
+      "trace_sha256": "a95a30574115c9cae6a8e270a8449f2444312c160dcb3a9dc67bed8c37edc4e0",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 188224,
+        "cache_creation_input_tokens": 51514,
+        "output_tokens": 8896
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-09v4fryd/ee74fddf-a89a-4114-b228-1a9bb5bd1fd4.jsonl",
+      "trace_sha256": "e43000fb9de5a1bb93ec85693766aaa21f60e07e6a90ad9008773338f55c5b47",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 183281,
+        "cache_creation_input_tokens": 42548,
+        "output_tokens": 7877
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review--qjigwjf/c998989d-4ff7-4678-8755-17a369af2dec.jsonl",
+      "trace_sha256": "4abc586b3e8fa8ea836860350e7888a3e9de649249ff8830d877ff905a71f123",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 251060,
+        "cache_creation_input_tokens": 55597,
+        "output_tokens": 10915
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-pdhvasyf/6438211b-4617-4be7-b7dc-f58a7a6b9884.jsonl",
+      "trace_sha256": "e9509a86ee1558f3f6de9f049119e859936f03459728ce6b6a525815cb4411da",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 126189,
+        "cache_creation_input_tokens": 44203,
+        "output_tokens": 6252
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-byk6ww-k/d921476f-f8b4-4956-9b6a-70eb778cfbd4.jsonl",
+      "trace_sha256": "e8b5b37a07c3ebbd92100b068ab520e2adcc86bab983b566dfe45f07a34d2aa1",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 167966,
+        "cache_creation_input_tokens": 45006,
+        "output_tokens": 6791
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-wutk98xq/5062b5e2-b315-46a7-b623-f33aca4e35ac.jsonl",
+      "trace_sha256": "fd8849d458c00b95390d2851f0e49a4a13f0a5c37cecb424172d4178cf8f10fb",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 179442,
+        "cache_creation_input_tokens": 47128,
+        "output_tokens": 7161
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-a3acy0g5/d4c5f2dc-21eb-4831-9f71-965747225156.jsonl",
+      "trace_sha256": "b6ec0e1e9c1aeeb4440b66960dea40bea76d467b8b29024aebe2892ae36b5953",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 210203,
+        "cache_creation_input_tokens": 51265,
+        "output_tokens": 6982
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-ir5nzcl9/0d03f7db-4366-4976-939c-b05c5898cd0b.jsonl",
+      "trace_sha256": "45dc8f225d4cbd36ec82d18ead89633327a810506538e21458d4504fabddeb4e",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 243548,
+        "cache_creation_input_tokens": 52755,
+        "output_tokens": 8276
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-kk3hd84i/1f34a86d-e776-49a8-9bde-1acbe4e6446b.jsonl",
+      "trace_sha256": "7f34df3bbdb93de1cddd2bb8f5e7c5d85f9fc67ffb4222e0608d85cc61b1e809",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 293509,
+        "cache_creation_input_tokens": 54690,
+        "output_tokens": 9309
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-bhybd55x/ae5e59d6-4df1-4369-99e2-ee458f15fc35.jsonl",
+      "trace_sha256": "f84b8c3aad552563592b86c491f3dd2303175adfc73141fbfc9385b22e833c57",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 165679,
+        "cache_creation_input_tokens": 53304,
+        "output_tokens": 9206
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-l4xs9lek/17dce154-429d-460c-80c4-f3f93ac77cdf.jsonl",
+      "trace_sha256": "dd1d965aff22a39b2731d5a8b62c507718043257290474cb899fa0da53703dcf",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 271550,
+        "cache_creation_input_tokens": 50143,
+        "output_tokens": 10578
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-mzimlcrf/128c2dc1-9bdc-4528-94db-6e239194f79c.jsonl",
+      "trace_sha256": "a207430c73fe04d9a86b00e4f4cff11e0b99be4eff448c7be7b152532ab34779",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 307369,
+        "cache_creation_input_tokens": 58347,
+        "output_tokens": 10319
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-lto0hl9z/e6867633-98e7-4592-b0d6-4177993458d4.jsonl",
+      "trace_sha256": "79c42a8c136ca6ade20dc7d0cde6d366bc8f220a2ecdbb659cebdadc33c8ee98",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 137586,
+        "cache_creation_input_tokens": 50441,
+        "output_tokens": 7690
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-9lxwv31i/e64cd41e-176e-4cb8-891f-c1aba0b7f0bc.jsonl",
+      "trace_sha256": "ec87deacfee2b3e423c879b2b8c48961dee216ee83b225e0ecc1072762a14d97",
+      "responses": 10,
+      "usage": {
+        "input_tokens": 60,
+        "cache_read_input_tokens": 346902,
+        "cache_creation_input_tokens": 63107,
+        "output_tokens": 10927
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-n0wso0pa/6eefde3a-9fa7-4c4d-a49b-5be53583dfd7.jsonl",
+      "trace_sha256": "89d3c9c03725af5ab30c180640d6d18760146d96ad9d8c20f14a10b8e527c082",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 153290,
+        "cache_creation_input_tokens": 59308,
+        "output_tokens": 8613
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-6ysj8tkd/4aa56c43-b840-4560-8953-18133b03cc50.jsonl",
+      "trace_sha256": "3472bc4481a674d20382810a32acdb14c9491d9c2d565bb4f77a24da2afc2ce8",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 157442,
+        "cache_creation_input_tokens": 61370,
+        "output_tokens": 9629
+      }
+    },
+    {
+      "system": "AKA-1",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs.with-traces/atrex-runs/claude-session-traces/projects/-tmp-atrex-production-review-fg2ak1bn/bc3700d4-e4f8-4be1-8068-8a51f0b94080.jsonl",
+      "trace_sha256": "6f1b28719349f6968792563de200d7a6bb7befca4d9b627919cc1e5ccb50c96e",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 219369,
+        "cache_creation_input_tokens": 66666,
+        "output_tokens": 6594
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0005-9085e72d/28cf71f2-5a6c-4ab1-aa9d-c4efd57b9341.jsonl",
+      "trace_sha256": "da3313d255c2e42cc064d5b644e26131493ab10bc7667f44f0af6494e2344305",
+      "responses": 186,
+      "usage": {
+        "input_tokens": 1116,
+        "cache_read_input_tokens": 19217794,
+        "cache_creation_input_tokens": 456175,
+        "output_tokens": 175764
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0005-9085e72d/28cf71f2-5a6c-4ab1-aa9d-c4efd57b9341/subagents/agent-a2ebf60612717ebce.jsonl",
+      "trace_sha256": "0493cf600dcb9dabc73de7dfb1bf08f1ba4c569be0d525baf402994f554830e0",
+      "responses": 20,
+      "usage": {
+        "input_tokens": 120,
+        "cache_read_input_tokens": 726061,
+        "cache_creation_input_tokens": 60400,
+        "output_tokens": 24609
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0008-3e8f6256/8bb0efc6-b66a-42ce-9f44-cea6a84fd013.jsonl",
+      "trace_sha256": "32f7d5b0db68b60edc33a72eacabc9be4eb71be8f4546c0a2c0b62e64165fffd",
+      "responses": 293,
+      "usage": {
+        "input_tokens": 1758,
+        "cache_read_input_tokens": 29880791,
+        "cache_creation_input_tokens": 738285,
+        "output_tokens": 392450
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0009-ae05b250/847db455-79b8-46aa-a3dd-6e70360b6bce.jsonl",
+      "trace_sha256": "47fb1b32641c2e1afec9705a7e80c428aabef675eacc87b742eef72601b6ee1b",
+      "responses": 106,
+      "usage": {
+        "input_tokens": 636,
+        "cache_read_input_tokens": 10048180,
+        "cache_creation_input_tokens": 371812,
+        "output_tokens": 101624
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0017-025110e0/908a7c8b-1681-4995-9237-82b09ea75f98.jsonl",
+      "trace_sha256": "28c6209ff30b6b4f55ff9471bba68c306bdb903baadd40299c95f28b0e562ec4",
+      "responses": 230,
+      "usage": {
+        "input_tokens": 1380,
+        "cache_read_input_tokens": 22854826,
+        "cache_creation_input_tokens": 742319,
+        "output_tokens": 272663
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0017-025110e0/908a7c8b-1681-4995-9237-82b09ea75f98/subagents/agent-a88b22e1f55334436.jsonl",
+      "trace_sha256": "7de475d9c27642ae33dd68bf6e38c79bd6bf54aef1ac90109995f2e5bafb70c3",
+      "responses": 51,
+      "usage": {
+        "input_tokens": 306,
+        "cache_read_input_tokens": 4355097,
+        "cache_creation_input_tokens": 129883,
+        "output_tokens": 27574
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0017-025110e0/908a7c8b-1681-4995-9237-82b09ea75f98/subagents/agent-a29f74df1c6f48d59.jsonl",
+      "trace_sha256": "29db36ab73320b0a2652b06bba500f8597f84651a062c194ed3fa0d3c038d9aa",
+      "responses": 59,
+      "usage": {
+        "input_tokens": 354,
+        "cache_read_input_tokens": 3625027,
+        "cache_creation_input_tokens": 104727,
+        "output_tokens": 28305
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0006-8d8ad775/e5e54f34-b653-43eb-b20d-fcbb69e0f702.jsonl",
+      "trace_sha256": "e09f6b42d58b4445b6ed404142310aed56a6497dc1613420efb7dfa13259835f",
+      "responses": 250,
+      "usage": {
+        "input_tokens": 1500,
+        "cache_read_input_tokens": 26435274,
+        "cache_creation_input_tokens": 1219225,
+        "output_tokens": 329404
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0006-8d8ad775/e5e54f34-b653-43eb-b20d-fcbb69e0f702/subagents/agent-a387c2510e3d0bf24.jsonl",
+      "trace_sha256": "3a864f0c3047b5819f228b498bf2d919503d62064888d4720c6f5f40c0d43bf4",
+      "responses": 67,
+      "usage": {
+        "input_tokens": 402,
+        "cache_read_input_tokens": 3869048,
+        "cache_creation_input_tokens": 101688,
+        "output_tokens": 31268
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0002-eac099c7/302680e3-3fab-4b6c-86eb-87ab4f46c91c.jsonl",
+      "trace_sha256": "601dd313ce04a926869974bd128fe042819c1daaeeeecc8febbc5e6e500bfc1e",
+      "responses": 127,
+      "usage": {
+        "input_tokens": 762,
+        "cache_read_input_tokens": 11697570,
+        "cache_creation_input_tokens": 278106,
+        "output_tokens": 120018
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0009-fc9648a0/7ae918bf-9580-48a8-8dc9-b0b0ff9ac84d.jsonl",
+      "trace_sha256": "a19f7e57121fa77fd52c08176ecfe983d686dc2dbd68e6822ca25e079a411f79",
+      "responses": 139,
+      "usage": {
+        "input_tokens": 834,
+        "cache_read_input_tokens": 15099431,
+        "cache_creation_input_tokens": 397264,
+        "output_tokens": 146773
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0001-5cfcb3c3/f8acf5e0-0b54-4efe-8f02-619ad9d1b894.jsonl",
+      "trace_sha256": "95f973f8872479e5723428d64890f4e79fd328f6ca2afa92472bc3177d50df0f",
+      "responses": 139,
+      "usage": {
+        "input_tokens": 834,
+        "cache_read_input_tokens": 12228239,
+        "cache_creation_input_tokens": 380326,
+        "output_tokens": 189504
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0004-566d4b3d/659eefab-a569-40cc-b90e-28310295e0cb.jsonl",
+      "trace_sha256": "108f17469695e77c0ab17aaf3a8e8830665181774d66a586212cb6379c509e17",
+      "responses": 271,
+      "usage": {
+        "input_tokens": 1626,
+        "cache_read_input_tokens": 28538532,
+        "cache_creation_input_tokens": 681106,
+        "output_tokens": 307327
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0004-566d4b3d/659eefab-a569-40cc-b90e-28310295e0cb/subagents/agent-a35b19fd44f85a776.jsonl",
+      "trace_sha256": "9a82255c684676ca27058751b4465f67d967fa2ea194dc3e5415091827671360",
+      "responses": 40,
+      "usage": {
+        "input_tokens": 240,
+        "cache_read_input_tokens": 1713596,
+        "cache_creation_input_tokens": 78647,
+        "output_tokens": 24830
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0001-844950bf/0143ef19-80d0-4653-a56b-107091d16870.jsonl",
+      "trace_sha256": "c9b6053b51c860552fdf6728f0fdb5da60d52f11e4d59729894a3b4393f48d4a",
+      "responses": 115,
+      "usage": {
+        "input_tokens": 690,
+        "cache_read_input_tokens": 11727530,
+        "cache_creation_input_tokens": 297977,
+        "output_tokens": 140149
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0019-1d52bca8/8d512665-541b-4207-96fc-d1fba35e8265.jsonl",
+      "trace_sha256": "2f4b78bbebbafaacaaf4a139dfb8127bddb459e863cfe2d98412e6355c9a219f",
+      "responses": 185,
+      "usage": {
+        "input_tokens": 1110,
+        "cache_read_input_tokens": 18642302,
+        "cache_creation_input_tokens": 635288,
+        "output_tokens": 235041
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0007-9b33bf7c/2d5dab42-fdcf-4535-8fcb-def9e7bdf98f.jsonl",
+      "trace_sha256": "9c03a378dad6011703afc04299e15da9f402f92010434c9f23c4b57e6badd387",
+      "responses": 156,
+      "usage": {
+        "input_tokens": 936,
+        "cache_read_input_tokens": 15127853,
+        "cache_creation_input_tokens": 419910,
+        "output_tokens": 163443
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "subagent",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0007-9b33bf7c/2d5dab42-fdcf-4535-8fcb-def9e7bdf98f/subagents/agent-a2e0420cadf8554a4.jsonl",
+      "trace_sha256": "2721f25718cd6cc82c9b89e8cecce4d9370029662867313bd2277fc54e6b6f21",
+      "responses": 74,
+      "usage": {
+        "input_tokens": 444,
+        "cache_read_input_tokens": 5945628,
+        "cache_creation_input_tokens": 135450,
+        "output_tokens": 53235
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0015-8871f3d3/4ad17868-86f8-4ae7-b198-3b977691a3b8.jsonl",
+      "trace_sha256": "c5433395d63a28ac2b4190c48c1a332b03911af38b8a6f5c72c6c9eeb1889ad6",
+      "responses": 152,
+      "usage": {
+        "input_tokens": 912,
+        "cache_read_input_tokens": 15731444,
+        "cache_creation_input_tokens": 373895,
+        "output_tokens": 156729
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0008-bb601d12/8c497ef5-48f3-450b-8026-40b032357fd0.jsonl",
+      "trace_sha256": "1c06009579041fbe76f71ceb03e7b8e79f70a1fbd4a4a7c0c3f8a3d94b7c34b1",
+      "responses": 128,
+      "usage": {
+        "input_tokens": 768,
+        "cache_read_input_tokens": 13015688,
+        "cache_creation_input_tokens": 325403,
+        "output_tokens": 129359
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0011-ff465239/fbc7183e-8c2a-4db4-99ce-3e7b7b9bf8fc.jsonl",
+      "trace_sha256": "4c5b95471a9d0c89f92963f58ec02bd0eeca54cbc32101ca94fc8958d9ef7508",
+      "responses": 125,
+      "usage": {
+        "input_tokens": 750,
+        "cache_read_input_tokens": 12052834,
+        "cache_creation_input_tokens": 298945,
+        "output_tokens": 111591
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0007-48133fcc/a5c6603f-1f53-45db-aecc-b5b53d750917.jsonl",
+      "trace_sha256": "5212ac07e5b8d4ee99d7948a2855fca77097bb6ca8a814f090df8b5870dba020",
+      "responses": 145,
+      "usage": {
+        "input_tokens": 870,
+        "cache_read_input_tokens": 14345113,
+        "cache_creation_input_tokens": 414384,
+        "output_tokens": 178515
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0013-1b00bc4b/5b66bf85-23c2-46f8-9d5c-9b94546fdf09.jsonl",
+      "trace_sha256": "775f25ed1d20ba067a4d1f9c30ca6cb844f7a99952fdd0c5dba55be8ef9ac9c9",
+      "responses": 149,
+      "usage": {
+        "input_tokens": 894,
+        "cache_read_input_tokens": 14544306,
+        "cache_creation_input_tokens": 363371,
+        "output_tokens": 141194
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0006-8d7d083d/e20f48ca-0346-45ad-8314-0fd14fc977b6.jsonl",
+      "trace_sha256": "44f281bd9f7571bdeded914278a9cce437210a1c4d51ecd29616910689e2f09c",
+      "responses": 112,
+      "usage": {
+        "input_tokens": 672,
+        "cache_read_input_tokens": 11314443,
+        "cache_creation_input_tokens": 296759,
+        "output_tokens": 93883
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0015-4ab75ab3/e2063f4c-c553-45d4-8587-6745a86a1e50.jsonl",
+      "trace_sha256": "43d3761ab567b413eeeaadc79ea4596f667a5da53b199e23e149ba0650f8184b",
+      "responses": 221,
+      "usage": {
+        "input_tokens": 1326,
+        "cache_read_input_tokens": 22462557,
+        "cache_creation_input_tokens": 657928,
+        "output_tokens": 261281
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0015-e9577455/4245f7f3-082d-4942-a9d5-b822ac9b6c47.jsonl",
+      "trace_sha256": "28fac7e5f5c6a71570c2796aecbd05088f188759ea9fc8976a423e18ccd53e19",
+      "responses": 197,
+      "usage": {
+        "input_tokens": 1182,
+        "cache_read_input_tokens": 20233300,
+        "cache_creation_input_tokens": 566174,
+        "output_tokens": 263558
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0013-4b52cf80/96ddfc56-72f2-41c1-8c67-8636013e5dac.jsonl",
+      "trace_sha256": "db6bbd2c469c83ce9e16a957bb423a2ced9c7294850e00b59c2bec706493c56b",
+      "responses": 181,
+      "usage": {
+        "input_tokens": 1086,
+        "cache_read_input_tokens": 19056643,
+        "cache_creation_input_tokens": 514273,
+        "output_tokens": 234148
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0002-d0f588f3/1237e641-fac4-4940-842a-61f08a630e95.jsonl",
+      "trace_sha256": "a3ed8d4881f6d67589cae7515842f12b8ee85d0b1c069470573cc851a6b9b923",
+      "responses": 83,
+      "usage": {
+        "input_tokens": 498,
+        "cache_read_input_tokens": 7900366,
+        "cache_creation_input_tokens": 253271,
+        "output_tokens": 115405
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0003-3c0e57b1/792079dd-647a-4425-b960-3cd2a334f394.jsonl",
+      "trace_sha256": "6c56c114fe895e598cf83ebe16ee27aa40249ebf8d6271927db634dc5825c893",
+      "responses": 209,
+      "usage": {
+        "input_tokens": 1298,
+        "cache_read_input_tokens": 18342703,
+        "cache_creation_input_tokens": 3932645,
+        "output_tokens": 212764
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0018-5eca221f/fa0bb437-8c0e-4dd6-97f2-a2773eb74da4.jsonl",
+      "trace_sha256": "9912c2de28b240fbcd0341fb2921defa957fa62a3aaee21f900ae3e7fe43e8c7",
+      "responses": 117,
+      "usage": {
+        "input_tokens": 702,
+        "cache_read_input_tokens": 12864234,
+        "cache_creation_input_tokens": 320865,
+        "output_tokens": 113418
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0018-70581ad8/398dd2b9-f4b0-4e2a-b4e6-50a3a557adcb.jsonl",
+      "trace_sha256": "520cde851855da0a116ea14d0aeafca66e81b309733af7ccb66ad0b28ea346b4",
+      "responses": 137,
+      "usage": {
+        "input_tokens": 822,
+        "cache_read_input_tokens": 13237414,
+        "cache_creation_input_tokens": 427743,
+        "output_tokens": 183208
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0011-734b84a5/0f0ad948-e2bc-4a95-b2fd-992f29af05aa.jsonl",
+      "trace_sha256": "1c7bac68f206996699603e15db9f357f6e8c575d1abb30cc1265f8030f655871",
+      "responses": 109,
+      "usage": {
+        "input_tokens": 654,
+        "cache_read_input_tokens": 10456505,
+        "cache_creation_input_tokens": 536574,
+        "output_tokens": 158148
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0010-1356220a/92f07fbc-cd26-4230-b8a4-b3ffad5ed4f6.jsonl",
+      "trace_sha256": "702bd457f22a86a5bcc45e3484f3ea31abde5cbd9f8fd64f11a87765a61a9d9f",
+      "responses": 86,
+      "usage": {
+        "input_tokens": 516,
+        "cache_read_input_tokens": 8546337,
+        "cache_creation_input_tokens": 291212,
+        "output_tokens": 113075
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0014-155b4015/6b6a9337-da7a-40ab-a63c-d831760e6374.jsonl",
+      "trace_sha256": "803c08da9b331f600c17f67bf692583c630aa551b1fc372a4a29d00a8ddb7b38",
+      "responses": 181,
+      "usage": {
+        "input_tokens": 1086,
+        "cache_read_input_tokens": 19472426,
+        "cache_creation_input_tokens": 476676,
+        "output_tokens": 194549
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0016-fbe65af7/f1750709-1685-44ff-87ee-e50e7da3f09e.jsonl",
+      "trace_sha256": "11590618bb127bd938043bd0fa1dee1a7434e7d5483e5cd15b6fced5e7028526",
+      "responses": 228,
+      "usage": {
+        "input_tokens": 1368,
+        "cache_read_input_tokens": 23220466,
+        "cache_creation_input_tokens": 677202,
+        "output_tokens": 291830
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0014-f6fbadda/dddc797d-672b-4f25-9da0-b6ab7f3e4cf8.jsonl",
+      "trace_sha256": "c0c2fb930fb8a007841678c9a573a0d7dd99713a56dd27e205e2ff48cf2bc80c",
+      "responses": 205,
+      "usage": {
+        "input_tokens": 1230,
+        "cache_read_input_tokens": 19623457,
+        "cache_creation_input_tokens": 398131,
+        "output_tokens": 167383
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0002-e215a199/d8623c2b-ec19-4378-aba1-b6bd707459cd.jsonl",
+      "trace_sha256": "a195f34725cf6c5df1a64577e682c3b60e7258bf8435a6fd0a9b435168fb0831",
+      "responses": 108,
+      "usage": {
+        "input_tokens": 648,
+        "cache_read_input_tokens": 10996194,
+        "cache_creation_input_tokens": 266503,
+        "output_tokens": 110599
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0016-adaaceb5/0f07ab5e-d818-405a-9483-0d3c7a22ab80.jsonl",
+      "trace_sha256": "3e80cab602256adfb406948f2f657f367121ccb20a581b240702c54d3860db4c",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 333000,
+        "cache_creation_input_tokens": 65953,
+        "output_tokens": 6718
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0004-ad5ab266/68ec3c92-ee06-4c9c-9b64-18c45b4d8929.jsonl",
+      "trace_sha256": "177cc5c171d704508c39f4e6d06845da632197b4d76744be48bc6db8bfbce112",
+      "responses": 149,
+      "usage": {
+        "input_tokens": 894,
+        "cache_read_input_tokens": 13627518,
+        "cache_creation_input_tokens": 393170,
+        "output_tokens": 145896
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0009-9ffc6fd7/84fc5249-8b7b-45a5-af90-4759dba7cf41.jsonl",
+      "trace_sha256": "e6536b150ec015e153855dad4255af8eeeb7b3a9affccf2f949a0cd0b5db2791",
+      "responses": 114,
+      "usage": {
+        "input_tokens": 684,
+        "cache_read_input_tokens": 12662846,
+        "cache_creation_input_tokens": 311716,
+        "output_tokens": 113752
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0010-34f8600d/5b93f753-535a-4fc4-97dc-66b59393deab.jsonl",
+      "trace_sha256": "a8c3228e0955e54dd5e6e6dff2683f098e753f5d66fad88a12db4301e238003a",
+      "responses": 166,
+      "usage": {
+        "input_tokens": 996,
+        "cache_read_input_tokens": 15537775,
+        "cache_creation_input_tokens": 419432,
+        "output_tokens": 175869
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0017-005b6f3f/5b79e864-e1c3-4bd1-b9e3-ec7b060831cc.jsonl",
+      "trace_sha256": "43dd8e5faf2ecd833097517e64699390036fd0ce8c28b4c0476169fc26336820",
+      "responses": 387,
+      "usage": {
+        "input_tokens": 2322,
+        "cache_read_input_tokens": 39824970,
+        "cache_creation_input_tokens": 1028548,
+        "output_tokens": 467021
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0011-b323fbf3/decb6d46-ef0c-4ecf-9d44-c656a6774e2e.jsonl",
+      "trace_sha256": "f426ae79eccc48a581b5f4505fdbca4ac727412699745ae5e99c26eaa3726314",
+      "responses": 147,
+      "usage": {
+        "input_tokens": 882,
+        "cache_read_input_tokens": 14336619,
+        "cache_creation_input_tokens": 380089,
+        "output_tokens": 132785
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0019-c1a9d865/122aecbb-f002-4fa8-b0c6-d9e5313a8c76.jsonl",
+      "trace_sha256": "31526903eed412d4deb29be9d851034349bfcc888ca89989a47e0036a86004d3",
+      "responses": 172,
+      "usage": {
+        "input_tokens": 1032,
+        "cache_read_input_tokens": 17190200,
+        "cache_creation_input_tokens": 386959,
+        "output_tokens": 151799
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0006-a1f2b675/35b187d6-2239-4d2c-a339-53ca561469b3.jsonl",
+      "trace_sha256": "833a715af6c05051e2e7cd3287289800095c8f8ba7ef0b58599b320c36d6e8c8",
+      "responses": 191,
+      "usage": {
+        "input_tokens": 1146,
+        "cache_read_input_tokens": 20125157,
+        "cache_creation_input_tokens": 442212,
+        "output_tokens": 179339
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0004-7c846bcf/02a8322e-a66f-4860-a9f8-f51dc3e69d24.jsonl",
+      "trace_sha256": "e357c746fcd3c5bab75f2ea104b117454e1f5c939b9024dafdae30b2ecf01418",
+      "responses": 176,
+      "usage": {
+        "input_tokens": 1056,
+        "cache_read_input_tokens": 16923707,
+        "cache_creation_input_tokens": 397682,
+        "output_tokens": 183967
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0014-ed00df8c/e02e50b7-9d1d-41f9-8378-c8c433aa3e9a.jsonl",
+      "trace_sha256": "d67ccbc1818d96b4e4cada18209a37dd42b02ca1b8c4db3884e9902fb00bcfad",
+      "responses": 146,
+      "usage": {
+        "input_tokens": 876,
+        "cache_read_input_tokens": 15238669,
+        "cache_creation_input_tokens": 548538,
+        "output_tokens": 270388
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0013-18f06b2b/c8ef4046-fc78-4087-8bb7-c9158241c141.jsonl",
+      "trace_sha256": "6b5fc303191620213a6fb52eef6ba00a2928377921c2f762323fbbac6b209c3c",
+      "responses": 113,
+      "usage": {
+        "input_tokens": 678,
+        "cache_read_input_tokens": 11015554,
+        "cache_creation_input_tokens": 291560,
+        "output_tokens": 127821
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0001-a87ebe1a/25551494-d556-4613-a1bf-a60786ca6e6e.jsonl",
+      "trace_sha256": "dcfab51cbb1381f66915c7ab6669b07b08e97ed520b741cf5ce7ceafe4c4575f",
+      "responses": 203,
+      "usage": {
+        "input_tokens": 1218,
+        "cache_read_input_tokens": 20040275,
+        "cache_creation_input_tokens": 445645,
+        "output_tokens": 188665
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0016-6dfccadb/190a1934-85df-4e01-934a-16e2f3b0ac87.jsonl",
+      "trace_sha256": "176902bd4ad846dfbba4abe8e123b7462caa32fc371f210648e0d9da37bd8266",
+      "responses": 187,
+      "usage": {
+        "input_tokens": 1122,
+        "cache_read_input_tokens": 18131003,
+        "cache_creation_input_tokens": 541736,
+        "output_tokens": 235659
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0003-0be4b217/51b069be-cec4-4bb7-bd08-5caced358518.jsonl",
+      "trace_sha256": "77656732894c8052e68f613146a1af5b3436e4cc9ce5436e263427f39feeb1da",
+      "responses": 144,
+      "usage": {
+        "input_tokens": 864,
+        "cache_read_input_tokens": 14027053,
+        "cache_creation_input_tokens": 384157,
+        "output_tokens": 170046
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0017-673d2138/4645a67c-7d14-4d00-a49e-8a02e5a9f46e.jsonl",
+      "trace_sha256": "40cde93af6356cb7fe9bc2735f7f008e0ea0b2c9a7a2b9a42a44c48860abddb2",
+      "responses": 24,
+      "usage": {
+        "input_tokens": 144,
+        "cache_read_input_tokens": 1678507,
+        "cache_creation_input_tokens": 98298,
+        "output_tokens": 18016
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0010-8a5a3db2/60dc0dd0-df72-4bc6-bc95-f87202c57fc7.jsonl",
+      "trace_sha256": "1b2c2ac7af65597787ca4e74d2a74adc72b884e879c780529d40fc28d935a0ac",
+      "responses": 176,
+      "usage": {
+        "input_tokens": 1056,
+        "cache_read_input_tokens": 18376205,
+        "cache_creation_input_tokens": 441652,
+        "output_tokens": 193203
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0005-525607cf/b5217f37-85cb-41c9-b582-125b2b2b2820.jsonl",
+      "trace_sha256": "da7cd1b4bdda4bc13a764620eca67c9b18a6421a54d916e36bbfe42843acd184",
+      "responses": 29,
+      "usage": {
+        "input_tokens": 174,
+        "cache_read_input_tokens": 2035061,
+        "cache_creation_input_tokens": 95595,
+        "output_tokens": 19448
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0012-63bc71c6/0a3a3fb5-0237-44c7-b68e-2a64c2eea6d2.jsonl",
+      "trace_sha256": "ba07feebb0db0d7534b106b039560506389cc1fddbb3010ee0e9ab5d76648588",
+      "responses": 153,
+      "usage": {
+        "input_tokens": 918,
+        "cache_read_input_tokens": 13755664,
+        "cache_creation_input_tokens": 385210,
+        "output_tokens": 124387
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0008-ce588d32/0c968011-7182-49e0-8693-4bd2809914be.jsonl",
+      "trace_sha256": "686801274e710efa778db0861271a6c5be14370f7552b6b671f909f4897891a9",
+      "responses": 102,
+      "usage": {
+        "input_tokens": 612,
+        "cache_read_input_tokens": 9370033,
+        "cache_creation_input_tokens": 390895,
+        "output_tokens": 177424
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0005-d97216f7/7eb5d9b0-0a93-4c75-97d6-596669415a8b.jsonl",
+      "trace_sha256": "290945f2d73f219875266ef7b0bac081705dc102abb36f7d90ca6354094677a4",
+      "responses": 112,
+      "usage": {
+        "input_tokens": 672,
+        "cache_read_input_tokens": 10925039,
+        "cache_creation_input_tokens": 264639,
+        "output_tokens": 93758
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0012-37a8266d/770caf13-a2ec-4c9e-983c-744371a36e8b.jsonl",
+      "trace_sha256": "3f73ca4c023887a224e56aa57e99a652724deaee3dbd1a2d09e2fdde8c470c5c",
+      "responses": 13,
+      "usage": {
+        "input_tokens": 78,
+        "cache_read_input_tokens": 569653,
+        "cache_creation_input_tokens": 74933,
+        "output_tokens": 10176
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0007-3149d99b/2b4f84bc-2910-425c-8d1e-1aea5abe8a7b.jsonl",
+      "trace_sha256": "79d1ea980f201f05e3796915f981ed96dc7f431cd7eb2bf2fb266eb7cd2d95a4",
+      "responses": 196,
+      "usage": {
+        "input_tokens": 1176,
+        "cache_read_input_tokens": 18886530,
+        "cache_creation_input_tokens": 437947,
+        "output_tokens": 180068
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cutedsl-l20n-production-e0012-165cd491/6899104c-823f-4814-803e-e9e8041db0fd.jsonl",
+      "trace_sha256": "64d46e91cd6ff0eb1c42b40a75d910b4b6b6f21df7f92c03dfb6182fa787c917",
+      "responses": 119,
+      "usage": {
+        "input_tokens": 714,
+        "cache_read_input_tokens": 10958903,
+        "cache_creation_input_tokens": 273900,
+        "output_tokens": 93264
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0003-6bec7356/d2df267e-24df-4367-992b-556e8dc68d88.jsonl",
+      "trace_sha256": "904b1e63af2e1b113b4bef215d47c027ec409e3546409abd6dd027beb1f3f665",
+      "responses": 247,
+      "usage": {
+        "input_tokens": 1482,
+        "cache_read_input_tokens": 24848405,
+        "cache_creation_input_tokens": 728508,
+        "output_tokens": 263339
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-cuda-l20n-production-e0019-90c2f208/a63a18bd-bb07-4b7a-b5a1-40316d97a226.jsonl",
+      "trace_sha256": "b6f6acdf81591d494800458bca94eb5daf87233ab41b1854e5ed70cf3fa41037",
+      "responses": 249,
+      "usage": {
+        "input_tokens": 1494,
+        "cache_read_input_tokens": 26286912,
+        "cache_creation_input_tokens": 501973,
+        "output_tokens": 200880
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "optimizer",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-root-atrex-runs2--atrex-long-horizon-worktrees-kernel-opt-fused-moe-fp8-triton-l20n-production-e0018-d25de35e/66261234-0227-4848-bd23-a154bac9434b.jsonl",
+      "trace_sha256": "92ea56ea4390cbdd573a8f1e799ee7ac425d747262995bca6a3c017ff37188f9",
+      "responses": 113,
+      "usage": {
+        "input_tokens": 678,
+        "cache_read_input_tokens": 10308386,
+        "cache_creation_input_tokens": 273009,
+        "output_tokens": 88645
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-zu3yp5dj/9827f79c-5378-431b-aa69-c70b28c7eee1.jsonl",
+      "trace_sha256": "cb4ec9dfa15fd8fe50f37b2c29126095de0552930afb635da95e620bc619dd11",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 134179,
+        "cache_creation_input_tokens": 36498,
+        "output_tokens": 6875
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-t5gz50xh/3e80d25a-86ba-4dc8-b715-0fd625d4c153.jsonl",
+      "trace_sha256": "b5fcf1aa2b32f7d31b02d3051328763ae98f6ccbf0636a8ede25ef61ee0fffa1",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 145537,
+        "cache_creation_input_tokens": 42230,
+        "output_tokens": 7382
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-be8ns1xs/23cf666f-bb4b-49c4-bcb3-d4f745597cb5.jsonl",
+      "trace_sha256": "dc69f633ed7d769549ae5938885b6973e97c9ecfe423c8aa6194e45e351a7a5d",
+      "responses": 14,
+      "usage": {
+        "input_tokens": 84,
+        "cache_read_input_tokens": 459089,
+        "cache_creation_input_tokens": 52535,
+        "output_tokens": 8811
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-dxo6nhy9/436d7519-3178-4bb1-ad99-5ce38c92954c.jsonl",
+      "trace_sha256": "9ce3184b8995ebb8282b683b58efa9f5ade7c4b3008f9e1f195945a80131a72d",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 171698,
+        "cache_creation_input_tokens": 36292,
+        "output_tokens": 6730
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-hq6e5d9n/99681c69-645a-4331-be01-1a8afcaa03b8.jsonl",
+      "trace_sha256": "c2a531f4440b75ea7443b082708039ccb468c36b2ac175476545614d3b390e05",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 133540,
+        "cache_creation_input_tokens": 35414,
+        "output_tokens": 5788
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-04iiakem/479bd011-f249-44d4-9acb-348273e6551d.jsonl",
+      "trace_sha256": "87885a78d83a460ec6add8790ab5ccc97731ff57752f690b8cad1a19d8bbfc15",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 137456,
+        "cache_creation_input_tokens": 37178,
+        "output_tokens": 4946
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-rv9h4lis/a4740c9f-2f4d-4220-8721-b0a3db207350.jsonl",
+      "trace_sha256": "c38068e6b671f1e07ad9c35ef7e662006fa4c66925d58f0dc9ec934de4241479",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 214922,
+        "cache_creation_input_tokens": 45304,
+        "output_tokens": 8526
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-kfnji-as/8123c5b6-6a9c-4bf0-b27e-5d3a661e51e7.jsonl",
+      "trace_sha256": "0fee0bf06d15b253285640f729010f3b4796c8c9419ff20945c8deca23bbe1c4",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 162764,
+        "cache_creation_input_tokens": 37732,
+        "output_tokens": 5284
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-4vim5ee8/6778084c-a62e-4535-bca3-7d6a08a4a6ab.jsonl",
+      "trace_sha256": "cd0dc357a21a29159196580f4ed3fb287e1e94c50276b1a735a41004b0c1858c",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 125749,
+        "cache_creation_input_tokens": 45656,
+        "output_tokens": 9575
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-2yu76-8t/801aa961-22ee-49cf-92c6-d89f26ad835a.jsonl",
+      "trace_sha256": "8070fb45738b934a7ba4b4b63b40706f061480f2fce352c547bfa4b87496b539",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 128200,
+        "cache_creation_input_tokens": 46308,
+        "output_tokens": 9399
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-i1ggqd8c/70128f2e-dce7-4335-a629-623f3aed043f.jsonl",
+      "trace_sha256": "5c27563b2675e5871a1d32e10fa1b4f1fac7f8552c517afbb46c8ee715485f4a",
+      "responses": 10,
+      "usage": {
+        "input_tokens": 60,
+        "cache_read_input_tokens": 310732,
+        "cache_creation_input_tokens": 47463,
+        "output_tokens": 9054
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-0to226e6/c8b852e8-6e72-4cbb-8b7c-74b561bd9ff5.jsonl",
+      "trace_sha256": "78d2da2e7e0cc6130c99099f0cfe7cde88c0485ea6a78216b3d3a746f749d621",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 241942,
+        "cache_creation_input_tokens": 44468,
+        "output_tokens": 12753
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-971a996e/ebd14894-b960-429d-9837-481e8439688e.jsonl",
+      "trace_sha256": "6ee6c9266d89b59d045357c6c434526b308229eea4d2054776fc02eb84cc7719",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 189383,
+        "cache_creation_input_tokens": 43985,
+        "output_tokens": 7093
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-hwujhf7c/8d474885-5c32-4cea-b636-b5dde02c6978.jsonl",
+      "trace_sha256": "4a41da6ac69ec6e2f5e1cda72c6a1bcf41fdf4fcbd9d80c12a0a1e5a39a63565",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 117300,
+        "cache_creation_input_tokens": 39057,
+        "output_tokens": 5151
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-th84a5g5/beeb9ff8-181a-4b22-a1d0-a40b426ce3db.jsonl",
+      "trace_sha256": "e3082cac5b3f471d28844cbd4a636a3fd394ee6f4a6d023786c77c82b57c29b6",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 133567,
+        "cache_creation_input_tokens": 35524,
+        "output_tokens": 5446
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-76gbyme3/2af9710a-daf0-4610-af66-8d3f57d25b6f.jsonl",
+      "trace_sha256": "9a5e463c030d92367763593cd62bed418f968bd952ec6b43581e573ae8b7f16a",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 201537,
+        "cache_creation_input_tokens": 49600,
+        "output_tokens": 9223
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-gm4v-y5c/bac2f0d5-dbdd-4bee-a1a5-1cbc7dec13fd.jsonl",
+      "trace_sha256": "1bea2db7b6cf6ee80071b3c1d6cdc7f4b7517f46bb50b7fe639cd73ae02961b3",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 134563,
+        "cache_creation_input_tokens": 36699,
+        "output_tokens": 7035
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-fdmbbgp2/24eaa860-cc02-4077-b169-df0305a18069.jsonl",
+      "trace_sha256": "22407b5304b3ae457236d48bf9f5456e849599263672615a3cb9d6b0c89b781d",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 233260,
+        "cache_creation_input_tokens": 44183,
+        "output_tokens": 8487
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-xs9416iw/39ba879c-6cd4-4266-9be2-5a95d5bc61bb.jsonl",
+      "trace_sha256": "4d25697a0062bf72507461569a0c575310c2c1be77dc1417452335581931b452",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 247688,
+        "cache_creation_input_tokens": 49783,
+        "output_tokens": 10013
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-2u-68v2m/71e69812-3bd6-4ed7-aef9-06b7d44c25eb.jsonl",
+      "trace_sha256": "34765af07e8244da63e6624ce9ee496e97c49ada18d78a36e1621e41c9a41550",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 229977,
+        "cache_creation_input_tokens": 50723,
+        "output_tokens": 11015
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-e6y1xzis/c162fe19-ab68-4c62-a9b4-4699140768b2.jsonl",
+      "trace_sha256": "46d8fa608c48ee5b06ff4ef34874b898fcd163acfd2a7b27e47caac75166996c",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 158570,
+        "cache_creation_input_tokens": 39836,
+        "output_tokens": 5883
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-lbll7119/7013aed4-4e9b-4279-9d77-245dc6afbe7a.jsonl",
+      "trace_sha256": "b03241879d8f2b175aa0f790db0e1046d36d38ba716f04c9e51a1ac1b4fa218b",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 193934,
+        "cache_creation_input_tokens": 49974,
+        "output_tokens": 6346
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-ovfss0p7/ca4fc5a7-f890-4bb4-a138-01ce815d133d.jsonl",
+      "trace_sha256": "561205bf886dd9c9dc2e43cef484bf2d5036da9a68083e59665415e573053607",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 167660,
+        "cache_creation_input_tokens": 36599,
+        "output_tokens": 6936
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-p1zhy2qd/a4e54745-a9c4-4118-8b98-f17621895351.jsonl",
+      "trace_sha256": "7d787580e1bc1b1fba69844542da732ff4c4072ce40732dea5f5929a8872c21b",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 133794,
+        "cache_creation_input_tokens": 35503,
+        "output_tokens": 5932
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review--n0i14e-/9235aeef-c30b-4ea4-b190-bc38556daa6f.jsonl",
+      "trace_sha256": "c405b0754ba7b06054e268aea6d2203092c1e9f4dca139bb8c28eae51e9d0b41",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 294647,
+        "cache_creation_input_tokens": 50221,
+        "output_tokens": 10304
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-bnrzhrt-/8340035b-ee9d-4b6f-99c0-29110232305d.jsonl",
+      "trace_sha256": "f6fdfc377653e9645526d0b15eed09015c7a053f2f6f04f92167d8bf7638dbdc",
+      "responses": 10,
+      "usage": {
+        "input_tokens": 60,
+        "cache_read_input_tokens": 296414,
+        "cache_creation_input_tokens": 44289,
+        "output_tokens": 8440
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-2c7-4c57/526d5cfe-af16-4283-873b-87335888acaf.jsonl",
+      "trace_sha256": "49bc522ede3cda11367fe35be8882d2b69885d70cd5c6f8626c5bddd38d2e1fe",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 112321,
+        "cache_creation_input_tokens": 38010,
+        "output_tokens": 7494
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-vnbcz1wf/8233ea64-d5a9-4d15-9727-e96f44e74887.jsonl",
+      "trace_sha256": "a70b8121d540671aa1921f1e3978150c46e9ab044e6f2a6ca224127e52ec60d2",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 223456,
+        "cache_creation_input_tokens": 42447,
+        "output_tokens": 6965
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-y0pgqxbz/276af700-44ca-456f-9e8a-bc5dc043f249.jsonl",
+      "trace_sha256": "3bbcf2d0cc545af1fc2bc130444b32e2a7711487fa96a396dcf3d1f775c8434d",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 137848,
+        "cache_creation_input_tokens": 36976,
+        "output_tokens": 6416
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-4nfpgxw2/eee8a730-af48-49ff-9921-8c482dcc1fbe.jsonl",
+      "trace_sha256": "abdab6d1a793e840ca63b11c830c4c014771b874e3d6aa557be1ffaf13b2efa7",
+      "responses": 9,
+      "usage": {
+        "input_tokens": 54,
+        "cache_read_input_tokens": 236914,
+        "cache_creation_input_tokens": 42823,
+        "output_tokens": 8295
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-0kpq6l8v/8aa4a3e6-4265-44c9-87c7-15f5639da3d6.jsonl",
+      "trace_sha256": "6452216ddd833ca6925434c2759c4664435ca42ad3432d5cddac75d9f2af2ac6",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 110302,
+        "cache_creation_input_tokens": 35976,
+        "output_tokens": 6610
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-cb9pjl6x/1d8afae8-6807-4497-9dfc-e89957e8a567.jsonl",
+      "trace_sha256": "d3eecff5424672a77dc76070cf5a1960e66dd308d2d44d6907d64214f35c2530",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 142568,
+        "cache_creation_input_tokens": 40397,
+        "output_tokens": 5962
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-pa7fbow8/38d5d30e-0b84-44dc-aea9-f286c74acd91.jsonl",
+      "trace_sha256": "93af23945ece749301724038e2b26b7b1f2671255df9e910dff5a805df5c6bc3",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 118923,
+        "cache_creation_input_tokens": 41041,
+        "output_tokens": 6849
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-igxq0y0m/e5be577e-c369-4f86-adb8-9d1dc62ea4b9.jsonl",
+      "trace_sha256": "b518f91f63d67edf794e3ddd17cbc538a11fa9983c443d721abb632722436851",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 207105,
+        "cache_creation_input_tokens": 40236,
+        "output_tokens": 9220
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-ya2trmj-/31524c83-9029-461e-b39d-1e5f43d7dc24.jsonl",
+      "trace_sha256": "701111f263fd42938aa5a8f05aafb417eac2acb8bef722489367be2fef43b2fc",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 154764,
+        "cache_creation_input_tokens": 46239,
+        "output_tokens": 6046
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-fpa84bpx/456fccad-9c2b-4b82-83df-cf74f9f4c3e8.jsonl",
+      "trace_sha256": "a0d1eb98894a111e32d9a1b654d277dc8efc92f27abb87b246a38cf40f9bdf65",
+      "responses": 10,
+      "usage": {
+        "input_tokens": 60,
+        "cache_read_input_tokens": 292280,
+        "cache_creation_input_tokens": 49550,
+        "output_tokens": 7848
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-73shmkj9/fd336b01-71b0-49f4-9d2e-c4e906673165.jsonl",
+      "trace_sha256": "943989b23c0c8818b2af2a756136fbdee8045b946b86f7581769e62321aab802",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 111694,
+        "cache_creation_input_tokens": 36736,
+        "output_tokens": 6479
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-vol1xs1u/b13b68d2-0bc0-4b6d-b94a-c1d27e4847e7.jsonl",
+      "trace_sha256": "8a5d3e5969e5b85a86af4f0ae77431e1f874c3d1e1626975d5a8237dd1034a25",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 236494,
+        "cache_creation_input_tokens": 46243,
+        "output_tokens": 9215
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-nd3r7bls/b91c2730-1dd9-41ce-a3d9-3bcc8f5a836c.jsonl",
+      "trace_sha256": "1bfab84e5b85c19357fc4ba47f464dbec075cbf088fbdc0240dfb86b4c82621b",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 183256,
+        "cache_creation_input_tokens": 42645,
+        "output_tokens": 8527
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-tdnimc1g/1a80fd58-d773-4286-9f54-2aa7d6d39737.jsonl",
+      "trace_sha256": "0bf94237b05464a5ca9057caf31ad6f07e18c849d7dc5c3ffb4170bffee5c4a3",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 158422,
+        "cache_creation_input_tokens": 49652,
+        "output_tokens": 8350
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-p-kybjs6/1f964b9b-6463-4721-a6f9-54d29523fe74.jsonl",
+      "trace_sha256": "ed1df0b5f11c32f9f4b1315f073d52a62b4b7f134560c858e1f7157068f0c396",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 137221,
+        "cache_creation_input_tokens": 50614,
+        "output_tokens": 8599
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-p3-nj6s7/299b6c7d-1443-4e12-955f-c6f4a4aac4da.jsonl",
+      "trace_sha256": "b3cd72c80f4c48075c5e7afd98affed278d6297016911c8d227e58087b24a3d4",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 219649,
+        "cache_creation_input_tokens": 55454,
+        "output_tokens": 10020
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-ags9yak6/3c72daf1-4ad8-4d74-84e7-4ec89a6405fa.jsonl",
+      "trace_sha256": "c2d6b9b52902f4f989f2055dfa947173955d92c50cc745da4611aa10de0835d8",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 232441,
+        "cache_creation_input_tokens": 53341,
+        "output_tokens": 8936
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-g0bqmezl/93111675-a04f-4c33-b932-ebc4a79ee137.jsonl",
+      "trace_sha256": "7d9f24f58ac67592e8b7e145ae0b2ac4fee875abf2c91ae55e30ce80fbe98edc",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 210484,
+        "cache_creation_input_tokens": 52918,
+        "output_tokens": 8721
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review--57c0uj6/d3fb5481-c217-49d3-ab05-970475747fc0.jsonl",
+      "trace_sha256": "40ad7f9a0df83c645613b15ca7e08cee28db7a1ef303f1ed2cecf64ed2c50486",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 209891,
+        "cache_creation_input_tokens": 49429,
+        "output_tokens": 5989
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-z5i8q95a/4e451ae9-7376-4cdf-89ed-b9bc2b6968a6.jsonl",
+      "trace_sha256": "c30ddef00338d3f8854a4747124e0cde1342ba82af451fc97c0145000c1a6957",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 150704,
+        "cache_creation_input_tokens": 57496,
+        "output_tokens": 8524
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-pt48zr4m/577539f8-0aab-4783-9e52-075471af651f.jsonl",
+      "trace_sha256": "8919ebda4260fda2f80e46ac009228aef8964d57d642073fb4f9873c68125a41",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 120130,
+        "cache_creation_input_tokens": 57850,
+        "output_tokens": 8795
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "triton",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-3p6qr5rz/63bd2470-bc05-40cf-999b-3e66f46ca845.jsonl",
+      "trace_sha256": "593cded17ca5da3e9eac21496ed2cc3804898076efabdeb60b4e2eb20612bb05",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 167779,
+        "cache_creation_input_tokens": 42473,
+        "output_tokens": 7789
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-8mce15rx/7fc8e441-7fa6-4c3d-b5aa-7abb68ac9cde.jsonl",
+      "trace_sha256": "c0869b7846b4f9ce1a38cc2d0c71db7582f559c301e2c7a3972eb9e8266e343d",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 216658,
+        "cache_creation_input_tokens": 54342,
+        "output_tokens": 8433
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-q6pyst2u/8dcb84fe-1b3a-47d4-bd88-9d6e9a2211b3.jsonl",
+      "trace_sha256": "28fefb33410e8df968a1a711c34c3fff9bf707a5e413990a243fc3aec8ce08c3",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 262083,
+        "cache_creation_input_tokens": 59837,
+        "output_tokens": 8706
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-eqlcfj5o/cdb15991-0ec1-477b-9e4d-9eb5a98e10b4.jsonl",
+      "trace_sha256": "56786793c4e7b3d36b3f92ca9b2b432cbb40c17b59e6b492a644772fdb1f1114",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 177029,
+        "cache_creation_input_tokens": 58152,
+        "output_tokens": 7616
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-diq5w38r/5e91cc7b-9402-4257-acf3-dd97357d2e1d.jsonl",
+      "trace_sha256": "403f41c5b7b599cfb7cab04c8e376e2b4a894dac21bad68ce6a509c2b740c192",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 249786,
+        "cache_creation_input_tokens": 55435,
+        "output_tokens": 7525
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-uudy3mqa/d0c14c9d-3ad4-4763-88d2-c46482f27e3c.jsonl",
+      "trace_sha256": "3badeef80eafb928d6761d2357326a976cee69ec883dacf9203667ef27121c8c",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 195859,
+        "cache_creation_input_tokens": 56214,
+        "output_tokens": 7691
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-34n0xoy0/23ed796c-06e0-47c5-abb1-e32c1c533b5d.jsonl",
+      "trace_sha256": "81818f76aa1e447e6d72e664b653407ed43f114c98c5b8da8704d0d325d11f51",
+      "responses": 8,
+      "usage": {
+        "input_tokens": 48,
+        "cache_read_input_tokens": 309497,
+        "cache_creation_input_tokens": 66274,
+        "output_tokens": 13091
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-t7nbpxvb/80bdb90d-2443-4eee-9a5e-4cc17c121070.jsonl",
+      "trace_sha256": "e15c539c041f23325ca3b37fb372bf73fcc5e50def5b9e561aecd5879418e699",
+      "responses": 5,
+      "usage": {
+        "input_tokens": 30,
+        "cache_read_input_tokens": 157496,
+        "cache_creation_input_tokens": 61204,
+        "output_tokens": 9812
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-9jgt-j71/c474d967-abe3-44b9-82ee-1f2d9b126edc.jsonl",
+      "trace_sha256": "eeb03a39e0ab1c7157c2f6e7e67bf8a7cce79b12b041e2b412be5405e6c00f87",
+      "responses": 7,
+      "usage": {
+        "input_tokens": 42,
+        "cache_read_input_tokens": 247296,
+        "cache_creation_input_tokens": 69034,
+        "output_tokens": 7514
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cuda",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-giyebwrg/2c344e49-7091-42cf-a7c4-b25598a1ba99.jsonl",
+      "trace_sha256": "666313dfd2cff62d4a1a5096599c4fc8ef1e4372a74e749bcb4c5055e6ae5034",
+      "responses": 6,
+      "usage": {
+        "input_tokens": 36,
+        "cache_read_input_tokens": 182635,
+        "cache_creation_input_tokens": 62372,
+        "output_tokens": 8552
+      }
+    },
+    {
+      "system": "AKA-2",
+      "dsl": "cutedsl",
+      "role": "policy_review",
+      "trace": "AKA/atrex-runs2.with-traces/atrex-runs2/claude-session-traces/projects/-tmp-atrex-production-review-l1jf73wi/c3182a20-be1a-46c1-b813-e9e113906c14.jsonl",
+      "trace_sha256": "f7764c2d21f6869176e41b7741d7013e462fc69a452c3070b3dedb4f1b2f10e1",
+      "responses": 11,
+      "usage": {
+        "input_tokens": 66,
+        "cache_read_input_tokens": 446665,
+        "cache_creation_input_tokens": 73198,
+        "output_tokens": 9480
+      }
+    }
+  ]
+}

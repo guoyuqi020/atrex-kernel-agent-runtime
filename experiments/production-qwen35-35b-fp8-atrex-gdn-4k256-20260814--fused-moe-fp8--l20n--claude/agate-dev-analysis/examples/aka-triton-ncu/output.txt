@@ -1,0 +1,7 @@
+KERNEL _quantize_hidden_kernel total=140608.0us mean=35152.00us n=4 launches=4
+KERNEL _dispatch_count_kernel total=44448.0us mean=11112.00us n=4 launches=4
+KERNEL _dispatch_reduce_kernel total=15744.0us mean=3936.00us n=4 launches=4
+KERNEL _dispatch_scan_kernel total=23456.0us mean=5864.00us n=4 launches=4
+KERNEL _dispatch_scatter_kernel total=49024.0us mean=12256.00us n=4 launches=4
+KERNEL _gemm_gate_up_kernel total=6155872.0us mean=1538968.00us n=4 launches=4
+KERNEL _gemm_down_kernel total=3067520.0us mean=766880.00us n=4 launches=4

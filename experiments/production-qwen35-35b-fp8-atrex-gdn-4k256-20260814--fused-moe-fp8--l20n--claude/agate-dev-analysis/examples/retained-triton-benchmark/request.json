@@ -1,0 +1,8 @@
+{
+  "operation": "dev",
+  "command": "python3 bench_moe_latency.py --iters 30 --cases 512,2048,4096,6144,8192",
+  "file_paths": ["tools/bench_moe_latency.py", "tools/probe_moe_correctness.py", "scratch/variant_kernel.py"],
+  "job_timeout_s": 600,
+  "intent": "custom_harness",
+  "note": "attempt2 direction2: gate/up num_warps 8 vs 16 head-to-head latency screen"
+}
