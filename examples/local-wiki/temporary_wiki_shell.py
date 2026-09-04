@@ -254,9 +254,9 @@ def main(argv: list[str] | None = None) -> int:
     wiki = settings.gpu_wiki
     if wiki is None:
         raise ValueError("temporary Wiki shell requires gpu_wiki configuration")
-    core_repository = Path(__file__).resolve().parents[2] / "src/atrex-kernel-agent-core"
+    core_repository = Path(__file__).resolve().parents[2] / "src/kernel-design-agents"
     if not (core_repository / "atrex-bundle.json").is_file():
-        raise FileNotFoundError(f"Core Agent Bundle is unavailable: {core_repository}")
+        raise FileNotFoundError(f"KDA Optimizer Bundle is unavailable: {core_repository}")
     shell = shutil.which(args.shell, path="/bin:/usr/bin:/usr/local/bin:/opt/homebrew/bin")
     if shell is None:
         raise FileNotFoundError(f"requested shell is unavailable: {args.shell}")

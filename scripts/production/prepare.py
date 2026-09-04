@@ -361,9 +361,9 @@ def _prepare_service_workspace(
         return
 
     core_commit = _git_commit(
-        root / "src/atrex-kernel-agent-core",
+        root / "src/kernel-design-agents",
         require_clean=True,
-        label="Core",
+        label="KDA Optimizer",
     )
     evolver_commit = _git_commit(
         root / "src/atrex-kernel-agent-evolver",
@@ -703,16 +703,19 @@ def _runtime_config(
             "health_check_interval_s": int(os.environ.get("AGATE_HEALTH_CHECK_INTERVAL", "30")),
         },
         "kernel_agent": {
-            "max_bundle_files": 1024,
-            "max_bundle_bytes": 8388608,
+            "max_bundle_files": 16384,
+            "max_bundle_bytes": 134217728,
             "max_entrypoint_bytes": 524288,
             "max_agent_problem_bytes": 262144,
             "base_source": {
-                "repository": str(root / "src/atrex-kernel-agent-core"),
+                "repository": str(root / "src/kernel-design-agents"),
                 "git_executable": _resolve_executable("git", "/usr/bin/git"),
-                "fetch_timeout_seconds": 120,
-                "max_archive_bytes": 67108864,
-                "allowed_submodules": {},
+                "fetch_timeout_seconds": 600,
+                "max_archive_bytes": 268435456,
+                "allowed_submodules": {
+                    "skills/KernelWiki": "https://github.com/DongyunZou/KernelWiki.git",
+                    "skills/ncu-report-skill": "https://github.com/DongyunZou/ncu-report-skill.git",
+                },
             },
         },
         "gpu_wiki": gpu_wiki,
@@ -985,9 +988,9 @@ def main() -> None:
         seed_text_by_dsl[dsl] = text
 
     core_commit = _git_commit(
-        root / "src/atrex-kernel-agent-core",
+        root / "src/kernel-design-agents",
         require_clean=True,
-        label="Core",
+        label="KDA Optimizer",
     )
     evolver_commit = _git_commit(
         root / "src/atrex-kernel-agent-evolver",

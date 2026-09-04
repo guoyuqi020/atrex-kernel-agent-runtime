@@ -10,6 +10,9 @@ English | [中文](testing-and-acceptance.zh.md)
 .venv/bin/mypy src
 .venv/bin/python scripts/smoke-wheel-independence.py
 sudo .venv/bin/python scripts/validate-linux-sandbox.py
+(cd src/kernel-design-agents && ../../.venv/bin/python -m pytest -q)
+(cd src/kernel-design-agents && ../../.venv/bin/ruff check src tests)
+(cd src/kernel-design-agents && ../../.venv/bin/mypy src tests)
 (cd src/atrex-kernel-agent-core && ../../.venv/bin/python -m pytest -q)
 (cd src/atrex-kernel-agent-core && ../../.venv/bin/ruff check src tests)
 (cd src/atrex-kernel-agent-core && ../../.venv/bin/mypy src tests)

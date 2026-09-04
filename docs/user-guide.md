@@ -53,6 +53,8 @@ Runtime config is strict schema v1. Important choices are:
 - optional GPU Wiki query service;
 - administration and maintenance limits.
 
+The default Optimizer is `src/kernel-design-agents` (KDA). Root/example configs, new production workspaces and temporary shells select it; see [KDA Optimizer](#kda-optimizer). Existing workspaces keep their pinned Optimizer repository and commit; switching the default does not migrate or restart them.
+
 Create a Campaign schema-v3 file from an example. Its `hardware_target` input selects an Agate GPU
 environment. At Bootstrap, Runtime queries that environment and passes the returned architecture
 (such as `sm_120`) to Agents while retaining the canonical Agate GPU alias only for scheduling. The
@@ -73,6 +75,30 @@ export AGATE_SK='...'
 
 The checked-in examples generate signing/admin values automatically. Production values must be
 stable across process restarts and stored in a secret manager.
+
+### KDA Optimizer
+
+The [KDA Bundle](../src/kernel-design-agents/README.md) uses the existing Core execution protocol, backend runners, Session/Usage capture, and Runtime tools. Its sole optimization workflow is `prompts/episode.md`: KDA's task contract, research, draft, executable plan, and candidate loop, adapted to Gateway and Journal/Report interfaces. The old Core's detailed optimization workflow is not appended. `CLAUDE.md` supplies shared rules to Bootstrap/Attempts on all four backends, without repeating the episode steps. Bootstrap still constructs the first correct DSL Kernel; problem generalization remains a separate phase.
+
+To prepare the default Optimizer for a new Campaign:
+
+1. Initialize the Bundle and its pinned Skills: `git submodule update --init --recursive src/kernel-design-agents`. If HTTPS is unavailable, use the command-local rewrite `git -c url.git@github.com:.insteadOf=https://github.com/ submodule update --init --recursive src/kernel-design-agents`.
+2. In the Python environment used by workers, install `python3 -m pip install -e .` from the Runtime root. PyYAML for offline KernelWiki queries is now a standard dependency; this does not install a local GPU/profiler.
+3. The shipped configs already include the KDA repository, Skill-submodule URL allowlist, and larger Bundle limits. [kernel-agent.example.json](../examples/kernel-design-agents/kernel-agent.example.json) is the equivalent configuration section for remote-repository deployments. Set `git_executable` to the absolute path returned by `command -v git`; relative paths resolve from the config directory, not `PATH`.
+4. Pin `base_revision.commit` in the new Campaign to a full executable Bundle commit containing `atrex-bundle.json` and `src/main.py`. Commit local changes first and publish them before fetching from another host. Do not select the original workflow-only revision. A local source repository is also supported.
+
+The importer expands the exact `KernelWiki` and `ncu-report-skill` gitlink commits into files and records their provenance. It rejects unapproved URLs, links, and further nested submodules, and enforces Bundle limits. An outer `git archive` alone omits the Skills and is not a complete Bundle. Defaults allow 16,384 files and 128 MiB for the Optimizer Bundle. Existing Campaign pins are unchanged. Example preparation replaces the template commit with local KDA HEAD; that HEAD must contain the executable migration, not merely uncommitted working-tree files.
+
+The six adaptive directories and their inheritance rules are unchanged. Runtime seeds them at the workspace root and removes duplicate defaults from the read-only implementation copy. Claude/Codex discover Skills through their session-private installation; other backends can read `skills/*/SKILL.md`. The corpus is read on demand, not appended to the initial prompt. `skills/README.md` explains how to use upstream recipes within the actual hardware, DSL, and Gateway constraints; a Profile result does not guarantee a local NCU report or the `ncu_report` module. Agent engineering documentation is not adaptive State.
+
+With development dependencies installed, verify from the Runtime root without a model or GPU call:
+
+```bash
+python3 -m pytest src/kernel-design-agents/tests -q -o addopts=''
+python3 -m pytest tests/test_kda_bundle.py tests/test_git_optimizer_base_loader.py -q -o addopts=''
+```
+
+Run KDA and old Core tests in separate pytest invocations because their top-level Python module names overlap.
 
 ## 4. Start and verify Runtime
 
@@ -271,11 +297,28 @@ Legacy State `docs/` is materialized as `knowledge/`; sealed historical Artifact
 If both names exist in one State, merge the contents explicitly into `knowledge/` before continuing.
 Engineering documentation under the Core repository's `docs/` is unrelated and is not renamed.
 
-Hooks follow the same initialization, checkpoint, inheritance, isolation, and reset policy. Their
-README records backend, event, invocation, dependencies, side effects, activation steps, and verified
-status. This directory is storage, not automatic registration: Runtime does not load its contents
-into Claude/Codex backend configuration. Older State snapshots gain an empty indexed `hooks/` in
-the materialized copy only.
+Skills and Hooks follow the same initialization, checkpoint, inheritance and reset policy. Before
+each Claude/Codex Optimizer or Bootstrap session (including a fresh retry), Runtime installs the
+current resources into that session's private Home, under `sessions/`. It does not run installation
+scripts, modify host/global configuration, or install a Candidate's hooks in the Evolver session.
+
+- Skills use `skills/<name>/SKILL.md` with YAML `name` and `description`, plus supporting files.
+  They are copied to `$CLAUDE_CONFIG_DIR/skills/` or `$HOME/.agents/skills/`. Loose notes are ignored.
+- Hooks use `hooks/claude.json` or `hooks/codex.json`: a native `{"hooks": {...}}` command-hook object.
+  Claude receives this hook map in its private `settings.json` (other copied settings are retained);
+  Codex receives private `hooks.json`. An absent file produces an empty hook map. Commands may use
+  `python3 "$WORKSPACE_ROOT/hooks/script.py"`; this variable resolves inside the sandbox as well.
+- Codex's noninteractive Core launch passes `--dangerously-bypass-hook-trust` only when attempt
+  hooks are installed. Use a CLI supporting that flag. In an interactive dev-shell, `/hooks` can
+  review/trust hooks in its private Home, or pass that flag for the single Codex invocation.
+- Only original `skills/` and `hooks/` files participate in inheritance; generated installations
+  are discarded with the Session. Update originals and their README indexes for later launches.
+  Qoder/Pi retain the resources but do not auto-install them. Native managed policies and explicit
+  deployment session settings still apply; registration alone is not proof that a hook executed.
+
+See the native [Codex hook contract](https://learn.chatgpt.com/docs/hooks),
+[Codex Skill layout](https://learn.chatgpt.com/docs/build-skills), and
+[Claude hook contract](https://code.claude.com/docs/en/hooks) for event and Skill semantics.
 
 Before launching a Core phase or its dev-shell, Runtime updates the workspace copy of
 `agent/optimizer/atrex-agent.json` with the effective backend, model, reasoning effort, and session

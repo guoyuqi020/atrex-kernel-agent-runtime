@@ -133,6 +133,9 @@ def test_bootstrap_prepare_preserves_existing_workspace_identity(tmp_path: Path)
     pinned_evolver_commit = "a" * 40
     existing_config = json.loads(config_path.read_text(encoding="utf-8"))
     existing_config["campaign"]["evolver"]["commit"] = pinned_evolver_commit
+    pinned_optimizer_repository = str(REPOSITORY / "src/atrex-kernel-agent-core")
+    existing_config["kernel_agent"]["base_source"]["repository"] = pinned_optimizer_repository
+    existing_config["kernel_agent"]["base_source"]["allowed_submodules"] = {}
     config_path.write_text(json.dumps(existing_config), encoding="utf-8")
 
     changed = {
@@ -156,6 +159,9 @@ def test_bootstrap_prepare_preserves_existing_workspace_identity(tmp_path: Path)
     regenerated = RuntimeSettings.from_file(config_path)
     assert regenerated.campaign is not None
     assert regenerated.campaign.evolver.commit == pinned_evolver_commit
+    assert regenerated.kernel_agent.base_source is not None
+    assert regenerated.kernel_agent.base_source.repository == pinned_optimizer_repository
+    assert regenerated.kernel_agent.base_source.allowed_submodules == {}
     assert f"Evolver commit: {pinned_evolver_commit}" in result.stdout
 
 

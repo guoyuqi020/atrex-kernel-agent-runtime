@@ -51,6 +51,8 @@ v1，主要需要确定：
 - 可选 GPU Wiki Query 服务；
 - Administration 和 Maintenance 上限。
 
+默认 Optimizer 为 `src/kernel-design-agents`（KDA）。根目录配置、各 Example、新建生产工作区和临时 Shell 均选择它，详见 [KDA Optimizer](#kda-optimizer)。已有工作区仍保留其 Optimizer 仓库和固定 Commit；修改默认值不会迁移或重启它们。
+
 从 Example 创建 Campaign schema-v3 文件。输入的 `hardware_target` 用于选择 Agate GPU 环境；
 Bootstrap 会查询远端环境，把返回的架构（例如 `sm_120`）传给 Agent，并只将规范 Agate GPU
 别名用于调度。Campaign 还会选择 Operator、Evaluation Contract、精确 Core
@@ -69,6 +71,30 @@ export AGATE_SK='...'
 
 仓库内 Example 会自动生成 Signing/Admin 值。生产值必须在进程重启间保持稳定，并由 Secret
 Manager 管理。
+
+### KDA Optimizer
+
+[KDA Bundle](../src/kernel-design-agents/README.md) 复用现有 Core 执行协议、Backend、Session/Usage 记录和 Runtime Tools。唯一的优化工作流为 `prompts/episode.md`：保留 KDA 的任务合同、研究、草稿、可执行计划和逐个候选迭代，适配 Gateway 与 Journal/Report 接口，不再叠加旧 Core 的详细工作流。`CLAUDE.md` 为四种 Backend 的 Bootstrap/Attempt 提供通用规范，不重复 Episode 步骤。Bootstrap 仍负责首次正确 DSL 实现，问题归纳仍是独立阶段。
+
+为新 Campaign 准备默认 Bundle：
+
+1. 初始化 Bundle 和固定版本的 Skills：`git submodule update --init --recursive src/kernel-design-agents`。HTTPS 不可用时，可使用仅本次命令生效的 SSH 替换：`git -c url.git@github.com:.insteadOf=https://github.com/ submodule update --init --recursive src/kernel-design-agents`。
+2. 在 Worker 使用的 Python 环境中，从 Runtime 根目录执行 `python3 -m pip install -e .`。离线 KernelWiki 查询所需的 PyYAML 已列为标准依赖；不安装本地 GPU 或 Profiler 依赖。
+3. 默认配置已包含 KDA 仓库、Skill 子模块 URL 白名单和适合完整离线 Wiki 的限额。[kernel-agent.example.json](../examples/kernel-design-agents/kernel-agent.example.json) 是使用远端仓库时对应的配置段。`git_executable` 填 `command -v git` 返回的绝对路径；相对路径按配置目录解析，不按 `PATH` 查找。
+4. 新 Campaign 的 `base_revision.commit` 固定到包含 `atrex-bundle.json` 和 `src/main.py` 的完整可执行 Commit。先提交本地修改，其他机器拉取前还需推送；不要选择原始只有工作流的版本。也支持本地源码仓库。
+
+导入器展开 `KernelWiki` 和 `ncu-report-skill` 的精确 Gitlink Commit，并记录来源；拒绝未获准的 URL、链接和更深层子模块，检查 Bundle 限额。仅对外层仓库执行 `git archive` 会遗漏 Skills，不能作为完整 Bundle。默认 Optimizer Bundle 限额为 16,384 文件、128 MiB。已有 Campaign 固定版本不变。Example 准备脚本会用本地 KDA HEAD 替换模板 Commit；可执行迁移必须已提交进该 HEAD，仅存在未提交的工作树文件不够。
+
+六个可继承目录及其规则不变：Runtime 在工作区根目录播种状态后，移除只读实现副本中的重复默认内容。Claude/Codex 通过 Session 私有安装发现 Skills；其他 Backend 可以直接读取 `skills/*/SKILL.md`。语料按需读取，不拼入初始 Prompt。`skills/README.md` 说明上游示例如何遵循实际硬件、DSL 和 Gateway 约束；Profile 结果不保证提供本地 NCU 报告或 `ncu_report` 模块。工程文档不属于可继承状态。
+
+安装开发依赖后，在 Runtime 根目录验证，无需模型或 GPU 调用：
+
+```bash
+python3 -m pytest src/kernel-design-agents/tests -q -o addopts=''
+python3 -m pytest tests/test_kda_bundle.py tests/test_git_optimizer_base_loader.py -q -o addopts=''
+```
+
+KDA 与旧 Core 的顶层 Python 模块同名，测试应分别启动 pytest。
 
 ## 4. 启动并检查 Runtime
 
@@ -252,9 +278,22 @@ Revision 都把 Source 与 State 一起封存为
 旧 State 的 `docs/` 在工作副本中迁移为 `knowledge/`，不改写封存历史。若两者同时存在，需先明确合并到
 `knowledge/` 再继续，避免覆盖。Core 仓库的工程文档目录 `docs/` 不属于 Runtime State，保持原名。
 
-`hooks/` 遵循相同的初始化、封存、继承、隔离和重置规则；README 记录 Backend、事件、调用方式、依赖、
-副作用、启用步骤和验证状态。该目录只负责存储，Runtime 不自动将其内容加载到 Claude/Codex 的配置中。
-旧 State 仅在工作副本中补齐带 README 的空 `hooks/`，不改写封存历史。
+Skills/Hooks 遵循相同的初始化、封存、继承与重置规则。每次 Claude/Codex Optimizer 或 Bootstrap
+Session 启动前（包括新的重试），Runtime 将当前资源安装到 `sessions/` 下该 Session 独享的 CLI Home。
+安装不执行脚本、不修改宿主机/全局配置，也不在 Evolver Session 中激活 Candidate 的 Hooks。
+
+- Skill 使用 `skills/<name>/SKILL.md`，带 YAML `name`、`description` 和所需辅助文件；复制到私有
+  `$CLAUDE_CONFIG_DIR/skills/` 或 `$HOME/.agents/skills/`。散装笔记不注册为 Skill。
+- Hook 使用 `hooks/claude.json` 或 `hooks/codex.json`，内容为原生 `{"hooks": {...}}` 命令 Hook 对象。
+  Claude 写入私有 `settings.json` 的 hooks 字段，保留其他复制来的设置；Codex 写入私有 `hooks.json`。
+  缺少文件时安装空 Hook Map。脚本命令可写 `python3 "$WORKSPACE_ROOT/hooks/script.py"`，沙箱内路径自动映射。
+- Core 非交互启动 Codex 时，仅在已安装本次 Hook 时增加 `--dangerously-bypass-hook-trust`，不写持久信任。
+  CLI 必须支持此参数。交互 dev-shell 可用 `/hooks` 在私有 Home 中确认信任，或为单次 Codex 命令加该参数。
+- 只有原始 `skills/`、`hooks/` 参与继承，安装产物随 Session 丢弃。需要保留的变更应修改原文件及 README。
+  Qoder/Pi 只保留资源，不自动安装。CLI 的管理策略和部署指定的 Session Settings 仍然生效；注册成功不代表 Hook 已执行。
+
+事件与 Skill 语义见 [Codex Hooks](https://learn.chatgpt.com/docs/hooks)、
+[Codex Skills](https://learn.chatgpt.com/docs/build-skills) 和 [Claude Hooks](https://code.claude.com/docs/en/hooks)。
 
 启动 Core 阶段或其 dev-shell 前，Runtime 将实际 Backend、Model、推理强度和 Session Settings
 写入工作区副本 `agent/optimizer/atrex-agent.json`，并设置 `prompt_root: "workspace"`，使 `prompts/...`

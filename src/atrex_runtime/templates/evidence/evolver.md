@@ -129,8 +129,12 @@ Prompts contains phase instructions; Memory contains search experiences and deci
 Knowledge contains reusable knowledge; Skills contains procedures; Tools contains scripts;
 Hooks contains backend hook scripts and configuration snippets. Keep content concise, reusable, and
 non-duplicative. Update the relevant index after additions, changes, removals, or renames.
-For Hooks document backend, event, command, dependencies, side effects, activation, and verification;
-storing a hook does not activate it.
+For Hooks document backend, event, command, dependencies, side effects and verification.
+Before the next Claude/Codex Optimizer session, Runtime installs `skills/<name>/SKILL.md` directories
+and native command-hook registrations from `hooks/claude.json` or `hooks/codex.json` into that
+session's private CLI Home. Hook commands can use `python3 "$WORKSPACE_ROOT/hooks/script.py"`.
+It never installs Candidate hooks into this Evolver session or modifies host/global configuration.
+Other backends only preserve these resources. Installation alone does not prove hook execution.
 
 These are Agent-authored materials, not authoritative results. You may combine supported content
 from eligible Agents and their Trajectories, remove redundant content, and incorporate stable behavior

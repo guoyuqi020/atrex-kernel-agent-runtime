@@ -569,7 +569,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--core-root",
         type=Path,
-        default=Path(__file__).resolve().parents[2] / "atrex-kernel-agent-core",
+        default=Path(__file__).resolve().parents[2] / "kernel-design-agents",
     )
     parser.add_argument("--temporary-parent", type=Path, default=Path("/var/tmp"))
     parser.add_argument("--timeout-seconds", type=float, default=180)

@@ -40,7 +40,12 @@ repeatable procedures, and `tools/` for scripts. Tool entries also need invocati
 side effects, dependencies, an example, and limitations in `tools/README.md`.
 Use `hooks/` for reusable Claude/Codex hook scripts and configuration snippets. Its README must identify
 the backend, event, command, dependencies, side effects, activation steps, and verification status.
-Persisting hooks does not activate them; the backend must explicitly load their configuration.
+Before each Claude/Codex Optimizer or Bootstrap session, Runtime installs `skills/<name>/SKILL.md`
+directories and the selected `hooks/claude.json` or `hooks/codex.json` into a private CLI Home.
+Use native `{"hooks": {event: [matcher groups]}}` command-hook definitions; reference scripts with
+`python3 "$WORKSPACE_ROOT/hooks/example.py"`. Installation does not execute hooks. Edit the reusable
+originals for later sessions, not generated CLI settings; host/global settings must not be changed.
+Other backends preserve these resources without auto-installation. See both README indexes for details.
 Keep content concise and non-duplicative; link Journal and measurement identities instead of copying
 raw traces or one-off outputs. Memory and
 Knowledge are Agent-authored interpretations, not authoritative Journal/measurement replacements.

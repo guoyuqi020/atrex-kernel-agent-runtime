@@ -43,7 +43,8 @@ immutable Evidence -> next Epoch
 ## Repository layout
 
 - `src/atrex_runtime/`: trusted Runtime package
-- `src/atrex-kernel-agent-core/`: separately versioned Optimizer Git submodule
+- `src/kernel-design-agents/`: default Optimizer Git submodule, including its pinned Skills
+- `src/atrex-kernel-agent-core/`: retained original Core implementation, not the default Optimizer
 - `src/atrex-kernel-agent-evolver/`: separately versioned Evolver Git submodule
 - `third_party/atrex-bench/`: pinned evaluator source submodule
 - [`third_party/reference-projects/`](third_party/reference-projects/README.md): pinned upstream GPU

@@ -160,6 +160,9 @@ class CorePhaseRunner:
         environment.update(
             (key, str(prepared.agent_home)) for key in self._policy.isolated_home_environment_keys
         )
+        # Optimizer extension installation must never inherit a global CLI Home,
+        # even when deployment-specific extra isolated-home keys are empty.
+        environment["HOME"] = str(prepared.agent_home)
         return environment
 
     def _project_agent_config(self, prepared: PreparedCorePhase, *, model: str | None) -> None:

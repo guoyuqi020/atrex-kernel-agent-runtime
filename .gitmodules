@@ -75,3 +75,6 @@
 [submodule "third_party/atrex-kernel-agent"]
 	path = third_party/atrex-kernel-agent
 	url = git@github.com:alibaba/atrex-kernel-agent.git
+[submodule "kernel-design-agents"]
+	path = src/kernel-design-agents
+	url = git@github.com:guoyuqi020/kernel-design-agents.git

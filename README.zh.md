@@ -40,7 +40,8 @@ Epoch：创建 Challenger -> 执行 Branch/Trajectory -> 比较 Kernel -> 选择
 ## 仓库结构
 
 - `src/atrex_runtime/`：可信 Runtime Package
-- `src/atrex-kernel-agent-core/`：独立版本的 Optimizer Git Submodule
+- `src/kernel-design-agents/`：默认 Optimizer Git Submodule，包含固定版本的 Skills
+- `src/atrex-kernel-agent-core/`：保留原 Core 实现，不再作为默认 Optimizer
 - `src/atrex-kernel-agent-evolver/`：独立版本的 Evolver Git Submodule
 - `third_party/atrex-bench/`：固定版本的评测器源码 Submodule
 - [`third_party/reference-projects/`](third_party/reference-projects/README.zh.md)：作为优化参考

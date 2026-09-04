@@ -23,6 +23,7 @@ from ..config import (
     BwrapFilesystemSettings,
     BwrapSandboxSettings,
 )
+from .extensions import install_optimizer_extensions
 
 _ENVIRONMENT_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _PRIVATE_PATH_ENVIRONMENT_KEYS = frozenset(
@@ -235,6 +236,8 @@ class BackendCredentialMounts:
         }
         relative_root = roots[backend]
         destination_root = session_home / relative_root
+        if destination_root.is_symlink():
+            raise ValueError("Provider Session config directory cannot be a symlink")
         destination_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         for relative in state_files[backend]:
             source = self.host_home / relative
@@ -249,6 +252,10 @@ class BackendCredentialMounts:
                 if backend == "qodercli"
                 else session_home / relative
             )
+            if destination.is_symlink() or (
+                destination.exists() and destination.stat().st_nlink > 1
+            ):
+                raise ValueError("Provider Session config must not alias another file")
             destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
             shutil.copyfile(source, destination)
             destination.chmod(0o600)
@@ -409,6 +416,9 @@ class CleanEnvironmentLauncher:
         )
         writable_projection = credentials is not None and bool(writable_backends)
         if not mounts and not writable_projection:
+            exact_environment.update(
+                install_optimizer_extensions(workspace, exact_environment, backends)
+            )
             assignments = tuple(
                 f"{key}={value}" for key, value in sorted(exact_environment.items())
             )
@@ -440,6 +450,9 @@ class CleanEnvironmentLauncher:
         )
         for backend in backends:
             credentials.update_environment(exact_environment, backend, session_home)
+        exact_environment.update(
+            install_optimizer_extensions(workspace, exact_environment, backends)
+        )
         assignments = tuple(f"{key}={value}" for key, value in sorted(exact_environment.items()))
         bwrap = [
             str(bwrap_executable),
@@ -851,6 +864,14 @@ class BwrapSandboxLauncher:
                 self.credentials.update_environment(mapped_environment, backend, session_home)
         else:
             qoder_state_overlays = ()
+        mapped_environment.update(
+            install_optimizer_extensions(
+                workspace,
+                environment,
+                backends,
+                visible_workspace=sandbox_workspace,
+            )
+        )
         translated_argv = tuple(
             self._translate_value(value, workspace, sandbox_workspace) for value in runtime_argv
         )

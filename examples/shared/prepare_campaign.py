@@ -66,7 +66,7 @@ def _git_commit(repository: Path) -> str:
     )
     commit = result.stdout.strip()
     if re.fullmatch(r"[0-9a-f]{40}", commit) is None:
-        raise SystemExit(f"Core repository did not resolve to a full commit: {repository}")
+        raise SystemExit(f"Agent repository did not resolve to a full commit: {repository}")
     return commit
 
 
@@ -102,7 +102,7 @@ def _runtime_config(
         "health_check_interval_s": _integer_environment("AGATE_HEALTH_CHECK_INTERVAL", 30),
     }
     template["kernel_agent"]["base_source"]["repository"] = str(
-        root / "src/atrex-kernel-agent-core"
+        root / "src/kernel-design-agents"
     )
     template["kernel_agent"]["base_source"]["git_executable"] = "/usr/bin/git"
 
@@ -185,7 +185,7 @@ def _campaign_inputs(
     contract_path = state / "evaluation-contract.json"
     _write_json(contract_path, contract)
 
-    core_commit = _git_commit(root / "src/atrex-kernel-agent-core")
+    core_commit = _git_commit(root / "src/kernel-design-agents")
     gpu_key = re.sub(r"[^a-z0-9]+", "-", gpu.lower()).strip("-")
     template_key = re.sub(
         r"[^a-z0-9]+",
@@ -247,11 +247,17 @@ def main() -> None:
     runtime_template = arguments.runtime_template.resolve()
     campaign_template = arguments.campaign_template.resolve()
     pinned_evolver_commit: str | None = None
+    pinned_kernel_agent: dict[str, Any] | None = None
     if config_path.is_file():
         existing_settings = RuntimeSettings.from_file(config_path)
+        if campaign_path.is_file():
+            pinned_kernel_agent = existing_settings.kernel_agent.model_dump(mode="json")
         if existing_settings.campaign is not None:
             pinned_evolver_commit = existing_settings.campaign.evolver.commit
     config = _runtime_config(root, state, agate_url, runtime_template)
+    if pinned_kernel_agent is not None:
+        # A frozen commit must keep its repository/Skill allowlist, too.
+        config["kernel_agent"] = pinned_kernel_agent
     if pinned_evolver_commit is not None:
         config["campaign"]["evolver"]["commit"] = pinned_evolver_commit
     _write_json(config_path, config)

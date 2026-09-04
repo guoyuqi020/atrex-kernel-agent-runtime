@@ -18,6 +18,10 @@ English | [中文](README.zh.md)
   evaluation, profiling, compilation checks, disassembly, development commands, and job control.
 - [`local-wiki/`](local-wiki/README.md): start the Local GPU Wiki and exercise the Agent
   `wiki-query` workflow through Runtime Tools, including a Wiki-focused managed debug shell.
+- [`kernel-design-agents/kernel-agent.example.json`](kernel-design-agents/kernel-agent.example.json):
+  a `kernel_agent` configuration section for the KDA Optimizer, including approved Skill submodules
+  and expanded Bundle limits. This is not a complete Runtime config or a runnable example;
+  see [KDA Optimizer](../docs/user-guide.md#kda-optimizer) for usage.
 
 Every Runtime example selects `campaign.optimizer.agent_backend` and
 `campaign.evolver.agent_backend` independently in its own `runtime.json`. Supported values are

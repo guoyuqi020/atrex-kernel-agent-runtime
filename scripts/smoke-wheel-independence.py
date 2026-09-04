@@ -16,6 +16,7 @@ _FORBIDDEN_SOURCE_PARTS = frozenset(
         "workspaces",
         "local-wiki",
         "atrex-kernel-agent-core",
+        "kernel-design-agents",
         "atrex-kernel-agent-evolver",
     }
 )

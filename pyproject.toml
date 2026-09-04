@@ -14,6 +14,7 @@ dependencies = [
   "anyio>=4.8,<5",
   "httpx>=0.28,<1",
   "pydantic>=2.12,<3",
+  "PyYAML>=6,<7",
   "uvicorn>=0.35,<1",
 ]
 
@@ -58,12 +59,12 @@ python_version = "3.12"
 strict = true
 packages = ["atrex_runtime"]
 mypy_path = "src"
-exclude = ["^src/atrex-kernel-agent-(core|evolver)/"]
+exclude = ["^src/atrex-kernel-agent-(core|evolver)/", "^src/kernel-design-agents/"]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 100
-exclude = ["src/atrex-kernel-agent-core", "src/atrex-kernel-agent-evolver"]
+exclude = ["src/atrex-kernel-agent-core", "src/atrex-kernel-agent-evolver", "src/kernel-design-agents"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
