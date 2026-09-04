@@ -2,9 +2,10 @@
 
 English | [中文](README.zh.md)
 
-This example starts the wire-compatible Local GPU Wiki and demonstrates the exact `wiki-query`
-workflow available to a Core Agent. The Local Wiki is a development test double. Production uses
-the same external API through a remote `gpu_wiki.base_url`.
+The standalone Local GPU Wiki server and browser/API queries remain available.
+The Agent-facing `wiki-query` Runtime Tool is temporarily removed. The managed/temporary Agent
+shell walkthroughs below are retained as historical reference, not currently supported workflows.
+KDA's bundled KernelWiki is independent and can still be queried through its included scripts.
 
 When running from a Lima-mounted checkout, create a Linux-local environment instead of reusing the
 repository's macOS `.venv`:

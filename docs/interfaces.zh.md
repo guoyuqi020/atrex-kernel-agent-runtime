@@ -76,7 +76,7 @@
 | `POST /v1/operations` | Gateway v2；仅执行 GPU/Agate Operation。 |
 | `POST /v1/runtime/queries` | 使用 Gateway v2 Envelope 执行不计配额的 Runtime 本地历史与源码查询。 |
 | `POST /v1/runtime/journals` | 使用 Gateway v2 Envelope 执行不计配额、由 Runtime 自管的 Direction/Experiment Mutation 与读取。 |
-| `POST /v1/wiki/query` | Wiki v1 `{schema_version,attempt_id,idempotency_key,query}`；返回冻结响应。 |
+| `POST /v1/wiki/query` | 保留的 Wiki 集成端点；不再向新建托管 Agent Session 下发 Wiki 权限。 |
 
 Candidate 操作上传完整 Base64 File Bundle，Runtime 在执行前封存。相同 Key/Request 重放已提交响应；
 同 Key 不同内容返回冲突。`evaluate` 生成探索性评测记录，但不会单独保留 Kernel Revision。Wire
@@ -149,7 +149,6 @@ python3 src/runtime_tools.py <command> --request scratch/request.json
 | `kernel-trial-show` | 按 Trial ID 查询 Kernel Artifact Digest 和规范化 Gateway Results；请求 JSON 不写 `operation`。 |
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
 | `gateway-result-read` | 按 Gateway Result Digest 读取规范化的 Agent 可见测量；请求 JSON 不写 `operation`。 |
-| `wiki-query` | `query`；Core 分配请求身份，stdout 只返回 Wiki `content`。 |
 | `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；Experiment 关联自动派生，返回稳定 Direction ID。 |
 | `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称和当前状态原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction；支持 ID 自动包含所有绑定它的可见 Experiment，以及状态事件在内部形成的关联快照。 |

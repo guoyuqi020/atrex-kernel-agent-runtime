@@ -149,7 +149,6 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
         "kernel-trial-show",
         "kernel-artifact-read",
         "gateway-result-read",
-        "wiki-query",
         "update-direction",
         "list-directions",
         "load-direction",
@@ -160,13 +159,14 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
     ):
         assert f"python3 agent/optimizer/src/runtime_tools.py {command} --request" in attempt_prompt
     assert "measurements-query" not in attempt_prompt
+    assert "wiki-query" not in attempt_prompt
+    assert "wiki-query" not in baseline_prompt
     assert "lineage-bootstrap-report" not in baseline_prompt
     for command in (
         "gateway-execute",
         "kernel-trial-show",
         "kernel-artifact-read",
         "gateway-result-read",
-        "wiki-query",
         "update-direction",
         "list-directions",
         "load-direction",

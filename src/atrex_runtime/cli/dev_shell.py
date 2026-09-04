@@ -94,12 +94,7 @@ def open_optimizer_dev_shell(
             ),
             redaction_patterns=evidence_settings.redaction_patterns,
         )
-        operations = frozenset(
-            {
-                *(GatewayOperation(value) for value in campaign.gateway_operations),
-                *((GatewayOperation.WIKI_QUERY,) if settings.gpu_wiki is not None else ()),
-            }
-        )
+        operations = frozenset(GatewayOperation(value) for value in campaign.gateway_operations)
         service = OptimizerDevShell(
             registry,
             LocalAttemptWorkspaceAssembler(
@@ -127,7 +122,7 @@ def open_optimizer_dev_shell(
                 heartbeat_seconds=campaign.fencing_heartbeat_seconds,
             ),
             OptimizerSessionConfig(environment=campaign.optimizer.environment.resolve(os.environ)),
-            wiki_enabled=settings.gpu_wiki is not None,
+            wiki_enabled=False,
         )
         result = service.open(
             shell_name=shell_name,
@@ -232,12 +227,7 @@ def open_temporary_optimizer_dev_shell(
                 settings.gateway_proxy.capability_signing_key_env,
             ),
         )
-        operations = frozenset(
-            {
-                *(GatewayOperation(value) for value in campaign.gateway_operations),
-                *((GatewayOperation.WIKI_QUERY,) if settings.gpu_wiki is not None else ()),
-            }
-        )
+        operations = frozenset(GatewayOperation(value) for value in campaign.gateway_operations)
         service = TemporaryOptimizerDevShell(
             artifacts,
             control,
@@ -252,7 +242,7 @@ def open_temporary_optimizer_dev_shell(
             operations=operations,
             max_calls=campaign.gateway_max_calls,
             capability_lifetime=timedelta(seconds=campaign.gateway_capability_lifetime_seconds),
-            wiki_enabled=settings.gpu_wiki is not None,
+            wiki_enabled=False,
         )
         result = service.open(
             shell_name=shell_name,

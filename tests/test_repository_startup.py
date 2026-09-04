@@ -7,7 +7,9 @@ import json
 import os
 import subprocess
 from pathlib import Path
+from typing import Any
 
+import pytest
 from conftest import with_local_interpreter
 
 from atrex_runtime.api.app import build_runtime_application
@@ -85,6 +87,52 @@ def test_checked_in_configuration_builds_server_and_campaign_runtime(tmp_path: P
     application.close()
     with build_campaign_runtime(settings, _environment()):
         pass
+
+
+def test_campaign_and_bootstrap_do_not_issue_wiki_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from atrex_runtime.composition import bootstrap, campaign
+    from atrex_runtime.gateway.control import SqliteGatewayControl
+    from atrex_runtime.gateway.control_models import GatewayOperation
+    from atrex_runtime.registry.sqlite import SqliteRegistry
+
+    settings = _settings(tmp_path)
+    assert settings.gpu_wiki is not None  # Even a configured service does not expose an Agent tool.
+    observed: list[dict[str, Any]] = []
+
+    def watch(module: Any, name: str) -> None:
+        original = getattr(module, name)
+
+        def construct(*args: Any, **kwargs: Any) -> Any:
+            observed.append(kwargs)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(module, name, construct)
+
+    watch(campaign, "AttemptTimedWorkerGatewayAuthorityProvider")
+    watch(campaign, "SessionOptimizerRunner")
+    watch(bootstrap, "CoreLineageBaselineGenerator")
+    with build_campaign_runtime(settings, _environment()):
+        pass
+    registry = SqliteRegistry(settings.storage.registry_database)
+    control = SqliteGatewayControl(
+        settings.storage.gateway_database, registry, signing_key=b"k" * 32
+    )
+    try:
+        bootstrap.build_core_lineage_baseline_generator(
+            settings, LocalArtifactStore(settings.storage.artifacts_root),
+            registry, control, _environment(),
+        )
+    finally:
+        control.close()
+        registry.close()
+    policies = [item for item in observed if "operations" in item]
+    assert len(policies) == 2
+    assert all(GatewayOperation.WIKI_QUERY not in item["operations"] for item in policies)
+    sessions = [item for item in observed if "wiki_enabled" in item]
+    assert len(sessions) == 2
+    assert all(item["wiki_enabled"] is False for item in sessions)
 
 
 def test_checked_in_comparison_evaluator_is_the_pinned_submodule(tmp_path: Path) -> None:

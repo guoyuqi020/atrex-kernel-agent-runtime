@@ -50,7 +50,7 @@ Runtime config is strict schema v1. Important choices are:
 - Optimizer/Evolver Backend, executable command, environment allowlist, and Session policy;
 - Gate policy, comparison method, Roofline builder, and Production Gate;
 - `development`, outer-OCI `container`, or Linux `sandbox` launcher;
-- optional GPU Wiki query service;
+- optional standalone GPU Wiki service (the Agent-facing Wiki tool is temporarily removed);
 - administration and maintenance limits.
 
 The default Optimizer is `src/kernel-design-agents` (KDA). Root/example configs, new production workspaces and temporary shells select it; see [KDA Optimizer](#kda-optimizer). Existing workspaces keep their pinned Optimizer repository and commit; switching the default does not migrate or restart them.

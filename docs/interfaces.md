@@ -85,7 +85,7 @@ tables and progress messages are operator presentation.
 | `POST /v1/operations` | Gateway protocol v2; executes GPU/Agate operations only. |
 | `POST /v1/runtime/queries` | Gateway protocol v2 envelope for unmetered Runtime-local history and source queries. |
 | `POST /v1/runtime/journals` | Gateway protocol v2 envelope for unmetered, Runtime-owned Direction/Experiment mutations and reads. |
-| `POST /v1/wiki/query` | Wiki protocol v1 `{schema_version, attempt_id, idempotency_key, query}`; returns a frozen response. |
+| `POST /v1/wiki/query` | Retained Wiki integration endpoint; new managed Agent sessions no longer receive Wiki authority. |
 
 Candidate operations upload a complete Base64 file Bundle. Runtime seals it before execution.
 Every key is idempotent: the same key/request replays the committed response; changed content with
@@ -167,7 +167,6 @@ python3 src/runtime_tools.py <command> --request scratch/request.json
 | `kernel-trial-show` | Reads one visible Trial's Kernel Artifact Digest and normalized Gateway results; request JSON omits `operation`. |
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
 | `gateway-result-read` | Reads a normalized Agent-visible measurement for a Gateway Result Digest; request JSON omits `operation`. |
-| `wiki-query` | `query`; Core assigns request identity, and stdout is only Wiki `content`, not audit metadata. |
 | `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Experiment associations are derived automatically; returns the stable Direction ID. |
 | `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, and current status to that file and returns only status, file, and count. |
 | `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction. Its supporting IDs automatically include every visible Experiment bound to it and associations snapshotted internally by status events. |

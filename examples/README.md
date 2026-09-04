@@ -16,8 +16,8 @@ English | [中文](README.zh.md)
   workspace without Bootstrap, Runtime service, or an Agent process.
 - [`agate/`](agate/README.md): call a real remote Agate service with the official CLI for
   evaluation, profiling, compilation checks, disassembly, development commands, and job control.
-- [`local-wiki/`](local-wiki/README.md): start the Local GPU Wiki and exercise the Agent
-  `wiki-query` workflow through Runtime Tools, including a Wiki-focused managed debug shell.
+- [`local-wiki/`](local-wiki/README.md): start the standalone Local GPU Wiki for browser/API queries.
+  The Agent-facing Wiki tool and its shell walkthroughs are temporarily unavailable.
 - [`kernel-design-agents/kernel-agent.example.json`](kernel-design-agents/kernel-agent.example.json):
   a `kernel_agent` configuration section for the KDA Optimizer, including approved Skill submodules
   and expanded Bundle limits. This is not a complete Runtime config or a runnable example;

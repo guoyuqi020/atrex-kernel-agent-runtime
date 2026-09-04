@@ -48,7 +48,7 @@ v1，主要需要确定：
 - Optimizer/Evolver Backend、启动命令、环境白名单和 Session Policy；
 - Gate Policy、比较方法、Roofline Builder 和 Production Gate；
 - `development`、外层 OCI `container` 或 Linux `sandbox` Launcher；
-- 可选 GPU Wiki Query 服务；
+- 可选独立 GPU Wiki 服务（Agent 的 Wiki Runtime Tool 已暂时移除）；
 - Administration 和 Maintenance 上限。
 
 默认 Optimizer 为 `src/kernel-design-agents`（KDA）。根目录配置、各 Example、新建生产工作区和临时 Shell 均选择它，详见 [KDA Optimizer](#kda-optimizer)。已有工作区仍保留其 Optimizer 仓库和固定 Commit；修改默认值不会迁移或重启它们。

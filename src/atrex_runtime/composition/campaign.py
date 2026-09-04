@@ -201,10 +201,7 @@ def build_campaign_runtime(
             registry,
             campaign.gateway_proxy_url,
             operations=frozenset(
-                {
-                    *(GatewayOperation(operation) for operation in campaign.gateway_operations),
-                    *((GatewayOperation.WIKI_QUERY,) if settings.gpu_wiki is not None else ()),
-                }
+                GatewayOperation(operation) for operation in campaign.gateway_operations
             ),
             max_calls=campaign.gateway_max_calls,
             lifetime=timedelta(seconds=campaign.gateway_capability_lifetime_seconds),
@@ -230,7 +227,7 @@ def build_campaign_runtime(
             registry,
             optimizer_config,
             independent_final_evaluation=False,
-            wiki_enabled=settings.gpu_wiki is not None,
+            wiki_enabled=False,
             worker_sessions=registry,
             kernel_trials=control,
             backend=campaign.optimizer.agent_backend,

@@ -858,12 +858,7 @@ def build_core_lineage_baseline_generator(
     campaign = settings.campaign
     if campaign is None:
         return None
-    operations = frozenset(
-        {
-            *(GatewayOperation(value) for value in campaign.gateway_operations),
-            *((GatewayOperation.WIKI_QUERY,) if settings.gpu_wiki is not None else ()),
-        }
-    )
+    operations = frozenset(GatewayOperation(value) for value in campaign.gateway_operations)
     resolved_finalizer = finalizer or build_authoritative_candidate_evaluator(
         settings, artifacts, registry, control, environment
     )
@@ -890,7 +885,7 @@ def build_core_lineage_baseline_generator(
         max_calls=campaign.gateway_max_calls,
         capability_lifetime=timedelta(seconds=campaign.gateway_capability_lifetime_seconds),
         environment=campaign.optimizer.environment.resolve(environment),
-        wiki_enabled=settings.gpu_wiki is not None,
+        wiki_enabled=False,
         backend=campaign.optimizer.agent_backend,
         max_infrastructure_retries=campaign.max_infrastructure_retries,
     )

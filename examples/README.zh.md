@@ -16,8 +16,8 @@
   进程，打开一份用完即销毁的合成 Evolution Workspace。
 - [`agate/`](agate/README.zh.md)：使用官方 CLI 直接调用真实远端 Agate 服务，演示评测、
   Profiling、编译检查、反汇编、开发命令与任务管理。
-- [`local-wiki/`](local-wiki/README.zh.md)：启动本地 GPU Wiki，并通过 Runtime Tools 演示
-  Agent 的 `wiki-query` 流程；也可打开面向 Wiki 调试的托管 Shell。
+- [`local-wiki/`](local-wiki/README.zh.md)：启动独立本地 GPU Wiki，通过浏览器/API 查询。
+  Agent Wiki 工具及对应 Shell 演示暂时不可用。
 - [`kernel-design-agents/kernel-agent.example.json`](kernel-design-agents/kernel-agent.example.json)：
   KDA Optimizer 的 `kernel_agent` 配置段，包含 Skill 子模块白名单和完整 Bundle 限额。
   不是完整 Runtime 配置或可运行脚本；用法见 [KDA Optimizer](../docs/user-guide.zh.md#kda-optimizer)。
