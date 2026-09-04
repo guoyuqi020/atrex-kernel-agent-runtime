@@ -56,7 +56,10 @@ publication still fails closed.
 ## Bootstrap and Kernel retention
 
 Bootstrap runs ordered correctness stages from `gate_policy.bootstrap`. A successful terminal
-Candidate becomes Lineage-local Kernel `v0`; there is no incumbent comparison.
+Candidate becomes Lineage-local Kernel `v0`; there is no incumbent comparison. Because that `v0` is
+the absolute baseline every later Kernel revision is reported against,
+`gate_policy.bootstrap.bench_iters` must sample as deeply as the Optimizer and Retention gates — a
+shallower budget shifts the same Kernel's latency by tens of percent on slow operators.
 
 The supplied policies use `bootstrap.bench_iters=100`, matching ordinary Optimizer Evaluate.
 Both default Bootstrap stages (1 then 5 correctness cases) use this sampling budget. Each stage
