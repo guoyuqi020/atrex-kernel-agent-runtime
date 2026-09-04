@@ -72,7 +72,7 @@ class AgateAuthoritativeCandidateEvaluator:
             BootstrapEvaluationStage(1),
             BootstrapEvaluationStage(5),
         ),
-        bootstrap_bench_iters: int = 5,
+        bootstrap_bench_iters: int = 100,
         profile_without_roofline: bool = False,
         production_policy: ProductionKernelPolicy | None = None,
         clock: Callable[[], datetime] = _utc_now,

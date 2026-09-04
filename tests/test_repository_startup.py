@@ -151,7 +151,7 @@ def test_checked_in_comparison_evaluator_is_the_pinned_submodule(tmp_path: Path)
     assert [
         (stage.correctness_cases, stage.evaluate_repeats) for stage in gate.bootstrap.stages
     ] == [(1, 1), (5, 1)]
-    assert gate.bootstrap.bench_iters == 5
+    assert gate.bootstrap.bench_iters == 100
     assert (gate.retention.correctness_cases, gate.retention.bench_iters) == (1, 100)
     assert gate.production_gate is True
     assert (gate.warmup_iters, gate.atol, gate.rtol) == (10, 0.01, 0.05)

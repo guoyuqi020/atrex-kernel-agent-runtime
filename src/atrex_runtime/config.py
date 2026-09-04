@@ -668,7 +668,7 @@ class BootstrapGateStageSettings(BaseModel):
 
 
 class BootstrapGateSettings(BaseModel):
-    """Ordered Bootstrap validation stages and their small timing sample."""
+    """Ordered Bootstrap validation stages and their shared timing budget."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
