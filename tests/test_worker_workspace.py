@@ -43,6 +43,7 @@ from atrex_runtime.workers.workspace import (
     LocalAttemptWorkspaceAssembler,
     copy_reusable_agent_state,
     ensure_reusable_directories,
+    initialize_reusable_agent_state,
     materialize_reusable_agent_state_snapshot,
     validate_reusable_agent_state_seed,
 )
@@ -55,7 +56,7 @@ def _put_text_artifact(
     kind: ArtifactKind,
 ) -> ArtifactDigest:
     source = tmp_path / f"source-{name}"
-    source.mkdir()
+    source.mkdir(exist_ok=True)
     (source / f"{name}.txt").write_text(name)
     return store.put_directory(source, kind)
 
@@ -428,9 +429,17 @@ def _single_trajectory_workspace(
     ephemeral_agent_state: bool,
     bootstrap_source_lineage_id: object | None = None,
     first_epoch_same_agent: bool = False,
+    core_seed: bool = False,
 ) -> tuple[LocalAttemptWorkspaceAssembler, RunAttemptRequest, str, str]:
     """Assemble the least Registry state one prepare() call accepts."""
     optimizer = _put_text_artifact(store, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT)
+    if core_seed:
+        source = tmp_path / "source-optimizer"
+        for name in REUSABLE_AGENT_DIRECTORIES:
+            (source / name).mkdir()
+            (source / name / "README.md").write_text(f"Initial {name} index")
+            (source / name / "seed.md").write_text(f"Initial {name}")
+        optimizer = store.put_directory(source, ArtifactKind.KERNEL_AGENT)
     kernel_digest = _put_text_artifact(store, tmp_path, "kernel", ArtifactKind.KERNEL)
     contract = store.put_json(
         {"schema_version": 1, "candidate_path": "kernel.txt"},
@@ -797,7 +806,9 @@ def test_evolved_revision_seeds_trajectory_from_candidate_runtime_state(tmp_path
         {
             "schema_version": 9,
             "candidate": {
-                "optimizer_digest": digest("optimizer"),
+                "optimizer_digest": _put_text_artifact(
+                    artifacts, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT
+                ),
                 "runtime_state_digest": state_digest,
             },
         },
@@ -808,7 +819,7 @@ def test_evolved_revision_seeds_trajectory_from_candidate_runtime_state(tmp_path
         new_kernel_agent_revision_id(),
         "epoch:test:challenger:1",
         Dsl.TRITON,
-        digest("optimizer"),
+        _put_text_artifact(artifacts, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT),
         "evolver",
         NOW,
         evolution_trace_digest=trace_digest,
@@ -848,7 +859,9 @@ def test_a_runtime_state_seed_without_skills_still_seeds_a_trajectory(tmp_path: 
         {
             "schema_version": 9,
             "candidate": {
-                "optimizer_digest": digest("optimizer"),
+                "optimizer_digest": _put_text_artifact(
+                    artifacts, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT
+                ),
                 "runtime_state_digest": state_digest,
             },
         },
@@ -859,7 +872,7 @@ def test_a_runtime_state_seed_without_skills_still_seeds_a_trajectory(tmp_path: 
         new_kernel_agent_revision_id(),
         "epoch:test:challenger:1",
         Dsl.TRITON,
-        digest("optimizer"),
+        _put_text_artifact(artifacts, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT),
         "evolver",
         NOW,
         evolution_trace_digest=trace_digest,
@@ -889,7 +902,7 @@ def test_source_only_evolution_preserves_parent_trajectory_state(tmp_path: Path)
         None,
         "bootstrap:test",
         Dsl.TRITON,
-        digest("parent-optimizer"),
+        _put_text_artifact(artifacts, tmp_path, "parent-optimizer", ArtifactKind.KERNEL_AGENT),
         "bootstrap",
         NOW,
         source_provenance_digest=digest("parent-provenance"),
@@ -904,7 +917,9 @@ def test_source_only_evolution_preserves_parent_trajectory_state(tmp_path: Path)
         {
             "schema_version": 9,
             "candidate": {
-                "optimizer_digest": digest("child-optimizer"),
+                "optimizer_digest": _put_text_artifact(
+                    artifacts, tmp_path, "child-optimizer", ArtifactKind.KERNEL_AGENT
+                ),
                 "runtime_state_digest": None,
             },
         },
@@ -915,7 +930,7 @@ def test_source_only_evolution_preserves_parent_trajectory_state(tmp_path: Path)
         parent.id,
         "epoch:test:challenger:1",
         Dsl.TRITON,
-        digest("child-optimizer"),
+        _put_text_artifact(artifacts, tmp_path, "child-optimizer", ArtifactKind.KERNEL_AGENT),
         "evolver",
         NOW,
         evolution_trace_digest=trace_digest,
@@ -950,7 +965,7 @@ def test_missing_trajectory_scope_restores_previous_attempt_runtime_state(
         None,
         "bootstrap:test",
         Dsl.TRITON,
-        digest("optimizer"),
+        _put_text_artifact(artifacts, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT),
         "bootstrap",
         NOW,
         source_provenance_digest=digest("source"),
@@ -969,7 +984,7 @@ def test_missing_trajectory_scope_restores_previous_attempt_runtime_state(
     registry.close()
 
 
-def test_four_directory_state_survives_serial_attempts_and_isolates_trajectories(
+def test_five_directory_state_survives_serial_attempts_and_isolates_trajectories(
     tmp_path: Path,
 ) -> None:
     with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
@@ -1056,6 +1071,138 @@ def test_legacy_state_upgrades_only_the_copy(tmp_path: Path) -> None:
     assert store.verify(digest).digest == digest
 
 
+def test_legacy_state_loads_prompts_from_pinned_core_only(tmp_path: Path) -> None:
+    core = tmp_path / "core"
+    (core / "prompts").mkdir(parents=True)
+    (core / "prompts/episode.md").write_text("Pinned methodology")
+    legacy = tmp_path / "legacy"
+    (legacy / "tools").mkdir(parents=True)
+    (legacy / "tools/README.md").write_text("Historical tools")
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    source_digest = store.put_directory(core, ArtifactKind.KERNEL_AGENT)
+    state_digest = store.put_directory(legacy, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE)
+    source = store.verify(source_digest).payload_path
+    state = store.verify(state_digest).payload_path
+    copied = tmp_path / "copied"
+    copy_reusable_agent_state(state, copied, optimizer_source=source)
+    assert (copied / "prompts/episode.md").read_text() == "Pinned methodology"
+    assert (copied / "tools/README.md").read_text() == "Historical tools"
+    assert not (state / "prompts").exists()
+    validate_reusable_agent_state_seed(copied, require_complete=True)
+    assert store.verify(source_digest).digest == source_digest
+    assert store.verify(state_digest).digest == state_digest
+
+
+def test_state_without_hooks_gains_only_an_empty_indexed_copy(tmp_path: Path) -> None:
+    legacy = tmp_path / "legacy"
+    ensure_reusable_directories(legacy)
+    (legacy / "hooks/README.md").unlink()
+    (legacy / "hooks").rmdir()
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    digest = store.put_directory(legacy, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE)
+    source = store.verify(digest).payload_path
+    validate_reusable_agent_state_seed(source)
+    with pytest.raises(ValueError, match=r"hooks/ must retain README\.md"):
+        validate_reusable_agent_state_seed(source, require_complete=True)
+    copied = tmp_path / "copied"
+    copy_reusable_agent_state(source, copied)
+    validate_reusable_agent_state_seed(copied, require_complete=True)
+    assert [entry.name for entry in (copied / "hooks").iterdir()] == ["README.md"]
+    assert not (source / "hooks").exists()
+    assert store.verify(digest).digest == digest
+
+
+@pytest.mark.parametrize("reset", (False, True))
+def test_attempt_core_seed_and_retry_precedence(tmp_path: Path, reset: bool) -> None:
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        store = LocalArtifactStore(tmp_path / "artifacts")
+        assembler, request, _, _ = _single_trajectory_workspace(
+            tmp_path, registry, store, ephemeral_agent_state=reset, core_seed=True
+        )
+        first = assembler.prepare(request)
+        for name in REUSABLE_AGENT_DIRECTORIES:
+            assert (first.root / name / "seed.md").read_text() == f"Initial {name}"
+            assert not (first.root / "agent/optimizer" / name).exists()
+            (first.root / name / "seed.md").unlink()
+            (first.root / name / "README.md").write_text("Pruned seed")
+        first.persist_reusable_directories()
+        registry.record_attempt_runtime_state(request.attempt_id, first.seal_runtime_state(store))
+        retry = assembler.prepare(request)
+        for name in REUSABLE_AGENT_DIRECTORIES:
+            assert (retry.root / name / "seed.md").exists() is reset
+            expected = f"Initial {name} index" if reset else "Pruned seed"
+            assert (retry.root / name / "README.md").read_text() == expected
+
+
+def test_core_initial_state_copies_resources_not_engineering_docs(tmp_path: Path) -> None:
+    core = tmp_path / "core"
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        (core / name).mkdir(parents=True)
+        (core / name / "README.md").write_text(f"Core {name} index")
+        (core / name / "nested").mkdir()
+        (core / name / "nested/seed.md").write_text(f"Initial {name}")
+    (core / "docs").mkdir()
+    (core / "docs/design.md").write_text("Engineering only")
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    digest = artifacts.put_directory(core, ArtifactKind.KERNEL_AGENT)
+    source = artifacts.verify(digest).payload_path
+    root = tmp_path / "workspace"
+    initialize_reusable_agent_state(root, source)
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        assert (root / name / "README.md").read_text() == f"Core {name} index"
+        assert (root / name / "nested/seed.md").read_text() == f"Initial {name}"
+        (root / name / "nested/seed.md").write_text("Learned state")
+        assert (source / name / "nested/seed.md").read_text() == f"Initial {name}"
+    assert not (root / "docs").exists()
+    assert not (root / "knowledge/design.md").exists()
+    assert artifacts.verify(digest).digest == digest
+
+
+def test_legacy_docs_migrates_without_rewriting_artifact(tmp_path: Path) -> None:
+    legacy = tmp_path / "legacy"
+    (legacy / "docs").mkdir(parents=True)
+    (legacy / "docs/README.md").write_text("API knowledge: api.md")
+    (legacy / "docs/api.md").write_text("Measured API constraints")
+    (legacy / "tools").mkdir()
+    (legacy / "tools/README.md").write_text("Tool index")
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    digest = store.put_directory(legacy, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE)
+    source = store.verify(digest).payload_path
+    validate_reusable_agent_state_seed(source)
+    with pytest.raises(ValueError, match="may contain only"):
+        validate_reusable_agent_state_seed(source, require_complete=True)
+    copied = tmp_path / "copied"
+    copy_reusable_agent_state(source, copied)
+    validate_reusable_agent_state_seed(copied, require_complete=True)
+    assert not (copied / "docs").exists()
+    assert (copied / "knowledge/README.md").read_text() == "API knowledge: api.md"
+    assert (copied / "knowledge/api.md").read_text() == "Measured API constraints"
+    assert (copied / "knowledge/api.md").stat().st_mode & 0o200
+    assert (source / "docs/api.md").is_file()
+    assert not (source / "knowledge").exists()
+    assert store.verify(digest).digest == digest
+
+
+def test_existing_persistent_docs_is_renamed(tmp_path: Path) -> None:
+    state = tmp_path / "state"
+    (state / "docs").mkdir(parents=True)
+    (state / "docs/note.md").write_text("Keep across retries")
+    ensure_reusable_directories(state)
+    ensure_reusable_directories(state)
+    assert not (state / "docs").exists()
+    assert (state / "knowledge/note.md").read_text() == "Keep across retries"
+    validate_reusable_agent_state_seed(state, require_complete=True)
+
+
+def test_knowledge_migration_rejects_conflicting_names(tmp_path: Path) -> None:
+    ensure_reusable_directories(tmp_path)
+    (tmp_path / "docs").mkdir()
+    (tmp_path / "docs/note.md").write_text("Do not discard")
+    with pytest.raises(ValueError, match="both docs/ and knowledge/"):
+        ensure_reusable_directories(tmp_path)
+    assert (tmp_path / "docs/note.md").read_text() == "Do not discard"
+
+
 @pytest.mark.parametrize("name", REUSABLE_AGENT_DIRECTORIES)
 def test_reusable_readme_rejects_symlink_or_directory(tmp_path: Path, name: str) -> None:
     state = tmp_path / "state"
@@ -1074,13 +1221,18 @@ def test_reusable_readme_rejects_symlink_or_directory(tmp_path: Path, name: str)
         ensure_reusable_directories(state)
 
 
-def test_evolver_snapshot_preserves_all_state_indexes_read_only(tmp_path: Path) -> None:
+@pytest.mark.parametrize("legacy_knowledge", (False, True))
+def test_evolver_snapshot_preserves_all_state_indexes_read_only(
+    tmp_path: Path, legacy_knowledge: bool
+) -> None:
     workspaces = tmp_path / "attempts"
     source = workspaces / ".reusable/lineage/agent/trajectory-00000001"
     ensure_reusable_directories(source)
     for name in REUSABLE_AGENT_DIRECTORIES:
         (source / name / "entry.txt").write_text(name)
         (source / name / "README.md").write_text(f"{name}: entry.txt")
+    if legacy_knowledge:
+        (source / "knowledge").rename(source / "docs")
     target = tmp_path / "evolver-view"
     assert materialize_reusable_agent_state_snapshot(
         workspaces,
@@ -1092,3 +1244,5 @@ def test_evolver_snapshot_preserves_all_state_indexes_read_only(tmp_path: Path) 
         assert (copied / "entry.txt").read_text() == name
         assert (copied / "README.md").read_text() == f"{name}: entry.txt"
         assert not (copied.stat().st_mode & 0o222)
+    assert (source / "docs").exists() is legacy_knowledge
+    assert not (target / "agent/trajectories/trajectory-00000001/docs").exists()

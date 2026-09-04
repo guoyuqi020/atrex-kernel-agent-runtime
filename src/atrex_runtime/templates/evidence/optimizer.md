@@ -10,33 +10,41 @@ workspace/
 ├── input/
 │   ├── kernel/                 # read-only incumbent Kernel
 │   └── evidence/               # read-only authorized history described below
-├── agent/optimizer/            # read-only Agent implementation and built-in resources
+├── agent/optimizer/            # read-only implementation/config; initial State copies omitted
 ├── work/kernel/                # writable candidate copied from the incumbent
-├── memory/                     # search memories and lessons; README.md index
-├── docs/                       # reusable knowledge and reference notes; README.md index
+├── prompts/                    # writable phase prompts and README.md index
+├── memory/                     # reusable search memories and lessons; README.md index
+├── knowledge/                  # reusable knowledge and reference notes; README.md index
 ├── skills/                     # reusable procedures; README.md index
 ├── tools/                      # reusable tool scripts; README.md index
+├── hooks/                      # reusable Claude/Codex hooks and config snippets; README.md index
 ├── sessions/                   # session capture owned by the launcher; do not modify
 └── scratch/                    # writable temporary requests, plans, recovery files, and reports
 ```
 
-All four directories are writable adaptive Runtime State. They persist across serial Attempts in
-this Epoch for the same Lineage, Agent Revision, and Trajectory. At the next Epoch boundary, every Active Trajectory starts from an
-independent copy of the prior winner's best-Kernel Trajectory terminal State; every Challenger
-starts from its Evolver-sealed revision State. Parallel Trajectories have independent stores.
-Bootstrap deposits seed later Attempts; retries use the latest persisted State. For reset-state
-ablation arms, all four directories start with only their README indexes on every Attempt/retry.
+Use the files already present as your starting point. Save reusable content in the writable
+`prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/` directories, and keep their
+README indexes current. The controller manages persistence and reuse between sessions.
+Files in `scratch/` are temporary and are not carried into later sessions or retries.
+
 Read the indexes before adding content. Whenever you add, change, rename, or remove a file, update
 that directory's `README.md` so it remains a current index of paths, purposes, and applicability.
-Use `memory/` for search experiences and decisions, `docs/` for sourced knowledge, `skills/` for
+Use `prompts/` for phase prompts and reusable tool instructions. Managed Agent configuration uses
+`prompt_root: "workspace"`; its `prompts/...` paths resolve here, not inside `agent/optimizer/`.
+Keep referenced files available. Edits apply to later fresh Sessions, not the already submitted
+current Prompt. Trusted injected context, tool validation, and evaluation rules cannot be changed
+by editing these files. The six initial State directories are omitted from the Source workspace
+copy; the sealed Source Artifact remains complete.
+Use `memory/` for reusable search experiences and decisions, `knowledge/` for sourced knowledge, `skills/` for
 repeatable procedures, and `tools/` for scripts. Tool entries also need invocation, inputs, outputs,
 side effects, dependencies, an example, and limitations in `tools/README.md`.
+Use `hooks/` for reusable Claude/Codex hook scripts and configuration snippets. Its README must identify
+the backend, event, command, dependencies, side effects, activation steps, and verification status.
+Persisting hooks does not activate them; the backend must explicitly load their configuration.
 Keep content concise and non-duplicative; link Journal and measurement identities instead of copying
 raw traces or one-off outputs. Memory and
-Docs are Agent-authored interpretations, not authoritative Journal/measurement replacements.
+Knowledge are Agent-authored interpretations, not authoritative Journal/measurement replacements.
 Never store credentials. Temporary requests, probes, and outputs belong in `scratch/`.
-
-Controller-internal files and metadata are intentionally omitted from this Agent-facing contract.
 
 ## Evidence view
 

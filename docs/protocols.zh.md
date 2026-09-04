@@ -60,34 +60,28 @@ Attempt、Generalization Subject 或 Evolution Subject 是逻辑 Owner。
 
 ## Evolver 与 Agent State
 
-Evolver `atrex-evolver-bundle.json` schema v1 声明唯一入口。Runtime 固定通过 stdin 发送
-`Run the versioned Evolver Bundle once.`。Evolution Input schema v11 固定 Parent、Evidence
-Checkpoint、DSL、Optimizer Digest、Workspace Path 和只读 `visible_agents` Catalog；其中包含
-Active Parent、已保留的 Lineage Agent 历史，以及同一 Epoch 中此前创建的 Challenger。每个条目
-包含仓库路径、Parent Link、创建者、关系类型，以及适用时的当前 Epoch Challenger Ordinal。
-无版本号的 Evolution Output 声明提案形态、所选 Agent Revision、假设、预期效果、相对于 Source
-根目录的准确 Changed Paths，以及 Candidate 取用过内容的其他可见 Revision；Trace schema v9 记录所选 Model、
-Bundle Commit/Tree/Artifact 与进程证据。Evolver 没有 Token 截止；必需 Report 使用空 Budget
-记录完整 Provider Usage。
-Schema v11 不包含 Runtime 查询权限。每个可见 Agent 都按稳定 Lineage 版本位于
-`input/agents/agent-vN/`，Runtime 派生 Evidence 位于 `input/evidence/agent-vN/`。每个版本都有生涯汇总；
-最近完成 Epoch 的参赛者还额外暴露该 Epoch 的 Conversation 与 Attempt Report。Evolver 直接从冻结文件
-读取 Source、Runtime State、汇总与可用 Session Evidence。从历史派生时，它把所选历史 Source 复制到
-Candidate Source，并可从可见历史状态整理扁平公共种子；Runtime 无需 Candidate Base 旁路记录，直接验证
-Agent Revision、报告的 Source Diff 与私有 Runtime State Diff。
-新 Revision 可以融合多个合格可见 Agent 的内容。`contributing_revision_ids` 记录除唯一 Source Base 外
-的全部贡献者；它只表示 Provenance，不改变 Diff Base，也不增加祖先边。当前 Epoch 中尚未参赛的
-Challenger 虽会出现在 Catalog 中，但不能作为贡献者。
-Agent 通过只读 Bundle 内的本地 `evolution-report` 命令提交该输出。无效 Draft 返回结构化
-`issues`、`request_schema` 与 `recovery` 且不发布；第一个有效 Draft 原子写入
-`scratch/evolution-report.json`。Agent 退出后 Runtime 再独立校验报告和 Candidate。
-按 Trajectory 划分的 `runtime-state/trajectories/<N>/{memory,docs,skills,tools}/` 保存自适应 State，
-属于非版本化 Lineage 状态。根级 `skills/` 和 `tools/` 在版本化 Agent Source 中无效。Evolver 可直接
-整理扁平的 `candidate/runtime-state/{memory,docs,skills,tools}/` 公共种子，也可修改控制未来状态使用方式的版本化
-机制。Runtime 始终独立封存 Candidate Source 与 State，并把两者组合为同一个不可变 Agent Bundle；
-所有新 Trajectory 都从该 Bundle 的 State 初始化。State 是否相对输入发生修改不影响封存。Agent
-Revision 直接记录 `optimizer_digest` 与 `runtime_state_digest`；Evolution Trace 是来源证据，而不是
-State 身份的唯一位置。缺少直接字段的旧 Revision 仍可通过 Trace 兼容读取。
+固定 Commit 的 Evolver Bundle 用 `atrex-evolver-bundle.json` schema 1 声明入口。
+Runtime 通过 stdin 固定发送 `Run the versioned Evolver Bundle once.`。Evolution Input schema 11
+包含 Parent、DSL、Evidence Checkpoint、工作区路径和冻结 Catalog，不授予 Gateway/Wiki 或 Runtime 查询权限。
+Trace schema 9 保存进程、Usage、Report、Candidate 身份和贡献内容快照；Provider Usage 必需，不设置 Evolver Token 截止。
+
+每个 `input/agents/agent-vN/` 是完整只读 Bundle，可写 `candidate/` 使用相同布局。
+`input/evidence/agent-vN/` 保存汇总及逐 Trajectory 补充资源；仅上一个完成 Epoch 的参赛者暴露
+该 Epoch 的 Conversation 和 Attempt Report。历史创建报告位于 `input/evolution-reports/`。
+
+Evolution Report 声明提案模式、所选 `kernel_agent_revision_id`、假设、预期效果、准确的 Bundle
+相对 `changed_paths`、`contributing_paths` 和未实现能力。从历史派生时先复制完整 Bundle，再修改。
+本地 `evolution-report` 校验 Draft，错误返回 `issues`、`request_schema`、`recovery`，不发布；
+首次有效调用原子生成 `scratch/evolution-report.json`。Session 结束后 Runtime 再独立校验。
+
+每个新 Revision 封存完整 Bundle 和六目录 State Checkpoint，记录 `optimizer_digest`、
+`runtime_state_digest`；每个新 Trajectory 使用独立副本。Optimizer 的实现权限和 State 继承规则不变。
+
+`contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许
+`input/agents/agent-vN/` 和 `input/evidence/agent-vN/resources/`，包括 Parent 其他 Trajectory 的资源。
+仅阅读和自动继承 Parent 不算贡献。路径必须存在、无链接或越界，且属于合格已评估历史或 Parent，
+不能引用同 Epoch 尚未评估的 Challenger。`reuse` 要求 `[]`。Runtime 在 Evolution Trace 中保存归属
+和准确内容快照；该字段不改变 Bundle Base 或 Revision 祖先关系。
 
 ## Artifact 与 Measurement
 
@@ -137,22 +131,24 @@ Report。
 
 ## Runtime State
 
-版本化 Agent Source 不能包含顶层 `skills/` 或 `tools/`。Adaptive State 是独立 Artifact：
+版本化 Core Source 包含 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/`、`hooks/` 初始种子，没有继承 State 时由 Runtime 复制。运行中积累的 Adaptive State 仍是独立 Artifact：
 
 ```text
 runtime-state/
   trajectories/<N>/
+    prompts/README.md
     memory/README.md
-    docs/README.md
+    knowledge/README.md
     skills/README.md
     tools/README.md
+    hooks/README.md
 ```
 
-Optimizer Workspace 把一条 Trajectory 的 State 展示为根级可写 `memory/`、`docs/`、`skills/` 和 `tools/`。
-各目录 README 必须随内容的新增、修改、重命名和删除同步更新。四目录整体封存，遵循相同的继承与隔离
-规则；清空状态的消融臂每次只保留四份 README 模板。自适应 Docs 与 Source 内的实现文档相互独立。Runtime
+Optimizer Workspace 把一条 Trajectory 的 State 展示为根级可写 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 和 `hooks/`。
+各目录 README 必须随内容的新增、修改、重命名和删除同步更新。六目录整体封存，遵循相同的继承与隔离
+规则；没有继承 State 时，从固定 Core Source 加载六目录初始内容，重置状态的消融臂每次回到该种子。自适应 Knowledge 与 Source 内的实现文档相互独立。Runtime
 封存终态内容并为下一个串行 Attempt 恢复。Evolver 获得冻结 Participant/Historical State，并在
-`candidate/runtime-state/{memory,docs,skills,tools}/` 编写一份扁平 Candidate Seed。新 Agent Revision 同时
+`candidate/{prompts,memory,knowledge,skills,tools,hooks}/` 编写一份扁平 Candidate Seed。新 Agent Revision 同时
 记录 Source 与 State Digest，作为一个逻辑 Bundle；每条新 Trajectory 得到独立副本。
 
 启用 Ephemeral Agent State 的 Ablation Lineage 会让每个 Attempt 从空 Adaptive State 开始。

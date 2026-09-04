@@ -512,8 +512,8 @@ def test_evolver_view_summarizes_non_pool_versions_without_sessions_or_reports(
     assert summary == {
         "kernel_agent_revision_id": "agent_fresh",
         "version": "agent-v2",
-        "source_path": "input/agents/agent-v2/source",
-        "runtime_state_path": "input/agents/agent-v2/runtime-state",
+        "path": "input/agents/agent-v2",
+        "resources_path": "input/evidence/agent-v2/resources",
         "latest_epoch": None,
         "career": {"epoch_participation_count": 0, "win_count": 0, "loss_count": 0},
     }
@@ -676,12 +676,18 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert manifest.role == "evolver"
     assert not (control_root / "evidence-instructions.md").exists()
     assert EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "adaptive `memory/`, `docs/`, `skills/`, and `tools/`" in EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "`candidate/source/` copy is writable" in EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "{memory,docs,skills,tools}/" in EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "candidate/runtime-state/" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert (
+        "Each of the six reusable directories has a mandatory `README.md` index"
+        in EVOLVER_EVIDENCE_PROMPT_TEXT
+    )
+    assert "`candidate/` starts as a writable" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "{prompts,memory,knowledge,skills,tools,hooks}/" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "candidate/runtime-state/" not in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "revision seed" in EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "every Trajectory of the new revision" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert (
+        "Candidate resources seed its next optimization trajectories"
+        in EVOLVER_EVIDENCE_PROMPT_TEXT
+    )
     assert "`secondary_criteria`" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "`incumbent_retained`" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "`identical_kernel`" in EVOLVER_EVIDENCE_PROMPT_TEXT
@@ -703,8 +709,8 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert not (destination / "bootstrap").exists()
     active_effect = json.loads((destination / "agent-v0/optimization-summary.json").read_text())
     assert active_effect["version"] == "agent-v0"
-    assert active_effect["source_path"] == "input/agents/agent-v0/source"
-    assert active_effect["runtime_state_path"] == "input/agents/agent-v0/runtime-state"
+    assert active_effect["path"] == "input/agents/agent-v0"
+    assert active_effect["resources_path"] == "input/evidence/agent-v0/resources"
     assert active_effect["latest_epoch"]["attempt_count"] == 1
     assert active_effect["latest_epoch"]["correct_attempt_count"] == 1
     assert active_effect["latest_epoch"]["branch"] == "active"

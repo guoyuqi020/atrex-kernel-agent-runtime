@@ -227,7 +227,7 @@ atrex-kernel-agent-runtime seed-ablation-arm \
 ```
 
 Runtime creates a separate one-Lineage Campaign from the source Bootstrap baseline with no
-Challenger. Use `ephemeral_agent_state=true` to reset adaptive Memory/Docs/Skills/Tools every Attempt; use false
+Challenger. Use `ephemeral_agent_state=true` to reset adaptive Prompts/Memory/Knowledge/Skills/Tools/Hooks every Attempt; use false
 to retain serial State and isolate only the absence of Evolver changes.
 
 For an evolving control, set `challenger_count=1`, `challenger_start_epoch=2`,
@@ -248,8 +248,12 @@ atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$L
 Use them only for trusted debugging. Optimizer Runtime Tools and the Evolver's read-only filesystem
 input contract are documented in [Interface Reference](interfaces.md).
 
-Every Optimizer Workspace contains writable `memory/` (search experiences), `docs/` (knowledge),
-`skills/` (procedures), and `tools/` (scripts), each with a `README.md` index. At Session exit,
+Every Optimizer Workspace contains writable `prompts/` (phase instructions), `memory/` (search experiences), `knowledge/` (knowledge),
+`skills/` (procedures), `tools/` (scripts), and `hooks/` (Claude/Codex hook scripts and configuration
+snippets), each with a `README.md` index. With no inherited State,
+Runtime initializes these from the corresponding directories in the pinned Core Revision, not the
+host's current checkout. Existing checkpoints take precedence. Older Core revisions without seed
+directories receive empty defaults. At Session exit,
 Runtime seals their exact terminal contents and records the Artifact Digest on the producing
 Attempt. The next serial Attempt continues from that State and can reconstruct it after local cache
 loss. Framework Bootstrap initializes the `agent-v0` State. Evolver starts from the State captured
@@ -259,9 +263,27 @@ Agent Revision seals its Source
 and State together as one logical Bundle, and each new trajectory receives an independent State
 copy. Adding, editing, renaming, or deleting content requires updating its directory's README with
 paths, purposes, and applicability; Tools also document invocation, inputs, outputs, dependencies,
-examples, and limitations. All four follow the same inheritance/reset policy. Older snapshots gain
+examples, and limitations. All six follow the same inheritance/reset policy. Older snapshots gain
 missing directories/indexes only when copied, without changing their stored Artifacts. These notes
 are Agent-authored; the Runtime Journal and Gateway results remain authoritative.
+
+Legacy State `docs/` is materialized as `knowledge/`; sealed historical Artifacts remain unchanged.
+If both names exist in one State, merge the contents explicitly into `knowledge/` before continuing.
+Engineering documentation under the Core repository's `docs/` is unrelated and is not renamed.
+
+Hooks follow the same initialization, checkpoint, inheritance, isolation, and reset policy. Their
+README records backend, event, invocation, dependencies, side effects, activation steps, and verified
+status. This directory is storage, not automatic registration: Runtime does not load its contents
+into Claude/Codex backend configuration. Older State snapshots gain an empty indexed `hooks/` in
+the materialized copy only.
+
+Before launching a Core phase or its dev-shell, Runtime updates the workspace copy of
+`agent/optimizer/atrex-agent.json` with the effective backend, model, reasoning effort, and session
+settings. `prompt_root: "workspace"` makes existing `prompts/...` paths resolve at workspace root.
+All six initial State directories are omitted from the Source workspace copy, so Optimizer sees
+only one writable version. Prompt edits affect subsequent fresh Sessions. The config file stays
+read-only to the Agent; this deployment
+projection does not create a new Source Revision or modify its sealed Artifact.
 
 ## 12. Recovery and maintenance
 

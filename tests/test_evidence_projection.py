@@ -288,11 +288,11 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
                     revision_id=parent_id,
                     version="agent-v0",
                     optimizer_digest=digest("parent-optimizer"),
-                    path="input/agents/agent-v0/source",
+                    path="input/agents/agent-v0",
                     optimization_summary_path="input/evidence/agent-v0/optimization-summary.json",
                     sessions_path="input/evidence/agent-v0/sessions",
                     reports_path="input/evidence/agent-v0/reports",
-                    runtime_state_path="input/agents/agent-v0/runtime-state",
+                    resources_path="input/evidence/agent-v0/resources",
                     parent=True,
                     relationship="active",
                     challenger_ordinal=None,
@@ -471,7 +471,7 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
     ]
     assert lessons[1]["trusted"] is False
     assert lessons[1]["text"] == "Reduce register pressure"
-    assert lessons[0]["contributing_revision_ids"] == []
+    assert lessons[0]["contributing_paths"] == []
     assert lessons[0]["unimplemented_capabilities"] == [
         {
             "capability": "Live occupancy modeling",

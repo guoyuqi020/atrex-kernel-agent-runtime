@@ -22,7 +22,6 @@ KERNEL_AGENT_IGNORED_DIRECTORY_NAMES = frozenset(
 )
 KERNEL_AGENT_IGNORED_FILE_NAMES = frozenset({".coverage", ".DS_Store"})
 KERNEL_AGENT_IGNORED_FILE_SUFFIXES = frozenset({".pyc", ".pyo"})
-KERNEL_AGENT_RESERVED_RUNTIME_STATE_NAMES = frozenset({"skills", "tools"})
 
 
 def is_ignored_kernel_agent_path(relative: PurePosixPath, *, directory: bool) -> bool:
@@ -159,14 +158,6 @@ class KernelAgentRevisionBuilder:
             for entry in directory.iterdir():
                 entry_stat = entry.lstat()
                 relative = PurePosixPath(*entry.relative_to(root).parts)
-                if (
-                    len(relative.parts) == 1
-                    and relative.name in KERNEL_AGENT_RESERVED_RUNTIME_STATE_NAMES
-                ):
-                    raise ValueError(
-                        "Optimizer repository cannot contain reserved top-level "
-                        f"runtime-state path: {relative.name}/"
-                    )
                 if stat.S_ISLNK(entry_stat.st_mode):
                     raise ValueError("Optimizer repository cannot contain symbolic links")
                 if stat.S_ISDIR(entry_stat.st_mode):

@@ -69,41 +69,35 @@ provider usage remains mandatory.
 
 ## Evolver and Agent State
 
-Evolver `atrex-evolver-bundle.json` schema v1 declares one entrypoint. Runtime sends exactly `Run the
-versioned Evolver Bundle once.` on stdin. Evolution input schema v11 fixes parent revision, evidence
-checkpoint, DSL, optimizer digest, workspace paths, and a read-only `visible_agents` catalog. That
-catalog contains the Active parent, retained Lineage Agent history, and Challengers already created
-earlier in the same Epoch. Each entry includes repository path, Parent link, creator, relationship,
-and current-Epoch Challenger ordinal when applicable. The unversioned Evolution output declares
-proposal mode, selected Agent revision, hypothesis, expected effect, exact Source-root-relative
-changed paths, and the other visible revisions whose content the Candidate drew on.
-Trace schema v9 records Bundle commit/tree/Artifact identity, selected model, and process evidence.
-Evolver has no token cutoff; its mandatory report records complete provider usage with a null budget.
-Schema v11 has no Runtime query authority. Every visible Agent is keyed by stable Lineage version
-under `input/agents/agent-vN/`, with Runtime-derived evidence under `input/evidence/agent-vN/`.
-Every version has a career summary; participants in the latest completed Epoch additionally expose
-that Epoch's Conversations and Attempt Reports. Evolver reads Source, Runtime State, summaries, and
-available Session evidence directly from frozen files. A historical derivation copies the selected historical Source into Candidate
-Source and may curate the flat common state seed from visible historical state; Runtime validates
-the declared Agent revision, the reported Source Diff, and the private Runtime State Diff without a
-Candidate Base side record.
-New revisions may combine material from multiple eligible visible Agents.
-`contributing_revision_ids` records every contributor other than the single Source base; it is
-provenance only and neither changes the Diff base nor adds an ancestry edge. Current-Epoch
-Challengers that have not competed are visible in the catalog but are ineligible contributors.
-The Agent submits this output through the read-only Bundle-local `evolution-report` command. Invalid
-drafts return structured `issues`, `request_schema`, and `recovery` without publishing; the first
-valid draft is atomically published to `scratch/evolution-report.json`. Runtime independently
-revalidates the published report and Candidate after the Agent exits.
-Per-Trajectory `runtime-state/trajectories/<N>/{memory,docs,skills,tools}/` is the adaptive State
-storage and belongs to non-versioned Lineage state. Top-level `skills/` and `tools/` are reserved and
-invalid in versioned Agent source. Evolver may curate the flat
-`candidate/runtime-state/{memory,docs,skills,tools}/` seed directly or change the versioned mechanism governing
-future state use. Runtime seals complete Source and State for every new Revision and copies that
-exact State to every new Trajectory. The Agent Revision directly records both
-`optimizer_digest` and `runtime_state_digest`; the Evolution Trace is provenance, not the only
-location of the State identity. Legacy revisions without the direct field remain readable through
-their Trace.
+The commit-pinned Evolver Bundle declares its entrypoint in `atrex-evolver-bundle.json` schema 1.
+Runtime sends exactly `Run the versioned Evolver Bundle once.` on stdin. Evolution input schema 11
+contains Parent identity, DSL, Evidence checkpoint, workspace paths, and the frozen Agent catalog;
+it grants no Gateway/Wiki or Runtime query capability. Trace schema 9 retains process, usage,
+report, Candidate identity, and contribution snapshots. Provider usage is required; there is no
+Evolver token cutoff.
+
+Every `input/agents/agent-vN/` is a complete read-only Bundle; `candidate/` uses the same layout.
+Evidence summaries and supplementary per-Trajectory resources are under `input/evidence/agent-vN/`.
+Only participants in the last completed Epoch expose its Conversations and Attempt Reports.
+Historical creation reports remain under `input/evolution-reports/`.
+
+An Evolution report declares proposal mode, selected `kernel_agent_revision_id`, hypothesis,
+expected effect, exact Bundle-relative `changed_paths`, `contributing_paths`, and unimplemented
+capabilities. Historical derivation copies the selected complete Bundle before editing it.
+The local `evolution-report` tool validates drafts and returns `issues`, `request_schema`, and
+`recovery` on error without publishing. The first valid call atomically publishes
+`scratch/evolution-report.json`; Runtime independently revalidates it after the Session exits.
+
+Every new revision seals the complete Bundle and six-directory State checkpoint, recording
+`optimizer_digest` and `runtime_state_digest`. Each new Trajectory starts from a separate copy;
+Optimizer implementation permissions and State inheritance remain unchanged.
+
+`contributing_paths` records sorted, unique workspace-relative files or directories actually incorporated from
+`input/agents/agent-vN/` or `input/evidence/agent-vN/resources/`, including Parent resources from other
+Trajectories. Mere reading and automatic Parent inheritance are not contributions. Paths must exist,
+contain no links/traversal, and belong to eligible evaluated history or Parent, never a same-Epoch
+unevaluated Challenger. `reuse` requires `[]`. Runtime records ownership and exact content snapshots
+in the Evolution Trace; the field does not change the Bundle base or revision ancestry.
 
 ## Artifacts and measurements
 
@@ -163,28 +157,31 @@ profile evidence, and Direction-bound Findings.
 
 ## Runtime State
 
-Versioned Agent source must not contain top-level `skills/` or `tools/`. Adaptive State is a
-separate Artifact:
+Versioned Core Source includes initial `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/` seeds.
+Runtime copies them when no inherited State exists. Learned State remains a separate Artifact:
 
 ```text
 runtime-state/
   trajectories/<N>/
+    prompts/README.md
     memory/README.md
-    docs/README.md
+    knowledge/README.md
     skills/README.md
     tools/README.md
+    hooks/README.md
 ```
 
-An Optimizer workspace presents one Trajectory's State as writable root `memory/`, `docs/`, `skills/`,
-and `tools/`. Each README indexes that directory and must track additions, edits, renames, and removals.
+An Optimizer workspace presents one Trajectory's State as writable root `prompts/`, `memory/`, `knowledge/`, `skills/`,
+`tools/`, and `hooks/`. Each README indexes that directory and tracks additions, edits, renames, and removals.
 Runtime seals the terminal contents and restores them for the next serial Attempt. Evolver receives
 frozen participant/historical State and writes one flat Candidate seed at
-`candidate/runtime-state/{memory,docs,skills,tools}/`. A new Agent Revision records both source and State
+`candidate/{prompts,memory,knowledge,skills,tools,hooks}/`. A new Agent Revision records both source and State
 digests as one logical Bundle; each new Trajectory receives an independent copy.
 
-An Ablation Lineage with ephemeral Agent State starts every Attempt with only the four README indexes.
-All four directories are sealed together and share the same inheritance and isolation rules.
-Adaptive Docs are distinct from implementation documentation inside versioned Source.
+Without inherited State, Runtime copies the six initial directories from the pinned Core Source.
+An Ablation Lineage with ephemeral Agent State returns to that seed on every Attempt/retry.
+All six directories are sealed together and share the same inheritance and isolation rules.
+Adaptive Knowledge are distinct from implementation documentation inside versioned Source.
 
 ## Evidence visibility
 

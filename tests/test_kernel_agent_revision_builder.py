@@ -55,21 +55,21 @@ def test_builder_seals_complete_repository(tmp_path: Path) -> None:
     assert (stored / "docs/design.md").is_file()
 
 
-@pytest.mark.parametrize("name", ("skills", "tools"))
-def test_builder_rejects_top_level_adaptive_state_directories(
+@pytest.mark.parametrize("name", ("prompts", "memory", "knowledge", "skills", "tools", "hooks"))
+def test_builder_seals_top_level_adaptive_state_seeds(
     tmp_path: Path,
     name: str,
 ) -> None:
     source = _source(tmp_path)
-    reserved = source / name
-    reserved.mkdir()
-    (reserved / "state.md").write_text("trajectory state\n", encoding="utf-8")
-
-    with pytest.raises(ValueError, match=f"reserved top-level runtime-state path: {name}/"):
-        KernelAgentRevisionBuilder(
-            LocalArtifactStore(tmp_path / "artifacts"),
-            limits=kernel_agent_limits(),
-        ).build_candidate(source, Dsl.TRITON)
+    seed = source / name
+    seed.mkdir(exist_ok=True)
+    (seed / "state.md").write_text("initial state\n", encoding="utf-8")
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    candidate = KernelAgentRevisionBuilder(
+        artifacts, limits=kernel_agent_limits()
+    ).build_candidate(source, Dsl.TRITON)
+    stored = artifacts.verify(candidate.optimizer_digest).payload_path
+    assert (stored / name / "state.md").read_text() == "initial state\n"
 
 
 def test_builder_allows_non_entry_repository_content(tmp_path: Path) -> None:

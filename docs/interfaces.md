@@ -339,36 +339,33 @@ only for readability.
 ## Evolver filesystem interface
 
 Evolver has no Runtime Tool or Runtime HTTP capability. Runtime materializes one frozen filesystem
-view keyed by Lineage version: every visible Agent version's repository and runtime state under
-`input/agents/agent-vN/`, and what Runtime derived about it under `input/evidence/agent-vN/`. Every
-version has an optimization summary; only the branches that competed in the last completed Epoch
-also have that Epoch's Conversations and Attempt reports. Prior Agent-creation reports are ordered as
-`input/evolution-reports/evo-N.json` and link Source Base/produced-Agent paths, exact changed Source
-paths, and contributing Source paths. The only writable Agent components are
-`candidate/source/` and `candidate/runtime-state/`.
+view keyed by Lineage version. `input/agents/agent-vN/` contains one complete Agent Bundle:
+implementation, configuration, and `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, `hooks/`.
+The writable `candidate/` has the same layout. Existing checkpoints replace packaged defaults;
+there is no second Source/State pair to edit.
 
-`runtime-state/trajectories/<N>/{memory,docs,skills,tools}/` is the adaptive State storage. It is
-non-versioned state accumulated by Optimizer Sessions and scoped to one Agent revision and
-Trajectory. Top-level `skills/` and `tools/` are reserved and rejected in versioned Agent source.
-Evolver reads frozen state and may curate one flat Candidate seed at
-`candidate/runtime-state/{memory,docs,skills,tools}/`, or revise the versioned Prompt, Workflow, memory policy,
-or implementation that governs future use. Runtime seals Candidate source and state independently.
-Every new Revision records both Digests as one logical Bundle and copies that exact State into every
-new Trajectory.
+`input/evidence/agent-vN/` contains an optimization summary and supplementary
+`resources/trajectories/<N>/` snapshots. Only participants in the last completed Epoch also have
+its Conversations and Attempt reports. Prior reports at `input/evolution-reports/evo-N.json`
+link `parent.path` and `generated_agent.path` to complete Bundles; contributing paths refer to
+locations in the original producing Session, not guaranteed-current resource contents.
 
-For `evolve_from_history`, Evolver replaces Candidate Source with a writable copy of the selected
-historical `source/`, optionally synthesizes a common state seed from visible historical state, and
-declares that Agent Revision as `kernel_agent_revision_id`. Its Source is the proposal reference;
-Runtime State identity remains private Runtime control data. Runtime validates Source eligibility,
-the reported Source-root-relative Diff, and the private State Diff; there is no Candidate Base side
-record or reset command.
+For `evolve_from_history`, copy the selected complete historical Bundle into Candidate before editing.
+Declare that revision as `kernel_agent_revision_id` and report the exact sorted Bundle-relative
+`changed_paths`, including all six adaptive directories. Runtime revalidates the full diff and seals
+the complete Bundle plus a six-directory checkpoint. Optimizer permissions and inheritance rules
+are unchanged: implementation is read-only, the six adaptive directories remain writable.
 
-Evolver submits its terminal draft with the Bundle-local `evolution-report` command. Validation
-errors return `issues`, `request_schema`, and `recovery`; failures publish nothing and may be retried.
-The first success publishes `scratch/evolution-report.json` atomically and returns a compact receipt.
-For a new revision, the report's sorted `contributing_revision_ids` names eligible visible Agents
-whose Source or Runtime State contributed content other than the selected Source base. These IDs
-record provenance only; they do not change the single Source Diff base or revision parentage.
+`contributing_paths` records sorted, unique workspace-relative files or directories actually incorporated from
+`input/agents/agent-vN/` or `input/evidence/agent-vN/resources/`, including Parent resources from other
+Trajectories. Mere reading and automatic Parent inheritance are not contributions. Paths must exist,
+contain no links/traversal, and belong to eligible evaluated history or Parent, never a same-Epoch
+unevaluated Challenger. `reuse` requires `[]`. Runtime records ownership and exact content snapshots
+in the Evolution Trace; the field does not change the Bundle base or revision ancestry.
+
+Evolver submits a draft through its local `evolution-report` tool. Invalid submissions return `issues`,
+`request_schema`, and `recovery` without publishing; the first success atomically writes
+`scratch/evolution-report.json`. Runtime independently revalidates the report after Session exit.
 
 ## External service contracts
 

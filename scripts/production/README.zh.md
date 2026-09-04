@@ -50,7 +50,7 @@ Bootstrap v0，对照臂不重复 Bootstrap 或 Baseline 测量。默认均运�
 | `ablation-pool-3` | 同一 Branch 内两条 Trajectory | 30 | 否 | 0 |
 | `ablation-pool-retained-3` | 同一 Branch 内两条 Trajectory | 30 | 是 | 0 |
 
-Runtime State 包含 Memory/Docs/Skills/Tools。重置 State 时，每个目录只保留 README 模板，
+Runtime State 包含 Memory/Knowledge/Skills/Tools。重置 State 时，每个目录恢复到固定 Core Revision 的初始内容，
 不清除 Kernel 进展或 Runtime 历史。Isolated 和 Retained 实例只共享 Bootstrap Baseline，
 不共享后续历史或可写 State；两类实例数随配置的 Active/Challenger Trajectory 总数派生。
 

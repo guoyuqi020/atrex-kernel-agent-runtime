@@ -1,6 +1,7 @@
-# Memory index
+# Reusable memory index
 
-Store concise search memories: decisions, failed approaches, lessons, and unresolved questions.
+Store concise, reusable search memories: decisions, failed approaches, lessons, and unresolved
+questions that later Attempts can build on, rather than a one-off session diary.
 Link relevant Direction/Experiment IDs and Kernel/Result Digests; distinguish measured facts from
 interpretation. This is Agent-authored memory, not a replacement for the Runtime Journal.
 

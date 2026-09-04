@@ -6,9 +6,10 @@ do not infer them.
 ```text
 input/
 ├── agents/agent-vN/
-│   ├── source/
-│   └── runtime-state/trajectories/<ordinal>/{memory,docs,skills,tools}/
+│   ├── src/ and Agent configuration
+│   └── {prompts,memory,knowledge,skills,tools,hooks}/
 ├── evidence/agent-vN/
+│   ├── resources/trajectories/trajectory-NNNNNNNN/{prompts,memory,knowledge,skills,tools,hooks}/
 │   ├── optimization-summary.json
 │   ├── sessions/trajectory-NNNNNNNN/attempt-NNNNNNNN.conversation.jsonl
 │   └── reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json
@@ -20,7 +21,7 @@ If the same Agent ran both Branches in the first Epoch, both histories appear un
 Trajectory slots for the replica follow Active's slots in State, Sessions, and Reports;
 `latest_epoch.branch` is `active_and_replica`. It is a
 parallel run of the same Agent, not an Evolution; no Evolution Report exists for it.
-`input/agents/agent-vN/` is its sealed Source and accumulated per-Trajectory State;
+`input/agents/agent-vN/` is one complete read-only Agent Bundle;
 `input/evidence/agent-vN/` is what Runtime derived about it. No directory name encodes an Epoch role.
 
 Every version has an `optimization-summary.json`. Only the branches that competed in the most
@@ -77,64 +78,70 @@ speed, not raw speed. Treat it accordingly when attributing the outcome.
 {
   "evolution_number": 1,
   "parent": {
-    "source_path": "input/agents/agent-v0/source",
-    "runtime_state_path": "input/agents/agent-v0/runtime-state"
+    "path": "input/agents/agent-v0"
   },
   "generated_agent": {
-    "source_path": "input/agents/agent-v1/source",
-    "runtime_state_path": "input/agents/agent-v1/runtime-state"
+    "path": "input/agents/agent-v1"
   },
   "report": {
     "proposal_type": "evolved",
     "hypothesis": "The Agent-level causal hypothesis.",
     "expected_effect": "The expected next-Epoch behavior.",
     "changed_paths": ["prompts/episode.md"],
-    "contributing_source_paths": ["input/agents/agent-v2/source"],
+    "contributing_paths": ["input/agents/agent-v2"],
     "unimplemented_capabilities": []
   }
 }
 ```
 
-`parent` is the selected Source Base, including for `evolve_from_history`; `generated_agent` is the
+`parent` is the selected Bundle Base, including for `evolve_from_history`; `generated_agent` is the
 produced revision. Each path points to that Agent's single visible location under `input/agents/`.
 
-`changed_paths` is the exact set of versioned Source files that Evolution changed, relative to the
-Source root. Runtime already checked it against the sealed Source, so it is recorded fact, not a claim
-you need to re-derive. It covers versioned Source only: an empty array means that Evolution changed
-Runtime State alone, and a `reuse` proposal is always empty. It tells you *which* files moved, not
-*what* changed inside them—diff the two named Source trees for that.
+`changed_paths` lists files changed by that Evolution relative to its Bundle root. Older reports
+may cover implementation files only. To inspect content, compare the named Bundles, but remember that
+the Parent's visible reusable resources can reflect later optimization sessions rather than the
+original Evolution input.
 
-`contributing_source_paths` names the other Agents whose Source or Runtime State that Evolution drew
-content from, and is empty when it drew from none. It is provenance, not parentage: `parent` remains the
-single Source base the diff was measured against.
+`contributing_paths` records the original workspace-relative files or directories whose content
+that Evolution incorporated, from Agent Bundles or Evidence resources, including Parent resources.
+It excludes mere reading and automatic Parent inheritance, and is empty when nothing was incorporated.
+These are paths in the producing Session; later resources may differ or disappear. Runtime retains
+exact content snapshots in the private Evolution Trace; do not treat current files as the old snapshot.
+Older ID-only reports identify contributing Bundles, not precise files or Trajectory resources.
+This is provenance, not parentage: `parent` remains the single Bundle base for the diff.
 
 Treat every other report field as intent to test against Source, conversations, Attempt reports, and
 optimization summaries. Bootstrap and unavailable legacy reports have no file.
 
-## Source and Runtime State
+## Agent Bundles and reusable resources
 
-Source under `input/agents/` is a sealed read-only snapshot. The complete
-`candidate/source/` copy is writable and is the versioned Agent code you may freely modify.
-Runtime State is adaptive `memory/`, `docs/`, `skills/`, and `tools/` accumulated independently by
-Trajectory; it may be narrow, stale, or wrong.
+Every `input/agents/agent-vN/` is a complete read-only Bundle. `candidate/` starts as a writable
+copy of the `parent: true` Bundle. There is no separate Source/State pair to assemble or synchronize.
 
-Each directory has a mandatory `README.md` index. Memory holds search experiences and decisions;
-Docs holds reusable knowledge; Skills holds procedures; Tools holds scripts. Whenever Candidate
-content changes, update the corresponding index, including removals and renames. Keep indexes and
-content concise and non-duplicative. These are Agent-authored materials, not authoritative results.
-Versioned Source may contain its own implementation documentation; it is separate from adaptive Docs.
+The Parent combines its implementation with the latest completed Epoch winner's best-Kernel
+Trajectory terminal resources, falling back to its Epoch-start snapshot, revision seed, then packaged
+defaults. This is also the next Active's starting snapshot. Other visible Bundles use their revision
+seeds. Per-Trajectory learned resources remain available under each Evidence entry's `resources/`;
+they are supplementary observations, not extra Candidate copies. Runtime never merges them automatically.
 
-The Candidate starts with the complete Source of the `parent: true` Agent and one flat
-`candidate/runtime-state/` seed. Runtime selects the latest completed Epoch's winning Agent and
-best-Kernel Trajectory terminal State, falling back to its Epoch-start State, revision seed, then
-empty State. Runtime never merges Trajectories. The sealed Candidate State initializes
-every Trajectory of the new revision and the next Active.
+Each of the six reusable directories has a mandatory `README.md` index:
+Prompts contains phase instructions; Memory contains search experiences and decisions;
+Knowledge contains reusable knowledge; Skills contains procedures; Tools contains scripts;
+Hooks contains backend hook scripts and configuration snippets. Keep content concise, reusable, and
+non-duplicative. Update the relevant index after additions, changes, removals, or renames.
+For Hooks document backend, event, command, dependencies, side effects, activation, and verification;
+storing a hook does not activate it.
 
-Every visible version's Source and Runtime State is readable, not only the one you start from. You may
-study all of them, but may merge content only from the Active and completed Lineage history—not an
-unevaluated `current_epoch_challenger`—into the single writable Candidate. The revision you declare as
-the Source base fixes only what your Source diff is measured against; other eligible revisions you
-drew content from are recorded separately as provenance.
+These are Agent-authored materials, not authoritative results. You may combine supported content
+from eligible Agents and their Trajectories, remove redundant content, and incorporate stable behavior
+into prompts or implementation. Credit contributing revisions. Do not draw from an unevaluated
+`current_epoch_challenger`.
+
+Edit `candidate/prompts/` for later Optimizer sessions; preserve configured prompt paths.
+Managed Optimizer sessions resolve those paths against their inherited writable `prompts/`.
+Changes do not alter a prompt already loaded or override trusted injected context and enforcement.
+Candidate resources seed its next optimization trajectories; they do not overwrite the next Active's
+independent starting copy.
 
 ## Optimization summary
 
@@ -142,8 +149,8 @@ drew content from are recorded separately as provenance.
 {
   "kernel_agent_revision_id": "agentrev_0123456789abcdef0123456789abcdef",
   "version": "agent-v3",
-  "source_path": "input/agents/agent-v3/source",
-  "runtime_state_path": "input/agents/agent-v3/runtime-state",
+  "path": "input/agents/agent-v3",
+  "resources_path": "input/evidence/agent-v3/resources",
   "latest_epoch": {
     "epoch_number": 3,
     "branch": "challenger",
@@ -178,8 +185,8 @@ drew content from are recorded separately as provenance.
 }
 ```
 
-`source_path` and `runtime_state_path` are this revision's single location under `input/agents/`; use
-them to move from Evidence to Source. `latest_epoch` is `null` before the revision completes an Epoch.
+`path` identifies the complete Bundle; `resources_path` identifies supplementary per-Trajectory
+resources. `latest_epoch` is `null` before the revision completes an Epoch.
 Otherwise `branch` is `active` or `challenger`, `challenger_ordinal` is `null` for the Active branch,
 and the three mutually exclusive Attempt outcome counts sum to `attempt_count`. `best_kernel` is `null`
 without a correct Candidate; otherwise it contains the fastest correct Attempt's authoritative Gateway
@@ -212,8 +219,8 @@ The final JSON supplies:
 - immutable `dsl` and current `evolution_number`;
 - `visible_agent_repositories[]` identity, version, `relationship`
   (`active` / `challenger` / `current_epoch_challenger` / `lineage_history`), `challenger_ordinal`,
-  `parent` marker, Source ancestry, and paths to Source, summary, available Sessions, available Attempt
-  reports, and Runtime State;
+  `parent` marker, ancestry, and paths to the Bundle, summary, available Sessions, Attempt
+  reports, and supplementary resources;
 - `evidence` and `evolution_reports` roots;
-- writable `candidate.source` and `candidate.runtime_state`;
+- writable `candidate`;
 - `evolution_report.draft`, exact publication `tool`, and final `published` path.

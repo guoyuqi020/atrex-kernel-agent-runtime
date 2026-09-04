@@ -372,8 +372,8 @@ class LocalEvidenceAssembler:
                     "hypothesis": evolution.output.hypothesis,
                     "expected_effect": evolution.output.expected_effect,
                     "changed_paths": list(getattr(evolution.output, "changed_paths", ())),
-                    "contributing_revision_ids": list(
-                        getattr(evolution.output, "contributing_revision_ids", ())
+                    "contributing_paths": list(
+                        getattr(evolution.output, "contributing_paths", ())
                     ),
                     "unimplemented_capabilities": [
                         item.model_dump(mode="json")

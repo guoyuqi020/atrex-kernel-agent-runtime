@@ -44,6 +44,7 @@ from atrex_runtime.workers.evolution import (
     PreparedEvolution,
     SubprocessEvolutionSessionDriver,
     _active_next_epoch_runtime_state_seed,
+    _upgrade_historical_output,
 )
 from atrex_runtime.workers.launcher import CleanEnvironmentLauncher
 
@@ -78,6 +79,32 @@ class ProcessExitThenSuccessfulEvolutionSession:
                 stderr="API Error: Connection lost mid-response.",
             )
         return result
+
+
+def test_legacy_contribution_ids_are_migrated_only_when_reading_history() -> None:
+    from atrex_runtime.workers.evolution import EvolutionOutput
+
+    revision = new_kernel_agent_revision_id()
+    old = {
+        "proposal_type": "evolved",
+        "kernel_agent_revision_id": new_kernel_agent_revision_id(),
+        "hypothesis": "historical intent",
+        "expected_effect": "historical effect",
+        "changed_paths": ["prompts/episode.md"],
+        "contributing_revision_ids": [revision],
+        "unimplemented_capabilities": [],
+    }
+    raw = {
+        "output": old,
+        "input": {
+            "visible_agents": [{"revision_id": revision, "path": "input/agents/agent-v1/source"}]
+        },
+    }
+    converted = EvolutionOutput.model_validate(_upgrade_historical_output(raw))
+    assert converted.contributing_paths == ("input/agents/agent-v1",)
+    assert old["contributing_revision_ids"] == [revision]
+    with pytest.raises(ValueError, match="contributing_revision_ids"):
+        EvolutionOutput.model_validate(old)
 
 
 def _optimizer_repository(
@@ -244,7 +271,7 @@ Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
     "model_request_count": 1,
     "usage_complete": True,
 }))
-(candidate / "source/prompts/episode.md").write_text("challenger optimizer\\n")
+(candidate / "prompts/episode.md").write_text("challenger optimizer\\n")
 Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "proposal_type": "evolved",
     "kernel_agent_revision_id": manifest["parent_revision_id"],
@@ -258,7 +285,7 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "changed_paths": ["""
         + json.dumps(declared_path)
         + """],
-    "contributing_revision_ids": """
+    "contributing_paths": """
         + json.dumps(sorted(contributing))
         + """,
 }))
@@ -323,7 +350,7 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "hypothesis": "Retry a historical design unchanged.",
     "expected_effect": "Reproduce its previously useful search behavior.",
     "changed_paths": [],
-    "contributing_revision_ids": [],
+    "contributing_paths": [],
     "unimplemented_capabilities": []
 }))
 """,
@@ -343,7 +370,7 @@ from pathlib import Path
 assert sys.stdin.read() == "Run the versioned Evolver Bundle once."
 manifest = json.loads(os.environ["ATREX_EVOLUTION_INPUT_JSON"])
 candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
-state = candidate / "runtime-state"
+state = candidate
 (state / "skills/search.md").write_text("prefer measured bottlenecks\\n")
 (state / "tools/README.md").write_text("# Candidate tools\\n")
 Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
@@ -368,8 +395,8 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "kernel_agent_revision_id": manifest["parent_revision_id"],
     "hypothesis": "Seed a reusable measured-bottleneck procedure.",
     "expected_effect": "Spend fewer Attempts on unsupported directions.",
-    "changed_paths": [],
-    "contributing_revision_ids": [],
+    "changed_paths": ["skills/search.md", "tools/README.md"],
+    "contributing_paths": [],
     "unimplemented_capabilities": []
 }))
 """,
@@ -390,11 +417,11 @@ from pathlib import Path
 assert sys.stdin.read() == "Run the versioned Evolver Bundle once."
 workspace = Path(os.environ["ATREX_EVOLUTION_WORKSPACE"])
 candidate = Path(os.environ["ATREX_EVOLUTION_CANDIDATE"])
-shutil.rmtree(candidate / "source")
-shutil.copytree(workspace / "input/agents/agent-v1/source", candidate / "source")
+shutil.rmtree(candidate)
+shutil.copytree(workspace / "input/agents/agent-v1", candidate)
 for path in [candidate, *candidate.rglob("*")]:
     path.chmod(0o700 if path.is_dir() else 0o600)
-(candidate / "source/prompts/episode.md").write_text("history repaired optimizer\\n")
+(candidate / "prompts/episode.md").write_text("history repaired optimizer\\n")
 Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
     "schema_version": 2,
     "usage_unit": "provider_tokens",
@@ -420,7 +447,7 @@ Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
     "hypothesis": "Repair one weak step in the historical design.",
     "expected_effect": "Retain its prior strengths with a narrower policy.",
     "changed_paths": ["prompts/episode.md"],
-    "contributing_revision_ids": [],
+    "contributing_paths": [],
     "unimplemented_capabilities": []
 }))
 """,
@@ -491,11 +518,55 @@ def _historical_catalog(
     )
 
 
+def test_unified_bundle_replaces_packaged_resources_without_resurrecting_files(
+    tmp_path: Path,
+) -> None:
+    from atrex_runtime.workers.workspace import REUSABLE_AGENT_DIRECTORIES
+
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    initial = _request(artifacts, tmp_path)
+    source = tmp_path / "source-optimizer"
+    state = tmp_path / "learned-state"
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        (source / name).mkdir(exist_ok=True)
+        (source / name / "README.md").write_text("packaged index")
+        (source / name / "removed.md").write_text("do not resurrect")
+        (state / name).mkdir(parents=True)
+        (state / name / "README.md").write_text("learned index")
+        (state / name / "learned.md").write_text("learned content")
+    revision = replace(
+        initial.parent_revision,
+        optimizer_digest=artifacts.put_directory(source, ArtifactKind.KERNEL_AGENT),
+        runtime_state_digest=artifacts.put_directory(
+            state, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE
+        ),
+    )
+    request = replace(
+        initial, parent_revision=revision, agent_catalog=(_baseline_catalog_entry(revision),)
+    )
+    prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
+    parent = prepared.root / "input/agents/agent-v0"
+    for bundle in (parent, prepared.candidate_root):
+        assert (bundle / "docs/design.md").read_text() == "parent design\n"
+        for name in REUSABLE_AGENT_DIRECTORIES:
+            assert (bundle / name / "README.md").read_text() == "learned index"
+            assert (bundle / name / "learned.md").read_text() == "learned content"
+            assert not (bundle / name / "removed.md").exists()
+    assert not (parent.stat().st_mode & 0o200)
+    assert prepared.candidate_root.stat().st_mode & 0o200
+    assert (
+        artifacts.verify(revision.optimizer_digest).payload_path / "memory/removed.md"
+    ).is_file()
+
+
 def test_evolution_workspace_copies_full_parent_to_writable_candidate(tmp_path: Path) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     request = _request(artifacts, tmp_path)
 
     prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
+    assert not (prepared.candidate_root / "source").exists()
+    assert not (prepared.candidate_root / "runtime-state").exists()
+    assert (prepared.candidate_root / "docs/design.md").read_text() == "parent design\n"
     manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
 
     assert manifest.parent_revision_id == request.parent_revision.id
@@ -509,15 +580,15 @@ def test_evolution_workspace_copies_full_parent_to_writable_candidate(tmp_path: 
     assert list((prepared.root / "input/evolution-reports").iterdir()) == []
     assert not (os.stat(prepared.root / "input/evolution-reports").st_mode & 0o200)
     assert prepared.model == "evolver-model"
-    parent_prompt = prepared.root / "input/agents/agent-v0/source/prompts/episode.md"
-    candidate_prompt = prepared.candidate_root / "source/prompts/episode.md"
+    parent_prompt = prepared.root / "input/agents/agent-v0/prompts/episode.md"
+    candidate_prompt = prepared.candidate_root / "prompts/episode.md"
     assert parent_prompt.is_file()
     assert candidate_prompt.is_file()
     assert os.stat(parent_prompt).st_mode & 0o200 == 0
     assert os.stat(candidate_prompt).st_mode & 0o200
-    assert (prepared.candidate_root / "runtime-state/skills").is_dir()
-    assert (prepared.candidate_root / "runtime-state/tools/README.md").is_file()
-    assert not (prepared.candidate_root / "runtime-state/trajectories").exists()
+    assert (prepared.candidate_root / "skills").is_dir()
+    assert (prepared.candidate_root / "tools/README.md").is_file()
+    assert not (prepared.candidate_root / "trajectories").exists()
     assert not (prepared.root / "input/parent").exists()
     assert not (prepared.root / "input/reusable-agents").exists()
     assert not (prepared.root / "runtime-tools").exists()
@@ -567,12 +638,10 @@ def test_evolution_workspace_copies_active_revision_runtime_state_seed(tmp_path:
 
     prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
 
-    assert (prepared.candidate_root / "runtime-state/skills/active.md").read_text() == (
+    assert (prepared.candidate_root / "skills/active.md").read_text() == (
         "active reusable procedure\n"
     )
-    assert (prepared.candidate_root / "runtime-state/tools/README.md").read_text() == (
-        "# Active tools\n"
-    )
+    assert (prepared.candidate_root / "tools/README.md").read_text() == ("# Active tools\n")
     assert (
         prepared.candidate_runtime_state_base_root / "skills/active.md"
     ).read_text() == "active reusable procedure\n"
@@ -733,12 +802,12 @@ def test_evolution_workspace_pools_the_last_completed_epoch_challenger_winner(
     assert by_id[loser.id].challenger_ordinal is None
     assert by_id[loser.id].parent is False
     assert by_id[loser.id].version == "agent-v0"
-    assert by_id[loser.id].path == "input/agents/agent-v0/source"
+    assert by_id[loser.id].path == "input/agents/agent-v0"
     assert by_id[parent.id].relationship == "challenger"
     assert by_id[parent.id].challenger_ordinal == 1
     assert by_id[parent.id].parent is True
     assert by_id[parent.id].version == "agent-v1"
-    assert by_id[parent.id].path == "input/agents/agent-v1/source"
+    assert by_id[parent.id].path == "input/agents/agent-v1"
     assert by_id[parent.id].sessions_path == "input/evidence/agent-v1/sessions"
     assert by_id[parent.id].reports_path == "input/evidence/agent-v1/reports"
     assert sorted(child.name for child in (prepared.root / "input/agents").iterdir()) == [
@@ -752,14 +821,12 @@ def test_evolution_workspace_pools_the_last_completed_epoch_challenger_winner(
     assert not (prepared.root / "input/current-epoch-challengers").exists()
     assert not (prepared.root / "input/historical").exists()
     assert (
-        prepared.root / "input/agents/agent-v0/source/prompts/episode.md"
+        prepared.root / "input/agents/agent-v0/prompts/episode.md"
     ).read_text() == "parent optimizer\n"
     assert (
-        prepared.root / "input/agents/agent-v1/source/prompts/episode.md"
+        prepared.root / "input/agents/agent-v1/prompts/episode.md"
     ).read_text() == "rival optimizer\n"
-    assert (
-        prepared.candidate_root / "source/prompts/episode.md"
-    ).read_text() == "rival optimizer\n"
+    assert (prepared.candidate_root / "prompts/episode.md").read_text() == "rival optimizer\n"
     for version in ("agent-v0", "agent-v1"):
         assert (prepared.root / f"input/evidence/{version}/sessions").is_dir()
         assert (prepared.root / f"input/evidence/{version}/reports").is_dir()
@@ -780,9 +847,7 @@ def test_evolution_workspace_pools_the_last_completed_epoch_active_winner(
     assert by_id[loser.id].relationship == "challenger"
     assert by_id[loser.id].challenger_ordinal == 1
     assert by_id[loser.id].parent is False
-    assert (
-        prepared.candidate_root / "source/prompts/episode.md"
-    ).read_text() == "parent optimizer\n"
+    assert (prepared.candidate_root / "prompts/episode.md").read_text() == "parent optimizer\n"
 
 
 def test_evolution_workspace_keys_same_ordinal_challengers_by_distinct_versions(
@@ -827,15 +892,15 @@ def test_evolution_workspace_keys_same_ordinal_challengers_by_distinct_versions(
     assert by_id[loser.id].relationship == "challenger"
     assert by_id[loser.id].challenger_ordinal == 1
     assert by_id[loser.id].version == "agent-v1"
-    assert by_id[loser.id].path == "input/agents/agent-v1/source"
+    assert by_id[loser.id].path == "input/agents/agent-v1"
     assert by_id[fresh.id].relationship == "current_epoch_challenger"
     assert by_id[fresh.id].challenger_ordinal == 1
     assert by_id[fresh.id].version == "agent-v2"
-    assert by_id[fresh.id].path == "input/agents/agent-v2/source"
+    assert by_id[fresh.id].path == "input/agents/agent-v2"
     assert by_id[fresh.id].sessions_path is None
     assert by_id[fresh.id].reports_path is None
-    assert (prepared.root / "input/agents/agent-v1/source/prompts/episode.md").is_file()
-    assert (prepared.root / "input/agents/agent-v2/source/prompts/episode.md").is_file()
+    assert (prepared.root / "input/agents/agent-v1/prompts/episode.md").is_file()
+    assert (prepared.root / "input/agents/agent-v2/prompts/episode.md").is_file()
     assert sorted(child.name for child in (prepared.root / "input/evidence").iterdir()) == [
         "agent-v0",
         "agent-v1",
@@ -920,23 +985,25 @@ def test_evolution_workspace_separates_current_epoch_challenger_from_the_pool(
         attempt_workspaces_root=attempt_workspaces,
     ).prepare(request)
 
-    assert (prepared.root / "input/agents/agent-v0/source/prompts/episode.md").is_file()
+    assert (prepared.root / "input/agents/agent-v0/prompts/episode.md").is_file()
     assert sorted(child.name for child in (prepared.root / "input/agents").iterdir()) == [
         "agent-v0",
         "agent-v1",
     ]
     current_epoch = prepared.root / "input/agents/agent-v1"
-    assert (current_epoch / "source/prompts/episode.md").is_file()
+    assert (current_epoch / "prompts/episode.md").is_file()
     assert (prepared.root / "input/evidence/agent-v1/optimization-summary.json").is_file()
     assert not (prepared.root / "input/evidence/agent-v1/sessions").exists()
     assert not (prepared.root / "input/evidence/agent-v1/reports").exists()
     assert not (prepared.root / "input/historical").exists()
-    reusable = prepared.root / "input/agents"
+    reusable = prepared.root / "input/evidence"
     assert (
-        reusable / "agent-v0/runtime-state" / "trajectories/trajectory-00000001/skills/lesson.md"
+        reusable / "agent-v0/resources" / "trajectories/trajectory-00000001/skills/lesson.md"
     ).read_text() == "active skill\n"
     assert (
-        current_epoch / "runtime-state" / "trajectories/trajectory-00000002/tools/helper.py"
+        prepared.root
+        / "input/evidence/agent-v1/resources"
+        / "trajectories/trajectory-00000002/tools/helper.py"
     ).read_text() == "print('challenger')\n"
     assert not (os.stat(reusable / "agent-v0").st_mode & 0o200)
     assert not (os.stat(current_epoch).st_mode & 0o200)
@@ -951,14 +1018,14 @@ def test_evolution_workspace_separates_current_epoch_challenger_from_the_pool(
     assert sessions_by_id[challenger.id] is None
     reusable_by_id = {
         item.revision_id: (
-            item.runtime_state_path,
-            list((prepared.root / item.runtime_state_path / "trajectories").iterdir()),
+            item.resources_path,
+            list((prepared.root / item.resources_path / "trajectories").iterdir()),
         )
         for item in agent_catalog
     }
-    assert reusable_by_id[active.id][0] == "input/agents/agent-v0/runtime-state"
+    assert reusable_by_id[active.id][0] == "input/evidence/agent-v0/resources"
     assert [path.name for path in reusable_by_id[active.id][1]] == ["trajectory-00000001"]
-    assert reusable_by_id[challenger.id][0] == "input/agents/agent-v1/runtime-state"
+    assert reusable_by_id[challenger.id][0] == "input/evidence/agent-v1/resources"
     assert [path.name for path in reusable_by_id[challenger.id][1]] == ["trajectory-00000002"]
 
 
@@ -989,8 +1056,8 @@ def test_evolution_workspace_gives_a_non_pool_version_source_state_and_summary(
 
     agent_root = prepared.root / "input/agents/agent-v1"
     evidence_root = prepared.root / "input/evidence/agent-v1"
-    assert (agent_root / "source/prompts/episode.md").is_file()
-    assert (agent_root / "runtime-state/trajectories").is_dir()
+    assert (agent_root / "prompts/episode.md").is_file()
+    assert (evidence_root / "resources/trajectories").is_dir()
     assert json.loads((evidence_root / "optimization-summary.json").read_text()) == {
         "career": {
             "epoch_participation_count": 0,
@@ -999,8 +1066,8 @@ def test_evolution_workspace_gives_a_non_pool_version_source_state_and_summary(
         },
         "kernel_agent_revision_id": historical.id,
         "version": "agent-v1",
-        "source_path": "input/agents/agent-v1/source",
-        "runtime_state_path": "input/agents/agent-v1/runtime-state",
+        "path": "input/agents/agent-v1",
+        "resources_path": "input/evidence/agent-v1/resources",
         "latest_epoch": None,
     }
     assert not (evidence_root / "sessions").exists()
@@ -1171,19 +1238,17 @@ async def test_fixed_runner_collects_complete_repository_candidate(
     assert previous_report["evolution_number"] == 1
     expected_projected_report = dict(trace["output"])
     expected_projected_report.pop("kernel_agent_revision_id")
-    expected_projected_report.pop("contributing_revision_ids")
-    expected_projected_report["contributing_source_paths"] = []
+    expected_projected_report.pop("contributing_paths")
+    expected_projected_report["contributing_paths"] = []
     assert previous_report["report"] == expected_projected_report
     assert previous_report["report"]["changed_paths"] == trace["output"]["changed_paths"]
     assert "kernel_agent_revision_id" not in json.dumps(previous_report)
     assert "contributing_revision_ids" not in json.dumps(previous_report)
     assert previous_report["parent"] == {
-        "runtime_state_path": "input/agents/agent-v0/runtime-state",
-        "source_path": "input/agents/agent-v0/source",
+        "path": "input/agents/agent-v0",
     }
     assert previous_report["generated_agent"] == {
-        "runtime_state_path": "input/agents/agent-v1/runtime-state",
-        "source_path": "input/agents/agent-v1/source",
+        "path": "input/agents/agent-v1",
     }
     session_trace = artifacts.verify(trace["session_trace_digest"])
     assert session_trace.kind is ArtifactKind.SESSION_LOG
@@ -1237,7 +1302,7 @@ async def test_fixed_runner_accepts_runtime_state_only_candidate(tmp_path: Path)
     build = await runner.build_challenger(request)
 
     assert isinstance(build.proposal, KernelAgentCandidateProposal)
-    assert build.proposal.candidate.optimizer_digest == request.parent_revision.optimizer_digest
+    assert build.proposal.candidate.optimizer_digest != request.parent_revision.optimizer_digest
     state_digest = build.proposal.candidate.runtime_state_digest
     assert state_digest is not None
     state = artifacts.verify(state_digest)
@@ -1435,6 +1500,7 @@ async def _build_with_contributor(
     *,
     current_epoch_challenger: bool,
     records: list[tuple[str, object, dict[str, object]]],
+    contributing_paths: tuple[str, ...] = ("input/agents/agent-v1",),
 ) -> tuple[BuildChallengerResult, KernelAgentRevision]:
     base_request = _request(artifacts, tmp_path)
     creation_key = (
@@ -1455,6 +1521,18 @@ async def _build_with_contributor(
         idempotency_key=base_request.idempotency_key,
         agent_catalog=_historical_catalog(base_request.parent_revision, contributor),
     )
+    attempt_workspaces = tmp_path / "attempt-workspaces"
+    learned = (
+        attempt_workspaces
+        / ".reusable"
+        / request.agent_catalog[0].lineage_id
+        / request.parent_revision.id
+        / "trajectory-00000002"
+    )
+    for directory in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+        (learned / directory).mkdir(parents=True)
+        (learned / directory / "README.md").write_text("index")
+    (learned / "memory/lesson.md").write_text("measured memory before evolution")
     sessions = SubprocessEvolutionSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
         EvolutionProcessConfig(
@@ -1463,7 +1541,7 @@ async def _build_with_contributor(
             bundle_artifact_digest=digest("evolver-bundle"),
             command_argv=(
                 str(Path(sys.executable).resolve()),
-                str(_agent_script(tmp_path, contributing=(str(contributor.id),))),
+                str(_agent_script(tmp_path, contributing=contributing_paths)),
             ),
             agent_backend="claude",
             isolated_home_environment_keys=(),
@@ -1476,7 +1554,9 @@ async def _build_with_contributor(
         ),
     )
     runner = EvolverBundleRunner(
-        EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts),
+        EvolutionWorkspaceAssembler(
+            tmp_path / "evolutions", artifacts, attempt_workspaces_root=attempt_workspaces
+        ),
         sessions,
         artifacts,
         FakeRuntimeEventRecorder(records),
@@ -1484,6 +1564,61 @@ async def _build_with_contributor(
         max_output_manifest_bytes=8192,
     )
     return await runner.build_challenger(request), contributor
+
+
+@pytest.mark.anyio
+async def test_contribution_snapshot_preserves_exact_parent_trajectory_resources(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    relative = "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/memory"
+    build, _ = await _build_with_contributor(
+        artifacts,
+        tmp_path,
+        current_epoch_challenger=False,
+        records=[],
+        contributing_paths=(relative,),
+    )
+    trace = json.loads(
+        (artifacts.verify(build.evolution_trace_digest).payload_path / "value.json").read_text()
+    )
+    snapshot = trace["contributions"][0]
+    assert snapshot["path"] == relative
+    assert snapshot["revision_id"] == trace["input"]["parent_revision_id"]
+    for learned in (tmp_path / "attempt-workspaces/.reusable").rglob("lesson.md"):
+        learned.write_text("later attempt replaced the lesson")
+    frozen = artifacts.verify(snapshot["snapshot_digest"])
+    assert (
+        frozen.payload_path / "memory/lesson.md"
+    ).read_text() == "measured memory before evolution"
+    closure = artifacts.expand_reference_closure([build.evolution_trace_digest])
+    assert snapshot["snapshot_digest"] in closure
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "input/agents/agent-v99",
+        "input/agents/agent-v1/missing",
+        "input/evidence/agent-v0/sessions",
+        "candidate/prompts",
+        "input/agents/agent-v1/../agent-v0",
+    ],
+)
+async def test_runtime_independently_rejects_invalid_contribution_paths(
+    tmp_path: Path,
+    relative: str,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    with pytest.raises(ValueError, match="contributing_paths"):
+        await _build_with_contributor(
+            artifacts,
+            tmp_path,
+            current_epoch_challenger=False,
+            records=[],
+            contributing_paths=(relative,),
+        )
 
 
 @pytest.mark.anyio
@@ -1504,9 +1639,14 @@ async def test_fixed_runner_records_credited_completed_history(tmp_path: Path) -
     trace = json.loads(
         (artifacts.verify(build.evolution_trace_digest).payload_path / "value.json").read_text()
     )
-    assert trace["output"]["contributing_revision_ids"] == [str(contributor.id)]
+    assert trace["output"]["contributing_paths"] == ["input/agents/agent-v1"]
     assert trace["output"]["kernel_agent_revision_id"] != str(contributor.id)
-    assert records[-1][2]["contributing_revision_ids"] == [str(contributor.id)]
+    assert records[-1][2]["contributing_paths"] == ["input/agents/agent-v1"]
+    reference = trace["contributions"][0]
+    assert reference["path"] == "input/agents/agent-v1"
+    assert reference["revision_id"] == contributor.id
+    snapshot = artifacts.verify(reference["snapshot_digest"])
+    assert (snapshot.payload_path / "agent-v1/prompts/episode.md").is_file()
 
 
 @pytest.mark.anyio
@@ -1540,7 +1680,7 @@ import sys
 from pathlib import Path
 
 assert not any(key.startswith("ATREX_") for key in os.environ)
-candidate = Path("candidate/source")
+candidate = Path("candidate")
 (candidate / "prompts/integration.md").write_text("real Evolver Bundle ran\\n")
 Path("scratch/evolution-report-draft.json").write_text(json.dumps({
     "proposal_type": "evolved",
@@ -1548,7 +1688,7 @@ Path("scratch/evolution-report-draft.json").write_text(json.dumps({
     "hypothesis": "The current Evolver entrypoint accepts the Runtime protocol.",
     "expected_effect": "Produce one valid complete Challenger Bundle.",
     "changed_paths": ["prompts/integration.md"],
-    "contributing_revision_ids": [],
+    "contributing_paths": [],
     "unimplemented_capabilities": []
 }))
 published = subprocess.run(
@@ -1746,7 +1886,7 @@ async def test_fixed_runner_rejects_false_change_declaration(tmp_path: Path) -> 
         max_output_manifest_bytes=8192,
     )
 
-    with pytest.raises(ValueError, match="disagrees with sealed Agent Source"):
+    with pytest.raises(ValueError, match="disagrees with sealed Agent Bundle"):
         await runner.build_challenger(request)
 
     assert [kind for kind, _aggregate, _payload in events.records][-1] == (

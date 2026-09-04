@@ -34,7 +34,9 @@ from .launcher import WorkerLauncher, validate_worker_environment
 from .workspace import (
     copy_reusable_agent_state,
     ensure_reusable_directories,
+    initialize_reusable_agent_state,
     persist_reusable_agent_state,
+    remove_optimizer_state_seeds,
 )
 
 LINEAGE_BOOTSTRAP_MANIFEST_VERSION: Literal[2] = 2
@@ -202,10 +204,14 @@ class LineageBootstrapWorkspaceAssembler:
             with persistent_lock.open("a+b") as lock:
                 fcntl.flock(lock, fcntl.LOCK_EX)
                 persistent_state = scope
-                ensure_reusable_directories(scope)
+                if not scope.exists():
+                    initialize_reusable_agent_state(scope, root / paths.optimizer)
+                else:
+                    ensure_reusable_directories(scope, optimizer_source=root / paths.optimizer)
                 copy_reusable_agent_state(scope, root)
         else:
-            ensure_reusable_directories(root)
+            initialize_reusable_agent_state(root, root / paths.optimizer)
+        remove_optimizer_state_seeds(root / paths.optimizer)
         return PreparedLineageBootstrap(
             root,
             manifest_path,

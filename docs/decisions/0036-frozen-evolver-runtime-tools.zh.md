@@ -16,21 +16,18 @@ Catalog 和 Candidate Reset 记录，只是在重复 Runtime 本可物化为普�
 
 Evolution Input schema v11 不包含 Runtime 查询权限。Runtime 物化：
 
-- `input/agents/agent-vN/` 下每个可见 Agent 唯一一份仓库与逐 Trajectory Runtime State；目录按稳定
+- `input/agents/agent-vN/` 下每个可见 Agent 唯一一份完整 Bundle；目录按稳定
   Lineage 版本命名，而不是按临时 Epoch 角色命名；
-- `input/evidence/agent-vN/` 下每个可见版本一份 Runtime 派生的优化汇总，以及最近完成 Epoch 全部
+- `input/evidence/agent-vN/` 下每个可见版本一份 Runtime 派生的优化汇总、`resources/trajectories/` 补充资源，以及最近完成 Epoch 全部
   Branch 的逐 Attempt Conversation 与 Attempt Report；
 - `input/evolution-reports/evo-N.json` 下可用的历史 Agent 创建报告；
 - 标明当前 Parent，以及同一 Epoch 中已经创建但尚未评测的 Challenger 的只读 Catalog。
 
-Evolver 直接读取这些文件，只能修改 Candidate `source/`、Candidate `runtime-state/` 和 `scratch/`。
-Runtime 初始复制 Active Source，以及最近完成 Epoch 获胜分支中产出最佳 Kernel 的 Trajectory 在该
-Epoch 最后一个 Attempt 后的终态 State；下一 Epoch 的 Active Branch 使用相同 State 种子。缺失终态
-State 时依次回退到该 Trajectory 的 Epoch 起始 State、Revision Seed 和空默认值。选择
-`evolve_from_history` 时，Evolver 用所选历史 Source 替换 Candidate Source，并可从可见历史状态整理
-公共种子。新 Revision 也可以融合多个合格可见 Agent 的 Source、Skill 或 Tool，并把这些贡献者与唯一
-Source Base 分开记录。Runtime 验证资格、报告的 Source 根目录相对 Diff 与私有 State Diff；每个新 Revision 把 Source 和 State 封存为一个
-逻辑 Bundle。不信任也不需要 Candidate Base 旁路记录。
+Evolver 直接读取这些文件，只能修改完整 `candidate/` Bundle 和报告暂存目录 `scratch/`。
+Parent Bundle 组合获胜实现与最近完成 Epoch 最佳 Kernel Trajectory 的终态资源；下一 Epoch Active
+使用相同起始快照。缺失时回退到 Epoch 起始快照、Revision Seed 和打包默认值。
+历史派生先复制完整历史 Bundle，再修改。Evolver 可以融合合格 Agent 的资源并记录贡献来源。
+Runtime 校验所选版本和整个 Bundle 的 Diff，包括六个自适应目录；封存完整 Bundle 与 State Checkpoint。
 
 删除 Evolver 查询接口、查询 Capability、公开 Helper、Candidate Allowlist 和私有查询 Snapshot。详细历史与
 完整 Evolution Trace 继续保存在 Runtime 现有 Evidence 与 Registry Store 中，只投影紧凑的 Agent 创建报告。

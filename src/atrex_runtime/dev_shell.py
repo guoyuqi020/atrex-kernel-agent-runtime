@@ -62,7 +62,8 @@ from .workers.optimizer import OptimizerSessionConfig
 from .workers.workspace import (
     LocalAttemptWorkspaceAssembler,
     PreparedAttempt,
-    write_empty_agent_state,
+    initialize_reusable_agent_state,
+    remove_optimizer_state_seeds,
 )
 
 
@@ -371,7 +372,8 @@ class TemporaryOptimizerDevShell:
         session_root = root / "sessions"
         session_root.mkdir(mode=0o700)
         (root / "scratch").mkdir(mode=0o700)
-        write_empty_agent_state(root)
+        initialize_reusable_agent_state(root, root / paths.optimizer)
+        remove_optimizer_state_seeds(root / paths.optimizer)
         return PreparedAttempt(
             root=root,
             manifest_path=manifest_path,

@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import stat
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -60,9 +61,11 @@ from .session_trace import enforce_session_trace_retention
 from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 from .token_usage import ProviderUsageReportV2, UsageUnit
 from .workspace import (
+    REUSABLE_AGENT_DIRECTORIES,
     copy_reusable_agent_state,
-    ensure_reusable_directories,
+    initialize_reusable_agent_state,
     materialize_reusable_agent_state_snapshot,
+    remove_optimizer_state_seeds,
     resolve_revision_runtime_state_seed,
     validate_reusable_agent_state_seed,
 )
@@ -230,7 +233,7 @@ class VisibleAgentRevisionV2(BaseModel):
     optimization_summary_path: str = Field(min_length=1, max_length=300)
     sessions_path: str | None = Field(default=None, min_length=1, max_length=300)
     reports_path: str | None = Field(default=None, min_length=1, max_length=300)
-    runtime_state_path: str = Field(min_length=1, max_length=300)
+    resources_path: str = Field(min_length=1, max_length=300)
     parent: bool
     relationship: Literal["active", "challenger", "current_epoch_challenger", "lineage_history"]
     challenger_ordinal: int | None = Field(default=None, gt=0)
@@ -358,7 +361,7 @@ class EvolutionOutput(BaseModel):
     changed_paths: tuple[str, ...] = Field(max_length=512)
     # Defaulted because sealed historical traces predating this field are re-parsed
     # by _previous_evolution_output under extra="forbid".
-    contributing_revision_ids: tuple[KernelAgentRevisionId, ...] = Field(
+    contributing_paths: tuple[str, ...] = Field(
         default=(),
         max_length=64,
     )
@@ -371,20 +374,40 @@ class EvolutionOutput(BaseModel):
             raise ValueError("kernel_agent_revision_id must be a string")
         return parse_kernel_agent_revision_id(value)
 
-    @field_validator("contributing_revision_ids", mode="before")
+    @field_validator("contributing_paths", mode="before")
     @classmethod
     def _validate_contributing_revisions(cls, value: object) -> tuple[str, ...]:
         if not isinstance(value, list | tuple):
-            raise ValueError("contributing_revision_ids must be an array")
+            raise ValueError("contributing_paths must be an array")
         normalized: list[str] = []
         for item in value:
             if not isinstance(item, str):
-                raise ValueError("contributing_revision_ids entries must be strings")
-            normalized.append(str(parse_kernel_agent_revision_id(item)))
+                raise ValueError("contributing_paths entries must be strings")
+            relative = PurePosixPath(item)
+            parts = relative.parts
+            if (
+                not item
+                or len(item) > 1000
+                or "\\" in item
+                or "\x00" in item
+                or relative.as_posix() != item
+                or ".." in parts
+                or len(parts) < 3
+                or parts[0] != "input"
+                or parts[1] not in {"agents", "evidence"}
+                or not parts[2].startswith("agent-v")
+                or not parts[2][7:].isdigit()
+                or (parts[1] == "evidence" and (len(parts) < 4 or parts[3] != "resources"))
+            ):
+                raise ValueError(
+                    "contributing_paths must name canonical workspace-relative paths under "
+                    "input/agents/agent-vN or input/evidence/agent-vN/resources"
+                )
+            normalized.append(item)
         if len(set(normalized)) != len(normalized):
-            raise ValueError("contributing_revision_ids cannot contain duplicates")
+            raise ValueError("contributing_paths cannot contain duplicates")
         if normalized != sorted(normalized):
-            raise ValueError("contributing_revision_ids must be sorted")
+            raise ValueError("contributing_paths must be sorted")
         return tuple(normalized)
 
     @field_validator("changed_paths")
@@ -397,7 +420,7 @@ class EvolutionOutput(BaseModel):
         for item in value:
             relative = PurePosixPath(item)
             if relative.is_absolute() or relative.as_posix() == "." or ".." in relative.parts:
-                raise ValueError("changed_paths must contain safe Source-root-relative paths")
+                raise ValueError("changed_paths must contain safe Bundle-root-relative paths")
             normalized.append(relative.as_posix())
         if len(set(normalized)) != len(normalized):
             raise ValueError("changed_paths cannot contain duplicates")
@@ -409,10 +432,8 @@ class EvolutionOutput(BaseModel):
     def _validate_mode_fields(self) -> Self:
         if self.proposal_type == "reuse" and self.changed_paths:
             raise ValueError("reuse requires changed_paths to be empty")
-        if self.proposal_type == "reuse" and self.contributing_revision_ids:
-            raise ValueError("reuse requires contributing_revision_ids to be empty")
-        if self.kernel_agent_revision_id in self.contributing_revision_ids:
-            raise ValueError("contributing_revision_ids cannot repeat the selected Source base")
+        if self.proposal_type == "reuse" and self.contributing_paths:
+            raise ValueError("reuse requires contributing_paths to be empty")
         return self
 
 
@@ -479,6 +500,38 @@ class EvolutionCandidateTraceV3(BaseModel):
         return parse_artifact_digest(value)
 
 
+class EvolutionContributionSnapshot(BaseModel):
+    """Exact input content credited by an Evolution, independent of later State."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path: str
+    revision_id: KernelAgentRevisionId
+    snapshot_digest: ArtifactDigest
+
+
+def _upgrade_historical_output(raw: dict[str, object]) -> object:
+    """Translate only sealed ID-only reports; live Agent submissions use paths."""
+    output = raw.get("output")
+    if not isinstance(output, dict) or "contributing_revision_ids" not in output:
+        return output
+    output = dict(output)
+    legacy = output.pop("contributing_revision_ids")
+    if "contributing_paths" in output or not isinstance(legacy, list):
+        raise ValueError("Historical Evolution contribution fields are ambiguous")
+    manifest = raw.get("input")
+    catalog = manifest.get("visible_agents", []) if isinstance(manifest, dict) else []
+    paths = {
+        item.get("revision_id"): str(item.get("path", "")).removesuffix("/source")
+        for item in catalog
+        if isinstance(item, dict)
+    }
+    if any(not isinstance(item, str) or item not in paths for item in legacy):
+        raise ValueError("Historical Evolution contributor is outside its frozen catalog")
+    output["contributing_paths"] = sorted(paths[item] for item in legacy)
+    return output
+
+
 class EvolutionTraceV9(BaseModel):
     """Immutable provenance for one successful Kernel Agent Evolution run."""
 
@@ -494,6 +547,14 @@ class EvolutionTraceV9(BaseModel):
     token_usage: ProviderUsageReportV2
     output: EvolutionOutput
     candidate: EvolutionCandidateTraceV3 | None
+    contributions: tuple[EvolutionContributionSnapshot, ...] = ()
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_legacy_contributions(cls, value: object) -> object:
+        if isinstance(value, dict):
+            return {**value, "output": _upgrade_historical_output(value)}
+        return value
 
     @field_validator("session_trace_digest", mode="before")
     @classmethod
@@ -528,7 +589,7 @@ def _previous_evolution_output(
     if raw_output is None:
         # Some imported or old traces retain only Candidate provenance.
         return None
-    output = EvolutionOutput.model_validate(raw_output)
+    output = EvolutionOutput.model_validate(_upgrade_historical_output(raw))
     if (
         not isinstance(raw_candidate, dict)
         or raw_candidate.get("optimizer_digest") != revision.optimizer_digest
@@ -588,7 +649,7 @@ class PreparedEvolution:
 
 
 class EvolutionWorkspaceAssembler:
-    """Materialize frozen Agents and seed one writable source/runtime-state Candidate."""
+    """Materialize frozen Agents and seed one writable complete Agent Bundle."""
 
     def __init__(
         self,
@@ -677,8 +738,8 @@ class EvolutionWorkspaceAssembler:
                 raise ValueError("visible Agent revision has no lineage version")
             version = f"agent-v{catalog_entry.revision_number}"
             competed = relationship in {"active", "challenger"}
-            relative = f"input/agents/{version}/source"
-            runtime_state_path = f"input/agents/{version}/runtime-state"
+            relative = f"input/agents/{version}"
+            runtime_state_path = f"input/evidence/{version}/resources"
             optimization_summary_path = f"input/evidence/{version}/optimization-summary.json"
             sessions_path = f"input/evidence/{version}/sessions" if competed else None
             reports_path = f"input/evidence/{version}/reports" if competed else None
@@ -699,7 +760,7 @@ class EvolutionWorkspaceAssembler:
                     optimization_summary_path=optimization_summary_path,
                     sessions_path=sessions_path,
                     reports_path=reports_path,
-                    runtime_state_path=runtime_state_path,
+                    resources_path=runtime_state_path,
                     parent=visible.id == revision.id,
                     relationship=relationship,
                     challenger_ordinal=challenger_ordinal,
@@ -728,12 +789,7 @@ class EvolutionWorkspaceAssembler:
             produced_paths = visible_paths.get(produced.id)
             if base_paths is None or produced_paths is None:
                 raise ValueError("Evolution report Agent paths are outside visible history")
-            contributing_paths: list[str] = []
-            for contributor_id in previous_output.contributing_revision_ids:
-                contributor_paths = visible_paths.get(contributor_id)
-                if contributor_paths is None:
-                    raise ValueError("Evolution report Agent paths are outside visible history")
-                contributing_paths.append(contributor_paths[0])
+            contributing_paths = list(previous_output.contributing_paths)
             report_path = evolution_reports_root / f"evo-{evolution_number}.json"
             if report_path.exists() or report_path.is_symlink():
                 raise ValueError("Evolution report number is duplicated")
@@ -742,19 +798,17 @@ class EvolutionWorkspaceAssembler:
                     {
                         "evolution_number": evolution_number,
                         "parent": {
-                            "source_path": base_paths[0],
-                            "runtime_state_path": base_paths[1],
+                            "path": base_paths[0],
                         },
                         "generated_agent": {
-                            "source_path": produced_paths[0],
-                            "runtime_state_path": produced_paths[1],
+                            "path": produced_paths[0],
                         },
                         "report": {
                             "proposal_type": previous_output.proposal_type,
                             "hypothesis": previous_output.hypothesis,
                             "expected_effect": previous_output.expected_effect,
                             "changed_paths": list(previous_output.changed_paths),
-                            "contributing_source_paths": contributing_paths,
+                            "contributing_paths": contributing_paths,
                             "unimplemented_capabilities": [
                                 item.model_dump(mode="json")
                                 for item in previous_output.unimplemented_capabilities
@@ -777,6 +831,9 @@ class EvolutionWorkspaceAssembler:
                 for revision_id in visible_by_id
             },
             read_only=False,
+            optimizer_sources={
+                revision_id: run_root / paths[0] for revision_id, paths in visible_paths.items()
+            },
         )
         assemble_evolver_evidence_view(
             evidence_root,
@@ -789,30 +846,45 @@ class EvolutionWorkspaceAssembler:
         )
         for version, revision_id in agent_versions.items():
             source_state = reusable_state_staging / revision_id
-            destination = agents_root / version
+            destination = evidence_root / version
             if not source_state.is_dir() or source_state.is_symlink():
                 raise ValueError(f"visible Agent runtime state is unavailable: {version}")
-            shutil.move(source_state, destination / "runtime-state")
+            destination.chmod(0o700)
+            shutil.move(source_state, destination / "resources")
+            make_tree_read_only(destination)
         if reusable_state_staging.exists():
             if any(reusable_state_staging.iterdir()):
                 raise ValueError(
                     "unclassified Agent runtime state remains after Evolution assembly"
                 )
             reusable_state_staging.rmdir()
-        candidate_root.mkdir(mode=0o700)
-        shutil.copytree(run_root / visible_paths[revision.id][0], candidate_root / "source")
-        candidate_runtime_state = candidate_root / "runtime-state"
-        active_runtime_state_seed = _active_next_epoch_runtime_state_seed(
-            evidence.payload_path,
-            revision.id,
-            self._artifacts,
-        ) or resolve_revision_runtime_state_seed(self._artifacts, revision)
-        if active_runtime_state_seed is None:
-            ensure_reusable_directories(candidate_runtime_state)
-        else:
-            copy_reusable_agent_state(active_runtime_state_seed, candidate_runtime_state)
+        # Present one complete Bundle. Checkpoints replace packaged defaults,
+        # never merge them: removed learned files must not reappear from Source.
+        for visible in visible_by_id.values():
+            bundle = run_root / visible_paths[visible.id][0]
+            source = self._artifacts.verify(visible.optimizer_digest).payload_path
+            seed = resolve_revision_runtime_state_seed(self._artifacts, visible)
+            if visible.id == revision.id:
+                seed = (
+                    _active_next_epoch_runtime_state_seed(
+                        evidence.payload_path, revision.id, self._artifacts
+                    )
+                    or seed
+                )
+            remove_optimizer_state_seeds(bundle)
+            make_tree_owner_writable(bundle)
+            with tempfile.TemporaryDirectory(prefix="atrex-bundle-state-") as temporary:
+                state = Path(temporary) / "state"
+                if seed is None:
+                    initialize_reusable_agent_state(state, source)
+                else:
+                    copy_reusable_agent_state(seed, state, optimizer_source=source)
+                for name in REUSABLE_AGENT_DIRECTORIES:
+                    shutil.copytree(state / name, bundle / name)
+        shutil.copytree(run_root / visible_paths[revision.id][0], candidate_root)
         candidate_runtime_state_base = control_state_root / "candidate-runtime-state-base"
-        shutil.copytree(candidate_runtime_state, candidate_runtime_state_base)
+        for name in REUSABLE_AGENT_DIRECTORIES:
+            shutil.copytree(candidate_root / name, candidate_runtime_state_base / name)
         make_tree_read_only(candidate_runtime_state_base)
         make_tree_owner_writable(candidate_root)
         make_tree_read_only(agents_root)
@@ -1443,6 +1515,7 @@ class EvolverBundleRunner(EvolverRunner):
         manifest = EvolutionInputManifestV11.model_validate_json(
             prepared.manifest_path.read_bytes()
         )
+        contributions = self._seal_contributions(prepared, manifest, output, request)
         repository_by_revision = {
             item.revision_id: prepared.root / item.path for item in manifest.visible_agents
         }
@@ -1465,10 +1538,7 @@ class EvolverBundleRunner(EvolverRunner):
             active_root = repository_by_revision[request.parent_revision.id]
             if self._changed_paths(
                 active_root,
-                prepared.candidate_root / "source",
-            ) or self._changed_paths(
-                prepared.candidate_runtime_state_base_root,
-                prepared.candidate_root / "runtime-state",
+                prepared.candidate_root,
             ):
                 raise ValueError("Evolution reuse must leave the writable Candidate unchanged")
             proposal = KernelAgentReuseProposal("reuse", reused.id)
@@ -1493,41 +1563,31 @@ class EvolverBundleRunner(EvolverRunner):
                 )
             if base.dsl is not request.parent_revision.dsl:
                 raise ValueError("Evolution base changed the lineage DSL")
-            for contributor_id in output.contributing_revision_ids:
-                contributor = visible.get(contributor_id)
-                if contributor is None:
-                    raise ValueError(
-                        "Evolution credits an Agent revision outside frozen Evidence"
-                    )
-                if contributor.dsl is not request.parent_revision.dsl:
-                    raise ValueError("Evolution credits an Agent revision from another DSL")
-                if contributor.creation_key.startswith(current_challenger_prefix):
-                    raise ValueError(
-                        "Evolution can only credit completed Lineage history"
-                    )
             candidate = self._builder.build_candidate(
-                prepared.candidate_root / "source",
+                prepared.candidate_root,
                 request.parent_revision.dsl,
             )
             base_root = repository_by_revision[base.id]
             changed_paths = self._changed_paths(
                 base_root,
-                prepared.candidate_root / "source",
+                prepared.candidate_root,
             )
-            runtime_state_changed_paths = self._changed_paths(
-                prepared.candidate_runtime_state_base_root,
-                prepared.candidate_root / "runtime-state",
-            )
-            if not changed_paths and not runtime_state_changed_paths:
-                raise ValueError("Evolver produced no Agent source or runtime-state changes")
+            runtime_state_changed_paths = {
+                f"{name}/{path}"
+                for name in REUSABLE_AGENT_DIRECTORIES
+                for path in self._changed_paths(
+                    prepared.candidate_runtime_state_base_root / name,
+                    prepared.candidate_root / name,
+                )
+            }
+            if not changed_paths:
+                raise ValueError("Evolver produced no Agent Bundle changes")
             if set(output.changed_paths) != changed_paths:
-                raise ValueError("Evolution changed_paths disagrees with sealed Agent Source")
+                raise ValueError("Evolution changed_paths disagrees with sealed Agent Bundle")
             # Every new Agent revision is a complete logical Bundle. Even when
             # Evolver changes Source only, retain the exact Candidate State that
             # was paired with that Source in the writable workspace.
-            runtime_state_digest = self._seal_runtime_state(
-                prepared.candidate_root / "runtime-state"
-            )
+            runtime_state_digest = self._seal_runtime_state(prepared.candidate_root)
             candidate = KernelAgentCandidate(
                 dsl=candidate.dsl,
                 optimizer_digest=candidate.optimizer_digest,
@@ -1560,6 +1620,7 @@ class EvolverBundleRunner(EvolverRunner):
             token_usage=result.token_usage,
             output=output,
             candidate=candidate_trace,
+            contributions=contributions,
         )
         evolution_trace_digest = self._artifacts.put_json(
             cast(JsonValue, trace.model_dump(mode="json")),
@@ -1574,7 +1635,7 @@ class EvolverBundleRunner(EvolverRunner):
                 "base_revision_id": base_revision_id,
                 "evolution_trace_digest": evolution_trace_digest,
                 "changed_paths": sorted(changed_paths),
-                "contributing_revision_ids": list(output.contributing_revision_ids),
+                "contributing_paths": list(output.contributing_paths),
                 "runtime_state_changed": bool(runtime_state_changed_paths),
                 "unimplemented_capabilities": [
                     item.model_dump(mode="json") for item in output.unimplemented_capabilities
@@ -1584,21 +1645,96 @@ class EvolverBundleRunner(EvolverRunner):
         )
         return BuildChallengerResult(proposal, evolution_trace_digest), session_trace_digest
 
+    def _seal_contributions(
+        self,
+        prepared: PreparedEvolution,
+        manifest: EvolutionInputManifestV11,
+        output: EvolutionOutput,
+        request: BuildChallengerRequest,
+    ) -> tuple[EvolutionContributionSnapshot, ...]:
+        """Revalidate provenance without trusting Evolver's helper, then freeze it."""
+        snapshots: list[EvolutionContributionSnapshot] = []
+        revisions = {entry.revision.id: entry.revision for entry in request.agent_catalog}
+        for index, relative in enumerate(output.contributing_paths):
+            label = f"contributing_paths[{index}]"
+            path = PurePosixPath(relative)
+            owner = next(
+                (
+                    item
+                    for item in manifest.visible_agents
+                    if path.is_relative_to(PurePosixPath(item.path))
+                    or path.is_relative_to(PurePosixPath(item.resources_path))
+                ),
+                None,
+            )
+            if owner is None or owner.relationship == "current_epoch_challenger":
+                raise ValueError(
+                    f"{label} can only credit completed Lineage history or Parent resources"
+                )
+            revision = revisions.get(owner.revision_id)
+            if revision is None or revision.dsl != request.parent_revision.dsl:
+                raise ValueError(f"{label} is outside the same-DSL Agent catalog")
+            source = prepared.root
+            try:
+                for part in path.parts:
+                    source = source / part
+                    mode = source.lstat().st_mode
+                    if not (stat.S_ISREG(mode) or stat.S_ISDIR(mode)):
+                        raise ValueError(f"{label} cannot traverse links or special files")
+                files = [source] if source.is_file() else list(source.rglob("*"))
+                count = size = 0
+                for item in files:
+                    metadata = item.lstat()
+                    if stat.S_ISDIR(metadata.st_mode):
+                        continue
+                    if not stat.S_ISREG(metadata.st_mode):
+                        raise ValueError(f"{label} contains a link or special file")
+                    count += 1
+                    size += metadata.st_size
+                    if (
+                        count > self._kernel_agent_limits.max_bundle_files
+                        or size > self._kernel_agent_limits.max_bundle_bytes
+                    ):
+                        raise ValueError(f"{label} exceeds snapshot limits; select a narrower path")
+            except OSError as error:
+                raise ValueError(f"{label} does not exist or is unreadable") from error
+            with tempfile.TemporaryDirectory(prefix="atrex-contribution-") as temporary:
+                snapshot = Path(temporary) / "snapshot"
+                snapshot.mkdir()
+                if source.is_dir():
+                    shutil.copytree(source, snapshot / source.name, symlinks=True)
+                else:
+                    shutil.copy2(source, snapshot / source.name)
+                digest = self._artifacts.put_directory(snapshot, ArtifactKind.EVIDENCE)
+            snapshots.append(
+                EvolutionContributionSnapshot(
+                    path=relative,
+                    revision_id=owner.revision_id,
+                    snapshot_digest=digest,
+                )
+            )
+        return tuple(snapshots)
+
     def _seal_session_trace(self, path: Path) -> ArtifactDigest:
         enforce_session_trace_retention(path)
         return self._artifacts.put_directory(path, ArtifactKind.SESSION_LOG)
 
     def _seal_runtime_state(self, path: Path) -> ArtifactDigest:
-        validate_reusable_agent_state_seed(
-            path,
-            max_files=self._kernel_agent_limits.max_bundle_files,
-            max_bytes=self._kernel_agent_limits.max_bundle_bytes,
-            require_complete=True,
-        )
-        return self._artifacts.put_directory(
-            path,
-            ArtifactKind.KERNEL_AGENT_RUNTIME_STATE,
-        )
+        # Storage remains split; only the six adaptive directories are checkpoints.
+        with tempfile.TemporaryDirectory(prefix="atrex-evolved-state-") as temporary:
+            state = Path(temporary) / "state"
+            for name in REUSABLE_AGENT_DIRECTORIES:
+                source = path / name
+                if source.is_symlink() or not source.is_dir():
+                    raise ValueError(f"Candidate {name}/ must be a real directory")
+                shutil.copytree(source, state / name, symlinks=True)
+            validate_reusable_agent_state_seed(
+                state,
+                max_files=self._kernel_agent_limits.max_bundle_files,
+                max_bytes=self._kernel_agent_limits.max_bundle_bytes,
+                require_complete=True,
+            )
+            return self._artifacts.put_directory(state, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE)
 
     @staticmethod
     def _changed_paths(parent: Path, candidate: Path) -> set[str]:

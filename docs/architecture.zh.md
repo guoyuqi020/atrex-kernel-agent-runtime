@@ -35,7 +35,7 @@ flowchart LR
 | Kernel Trial | 一份精确测量的实验 Kernel，不消耗 `vN`。 |
 | Kernel Revision | Lineage 内被保留并标记为 `vN` 的 Kernel。 |
 | Agent Revision | Lineage 内标记为 `agent-vN` 的 Agent Bundle。 |
-| Runtime State | Agent 执行产生的自适应 `memory/`、`docs/`、`skills/` 与 `tools/`，与版本化源码分开存储。 |
+| Runtime State | Agent 执行产生的自适应 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 与 `hooks/`，与版本化源码分开存储。 |
 | Artifact | Runtime 本地 CAS 中不可变的内容寻址数据。 |
 
 术语必须保持一致：“Lineage”不表示并行 Trajectory，“Attempt”不表示 Provider 重试；角色相关时
@@ -73,19 +73,18 @@ Attempt。Optimizer View 按分支包含每个已完成 Active/Challenger 分支
 Conversation，且每个已完成 Epoch 都标明被选中的分支；Evolver View 还额外包含 Agent 选择结果、
 Attempt Outcome 与被引用的精确 Kernel Artifact。
 Runtime 还会冻结版本化 Agent/Kernel Catalog 和全部历史 Kernel Artifact。Evolver Workspace
-明确拆分每个可见 Agent 版本的封存源码与逐 Trajectory `memory/docs/skills/tools`（`input/agents/agent-vN/`）以及
-Runtime 对它的派生结论（`input/evidence/agent-vN/`）。两棵树都按 Lineage 版本索引，任何目录名都不再
+将每个可见版本组装为完整 Bundle（`input/agents/agent-vN/`），效果汇总和逐 Trajectory
+补充资源放在 `input/evidence/agent-vN/`。两棵树都按 Lineage 版本索引，任何目录名都不再
 编码 Epoch 角色。每个版本都有效果汇总；只有在上一个已完成 Epoch 中参赛的全部分支还额外拥有该 Epoch 的
 Attempt Conversation 与 Attempt Report。每份汇总都记录该版本的分支与胜负，以及最后一次两两选择使用
 的规则；存在多个 Challenger 时，该规则不代表完整淘汰过程。
 此前 Agent 创建时的报告位于只读
-`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，运行时状态位于
-`input/agents/` 中该版本源码旁边。每个 Optimizer Session 都把终态 `memory/docs/skills/tools` 封存为不可变
+`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，每个可见 Bundle 直接包含所选自适应目录。每个 Optimizer Session 都把终态 `prompts/memory/knowledge/skills/tools/hooks` 封存为不可变
 Runtime State Artifact，生产它的 Attempt 记录 `runtime_state_digest`；Attempt ID 本身就是生产者
 身份，因此不再引入第二个 Checkpoint ID。后续串行 Attempt 在本地缓存丢失时会从该摘要恢复准确
 State。Runtime 使用最近完成 Epoch 获胜分支中、产出最佳 Kernel 的 Trajectory 在最后一个 Attempt
 结束后的终态 State，作为下一 Epoch Active Branch 与 Evolver Candidate 的共同种子；缺失时依次回退
-到该 Trajectory 的 Epoch 起始 State、Revision Seed 和空 State。Evolver 把 Candidate Source 与 State
+到该 Trajectory 的 Epoch 起始 State、Revision Seed 和打包默认内容。Evolver 把 Candidate Source 与 State
 一起封存为一个逻辑
 Agent Bundle。Evidence 保存规范化摘要和 Session 来源 Digest；Agent Workspace 按 Digest 物化原始、未
 脱敏 Session Artifact。Wiki Query 暴露外部服务完整、安全的 `records`/`notes` 投影，并以稳定
@@ -116,7 +115,7 @@ Source/State 与生涯汇总，以及更早的 Evolution Report。
 `seed-ablation-arm` 从已有 Lineage 的冻结 Bootstrap Baseline 创建单独 Campaign 中的控制
 Lineage。`challenger_count` 默认 0，也可启用进化频率对照；`challenger_start_epoch` 默认 2。
 `ephemeral_agent_state` 决定每次 Attempt 后是否清空
-`memory/`、`docs/`、`skills/` 与 `tools/`。该 Arm 共享可比较的源评测身份，但生命周期和版本历史独立。
+`prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 与 `hooks/`。该 Arm 共享可比较的源评测身份，但生命周期和版本历史独立。
 
 启用 `first_epoch_same_agent=true` 后，首轮 Challenger 是 Runtime 创建的 Active 同版本
 `replica`，不属于一次进化。两个分支的 Attempt 和可写 State 独立，Agent Revision 不变。
@@ -136,9 +135,9 @@ Runtime 导入完整 Core Commit，不执行仓库内容；拒绝不安全路径
 Manifest 违规和超限内容，然后封存完整 Agent Source Artifact。Git Commit 表示经审查源码来源，
 Artifact Digest 表示实际使用的精确校验 Snapshot，两者都保留。
 
-Optimizer Session 只读挂载 Agent Source，并提供可写 `memory/`、`docs/`、`skills/` 和 `tools/`。Runtime 封存每个 Session
+Optimizer Session 只读挂载 Agent Source，并提供可写 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 和 `hooks/`。Runtime 封存每个 Session
 终态 State，串行 Attempt 恢复前一 State。Evolution 提供只读 Active/Challenger/Historical Source
-与 State，以及可写 Candidate `source/` 和 `runtime-state/{memory,docs,skills,tools}/`；Runtime 校验并将二者
+与 State，以及可写的完整 `candidate/` Bundle（实现和六个自适应目录）；Runtime 校验并将二者
 封存为新 Agent Bundle。Runtime 不会把进化结果推回 Core 仓库。
 
 ## 存储与恢复

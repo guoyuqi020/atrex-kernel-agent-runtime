@@ -192,7 +192,7 @@ Runtime 在发布独立 `agent-v0`/`v0` 根之前重新校验 Agent，并在目�
 - 可选 `optimizer_model`。
 
 它创建一个独立的单 Lineage Campaign，默认不生成 Challenger。当
-`ephemeral_agent_state=true` 时，每个 Attempt 的 `memory/`、`docs/`、`skills/` 与 `tools/` 只保留 README 模板；
+`ephemeral_agent_state=true` 时，每个 Attempt 的 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 与 `hooks/` 恢复到固定 Core Revision 的初始内容；
 设为 false 时保留源 Bootstrap Deposit 和后续串行 State。对比进化频率时使用
 `challenger_count=1`、`challenger_start_epoch=2`、`first_epoch_same_agent=true`、
 `ephemeral_agent_state=false`，调整

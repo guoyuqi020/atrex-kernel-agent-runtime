@@ -1,7 +1,7 @@
 # Skills index
 
 Store reusable procedures: when to apply a method, its steps, prerequisites, and validation criteria.
-Use docs/ for reference knowledge, memory/ for search lessons, and tools/ for executable scripts.
+Use knowledge/ for reference knowledge, memory/ for search lessons, and tools/ for executable scripts.
 
 Whenever you add, change, rename, or remove a Skill, update this README with its path, purpose,
 trigger conditions, dependencies, and limitations. Read this index before adding duplicates.

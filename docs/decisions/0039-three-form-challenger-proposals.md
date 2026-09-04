@@ -3,36 +3,29 @@
 ## Decision
 
 Each Evolver invocation emits exactly one uniform `EvolutionOutput` proposal. Every mode uses
-`kernel_agent_revision_id`, `changed_paths`, and `contributing_revision_ids`. The second contains only
-sorted paths relative to
-the selected Agent Source root. `reuse` requires an empty array; a new-revision mode may also use an
-empty array for a Runtime-State-only change:
+`kernel_agent_revision_id`, `changed_paths`, and `contributing_paths`. The second contains sorted paths relative to the selected visible Bundle, including all six adaptive
+directories. `reuse` requires an empty array; a new revision requires a real change:
 
 - `evolved` creates a new Agent revision whose parent is the Epoch Active revision;
 - `reuse` enters one visible historical revision unchanged and creates no revision or version label;
 - `evolve_from_history` creates a new Agent revision whose parent is one visible historical revision.
 
-The reported revision identifies Agent Source only. Runtime State identity and checkpointing remain
-private Runtime control data. Runtime validates every referenced Source revision against the
-invocation's frozen visible set and same-DSL
-Lineage. For new revisions it independently compares Candidate `source/` and `runtime-state/` with
-the selected Source base and initial Active State checkpoint, validates the reported Source-only
-changed-file set, and requires at least one actual Source or State change. Runtime State paths are
-not part of the Agent report. For reuse it requires Source and the common seed to remain unchanged. For
-`evolve_from_history`, Evolver replaces Source with a writable copy from the selected
-`input/agents/agent-vN/source/` and may synthesize the common seed from visible historical state.
-Runtime validates the declared base and checks the final Diff across Source and state seed.
+The reported revision selects the visible Bundle and single parent; exact State identity remains
+Runtime control data. For `evolve_from_history`, copy the complete selected `input/agents/agent-vN/`
+into `candidate/` before editing. Runtime validates same-DSL eligibility and the complete Bundle diff.
+Adaptive-directory modifications are part of `changed_paths`. Reuse requires Candidate unchanged.
 
 Every proposal may carry bounded `unimplemented_capabilities`. Each entry names an Agent capability,
 its expected Kernel-optimization benefit, and why the Evolver could not implement it. Runtime stores
 these entries as untrusted Evolution Evidence for later Evolvers; they do not grant capabilities or
 affect selection.
 
-A Candidate may combine content from several visible Agents. `contributing_revision_ids` names every
-revision other than the Source base whose Source, Skills, or Tools it drew content from; each must be
-completed Lineage history or the Active, never a Challenger built in the same Epoch. This is provenance,
-not parentage: the Source base and the diff target remain the single `kernel_agent_revision_id`, so the
-declaration adds no ancestry edge.
+`contributing_paths` records sorted, unique workspace-relative files or directories actually incorporated from
+`input/agents/agent-vN/` or `input/evidence/agent-vN/resources/`, including Parent resources from other
+Trajectories. Mere reading and automatic Parent inheritance are not contributions. Paths must exist,
+contain no links/traversal, and belong to eligible evaluated history or Parent, never a same-Epoch
+unevaluated Challenger. `reuse` requires `[]`. Runtime records ownership and exact content snapshots
+in the Evolution Trace; the field does not change the Bundle base or revision ancestry.
 
 Proposal type, Source reference revision, resulting competing revision, and Evolution Trace Digest belong to the
 Epoch Challenger participation record. Revision parentage remains a single-parent tree. Epoch

@@ -34,6 +34,78 @@ from atrex_runtime.workers.optimizer import OptimizerSessionConfig
 from atrex_runtime.workers.workspace import PreparedAttempt
 
 
+@pytest.mark.parametrize(
+    "phase", ("problem_generalization", "framework_baseline", "optimization_attempt")
+)
+@pytest.mark.parametrize("backend", ("claude", "codex", "qodercli", "pi"))
+@pytest.mark.parametrize("model", (None, "lineage-model"))
+def test_visible_core_config_matches_runtime_binding(
+    tmp_path: Path, phase: str, backend: str, model: str | None
+) -> None:
+    source = tmp_path / "source"
+    (source / "src").mkdir(parents=True)
+    (source / "src/main.py").write_text("pass\n")
+    (source / "atrex-bundle.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "bundle_format": "atrex-kernel-agent-bundle-v1",
+                "entrypoint": {"command": "src/main.py"},
+            }
+        )
+    )
+    original = {
+        "schema_version": 2,
+        "agent_backend": "codex",
+        "reasoning_effort": "max",
+        "session_settings": "stale settings",
+        "model": "stale-model",
+        "prompts": {"optimization_attempt": "prompts/episode.md"},
+        "prompt_fragments": {"attempt_tools": "prompts/attempt-tools.md"},
+    }
+    (source / "atrex-agent.json").write_text(json.dumps(original))
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    source_digest = artifacts.put_directory(source, ArtifactKind.KERNEL_AGENT)
+    root = tmp_path / "workspace"
+    repository = artifacts.materialize(source_digest, root / "agent/optimizer")
+    (root / "sessions").mkdir()
+    repository.chmod(0o500)
+    runner = CorePhaseRunner(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        CoreOptimizerProcessConfig(
+            agent_backend=backend,
+            reasoning_effort="low",
+            session_settings="effective settings",
+            command_prefix=(sys.executable,),
+            isolated_home_environment_keys=(),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            max_attempt_report_bytes=65_536,
+            timeout_seconds=30,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+            max_session_tokens=1000,
+        ),
+        artifacts,
+    )
+    prepared = runner.prepare(root, root / "sessions")
+    env = runner.runtime_environment(prepared, phase=phase, model=model)
+    effective = json.loads((repository / "atrex-agent.json").read_text())
+    assert effective == {
+        **original,
+        "agent_backend": env["ATREX_AGENT_BACKEND"],
+        "reasoning_effort": env["ATREX_AGENT_REASONING_EFFORT"],
+        "session_settings": env["ATREX_AGENT_SESSION_SETTINGS"],
+        "model": model,
+        "prompt_root": "workspace",
+    }
+    assert not (repository.stat().st_mode & 0o222)
+    assert not ((repository / "atrex-agent.json").stat().st_mode & 0o222)
+    assert not list(repository.glob(".agent-config-*"))
+    stored = artifacts.verify(source_digest).payload_path
+    assert json.loads((stored / "atrex-agent.json").read_text()) == original
+
+
 def _attempt_manifest() -> AttemptInputManifestV9:
     return AttemptInputManifestV9(
         attempt_id=new_attempt_id(),

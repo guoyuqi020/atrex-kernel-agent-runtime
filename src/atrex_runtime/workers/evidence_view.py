@@ -222,8 +222,8 @@ def evolver_agent_optimization_summary(
     return {
         "kernel_agent_revision_id": revision_id,
         "version": version,
-        "source_path": f"input/agents/{version}/source",
-        "runtime_state_path": f"input/agents/{version}/runtime-state",
+        "path": f"input/agents/{version}",
+        "resources_path": f"input/evidence/{version}/resources",
         "latest_epoch": latest_epoch,
         "career": {
             "epoch_participation_count": len(participated_epochs),

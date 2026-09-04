@@ -30,7 +30,8 @@ from .manifest import (
 )
 from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 
-REUSABLE_AGENT_DIRECTORIES = ("memory", "docs", "skills", "tools")
+REUSABLE_AGENT_DIRECTORIES = ("prompts", "memory", "knowledge", "skills", "tools", "hooks")
+_LEGACY_STATE_DIRECTORIES = frozenset((*REUSABLE_AGENT_DIRECTORIES, "docs"))
 REUSABLE_READMES = {
     name: (Path(__file__).parents[1] / "templates/runtime-state" / f"{name}.md").read_text(
         encoding="utf-8"
@@ -39,11 +40,35 @@ REUSABLE_READMES = {
 }
 
 
-def ensure_reusable_directories(root: Path) -> None:
+def _knowledge_directory(root: Path) -> Path:
+    """Resolve the old State name without changing sealed history or merging conflicts."""
+    current, legacy = root / "knowledge", root / "docs"
+    if legacy.exists() or legacy.is_symlink():
+        _validate_reusable_tree(legacy)
+        if current.exists() or current.is_symlink():
+            raise ValueError(
+                "Runtime State contains both docs/ and knowledge/; "
+                "merge their content into knowledge/ and remove the legacy docs/ directory"
+            )
+        return legacy
+    return current
+
+
+def ensure_reusable_directories(root: Path, *, optimizer_source: Path | None = None) -> None:
     """Fill missing State directories/indexes without overwriting Agent-authored content."""
     if root.is_symlink():
         raise ValueError(f"Reusable State root must not be a symlink: {root}")
     root.mkdir(parents=True, exist_ok=True, mode=0o700)
+    prompts = root / "prompts"
+    if optimizer_source is not None and not prompts.exists() and not prompts.is_symlink():
+        seed = optimizer_source / "prompts"
+        if seed.exists() or seed.is_symlink():
+            _copy_reusable_tree(seed, prompts)
+            make_tree_owner_writable(prompts)
+    knowledge = _knowledge_directory(root)
+    if knowledge.name == "docs":
+        knowledge.rename(root / "knowledge")
+        make_tree_owner_writable(root / "knowledge")
     for name in REUSABLE_AGENT_DIRECTORIES:
         directory = root / name
         if directory.is_symlink():
@@ -57,14 +82,34 @@ def ensure_reusable_directories(root: Path) -> None:
             readme.write_text(REUSABLE_READMES[name], encoding="utf-8")
 
 
-def copy_reusable_agent_state(source: Path, destination: Path) -> None:
+def copy_reusable_agent_state(
+    source: Path, destination: Path, *, optimizer_source: Path | None = None
+) -> None:
     """Copy just adaptive State, upgrading older snapshots only in the writable copy."""
+    knowledge = _knowledge_directory(source)
     for name in REUSABLE_AGENT_DIRECTORIES:
-        directory = source / name
+        directory = knowledge if name == "knowledge" else source / name
         if directory.exists() or directory.is_symlink():
             _copy_reusable_tree(directory, destination / name)
             make_tree_owner_writable(destination / name)
-    ensure_reusable_directories(destination)
+    ensure_reusable_directories(destination, optimizer_source=optimizer_source)
+
+
+def remove_optimizer_state_seeds(repository: Path) -> None:
+    """Hide duplicate initial State only in a materialized Optimizer Source copy."""
+    if repository.is_symlink() or not repository.is_dir():
+        raise ValueError("Optimizer Source must be a real directory")
+    mode = stat.S_IMODE(repository.stat().st_mode)
+    try:
+        repository.chmod(mode | stat.S_IWUSR)
+        for name in REUSABLE_AGENT_DIRECTORIES:
+            path = repository / name
+            if path.exists() or path.is_symlink():
+                _validate_reusable_tree(path)
+                make_tree_owner_writable(path)
+                shutil.rmtree(path)
+    finally:
+        repository.chmod(mode)
 
 
 def materialize_reusable_agent_state_snapshot(
@@ -72,6 +117,7 @@ def materialize_reusable_agent_state_snapshot(
     destination: Path,
     *,
     agent_lineages: Mapping[str, object | None],
+    optimizer_sources: Mapping[str, Path] | None = None,
     read_only: bool = True,
 ) -> dict[str, tuple[int, ...]]:
     """Freeze visible per-trajectory reusable Agent state for one Evolver session."""
@@ -119,13 +165,17 @@ def materialize_reusable_agent_state_snapshot(
                     if ordinal <= 0:
                         raise ValueError(f"Reusable trajectory ordinal is invalid: {source}")
                     children = {child.name for child in source.iterdir()}
-                    if not children <= set(REUSABLE_AGENT_DIRECTORIES):
+                    if not children <= _LEGACY_STATE_DIRECTORIES:
                         raise ValueError(
                             f"Reusable trajectory has unexpected State directories: {source}"
                         )
                     target = trajectories_root / source.name
                     target.mkdir(mode=0o700)
-                    copy_reusable_agent_state(source, target)
+                    copy_reusable_agent_state(
+                        source,
+                        target,
+                        optimizer_source=(optimizer_sources or {}).get(revision_id),
+                    )
                     ordinals.append(ordinal)
             trajectories_by_revision[revision_id] = tuple(ordinals)
 
@@ -150,14 +200,19 @@ def validate_reusable_agent_state_seed(
     state_root = Path(root)
     _validate_reusable_tree(state_root)
     present = {child.name for child in state_root.iterdir()}
-    if not present <= set(REUSABLE_AGENT_DIRECTORIES):
-        raise ValueError("Candidate runtime-state may contain only memory/, docs/, skills/, tools/")
+    allowed = set(REUSABLE_AGENT_DIRECTORIES) if require_complete else _LEGACY_STATE_DIRECTORIES
+    if not present <= allowed:
+        raise ValueError(
+            "Candidate runtime-state may contain only "
+            "prompts/, memory/, knowledge/, skills/, tools/, hooks/"
+        )
+    knowledge = _knowledge_directory(state_root)
     # Older immutable snapshots may lack newly introduced directories or empty ones.
-    # Normalize only materialized copies; new Candidate output must have all four indexes.
+    # Normalize only materialized copies; new Candidate output must have all six indexes.
     files = 0
     total_bytes = 0
     for name in REUSABLE_AGENT_DIRECTORIES:
-        directory = state_root / name
+        directory = knowledge if name == "knowledge" else state_root / name
         if require_complete and not (directory / "README.md").is_file():
             raise ValueError(f"Candidate runtime-state {name}/ must retain README.md")
         if not directory.exists():
@@ -233,7 +288,7 @@ class PreparedAttempt:
         )
 
     def seal_runtime_state(self, artifacts: LocalArtifactStore) -> ArtifactDigest:
-        """Seal all four post-Session State directories as one immutable checkpoint."""
+        """Seal all six post-Session State directories as one immutable checkpoint."""
         ensure_reusable_directories(self.root)
         scratch = self.root / "scratch"
         scratch.mkdir(mode=0o700, exist_ok=True)
@@ -246,8 +301,15 @@ class PreparedAttempt:
             shutil.rmtree(state, ignore_errors=True)
 
 
-def write_empty_agent_state(root: Path) -> None:
-    """Lay down the empty reusable Agent state a Session with no inherited state starts from."""
+def initialize_reusable_agent_state(root: Path, optimizer_source: Path) -> None:
+    """Load the pinned Core's initial State, never its engineering docs/ directory."""
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        directory = optimizer_source / name
+        if directory.exists() or directory.is_symlink():
+            _copy_reusable_tree(directory, root / name)
+            make_tree_owner_writable(root / name)
+    # Older Core commits do not contain State seeds. Missing directories/indexes
+    # get the legacy empty defaults, without importing Source's engineering docs/.
     ensure_reusable_directories(root)
 
 
@@ -302,7 +364,7 @@ class LocalAttemptWorkspaceAssembler:
         lineage = self._registry.get_lineage(epoch.lineage_id)
         campaign = self._registry.get_campaign(lineage.campaign_id)
         # An ephemeral-state Lineage is an ablation control arm, so every Attempt starts from the
-        # same empty Agent state. That has to be decided before reading any prior digest:
+        # same Core seed. That has to be decided before reading any prior digest:
         # attempt.runtime_state_digest is sealed after the Session, so a physical retry would
         # otherwise inherit the first run's Skills.
         previous_runtime_state_digest: ArtifactDigest | None = None
@@ -341,7 +403,9 @@ class LocalAttemptWorkspaceAssembler:
         persistent_state: Path | None = None
         persistent_lock: Path | None = None
         if lineage.ephemeral_agent_state:
-            write_empty_agent_state(root)
+            initialize_reusable_agent_state(
+                root, self._artifacts.verify(revision.optimizer_digest).payload_path
+            )
         else:
             state_trajectory = attempt.trajectory_ordinal
             if (
@@ -416,6 +480,7 @@ class LocalAttemptWorkspaceAssembler:
             root / paths.agent_problem,
         )
         self._artifacts.materialize(revision.optimizer_digest, root / paths.optimizer)
+        remove_optimizer_state_seeds(root / paths.optimizer)
 
         working_kernel = root / paths.working_kernel
         shutil.copytree(root / paths.input_kernel, working_kernel)
@@ -511,6 +576,7 @@ class LocalAttemptWorkspaceAssembler:
     ) -> tuple[Path, Path]:
         revision_id = revision.id
         parent_revision_id = revision.parent_id
+        optimizer_source = self._artifacts.verify(revision.optimizer_digest).payload_path
         persistent = self._root / ".reusable"
         lock_path = persistent / ".lock"
         scope = (
@@ -555,8 +621,14 @@ class LocalAttemptWorkspaceAssembler:
                         source_scope = bootstrap
                 if source_scope is not None and source_scope.exists():
                     _validate_reusable_tree(source_scope)
-                    copy_reusable_agent_state(source_scope, scope)
-            ensure_reusable_directories(scope)
+                    copy_reusable_agent_state(
+                        source_scope,
+                        scope,
+                        optimizer_source=optimizer_source,
+                    )
+                else:
+                    initialize_reusable_agent_state(scope, optimizer_source)
+            ensure_reusable_directories(scope, optimizer_source=optimizer_source)
         return scope, lock_path
 
     def _evolved_runtime_state_seed(

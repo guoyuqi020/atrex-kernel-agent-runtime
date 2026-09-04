@@ -40,8 +40,8 @@ All default schedules run 5 Epochs with 3 serial Attempts per Trajectory per Epo
 | `ablation-pool-3` | Two Trajectories in one Branch | 30 | no | 0 |
 | `ablation-pool-retained-3` | Two Trajectories in one Branch | 30 | yes | 0 |
 
-Runtime State includes Memory/Docs/Skills/Tools. Resetting State leaves only each directory's README
-template; it does not erase Kernel progress or Runtime history. Isolated and Retained instances
+Runtime State includes Memory/Knowledge/Skills/Tools. Resetting State restores the pinned Core's initial
+contents; it does not erase Kernel progress or Runtime history. Isolated and Retained instances
 share only the Bootstrap baseline, not subsequent history or mutable State. Their replica counts
 follow the configured Active/Challenger Trajectory count.
 

@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+import json
+import os
+import stat
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -15,6 +19,7 @@ from .launcher import WorkerLauncher, validate_worker_environment
 from .process import BoundedProcessConfig, BoundedProcessResult, BoundedProcessRunner
 from .session_trace import enforce_session_trace_retention
 from .token_usage import ProviderUsageReportV2, UsageUnit
+from .workspace import ensure_reusable_directories, remove_optimizer_state_seeds
 
 CORE_TIMEOUT_EXIT_STATUS = 124
 _UNSEALED_SESSION_MARKER = ".runtime-live-session"
@@ -108,6 +113,8 @@ class CorePhaseRunner:
         command = repository.joinpath(*PurePosixPath(manifest.entrypoint.command).parts)
         if command.is_symlink() or not command.is_file():
             raise InfrastructureError("Core Bundle command is unavailable")
+        ensure_reusable_directories(root, optimizer_source=repository)
+        remove_optimizer_state_seeds(repository)
         token_usage_path = root.joinpath(
             *PurePosixPath(self._policy.token_usage_report_relative_path).parts
         )
@@ -123,6 +130,7 @@ class CorePhaseRunner:
         phase: str,
         model: str | None = None,
     ) -> dict[str, str]:
+        self._project_agent_config(prepared, model=model)
         usage_unit: UsageUnit = (
             "credits" if self._policy.agent_backend == "qodercli" else "provider_tokens"
         )
@@ -153,6 +161,49 @@ class CorePhaseRunner:
             (key, str(prepared.agent_home)) for key in self._policy.isolated_home_environment_keys
         )
         return environment
+
+    def _project_agent_config(self, prepared: PreparedCorePhase, *, model: str | None) -> None:
+        """Expose the effective binding in the workspace copy, never the sealed Source."""
+        repository = prepared.repository
+        path = repository / "atrex-agent.json"
+        # Custom Bundles may implement the launch protocol without the Core config.
+        if not path.exists() and not path.is_symlink():
+            return
+        if (
+            repository.is_symlink()
+            or not repository.resolve().is_relative_to(prepared.root.resolve())
+            or path.is_symlink()
+            or not path.is_file()
+        ):
+            raise InfrastructureError("Core Agent config must be a workspace-local regular file")
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as error:
+            raise InfrastructureError("Core Agent config cannot be read") from error
+        if not isinstance(value, dict):
+            raise InfrastructureError("Core Agent config must be a JSON object")
+        value.update(
+            agent_backend=self._policy.agent_backend,
+            reasoning_effort=self._policy.reasoning_effort,
+            session_settings=self._policy.session_settings,
+            model=(model or "").strip() or None,
+            prompt_root="workspace",
+        )
+        mode = stat.S_IMODE(repository.stat().st_mode)
+        temporary: Path | None = None
+        try:
+            repository.chmod(mode | stat.S_IWUSR)
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=repository, prefix=".agent-config-", delete=False
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+            temporary.chmod(0o400)
+            os.replace(temporary, path)
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+            repository.chmod(mode)
 
     def run(
         self,

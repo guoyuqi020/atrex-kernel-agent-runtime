@@ -17,26 +17,22 @@ facts that Runtime can materialize as ordinary read-only files.
 
 Evolution Input schema v11 has no Runtime query authority. Runtime materializes:
 
-- every visible Agent repository and per-Trajectory Runtime State once under
+- one complete Bundle per visible Agent under
   `input/agents/agent-vN/`, keyed by stable Lineage version rather than temporary Epoch role;
-- one Runtime-derived optimization summary per visible version under `input/evidence/agent-vN/`,
+- one Runtime-derived optimization summary and `resources/trajectories/` snapshots per version under `input/evidence/agent-vN/`,
   plus one Conversation and Attempt Report per Attempt for every Branch in the latest completed
   Epoch;
 - available prior Agent-creation reports under `input/evolution-reports/evo-N.json`; and
 - a read-only catalog that identifies the current Parent and any same-Epoch Challengers already
   created but not yet evaluated.
 
-Evolver reads these files directly and may modify only Candidate `source/`, Candidate
-`runtime-state/`, and `scratch/`. Runtime initially copies Active Source and the latest completed
-Epoch winner's best-Kernel Trajectory terminal State after that Epoch's last Attempt. The next
-Epoch's Active Branch uses the same State seed. Missing terminal State falls back to that
-Trajectory's Epoch-start State, the revision seed, and empty default. For `evolve_from_history`,
-Evolver replaces Source with the selected historical Source and may synthesize the common seed from
-visible historical state. A new revision may also combine Source, Skills, or Tools from multiple
-eligible visible Agents and records those contributors separately from its single Source base. Runtime verifies eligibility
-and validates the reported Source-root-relative Diff plus its private State Diff. Every new Revision seals Source and State as one logical
-Bundle. No Candidate Base side
-record is trusted or required.
+Evolver reads these files directly and may modify only the complete `candidate/` Bundle and report
+scratch space. The Parent Bundle combines the winning implementation and its best-Kernel
+Trajectory's terminal resources; the next Active starts from the same snapshot. Missing terminal
+State falls back to Epoch-start State, revision seed, and packaged defaults.
+Historical derivation copies the complete selected Bundle before editing it. Evolver may synthesize
+eligible Agents' resources and record their contributions. Runtime validates the selected revision
+and entire Bundle diff, including all six adaptive directories, then seals Bundle and State.
 
 The Evolver query endpoint, query capability, public helper, Candidate allowlist, and private query
 snapshot are removed. Detailed history and full Evolution traces remain in Runtime's existing

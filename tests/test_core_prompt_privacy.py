@@ -284,7 +284,9 @@ def test_execution_prompts_require_depositing_reusable_knowledge() -> None:
     bootstrap = " ".join(prompts["framework_baseline"].split())
     assert "before finishing" in bootstrap
     for prompt in (attempt, bootstrap):
-        for directory in ("memory", "docs", "skills", "tools"):
+        assert "reusable search" in prompt
+        assert "reusable Claude/Codex hook" in prompt
+        for directory in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
             assert f"`{directory}/`" in prompt
         assert "README.md" in prompt
         assert "rename" in prompt and "remove" in prompt

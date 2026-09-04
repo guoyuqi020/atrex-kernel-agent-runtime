@@ -163,6 +163,10 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     agent = tmp_path / "agent"
     agent.mkdir()
     _write_agent(agent)
+    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+        (agent / name).mkdir()
+        (agent / name / "README.md").write_text(f"Initial {name} index")
+        (agent / name / "seed.md").write_text(f"Initial {name}")
     kernel_digest = artifacts.put_directory(kernel, ArtifactKind.KERNEL)
     agent_digest = artifacts.put_directory(agent, ArtifactKind.KERNEL_AGENT)
     contract_digest = artifacts.put_json(
@@ -204,8 +208,10 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert not (os.stat(reference).st_mode & 0o200)
     (prepared.root / "skills/baseline.md").write_text("reuse this lesson\n")
     (prepared.root / "tools/probe.py").write_text("print('probe')\n")
-    for name in ("memory", "docs", "skills", "tools"):
-        assert (prepared.root / name / "README.md").is_file()
+    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+        assert (prepared.root / name / "README.md").read_text() == f"Initial {name} index"
+        assert not (prepared.root / "agent/optimizer" / name).exists()
+        assert (prepared.root / name / "seed.md").read_text() == f"Initial {name}"
         (prepared.root / name / "entry.txt").write_text(f"bootstrap {name}")
         (prepared.root / name / "README.md").write_text(f"{name}: entry.txt")
 
@@ -249,7 +255,7 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     resumed = assembler.prepare(manifest)
     assert (resumed.root / "skills/baseline.md").read_text() == "reuse this lesson\n"
     assert (resumed.root / "tools/probe.py").read_text() == "print('probe')\n"
-    for name in ("memory", "docs", "skills", "tools"):
+    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
         assert (resumed.root / name / "entry.txt").read_text() == f"bootstrap {name}"
         assert (resumed.root / name / "README.md").read_text() == f"{name}: entry.txt"
 

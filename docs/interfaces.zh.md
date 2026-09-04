@@ -302,31 +302,27 @@ Report 对外展示。缺失或非 ready 的 Handoff 会直接终结，不会运
 ## Evolver 文件系统接口
 
 Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份按 Lineage 版本索引的冻结文件
-视图：每个可见 Agent 版本的仓库与 Runtime State 位于 `input/agents/agent-vN/`，Runtime 对它的派生结论
-位于 `input/evidence/agent-vN/`。每个版本都有优化效果汇总；只有在上一个已完成 Epoch 中参赛的全部分支
-还额外拥有该 Epoch 的 Conversation 与 Attempt Report。此前 Agent 创建报告
-按 `input/evolution-reports/evo-N.json` 排序，并关联 Source Base/产出 Agent 路径、准确 Changed Source
-路径与贡献 Source 路径。唯一可写的 Agent
-组件是 `candidate/source/` 与 `candidate/runtime-state/`。
+视图。`input/agents/agent-vN/` 是完整 Agent Bundle，直接包含实现、配置及
+`prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/`、`hooks/`。可写 `candidate/` 使用相同布局。
+已有 Checkpoint 替换打包默认内容，无需再分别编辑 Source/State。
 
-`runtime-state/trajectories/<N>/{memory,docs,skills,tools}/` 是自适应 State 存储，它是 Optimizer Session
-积累的非版本化状态，作用域是某个 Agent Revision 的某条 Trajectory。根级 `skills/` 和 `tools/`
-是保留路径，在版本化 Agent Source 中会被拒绝。Evolver 可把冻结状态整理为唯一一份扁平的
-`candidate/runtime-state/{memory,docs,skills,tools}/` 种子，也可修改版本化 Prompt、Workflow、Memory Policy 或实现，
-以改进未来 Session 的状态使用方式。Runtime 始终分别封存 Candidate Source 与 State，并把两者组合为
-同一个不可变 Agent Bundle；所有新 Trajectory 都从该 Bundle 的 State 初始化。
+`input/evidence/agent-vN/` 保存优化效果汇总和补充的 `resources/trajectories/<N>/` 快照。
+仅上一个完成 Epoch 的参赛者拥有该 Epoch 的 Conversation 与 Attempt Report。历史报告
+`input/evolution-reports/evo-N.json` 的 `parent.path` 和 `generated_agent.path` 指向完整 Bundle；
+贡献路径属于原始生成 Session，不保证当前资源仍与原始内容一致。
 
-选择 `evolve_from_history` 时，Evolver 用所选历史 `source/` 的完整可写副本替换 Candidate Source，
-可从可见历史状态整理公共种子，并声明 `kernel_agent_revision_id`；该 Revision 的 Source 是提案参考。
-Runtime State 身份仍是 Runtime 私有控制数据。Runtime 验证 Source 资格、报告的 Source 根目录相对
-Diff 和私有 State Diff；不再存在 Candidate Base 旁路记录或 Reset 命令。
+从历史派生时先复制完整历史 Bundle 到 Candidate，再修改；报告所选 `kernel_agent_revision_id`，
+`changed_paths` 为相对于 Bundle 根目录的排序文件 Diff，包括六目录改动。Runtime 独立校验 Diff，
+封存完整 Bundle 和六目录 Checkpoint。Optimizer 的权限与继承规则不变：实现只读，六目录可写。
 
-Evolver 使用 Bundle 本地的 `evolution-report` 命令提交终态 Draft。校验错误返回 `issues`、
-`request_schema` 与 `recovery`；失败不发布且可修正后重试。第一次成功调用原子发布
-`scratch/evolution-report.json` 并返回紧凑回执。
-对于新 Revision，报告中排序后的 `contributing_revision_ids` 列出除所选 Source Base 外，实际贡献了
-Source 或 Runtime State 的合格可见 Agent。这些 ID 只记录 Provenance，不改变唯一 Source Diff Base 或
-Revision Parentage。
+`contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许
+`input/agents/agent-vN/` 和 `input/evidence/agent-vN/resources/`，包括 Parent 其他 Trajectory 的资源。
+仅阅读和自动继承 Parent 不算贡献。路径必须存在、无链接或越界，且属于合格已评估历史或 Parent，
+不能引用同 Epoch 尚未评估的 Challenger。`reuse` 要求 `[]`。Runtime 在 Evolution Trace 中保存归属
+和准确内容快照；该字段不改变 Bundle Base 或 Revision 祖先关系。
+
+Evolver 通过本地 `evolution-report` 提交 Draft；错误返回 `issues`、`request_schema` 和 `recovery`，
+不发布。首次成功原子生成 `scratch/evolution-report.json`，Session 退出后 Runtime 再独立校验。
 
 ## 外部服务 Contract
 
