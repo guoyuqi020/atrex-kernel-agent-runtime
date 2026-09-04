@@ -70,8 +70,9 @@ from ..domain.models import (
     WorkerSessionStatus,
 )
 from ..sqlite_support import configure_durable_sqlite
+from .stop_migration import migrate_stops
 
-SCHEMA_VERSION = 32
+SCHEMA_VERSION = 33
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -503,6 +504,10 @@ class SqliteRegistry:
             )
         if version == SCHEMA_VERSION:
             return
+        if version == 32:
+            with self._lock:
+                migrate_stops(self._connection)
+            return
         if version == 23:
             with self._lock:
                 self._connection.executescript(
@@ -730,6 +735,7 @@ class SqliteRegistry:
                         "ALTER TABLE epoch_challengers_next RENAME TO epoch_challengers"
                     )
                 self._connection.execute("PRAGMA user_version = 32")
+            self._migrate()
             return
         if version == 14:
             with self._lock:
@@ -1488,6 +1494,8 @@ class SqliteRegistry:
                 COMMIT;
                 """
             )
+
+        self._migrate()
 
     def _has_tables(self, *names: str) -> bool:
         placeholders = ",".join("?" for _ in names)
@@ -3590,6 +3598,81 @@ class SqliteRegistry:
                 epoch_id,
                 {"expected": expected, "next": next_status},
             )
+
+    def stop_epoch(self, epoch_id: EpochId, reason: str) -> Epoch:
+        """Stop a quiescent Epoch; the caller must first terminate its local workers.
+
+        Invalidate the old scheduler fence so late writes cannot revive interrupted
+        work. Completed/failed Epochs are unchanged, and repeated stops are harmless.
+        """
+        if not reason.strip() or len(reason) > 2048:
+            raise ValueError("stop reason must contain 1-2048 characters")
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT status, lineage_id FROM epochs WHERE id = ?", (epoch_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Epoch not found: {epoch_id}")
+            status = EpochStatus(_required_text(row, "status"))
+            if status not in {EpochStatus.COMPLETED, EpochStatus.FAILED, EpochStatus.STOPPED}:
+                now = self._clock()
+                lineage_id = _required_text(row, "lineage_id")
+                self._connection.execute(
+                    "INSERT INTO epoch_stops VALUES (?, ?, ?, ?)",
+                    (epoch_id, status, reason, now),
+                )
+                self._connection.execute(
+                    "UPDATE epochs SET status = 'stopped' WHERE id = ?", (epoch_id,),
+                )
+                attempts = self._connection.execute(
+                    "SELECT id FROM attempts WHERE epoch_id = ? AND status = 'running'",
+                    (epoch_id,),
+                ).fetchall()
+                self._connection.execute(
+                    "UPDATE attempts SET status = 'interrupted', failure_reason = ? "
+                    "WHERE epoch_id = ? AND status = 'running'", (reason, epoch_id),
+                )
+                self._connection.execute(
+                    "UPDATE worker_sessions SET status = 'interrupted', "
+                    "finish_reason = 'operator-stopped', completed_at = ? "
+                    "WHERE epoch_id = ? AND status = 'running'", (now, epoch_id),
+                )
+                self._connection.execute(
+                    "UPDATE lineage_fences SET generation = generation + 1, "
+                    "owner = ?, lease_expires_at = '0001-01-01T00:00:00+00:00' "
+                    "WHERE lineage_id = ?", (f"stopped:{epoch_id}", lineage_id),
+                )
+                for attempt in attempts:
+                    self._event("attempt.interrupted", attempt["id"], {"reason": reason})
+                self._event(
+                    "epoch.stopped", epoch_id,
+                    {"previous_status": status, "reason": reason, "stopped_at": now},
+                )
+        return self.get_epoch(epoch_id)
+
+    def resume_stopped_epoch(self, epoch_id: EpochId) -> Epoch:
+        """Restore the saved phase and rotate interrupted Attempts' authority once."""
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT e.status, s.previous_status FROM epochs e "
+                "LEFT JOIN epoch_stops s ON s.epoch_id = e.id WHERE e.id = ?", (epoch_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Epoch not found: {epoch_id}")
+            if row["status"] == EpochStatus.STOPPED:
+                previous = EpochStatus(_required_text(row, "previous_status"))
+                now = self._clock()
+                self._connection.execute(
+                    "UPDATE attempts SET status = 'running', failure_reason = NULL, "
+                    "recovery_generation = recovery_generation + 1, authority_started_at = ? "
+                    "WHERE epoch_id = ? AND status = 'interrupted'", (now, epoch_id),
+                )
+                self._connection.execute(
+                    "UPDATE epochs SET status = ? WHERE id = ?", (previous, epoch_id),
+                )
+                self._connection.execute("DELETE FROM epoch_stops WHERE epoch_id = ?", (epoch_id,))
+                self._event("epoch.resumed", epoch_id, {"status": previous})
+        return self.get_epoch(epoch_id)
 
     def fail_epoch(self, epoch_id: EpochId, reason: str) -> None:
         """Atomically fail a non-terminal epoch and its lineage."""

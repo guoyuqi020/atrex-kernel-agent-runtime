@@ -97,7 +97,7 @@
           {"correctness_cases": 1, "evaluate_repeats": 1},
           {"correctness_cases": 5, "evaluate_repeats": 1}
         ],
-        "bench_iters": 5
+        "bench_iters": 100
       },
       "retention": {
         "correctness_cases": 1,
@@ -142,7 +142,7 @@
       "minimum_improvement_percent": 0.0,
       "allocation_timeout_seconds": 600,
       "shape_batch_size": 1,
-      "max_parallel_shape_batches": 8
+      "max_parallel_shape_batches": 16
     },
     "agent_promotion_comparison": {
       "method": "same_allocation_abba",
@@ -150,7 +150,7 @@
       "minimum_improvement_percent": 0.0,
       "allocation_timeout_seconds": 600,
       "shape_batch_size": 1,
-      "max_parallel_shape_batches": 8
+      "max_parallel_shape_batches": 16
     },
     "evidence": {
       "max_trace_files": 8,

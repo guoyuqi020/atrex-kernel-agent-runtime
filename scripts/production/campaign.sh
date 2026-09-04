@@ -179,6 +179,7 @@ stop_campaign() {
     fi
   fi
   if (( ${#pids[@]} == 0 )); then
+    "${atrex_prod_python}" "${script_dir}/stop_epochs.py" --workspace "${atrex_prod_workspace}"
     rm -f -- "${campaign_pid_file}"
     write_state "stopped"
     echo "Campaign task: stopped"
@@ -210,6 +211,7 @@ stop_campaign() {
     echo "Campaign task did not stop; remaining pids: ${survivors//$'\n'/,}" >&2
     return 1
   fi
+  "${atrex_prod_python}" "${script_dir}/stop_epochs.py" --workspace "${atrex_prod_workspace}"
   rm -f -- "${campaign_pid_file}"
   write_state "stopped"
   echo "Campaign task: stopped"

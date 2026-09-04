@@ -14,7 +14,12 @@ from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest
 from ..domain.models import KernelMeasurement, KernelMeasurementPurpose, KernelRevision
 from ..ports import KernelMeasurementJournal, KernelMeasurementRun, KernelMeasurementRunner
-from .agate import AgateClient, AgateRequestBuilder, parse_agate_evaluation
+from .agate import (
+    AgateCandidateRejection,
+    AgateClient,
+    AgateRequestBuilder,
+    parse_agate_evaluation,
+)
 from .batched_evaluate import (
     ShapeBatch,
     ShapeBatchedEvaluateExecutor,
@@ -23,6 +28,7 @@ from .batched_evaluate import (
 from .candidate import resolve_kernel_candidate
 from .contract import RegistryKernelEvaluationContextResolver
 from .execution import build_evaluation_request, call_agate_json
+from .job_recovery import JobExecution, run_with_log_recovery
 from .protocol import EvaluationV2
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
@@ -100,40 +106,48 @@ class AgateKernelMeasurementRunner(KernelMeasurementRunner):
                 name=f"{context.operator}_comparison_{measurement_id}_batch_{batch.index}",
                 idempotency_key=batch.idempotency_key,
             )
-            try:
-                accepted = await self._call(lambda: self._client.submit_job("eval", payload))
-            except InfrastructureError as error:
-                source = error.__cause__
-                fields = vars(source) if source is not None else {}
-                if fields.get("status") in {400, 422}:
-                    return ShapeBatchOutcome(
-                        {"status": "rejected", "error": "candidate request rejected"},
-                        evaluation=_failed_evaluation(),
-                    )
-                raise
-            job_id = accepted.get("job_id")
-            if not isinstance(job_id, str) or not job_id:
-                raise InfrastructureError("Agate measurement acceptance has no job_id")
-            self._journal.record_runtime_event(
-                "comparison.measurement_submitted",
-                revision.id,
-                {
-                    "kernel_revision_id": revision.id,
-                    "repeat": repeat,
-                    "measurement_id": measurement_id,
-                    "agate_job_id": job_id,
-                    "purpose": purpose.value,
-                    "shape_batch": batch.index,
-                    "shape_ids": list(batch.shape_ids),
-                },
-            )
-            job = await self._call(
-                lambda: self._client.get_job(
-                    job_id,
-                    wait=True,
-                    timeout=self._wait_timeout_s,
+
+            async def execute(submission: dict[str, object]) -> JobExecution:
+                try:
+                    accepted = await self._call(lambda: self._client.submit_job("eval", submission))
+                except InfrastructureError as error:
+                    source = error.__cause__
+                    fields = vars(source) if source is not None else {}
+                    if fields.get("status") in {400, 422}:
+                        raise AgateCandidateRejection("candidate request rejected") from error
+                    raise
+                job_id = accepted.get("job_id")
+                if not isinstance(job_id, str) or not job_id:
+                    raise InfrastructureError("Agate measurement acceptance has no job_id")
+                self._journal.record_runtime_event(
+                    "comparison.measurement_submitted",
+                    revision.id,
+                    {
+                        "kernel_revision_id": revision.id,
+                        "repeat": repeat,
+                        "measurement_id": measurement_id,
+                        "agate_job_id": job_id,
+                        "purpose": purpose.value,
+                        "shape_batch": batch.index,
+                        "shape_ids": list(batch.shape_ids),
+                    },
                 )
-            )
+                job = await self._call(
+                    lambda: self._client.get_job(
+                        job_id,
+                        wait=True,
+                        timeout=self._wait_timeout_s,
+                    )
+                )
+                return job_id, job
+
+            try:
+                job_id, job = await run_with_log_recovery(payload, execute)
+            except AgateCandidateRejection as rejection:
+                return ShapeBatchOutcome(
+                    {"status": "rejected", "error": rejection.payload},
+                    evaluation=_failed_evaluation(),
+                )
             status = job.get("status")
             if status not in _TERMINAL:
                 raise InfrastructureError("Agate measurement did not reach a terminal state")

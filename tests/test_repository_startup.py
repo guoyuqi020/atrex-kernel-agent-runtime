@@ -151,7 +151,10 @@ def test_checked_in_comparison_evaluator_is_the_pinned_submodule(tmp_path: Path)
     assert [
         (stage.correctness_cases, stage.evaluate_repeats) for stage in gate.bootstrap.stages
     ] == [(1, 1), (5, 1)]
-    assert gate.bootstrap.bench_iters == 5
+    assert gate.bootstrap.bench_iters == gate.optimizer.bench_iters == 100
+    production = json.loads((repository / "scripts/production/policy.json").read_text())
+    assert production["gate_policy"]["bootstrap"]["bench_iters"] == 100
+    assert production["comparison"]["max_parallel_shape_batches"] == 16
     assert (gate.retention.correctness_cases, gate.retention.bench_iters) == (1, 100)
     assert gate.production_gate is True
     assert (gate.warmup_iters, gate.atol, gate.rtol) == (10, 0.01, 0.05)
@@ -170,7 +173,7 @@ def test_checked_in_comparison_evaluator_is_the_pinned_submodule(tmp_path: Path)
         assert comparison.minimum_improvement_percent == 0.0
         assert comparison.allocation_timeout_seconds == 600
         assert comparison.shape_batch_size == 1
-        assert comparison.max_parallel_shape_batches == 8
+        assert comparison.max_parallel_shape_batches == 16
 
     assert evaluator_repository == (repository / "third_party/atrex-bench").resolve()
     resolved = subprocess.run(
@@ -267,7 +270,16 @@ def test_runtime_examples_own_their_configs_and_share_only_canonical_inputs() ->
 
     for name in RUNTIME_EXAMPLES:
         example = repository / "examples" / name
-        RuntimeSettings.from_file(example / "runtime.json")
+        settings = RuntimeSettings.from_file(example / "runtime.json")
+        assert settings.campaign is not None
+        gate = settings.campaign.gate_policy
+        assert gate.bootstrap.bench_iters == gate.optimizer.bench_iters == 100
+        for comparison in (
+            settings.campaign.kernel_retention_comparison,
+            settings.campaign.agent_promotion_comparison,
+        ):
+            assert comparison.method == "same_allocation_abba"
+            assert comparison.max_parallel_shape_batches == 16
         campaign = load_campaign_spec(example / "campaign.json")
         assert campaign.evaluation_contract.is_relative_to(shared)
         assert campaign.agent_problem is not None

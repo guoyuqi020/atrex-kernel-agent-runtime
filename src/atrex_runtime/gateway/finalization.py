@@ -32,6 +32,7 @@ from .execution import (
     store_gateway_result,
     submit_agate_job,
 )
+from .job_recovery import JobExecution, run_with_log_recovery
 from .production_policy import ProductionKernelPolicy
 from .protocol import EvaluationV2
 from .repeated_evaluate import aggregate_evaluations, repeated_evaluate_result
@@ -72,7 +73,7 @@ class AgateAuthoritativeCandidateEvaluator:
             BootstrapEvaluationStage(1),
             BootstrapEvaluationStage(5),
         ),
-        bootstrap_bench_iters: int = 5,
+        bootstrap_bench_iters: int = 100,
         profile_without_roofline: bool = False,
         production_policy: ProductionKernelPolicy | None = None,
         clock: Callable[[], datetime] = _utc_now,
@@ -388,23 +389,27 @@ class AgateAuthoritativeCandidateEvaluator:
         event_base: dict[str, object],
     ) -> tuple[JsonValue, str | None, EvaluationV2]:
         """Submit, await, and parse one authoritative ordinary Evaluate job."""
+        async def execute(submission: dict[str, object]) -> JobExecution:
+            accepted = await self._submit("eval", submission)
+            job_id = accepted.get("job_id")
+            if not isinstance(job_id, str) or not job_id:
+                raise InfrastructureError("authoritative Agate acceptance has no job_id")
+            self._events.record_runtime_event(
+                "gateway.authoritative_evaluation_submitted",
+                attempt_id,
+                {**event_base, "agate_job_id": job_id},
+            )
+            job = await self._wait_for_job(job_id)
+            return job_id, job
+
         try:
-            accepted = await self._submit("eval", payload)
+            job_id, job = await run_with_log_recovery(payload, execute)
         except AgateCandidateRejection as rejection:
             return (
                 {"status": "rejected", "error": rejection.payload},
                 None,
                 EvaluationV2(correct=False, latency_us=None),
             )
-        job_id = accepted.get("job_id")
-        if not isinstance(job_id, str) or not job_id:
-            raise InfrastructureError("authoritative Agate acceptance has no job_id")
-        self._events.record_runtime_event(
-            "gateway.authoritative_evaluation_submitted",
-            attempt_id,
-            {**event_base, "agate_job_id": job_id},
-        )
-        job = await self._wait_for_job(job_id)
         status = job.get("status")
         if status not in _TERMINAL:
             raise InfrastructureError("authoritative Agate job did not reach a terminal state")
@@ -432,8 +437,8 @@ class AgateAuthoritativeCandidateEvaluator:
                 "top_kernels": 10,
             }
         )
-        try:
-            accepted = await self._submit("profile", payload)
+        async def execute(submission: dict[str, object]) -> JobExecution:
+            accepted = await self._submit("profile", submission)
             job_id = accepted.get("job_id")
             if not isinstance(job_id, str) or not job_id:
                 raise InfrastructureError("authoritative Agate Profile acceptance has no job_id")
@@ -447,6 +452,10 @@ class AgateAuthoritativeCandidateEvaluator:
                 },
             )
             job = await self._wait_for_job(job_id)
+            return job_id, job
+
+        try:
+            job_id, job = await run_with_log_recovery(payload, execute)
             if job.get("status") not in _TERMINAL:
                 raise InfrastructureError("authoritative Agate Profile did not terminate")
             self._events.record_runtime_event(

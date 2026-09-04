@@ -183,7 +183,7 @@ def _write_config(tmp_path: Path) -> Path:
                                 {"correctness_cases": 1, "evaluate_repeats": 1},
                                 {"correctness_cases": 5, "evaluate_repeats": 1},
                             ],
-                            "bench_iters": 5,
+                            "bench_iters": 100,
                         },
                         "retention": {"correctness_cases": 1, "bench_iters": 100},
                         "warmup_iters": 10,
@@ -439,7 +439,7 @@ def test_campaign_config_uses_atrex_kernel_agent_gate_policy(tmp_path: Path) -> 
     assert [
         (stage.correctness_cases, stage.evaluate_repeats) for stage in gate.bootstrap.stages
     ] == [(1, 1), (5, 1)]
-    assert gate.bootstrap.bench_iters == 5
+    assert gate.bootstrap.bench_iters == 100
     assert gate.retention.correctness_cases == 1
     assert gate.retention.bench_iters == 100
     assert gate.production_gate is False

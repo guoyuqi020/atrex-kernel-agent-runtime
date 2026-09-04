@@ -217,6 +217,10 @@ class Registry(Protocol):
 
     def fail_epoch(self, epoch_id: EpochId, reason: str) -> None: ...
 
+    def stop_epoch(self, epoch_id: EpochId, reason: str) -> Epoch: ...
+
+    def resume_stopped_epoch(self, epoch_id: EpochId) -> Epoch: ...
+
     def recover_failed_epoch(
         self,
         epoch_id: EpochId,

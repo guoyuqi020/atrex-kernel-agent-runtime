@@ -147,6 +147,14 @@ complete `start` command. A task owns its inputs, per-DSL definitions/results/lo
 workspaces, and `campaign-run/` lifecycle state. Registry, Gateway/Agate Job databases, Artifact
 Store, signing secrets, and Wiki belong to the service workspace.
 
+After confirming process exit, `stop` records unfinished Epochs as `stopped` and running Attempts
+and Worker Sessions as `interrupted`, including the workspace's ablation arms. Completed results
+remain intact; interruption does not consume infrastructure retries. Restart restores the saved
+Epoch phase and retries interrupted Attempts with the same ID and a new generation/session.
+Already registered Kernels continue validation without rerunning the Optimizer. Repeated stops
+are safe and reconcile the Registry even when processes have already exited; reconciliation failure
+does not report successful completion of the stop procedure. Shared services remain running.
+
 ## Self-contained task
 
 For a single task that manages its own Runtime/Wiki:

@@ -103,7 +103,7 @@ async def test_shape_batch_executor_preserves_single_job_result() -> None:
             {"all_pass": True},
         )
 
-    result = await executor.run(_contract(4), "original-key", evaluate)
+    result = await executor.run(_contract(1), "original-key", evaluate)
 
     assert result.job is raw
     assert result.job_id == "only"
@@ -178,22 +178,51 @@ async def test_shape_batch_executor_stops_on_candidate_rejection() -> None:
 
 
 @pytest.mark.anyio
-async def test_one_agate_job_carries_every_shape_by_default() -> None:
+async def test_default_matches_abba_one_shape_and_sixteen_workers() -> None:
+    from atrex_runtime.config import SameAllocationAbbaComparisonSettings
+
     executor = ShapeBatchedEvaluateExecutor()
+    seen: list[ShapeBatch] = []
+    active = 0
+    peak = 0
+
+    async def evaluate(batch: ShapeBatch) -> ShapeBatchOutcome:
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        seen.append(batch)
+        await anyio.sleep(0.01)
+        active -= 1
+        return ShapeBatchOutcome(
+            {"job_id": f"job-{batch.index}", "status": "succeeded"},
+            EvaluationV2(correct=True, latency_us=5.0),
+            f"job-{batch.index}",
+            {"all_pass": True},
+        )
+
+    result = await executor.run(_contract(32), "logical-eval", evaluate)
+
+    abba = SameAllocationAbbaComparisonSettings(method="same_allocation_abba")
+    assert len(seen) == 32
+    assert peak == abba.max_parallel_shape_batches == 16
+    assert all(len(batch.shape_ids) == abba.shape_batch_size == 1 for batch in seen)
+    assert {batch.shape_ids[0] for batch in seen} == {str(index) for index in range(32)}
+    assert len({batch.idempotency_key for batch in seen}) == 32
+    assert all(batch.contract.lock_clocks for batch in seen)
+    assert all(batch.contract.metadata["num_shapes"] == 1 for batch in seen)
+    assert all(set(batch.contract.roofline["shapes"]) == set(batch.shape_ids) for batch in seen)
+    assert result.job_id is None
+    assert result.evaluation.latency_us == pytest.approx(5)
+
+
+@pytest.mark.anyio
+async def test_explicit_unsplit_executor_still_uses_one_job() -> None:
     seen: list[ShapeBatch] = []
 
     async def evaluate(batch: ShapeBatch) -> ShapeBatchOutcome:
         seen.append(batch)
-        return ShapeBatchOutcome(
-            {"job_id": "single", "status": "succeeded"},
-            EvaluationV2(correct=True, latency_us=5.0),
-            "single",
-            {"all_pass": True},
-        )
+        return ShapeBatchOutcome({}, EvaluationV2(correct=True, latency_us=5))
 
-    result = await executor.run(_contract(90), "one-job", evaluate)
-
+    await ShapeBatchedEvaluateExecutor(shape_batch_size=None).run(_contract(14), "key", evaluate)
     assert len(seen) == 1
-    assert len(seen[0].shape_ids) == 90
-    assert seen[0].idempotency_key == "one-job"
-    assert result.job_id == "single"
+    assert len(seen[0].shape_ids) == 14

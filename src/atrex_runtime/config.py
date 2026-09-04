@@ -605,7 +605,7 @@ class SameAllocationAbbaComparisonSettings(BaseModel):
     minimum_improvement_percent: float = Field(default=0.0, ge=0, lt=100)
     allocation_timeout_seconds: int = Field(default=600, gt=0)
     shape_batch_size: int = Field(default=1, gt=0)
-    max_parallel_shape_batches: int = Field(default=8, gt=0)
+    max_parallel_shape_batches: int = Field(default=16, gt=0)
 
 
 ComparisonSettings = Annotated[
@@ -668,7 +668,7 @@ class BootstrapGateStageSettings(BaseModel):
 
 
 class BootstrapGateSettings(BaseModel):
-    """Ordered Bootstrap validation stages and their small timing sample."""
+    """Ordered Bootstrap validation stages and their performance sampling budget."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

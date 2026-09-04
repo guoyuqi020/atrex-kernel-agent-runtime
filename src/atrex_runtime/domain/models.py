@@ -80,6 +80,7 @@ class EpochStatus(StrEnum):
     READY = "ready"
     RUNNING = "running"
     SELECTING = "selecting"
+    STOPPED = "stopped"
     COMPLETED = "completed"
     FAILED = "failed"
 
@@ -90,6 +91,7 @@ class AttemptStatus(StrEnum):
     RUNNING = "running"
     COMPLETED = "completed"
     INFRASTRUCTURE_FAILED = "infrastructure_failed"
+    INTERRUPTED = "interrupted"
 
 
 class AttemptReportStatus(StrEnum):
@@ -136,6 +138,7 @@ class WorkerSessionStatus(StrEnum):
     COMPLETED = "completed"
     FAILED = "failed"
     TIMED_OUT = "timed_out"
+    INTERRUPTED = "interrupted"
 
 
 @dataclass(frozen=True, slots=True)

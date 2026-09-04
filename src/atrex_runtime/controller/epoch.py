@@ -146,6 +146,8 @@ class EpochController:
             )
             self._registry.insert_epoch(epoch)
 
+        if epoch.status is EpochStatus.STOPPED:
+            epoch = self._registry.resume_stopped_epoch(epoch.id)
         if epoch.status is EpochStatus.FAILED:
             raise InvalidTransitionError(f"Epoch {epoch.id} has failed")
         if epoch.status is EpochStatus.BUILDING_CHALLENGER:

@@ -511,6 +511,44 @@ async def test_abba_poll_error_retries_with_a_fresh_job(
 
 
 @pytest.mark.anyio
+async def test_abba_lost_logs_resubmit_beyond_general_retry_ceiling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    delays: list[float] = []
+    polled: list[str] = []
+
+    async def sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
+
+    class LostLogsClient(FakeAgateClient):
+        def get_job(
+            self, job_id: str, wait: bool = False, timeout: float = 30,
+            include_spec: bool = False,
+        ) -> dict[str, object]:
+            polled.append(job_id)
+            if int(job_id.rsplit("_", 1)[1]) < 11:
+                return {
+                    "job_id": job_id, "status": "failed",
+                    "error": {"error_class": "infra", "reason": "logs_unavailable",
+                              "details": {"backend_state": "succeeded"}},
+                }
+            return super().get_job(job_id, wait, timeout, include_spec)
+
+    client = LostLogsClient()
+    result, journal = await _run_pair(client, tmp_path)
+    assert len(client.requests) == 13  # Two successful batches and eleven lost executions.
+    assert len(polled) == len(set(polled)) == 13
+    assert len(delays) == 11 and max(delays) == 60
+    replacements = [r for r in client.requests if "idempotency_key" in r]
+    assert len({r["idempotency_key"] for r in replacements}) == 11
+    assert len([e for e in journal.events if e[0] == "comparison.abba_batch_submitted"]) == 13
+    assert not any(e[0] == "comparison.abba_batch_retried" for e in journal.events)
+    assert all(run.correct for run in result.candidate_runs)
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "failure", ("submit_error", "missing_job_id", "nonterminal", "malformed_payload")
 )

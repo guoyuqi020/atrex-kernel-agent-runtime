@@ -35,6 +35,7 @@ from .contract import (
     AgateEvaluationContractV1,
 )
 from .control_models import GatewayOperation
+from .job_recovery import JobExecution, run_with_log_recovery
 from .private_results import (
     project_candidate_rejection,
     project_compile_job,
@@ -501,12 +502,40 @@ class AgateGatewayAdapter:
         binding_key: str,
         expected_shape_ids: tuple[str, ...] | None = None,
     ) -> GatewayAdapterResult:
-        """Submit and await one concrete Agate job."""
-        try:
+        """Submit and await a Job, replacing only lost-log executions."""
+
+        async def execute(submission: dict[str, object]) -> JobExecution:
             acceptance = await self._call(
-                lambda: self._client.submit_job(kind, payload),
+                lambda: self._client.submit_job(kind, submission),
                 validation_is_candidate=True,
             )
+            job_id = acceptance.get("job_id")
+            if not isinstance(job_id, str) or not job_id:
+                raise InfrastructureError("Agate acceptance did not contain a valid job_id")
+            self._jobs.bind(
+                AgateJobBinding(
+                    job_id,
+                    request.attempt_id,
+                    (
+                        str(submission["idempotency_key"])
+                        if submission.get("idempotency_key") != payload.get("idempotency_key")
+                        else binding_key
+                    ),
+                    kind,
+                    request.operation,
+                )
+            )
+            job = await self._call(
+                lambda: self._client.get_job(
+                    job_id,
+                    wait=True,
+                    timeout=self._wait_timeout_s,
+                )
+            )
+            return job_id, job
+
+        try:
+            _, job = await run_with_log_recovery(payload, execute)
         except AgateCandidateRejection as rejection:
             rejected: JsonValue = {"status": "rejected", "error": rejection.payload}
             return GatewayAdapterResult(
@@ -519,29 +548,10 @@ class AgateGatewayAdapter:
                 ),
                 worker_result=project_candidate_rejection(rejection.payload),
             )
-        job_id = acceptance.get("job_id")
-        if not isinstance(job_id, str) or not job_id:
-            raise InfrastructureError("Agate acceptance did not contain a valid job_id")
-        binding = self._jobs.bind(
-            AgateJobBinding(
-                job_id,
-                request.attempt_id,
-                binding_key,
-                kind,
-                request.operation,
-            )
-        )
-        job = await self._call(
-            lambda: self._client.get_job(
-                job_id,
-                wait=True,
-                timeout=self._wait_timeout_s,
-            )
-        )
         expected = expected_shape_ids
-        if expected is None and binding.operation is GatewayOperation.EVALUATE:
+        if expected is None and request.operation is GatewayOperation.EVALUATE:
             expected = tuple(context.contract.shapes)
-        return self._map_job(job, binding.operation, expected)
+        return self._map_job(job, request.operation, expected)
 
     async def _submit_batched_evaluate(
         self,
@@ -654,9 +664,9 @@ class AgateGatewayAdapter:
                 "top_kernels": 10,
             }
         )
-        try:
+        async def execute(submission: dict[str, object]) -> JobExecution:
             acceptance = await self._call(
-                lambda: self._client.submit_job("profile", payload),
+                lambda: self._client.submit_job("profile", submission),
                 validation_is_candidate=True,
             )
             job_id = acceptance.get("job_id")
@@ -666,7 +676,7 @@ class AgateGatewayAdapter:
                 AgateJobBinding(
                     job_id,
                     request.attempt_id,
-                    profile_key,
+                    str(submission["idempotency_key"]),
                     "profile",
                     GatewayOperation.PROFILE,
                 )
@@ -678,6 +688,10 @@ class AgateGatewayAdapter:
                     timeout=self._wait_timeout_s,
                 )
             )
+            return job_id, job
+
+        try:
+            _, job = await run_with_log_recovery(payload, execute)
             if job.get("status") not in _TERMINAL_STATUSES:
                 raise InfrastructureError("Agate Profile did not reach a terminal state")
             return job

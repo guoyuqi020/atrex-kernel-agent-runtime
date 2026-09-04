@@ -35,6 +35,7 @@ from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContextResolver
 from .correctness import merge_correctness_summaries
 from .execution import call_agate_json
+from .job_recovery import JobExecution, run_with_log_recovery
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 # One transient Agate batch used to fail the whole Epoch selection, discarding every sibling
@@ -496,27 +497,31 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             "dev_intent": "custom_harness",
             "dev_note": "trusted same-allocation ABBA performance gate",
         }
-        accepted = await self._call(lambda: self._client.submit_job("dev", dev_request))
-        job_id = accepted.get("job_id")
-        if not isinstance(job_id, str) or not job_id:
-            raise InfrastructureError("Agate ABBA acceptance has no job_id")
-        self._journal.record_runtime_event(
-            "comparison.abba_batch_submitted",
-            candidate.id,
-            {
-                "comparison_id": comparison_id,
-                "batch_index": batch_index,
-                "purpose": purpose.value,
-                "incumbent_kernel_revision_id": incumbent.id,
-                "candidate_kernel_revision_id": candidate.id,
-                "shape_count": len(shape_ids),
-                "agate_job_id": job_id,
-                "operator": context_name,
-            },
-        )
-        job = await self._call(
-            lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
-        )
+        async def execute(submission: dict[str, object]) -> JobExecution:
+            accepted = await self._call(lambda: self._client.submit_job("dev", submission))
+            job_id = accepted.get("job_id")
+            if not isinstance(job_id, str) or not job_id:
+                raise InfrastructureError("Agate ABBA acceptance has no job_id")
+            self._journal.record_runtime_event(
+                "comparison.abba_batch_submitted",
+                candidate.id,
+                {
+                    "comparison_id": comparison_id,
+                    "batch_index": batch_index,
+                    "purpose": purpose.value,
+                    "incumbent_kernel_revision_id": incumbent.id,
+                    "candidate_kernel_revision_id": candidate.id,
+                    "shape_count": len(shape_ids),
+                    "agate_job_id": job_id,
+                    "operator": context_name,
+                },
+            )
+            job = await self._call(
+                lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
+            )
+            return job_id, job
+
+        _, job = await run_with_log_recovery(dev_request, execute)
         if job.get("status") not in _TERMINAL:
             raise InfrastructureError("Agate ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:

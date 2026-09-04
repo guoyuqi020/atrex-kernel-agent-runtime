@@ -2215,7 +2215,10 @@ class SqliteGatewayControl(AttemptOutcomeSource):
 
     def _subject_generation(self, attempt_id: AttemptId) -> int:
         try:
-            return self._registry.get_attempt(attempt_id).recovery_generation
+            attempt = self._registry.get_attempt(attempt_id)
+            if attempt.status is AttemptStatus.INTERRUPTED:
+                raise PermissionError("Attempt is interrupted; resume before using Runtime tools")
+            return attempt.recovery_generation
         except KeyError:
             self.get_bootstrap_subject(attempt_id)
             with self._lock:

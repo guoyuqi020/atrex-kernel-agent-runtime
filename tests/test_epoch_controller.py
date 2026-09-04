@@ -14,7 +14,12 @@ from conftest import NOW, FakeAttemptEvidence, digest, seed_lineage
 
 from atrex_runtime.controller import EpochController
 from atrex_runtime.domain.errors import InfrastructureError, InvalidTransitionError
-from atrex_runtime.domain.ids import AttemptId, KernelAgentRevisionId, new_kernel_revision_id
+from atrex_runtime.domain.ids import (
+    AttemptId,
+    KernelAgentRevisionId,
+    new_kernel_revision_id,
+    new_worker_session_id,
+)
 from atrex_runtime.domain.models import (
     AgentSelectionReason,
     AttemptReportStatus,
@@ -26,7 +31,11 @@ from atrex_runtime.domain.models import (
     KernelRevision,
     LineageStatus,
     TokenUsage,
+    WorkerSession,
+    WorkerSessionRole,
+    WorkerSessionStatus,
 )
+from atrex_runtime.gateway.control import SqliteGatewayControl
 from atrex_runtime.ports import (
     AttemptCandidateResult,
     BuildChallengerRequest,
@@ -61,6 +70,74 @@ class FakeEvolver:
             ),
             digest("evolution-trace"),
         )
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("legacy_schema", [False, True])
+async def test_managed_stop_preserves_completed_attempt_and_resumes_interrupted_generation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, legacy_schema: bool,
+) -> None:
+    database = tmp_path / "runtime.db"
+    with monkeypatch.context() as patch:
+        if legacy_schema:
+            patch.setattr("atrex_runtime.registry.sqlite.migrate_stops", lambda _connection: None)
+        with SqliteRegistry(database) as registry:
+            seeded = seed_lineage(registry, challenger_count=0)
+            controller = EpochController(
+                registry, FakeEvolver(),
+                ScriptedOptimizer(seeded.active_revision_id,
+                                  active=[candidate("kept", 90), RuntimeError("killed")],
+                                  challenger=[]),
+                FakeAttemptEvidence(),
+            )
+            with pytest.raises(RuntimeError, match="killed"):
+                await controller.run_epoch(seeded.lineage_id, 1)
+
+    with SqliteRegistry(database) as registry:
+        epoch = registry.find_epoch(seeded.lineage_id, 1)
+        assert epoch is not None
+        completed, running = registry.list_attempts(epoch.id)
+        session_id = new_worker_session_id()
+        registry.start_worker_session(WorkerSession(
+            id=session_id, role=WorkerSessionRole.OPTIMIZER, subject_id=running.id,
+            external_run_id="old-run", workspace_path=str(tmp_path),
+            status=WorkerSessionStatus.RUNNING, started_at=NOW, attempt_id=running.id,
+        ))
+        registry.acquire_lineage_fence(
+            seeded.lineage_id, "dead-scheduler", now=NOW,
+            lease_expires_at="2999-01-01T00:00:00+00:00",
+        )
+        assert registry.stop_epoch(epoch.id, "operator stop").status is EpochStatus.STOPPED
+        registry.stop_epoch(epoch.id, "operator stop")  # Idempotent.
+        assert registry.get_attempt(completed.id) == completed
+        interrupted = registry.get_attempt(running.id)
+        assert interrupted.status is AttemptStatus.INTERRUPTED
+        control = SqliteGatewayControl(tmp_path / "gateway.db", registry, signing_key=b"s" * 32)
+        with pytest.raises(PermissionError, match="interrupted"):
+            control.current_generation(running.id)
+        control.close()
+        assert interrupted.recovery_generation == running.recovery_generation
+        assert interrupted.infrastructure_failures == running.infrastructure_failures
+        assert registry.get_worker_session(session_id).status is WorkerSessionStatus.INTERRUPTED
+        registry.acquire_lineage_fence(
+            seeded.lineage_id, "new-scheduler", now=NOW,
+            lease_expires_at="2999-01-01T00:00:00+00:00",
+        )  # Old lease was invalidated even if its original expiration was in the future.
+        optimizer = ScriptedOptimizer(seeded.active_revision_id,
+                                      active=[candidate("resumed", 80)], challenger=[])
+        result = await EpochController(
+            registry, FakeEvolver(), optimizer, FakeAttemptEvidence(),
+        ).run_epoch(seeded.lineage_id, 1)
+        assert result.epoch.status is EpochStatus.COMPLETED
+        assert optimizer.calls[BranchRole.ACTIVE] == [running.id]
+        assert (
+            registry.get_attempt(running.id).recovery_generation == running.recovery_generation + 1
+        )
+        assert registry.get_attempt(completed.id) == completed
+        assert registry.stop_epoch(epoch.id, "stop completed").status is EpochStatus.COMPLETED
+        assert registry.resume_stopped_epoch(epoch.id).status is EpochStatus.COMPLETED
+    with closing(sqlite3.connect(database)) as connection:
+        assert not connection.execute("PRAGMA foreign_key_check").fetchall()
 
 
 class NoChangeEvolver(FakeEvolver):
@@ -1022,6 +1099,8 @@ async def test_running_attempt_resumes_without_repeating_registered_kernel(
         )
     )
 
+    registry.stop_epoch(epoch.id, "stop before pending Kernel acceptance")
+    assert registry.get_attempt(interrupted.id).status is AttemptStatus.INTERRUPTED
     resumed_optimizer = ScriptedOptimizer(
         seeded.active_revision_id,
         active=[candidate("active-second", 90)],

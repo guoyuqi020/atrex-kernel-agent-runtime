@@ -25,6 +25,7 @@ from .execution import (
     store_gateway_result,
     submit_agate_job,
 )
+from .job_recovery import JobExecution, run_with_log_recovery
 from .production_policy import ProductionKernelPolicy
 from .protocol import EvaluationV2
 
@@ -115,30 +116,34 @@ class AgateLineageSeedEvaluator:
                 name=f"{campaign.operator}_{lineage_id}_seed_batch_{batch.index}",
                 idempotency_key=batch.idempotency_key,
             )
+            async def execute(submission: dict[str, object]) -> JobExecution:
+                accepted = await self._submit("eval", submission)
+                job_id = accepted.get("job_id")
+                if not isinstance(job_id, str) or not job_id:
+                    raise InfrastructureError("Lineage seed Agate acceptance has no job_id")
+                self._events.record_runtime_event(
+                    "lineage_seed.evaluation_submitted",
+                    lineage_id,
+                    {
+                        "campaign_id": campaign_id,
+                        "kernel_artifact_digest": kernel_artifact_digest,
+                        "agate_job_id": job_id,
+                        "shape_batch": batch.index,
+                        "shape_ids": list(batch.shape_ids),
+                    },
+                )
+                job = await self._call(
+                    lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
+                )
+                return job_id, job
+
             try:
-                accepted = await self._submit("eval", payload)
+                job_id, job = await run_with_log_recovery(payload, execute)
             except AgateCandidateRejection as rejection:
                 return ShapeBatchOutcome(
                     {"status": "rejected", "error": rejection.payload},
                     EvaluationV2(correct=False, latency_us=None),
                 )
-            job_id = accepted.get("job_id")
-            if not isinstance(job_id, str) or not job_id:
-                raise InfrastructureError("Lineage seed Agate acceptance has no job_id")
-            self._events.record_runtime_event(
-                "lineage_seed.evaluation_submitted",
-                lineage_id,
-                {
-                    "campaign_id": campaign_id,
-                    "kernel_artifact_digest": kernel_artifact_digest,
-                    "agate_job_id": job_id,
-                    "shape_batch": batch.index,
-                    "shape_ids": list(batch.shape_ids),
-                },
-            )
-            job = await self._call(
-                lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
-            )
             if job.get("status") not in _TERMINAL:
                 raise InfrastructureError("Lineage seed Agate job did not reach a terminal state")
             evaluation = (
@@ -185,8 +190,8 @@ class AgateLineageSeedEvaluator:
                 "top_kernels": 10,
             }
         )
-        try:
-            accepted = await self._submit("profile", payload)
+        async def execute(submission: dict[str, object]) -> JobExecution:
+            accepted = await self._submit("profile", submission)
             job_id = accepted.get("job_id")
             if not isinstance(job_id, str) or not job_id:
                 raise InfrastructureError("Lineage seed Agate Profile acceptance has no job_id")
@@ -198,6 +203,10 @@ class AgateLineageSeedEvaluator:
             job = await self._call(
                 lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
             )
+            return job_id, job
+
+        try:
+            job_id, job = await run_with_log_recovery(payload, execute)
             if job.get("status") not in _TERMINAL:
                 raise InfrastructureError("Lineage seed Agate Profile did not terminate")
             self._events.record_runtime_event(

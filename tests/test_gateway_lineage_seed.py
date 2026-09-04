@@ -112,11 +112,11 @@ async def test_lineage_seed_evaluation_uses_campaign_contract_and_profiles_sol(
 
         assert result.correct is True
         assert result.latency_us == 17.5
-        assert [kind for kind, _ in client.submissions] == ["eval", "profile"]
+        assert [kind for kind, _ in client.submissions] == ["eval"] * 5 + ["profile"]
         references = [
             payload["reference"] for kind, payload in client.submissions if kind == "eval"
         ]
-        assert [len(reference["shapes"]) for reference in references] == [5]  # type: ignore[index]
+        assert [len(reference["shapes"]) for reference in references] == [1] * 5  # type: ignore[index]
         assert builder.payloads[0]["candidate"] == "class Model: pass\n"
         assert builder.payloads[0]["gpu"] == "nvidia-h100"
         assert builder.payloads[0]["spec_fields"] == {"languages": ["triton"]}

@@ -262,9 +262,38 @@ def _subject(attempt_id: object) -> BootstrapGatewaySubject:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("lost_logs", [False, True])
 async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    lost_logs: bool,
 ) -> None:
+    delays: list[float] = []
+    fetched: list[str] = []
+
+    async def sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
+
+    class Client(RepeatedFinalClient):
+        def get_job(
+            self, job_id: str, wait: bool = False, timeout: float = 30.0,
+            include_spec: bool = False,
+        ) -> dict[str, object]:
+            fetched.append(job_id)
+            job = super().get_job(job_id, wait, timeout, include_spec)
+            if lost_logs and job_id == "ev_final_0":
+                return {
+                    "job_id": job_id,
+                    "status": "failed",
+                    "error": {
+                        "error_class": "infra", "reason": "logs_unavailable",
+                        "details": {"backend_state": "succeeded"},
+                    },
+                }
+            return {**job, "result": {"all_pass": True, "latency_us_geomean": 7.5}}
+
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     control = SqliteGatewayControl(
         tmp_path / "gateway.sqlite",
@@ -298,7 +327,7 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
         latency_us=8.0,
         agate_job_id="ev_agent",
     )
-    client = FakeClient()
+    client = Client()
     events = FakeEvents()
     finalizer = AgateAuthoritativeCandidateEvaluator(
         client,  # type: ignore[arg-type]
@@ -309,7 +338,6 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
         events,
         wait_timeout_s=100.0,
         bootstrap_stages=(BootstrapEvaluationStage(1),),
-        bootstrap_bench_iters=5,
         clock=lambda: NOW,
     )
 
@@ -327,23 +355,40 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert recovered == outcome
     assert outcome.correct is True
     assert outcome.latency_us == 7.5
-    assert len(client.submitted) == 1
+    expected_jobs = 6 if lost_logs else 5
+    assert len(client.submitted) == expected_jobs
+    assert len(fetched) == len(set(fetched)) == expected_jobs
+    assert delays == ([5] if lost_logs else [])
+    assert len({r["idempotency_key"] for r in client.submitted}) == expected_jobs
     assert [
         len(request["reference"]["shapes"])
         for request in client.submitted  # type: ignore[index]
-    ] == [5]
+    ] == [1] * expected_jobs
+    if lost_logs:
+        replacement = next(
+            r for r in client.submitted if str(r["idempotency_key"]).startswith("logs-retry:")
+        )
+        assert {k: v for k, v in replacement.items() if k != "idempotency_key"} == {
+            k: v for k, v in client.submitted[0].items() if k != "idempotency_key"
+        }
     assert client.submitted[0]["gpu"] == "L20N"
     options = client.submitted[0]["options"]
     assert isinstance(options, dict)
-    assert options["bench_iters"] == 5
+    assert options["bench_iters"] == 100
+    raw = json.loads(
+        (artifacts.verify(outcome.gateway_result_digest).payload_path / "value.json").read_text()
+    )
+    assert raw["bench_iters"] == 100
+    batches = raw["completed_stages"][0]["job"]
+    assert batches["shape_batch_size"] == 1
+    assert batches["max_parallel_shape_batches"] == 16
     evaluations = control.list_evaluations(attempt_id)
     assert [item.source.value for item in evaluations] == ["agent", "runtime_final"]
     assert evaluations[-1].kernel_artifact_digest == candidate_digest
     assert control.get_committed_outcome(attempt_id) == outcome
     assert [kind for kind, _aggregate, _payload in events.values] == [
         "gateway.authoritative_evaluation_submitted",
-        "gateway.authoritative_evaluation_completed",
-    ]
+    ] * expected_jobs + ["gateway.authoritative_evaluation_completed"]
     control.close()
     registry.close()
 
@@ -533,6 +578,8 @@ async def test_finalizer_runs_ordered_atrex_bootstrap_stages_and_uses_second_lat
     assert raw["latency_source_stage"] == 1
     assert [stage["correctness_cases"] for stage in raw["completed_stages"]] == [1, 5]
     assert [request["options"]["num_correctness_cases"] for request in client.submitted] == [1, 5]
+    assert [request["options"]["bench_iters"] for request in client.submitted] == [100, 100]
+    assert raw["bench_iters"] == 100
     control.close()
     registry.close()
 

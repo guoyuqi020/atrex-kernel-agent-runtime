@@ -31,6 +31,13 @@ Core 与 Evolver 是部署批准、按完整 Commit 固定的 Git 仓库；相�
    失败后不再放弃，而是每隔 60 秒持续重试，直至成功。一次成功会让下一次请求重新计数。
    不可重试的 4xx 校验或鉴权错误仍立即返回，因为必须修改请求才能成功。编译失败、正确性失败等
    Job 终态属于结果，不会被该策略重新提交。周期性健康观测仍是有界单次探针，不持有 Campaign 工作。
+   日志收集失败有一个例外：Job `status=failed`、`error_class=infra`、
+   `reason=logs_unavailable` 且 `error.details.backend_state=succeeded` 时，
+   提交并等待结果时，Runtime 使用新的幂等键重新提交相同任务，获取并等待新的 Job ID，
+   不再查询失败的旧 Job。依次等待 5、10、20、40 秒，之后每 60 秒持续重提，直到恢复或取消。
+   Evaluate 只重提失败的 Shape 批次；Profile、Dev、Check、Disassemble、Bootstrap、Seed 评测
+   和 ABBA 也适用。每个新 Job 都正常绑定或记录提交事件。显式 Poll 仍只读；其他 Job 结果、
+   网络请求重试和 Agent 错误返回格式不变。
 6. 执行 Campaign schema-v3 Bootstrap 时保持 Runtime、Gateway 和可选 Wiki 可用；Core Baseline
    Session 会回调 Runtime。
 7. 使用绝对目标 Epoch 调度 Campaign。GPU Wiki 只需运行查询服务；Runtime 没有 Feedback Drainer

@@ -16,7 +16,8 @@ from .correctness import merge_correctness_summaries
 from .private_results import project_candidate_rejection
 from .protocol import EvaluationV2
 
-EVALUATE_MAX_PARALLEL_BATCHES = 8
+EVALUATE_MAX_PARALLEL_BATCHES = 16
+EVALUATE_SHAPE_BATCH_SIZE = 1
 CANDIDATE_REJECTED_CATEGORY = "candidate_rejected"
 
 
@@ -52,12 +53,12 @@ class BatchedEvaluateOutcome:
 
 
 class ShapeBatchedEvaluateExecutor:
-    """Submit one Agate job per Evaluate, or a bounded Shape split when asked."""
+    """Submit one Shape per Agate job with at most sixteen concurrent batches by default."""
 
     def __init__(
         self,
         *,
-        shape_batch_size: int | None = None,
+        shape_batch_size: int | None = EVALUATE_SHAPE_BATCH_SIZE,
         max_parallel_batches: int = EVALUATE_MAX_PARALLEL_BATCHES,
     ) -> None:
         if max_parallel_batches <= 0 or (shape_batch_size is not None and shape_batch_size <= 0):

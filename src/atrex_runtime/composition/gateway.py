@@ -47,7 +47,7 @@ def compose_authoritative_candidate_evaluator(
                 for stage in gate_policy.bootstrap.stages
             )
         ),
-        bootstrap_bench_iters=(5 if gate_policy is None else gate_policy.bootstrap.bench_iters),
+        bootstrap_bench_iters=(100 if gate_policy is None else gate_policy.bootstrap.bench_iters),
         profile_without_roofline=True,
         production_policy=production_policy or ProductionKernelPolicy(),
     )

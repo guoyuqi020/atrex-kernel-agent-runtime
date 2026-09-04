@@ -274,6 +274,12 @@ bash scripts/production/campaign.sh restart --workspace /data/atrex/tasks/flash-
 Sandbox 与 Agent 子进程，但不会影响共享 Runtime/Wiki。`restart` 复用持久化的精确启动参数和
 绝对目标 Epoch；若要修改目标 Epoch，请先 `stop`，再用新的完整 `start` 命令启动。
 
+确认进程退出后，`stop` 将本工作区主线及消融臂的未完成 Epoch 标记为 `stopped`，正在执行的
+Attempt 和 Worker Session 标记为 `interrupted`。已完成结果不变；中断不消耗基础设施重试次数。
+重新启动会恢复 Epoch 停止前的阶段，被中断的 Attempt 保留 ID、以新 generation/session 重试。
+已注册的 Kernel 会继续完成后续验收，不重复调用 Optimizer。重复 `stop` 安全，即使进程已经
+退出也会核对 Registry；Registry 更新失败时不会宣告停止流程成功。共享服务不受影响。
+
 任务 Workspace 拥有独立的配置、Bootstrap 输入、结果、日志及 Agent 沙箱目录；它与常驻
 控制面共享 Registry、Gateway/Agate Job 数据库、Artifact Store、Capability 签名密钥和
 Wiki。`campaign.sh` 启动前会检查 Runtime `/healthz` 与 Wiki `/readyz`，任一服务不可用时

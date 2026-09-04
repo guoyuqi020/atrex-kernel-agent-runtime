@@ -25,6 +25,17 @@ Optimizer Runtime Tools 通过 `gateway-execute` 暴露 `check`、`dev`、`evalu
 Attempt 中评测多个 Candidate、将其写入 Experiment Journal，并在 `attempt-report` 中提名一个已
 评测 Candidate。
 
+## 普通 Evaluate 的 Shape 分批
+
+每轮普通 Evaluate 为每个验证 Shape 提交一个 Agate Eval Job，最多 16 批并发。默认与 ABBA 的
+单 Shape、16 批并发一致，覆盖 Optimizer 请求、Bootstrap 各阶段、Lineage Seed 和普通 Evaluate
+Comparator。Agent 仍只发起一个逻辑请求；Runtime 按批裁剪私有 Contract、对应 metadata 和
+Roofline，并在聚合 Artifact 中保留每批的 Job 与结果。
+
+全部 Shapes 必须通过正确性检查；跨 Shape 延迟取几何平均。配置的独立 Evaluate repeats
+仍对各轮聚合延迟取算术平均。各 Repeat 独立运行，16 批限制按每轮计算，不是全局 GPU 并发限制。
+ABBA 的比较配置不会改变普通 Evaluate 的上述默认分批设置。
+
 ## Correctness 与 Production Gate
 
 `gate_policy` 定义容差、Correctness Case 数、Warmup/Benchmark 预算、超时、锁频和固定的 Atrex
@@ -39,6 +50,12 @@ DSL，拒绝 PyTorch 计算回退和动态/预构建实现加载，并在存在 
 
 Bootstrap 按 `gate_policy.bootstrap` 运行有序正确性阶段。成功的终态 Candidate 成为 Lineage 内
 Kernel `v0`，此时没有 Incumbent 比较。
+
+随仓库提供的策略将 `bootstrap.bench_iters` 设为 100，与普通 Optimizer Evaluate 一致。默认两个
+阶段（先 1 case，再 5 cases）都使用该性能采样预算，并共用单 Shape、最多 16 批并发的执行器和
+Agate 重试策略。网络错误重试原请求；`logs_unavailable` 且后端成功时，只重提失败批次并获取新
+Job ID，按 5/10/20/40 秒退避，之后每 60 秒持续重试。Candidate 校验和正确性失败不按基础设施
+错误重试。
 
 普通 Attempt 使用 `kernel_retention_comparison`：
 

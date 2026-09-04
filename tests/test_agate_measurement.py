@@ -130,10 +130,10 @@ async def test_repeated_evaluate_runner_uses_sealed_kernel_and_campaign_contract
         assert first.correct is True
         assert first.latency_us == 17.5
         assert first.gateway_result_digest is not None
-        assert first.agate_job_id == "ev_measurement"
-        assert len(client.submissions) == 2
+        assert first.agate_job_id is None
+        assert len(client.submissions) == 10
         references = [payload["reference"] for _kind, payload in client.submissions]
-        assert sorted(len(reference["shapes"]) for reference in references) == [5, 5]  # type: ignore[index]
+        assert sorted(len(reference["shapes"]) for reference in references) == [1] * 10  # type: ignore[index]
         assert client.submissions[0][0] == "eval"
         assert builder.payloads[0]["candidate"] == "class Model: pass\n"
         assert builder.payloads[0]["gpu"] == "nvidia-h100"
@@ -141,12 +141,7 @@ async def test_repeated_evaluate_runner_uses_sealed_kernel_and_campaign_contract
         events = registry.list_runtime_events(after_sequence=0, limit=100)
         assert [
             event.kind for event in events if event.kind.startswith("comparison.measurement_")
-        ] == [
-            "comparison.measurement_submitted",
-            "comparison.measurement_completed",
-            "comparison.measurement_submitted",
-            "comparison.measurement_completed",
-        ]
+        ] == (["comparison.measurement_submitted"] * 5 + ["comparison.measurement_completed"]) * 2
         measurements = registry.list_kernel_measurements(revision.id)
         assert len(measurements) == 2
         assert measurements[0].purpose is KernelMeasurementPurpose.KERNEL_RETENTION

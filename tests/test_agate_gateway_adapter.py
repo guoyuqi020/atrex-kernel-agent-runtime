@@ -7,6 +7,7 @@ import json
 import math
 import sqlite3
 import threading
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -123,12 +124,19 @@ class FakeAgateClient:
     fetched: list[tuple[str, bool, float]] = field(default_factory=list)
     cancelled: list[str] = field(default_factory=list)
     environment_calls: list[tuple[str, str | None, bool]] = field(default_factory=list)
+    requests_by_job: dict[str, dict[str, object]] = field(default_factory=dict)
+    submit_lock: threading.Lock = field(default_factory=threading.Lock)
 
     def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
-        self.submitted.append((kind, request))
-        if self.submit_error is not None:
-            raise self.submit_error
-        return {"job_id": self.acceptance_job_id, "status": "queued"}
+        with self.submit_lock:
+            ordinal = len(self.submitted)
+            self.submitted.append((kind, request))
+            if self.submit_error is not None:
+                raise self.submit_error
+            job_id = self.acceptance_job_id + (f"_{ordinal}" if ordinal else "")
+            if kind == "eval":
+                self.requests_by_job[job_id] = request
+        return {"job_id": job_id, "status": "queued"}
 
     def get_job(
         self,
@@ -139,7 +147,28 @@ class FakeAgateClient:
     ) -> dict[str, object]:
         del include_spec
         self.fetched.append((job_id, wait, timeout))
-        return self.job
+        job = deepcopy(self.job)
+        if job_id in self.requests_by_job:
+            job["job_id"] = job_id
+        request = self.requests_by_job.get(job_id, {})
+        reference = request.get("reference")
+        result = job.get("result")
+        if isinstance(reference, dict) and isinstance(result, dict):
+            shapes = reference.get("shapes", {})
+            for key in ("correctness", "performance"):
+                section = result.get(key)
+                if isinstance(section, dict) and isinstance(section.get("shapes"), dict):
+                    section["shapes"] = {
+                        key: value for key, value in section["shapes"].items() if key in shapes
+                    }
+            passed = result.get("passed")
+            if isinstance(passed, dict):
+                for stage, values in passed.items():
+                    if isinstance(values, dict):
+                        passed[stage] = {
+                            key: value for key, value in values.items() if key in shapes
+                        }
+        return job
 
     def cancel_job(self, job_id: str) -> dict[str, object]:
         self.cancelled.append(job_id)
@@ -164,6 +193,8 @@ class FakeAgateClient:
 @dataclass
 class EvalProfileAgateClient(FakeAgateClient):
     def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+        if kind == "eval":
+            return super().submit_job(kind, request)
         self.submitted.append((kind, request))
         return {"job_id": "ev_test" if kind == "eval" else "pr_test", "status": "queued"}
 
@@ -176,8 +207,8 @@ class EvalProfileAgateClient(FakeAgateClient):
     ) -> dict[str, object]:
         del include_spec
         self.fetched.append((job_id, wait, timeout))
-        if job_id == "ev_test":
-            return self.job
+        if job_id.startswith("ev_test"):
+            return super().get_job(job_id, wait, timeout)
         assert job_id == "pr_test"
         return {
             "job_id": job_id,
@@ -201,6 +232,7 @@ class RepeatedEvalAgateClient(FakeAgateClient):
 
     lock: threading.Lock = field(default_factory=threading.Lock)
     latency_ms_by_job: dict[str, float] = field(default_factory=dict)
+    shape_ids_by_job: dict[str, list[str]] = field(default_factory=dict)
 
     def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
         assert kind == "eval"
@@ -209,6 +241,9 @@ class RepeatedEvalAgateClient(FakeAgateClient):
             job_id = f"ev_repeat_{ordinal}"
             self.submitted.append((kind, request))
             self.latency_ms_by_job[job_id] = float(ordinal * 2 + 1)
+            reference = request["reference"]
+            assert isinstance(reference, dict)
+            self.shape_ids_by_job[job_id] = list(reference["shapes"])
         return {"job_id": job_id, "status": "queued"}
 
     def get_job(
@@ -221,22 +256,20 @@ class RepeatedEvalAgateClient(FakeAgateClient):
         del include_spec
         self.fetched.append((job_id, wait, timeout))
         latency_ms = self.latency_ms_by_job[job_id]
+        shape_ids = self.shape_ids_by_job[job_id]
         return {
             "job_id": job_id,
             "status": "succeeded",
             "result": {
                 "passed": {
-                    "compile": {"0": {"status": "passed"}, "1": {"status": "passed"}},
-                    "correctness": {
-                        "0": {"status": "passed"},
-                        "1": {"status": "passed"},
-                    },
+                    "compile": {key: {"status": "passed"} for key in shape_ids},
+                    "correctness": {key: {"status": "passed"} for key in shape_ids},
                 },
-                "correctness": {"shapes": {"0": {"cases": []}, "1": {"cases": []}}},
+                "correctness": {"shapes": {key: {"cases": []} for key in shape_ids}},
                 "performance": {
                     "shapes": {
-                        "0": {"samples": [{"end_to_end_time_ms": latency_ms}]},
-                        "1": {"samples": [{"end_to_end_time_ms": latency_ms}]},
+                        key: {"samples": [{"end_to_end_time_ms": latency_ms}]}
+                        for key in shape_ids
                     }
                 },
             },
@@ -256,7 +289,7 @@ class BatchedEvalAgateClient(FakeAgateClient):
         shapes = reference["shapes"]
         assert isinstance(shapes, dict)
         # Batches submit concurrently, so key the stub on the batch, not on arrival order.
-        self.latency_by_job[job_id] = 2.0 if len(shapes) > 1 else 32.0
+        self.latency_by_job[job_id] = float(2 ** (int(next(iter(shapes))) + 1))
         return {"job_id": job_id, "status": "queued"}
 
     def get_job(
@@ -410,13 +443,16 @@ async def test_eval_uses_sealed_context_and_maps_raw_atrex_result(tmp_path: Path
         "failures": [],
         "latency_us_geomean": pytest.approx(math.sqrt(2000 * 4000)),
         "latency_us_by_shape": {"0": 2000.0, "1": 4000.0},
+        "shape_batch_count": 2,
         "shape_ids_are_opaque": True,
         "hidden_case_details": "shape inputs and failure details withheld",
     }
     assert client.submitted[0][0] == "eval"
-    assert client.fetched == [("ev_test", True, 1200)]
+    assert sorted(client.fetched) == [("ev_test", True, 1200), ("ev_test_1", True, 1200)]
     assert builder.calls[0]["gpu"] == "H20"
-    assert builder.calls[0]["idempotency_key"] == "candidate-1"
+    sent_keys = [payload["idempotency_key"] for _, payload in client.submitted]
+    assert len(set(sent_keys)) == 2
+    assert all(str(key).startswith("shape-batch:") for key in sent_keys)
     assert builder.calls[0]["spec_fields"] == {"languages": ["triton"]}
     assert builder.calls[0]["reference"]["metadata"]["benchmark_contract"] == {  # type: ignore[index]
         "mutates_inputs": ["state"],
@@ -459,6 +495,69 @@ async def test_eval_schedules_with_agate_gpu_while_agent_context_uses_arch(
 
     assert builder.calls[0]["gpu"] == "L20N"
     jobs.close()
+
+
+@pytest.mark.anyio
+async def test_lost_logs_resubmit_only_failed_shape_jobs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DelayedLogsClient(FakeAgateClient):
+        def get_job(
+            self, job_id: str, wait: bool = False, timeout: float = 30,
+            include_spec: bool = False,
+        ) -> dict[str, object]:
+            result = super().get_job(job_id, wait, timeout, include_spec)
+            if job_id == "ev_test":
+                return {
+                    "job_id": job_id,
+                    "status": "failed",
+                    "result": None,
+                    "error": {
+                        "error_class": "infra",
+                        "reason": "logs_unavailable",
+                        "details": {"backend_state": "succeeded", "gc_deferred": True},
+                    },
+                }
+            return result
+
+    raw = DelayedLogsClient(_successful_job())
+    delays: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
+    adapter, _, jobs = _adapter(tmp_path, raw)
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "kernel.py").write_text("class Model: pass\n")
+    attempt_id = new_attempt_id()
+    try:
+        result = await adapter.execute(
+            GatewayAdapterRequest(
+                attempt_id, GatewayOperation.EVALUATE, "delayed-logs",
+                digest("candidate"), candidate, None, None, None,
+            )
+        )
+        assert result.evaluation is not None and result.evaluation.correct
+        assert result.evaluation.latency_us == pytest.approx(math.sqrt(2000 * 4000))
+        assert len(raw.submitted) == 3  # Only the failed Shape needs a replacement.
+        assert sorted(raw.fetched) == [
+            ("ev_test", True, 1200), ("ev_test_1", True, 1200),
+            ("ev_test_2", True, 1200),
+        ]
+        assert delays == [5]
+        assert len({p["idempotency_key"] for _, p in raw.submitted}) == 3
+        replacement = next(p for _, p in raw.submitted
+                           if str(p["idempotency_key"]).startswith("logs-retry:"))
+        original = raw.requests_by_job["ev_test"]
+        assert {k: v for k, v in replacement.items() if k != "idempotency_key"} == {
+            k: v for k, v in original.items() if k != "idempotency_key"
+        }
+        for job_id, *_ in raw.fetched:
+            assert jobs.require_owned(attempt_id, job_id).attempt_id == attempt_id
+    finally:
+        jobs.close()
 
 
 @pytest.mark.anyio
@@ -527,18 +626,30 @@ async def test_eval_repetitions_run_as_independent_jobs_and_average(tmp_path: Pa
 
     assert result.evaluation is not None
     assert result.evaluation.correct is True
-    assert result.evaluation.latency_us == pytest.approx(2000.0)
-    assert len(client.submitted) == 2
+    assert len(client.submitted) == 4  # Two full repeats, each split into two Shape jobs.
     child_keys = [payload["idempotency_key"] for _kind, payload in client.submitted]
-    assert len(set(child_keys)) == 2
+    assert len(set(child_keys)) == 4
     assert isinstance(result.result, dict)
     assert result.result["repeats"] == 2
     assert len(result.result["jobs"]) == 2  # type: ignore[arg-type]
+    repeat_jobs = result.result["jobs"]
+    assert isinstance(repeat_jobs, list)
+    expected_latencies = []
+    for repeat_job in repeat_jobs:
+        assert isinstance(repeat_job, dict)
+        batches = repeat_job["batches"]
+        assert isinstance(batches, list) and len(batches) == 2
+        latencies = []
+        for batch in batches:
+            assert isinstance(batch, dict)
+            latencies.append(client.latency_ms_by_job[str(batch["agate_job_id"])] * 1000)
+        expected_latencies.append(math.sqrt(latencies[0] * latencies[1]))
+    assert result.evaluation.latency_us == pytest.approx(sum(expected_latencies) / 2)
     jobs.close()
 
 
 @pytest.mark.anyio
-async def test_optimizer_eval_sends_every_shape_in_one_job(tmp_path: Path) -> None:
+async def test_optimizer_eval_splits_shapes_and_merges_their_latencies(tmp_path: Path) -> None:
     contract = _contract().model_copy(update={"shapes": {str(index): {} for index in range(5)}})
     client = BatchedEvalAgateClient(_successful_job())
     builder = CapturingBuilder()
@@ -567,12 +678,13 @@ async def test_optimizer_eval_sends_every_shape_in_one_job(tmp_path: Path) -> No
         )
     )
 
-    assert len(client.submitted) == 1
+    assert len(client.submitted) == 5
     references = [payload["reference"] for _kind, payload in client.submitted]
-    assert [len(reference["shapes"]) for reference in references] == [5]  # type: ignore[index]
+    assert [len(reference["shapes"]) for reference in references] == [1] * 5  # type: ignore[index]
+    assert {key for reference in references for key in reference["shapes"]} == set(contract.shapes)  # type: ignore[index]
     assert result.evaluation is not None
-    assert result.evaluation.latency_us == pytest.approx(2.0)
-    assert result.job_id == "ev_batch_0"
+    assert result.evaluation.latency_us == pytest.approx(8.0)  # GeoMean(2, 4, 8, 16, 32).
+    assert result.job_id is None
     jobs.close()
 
 
@@ -606,9 +718,9 @@ async def test_eval_profiles_when_the_sealed_contract_has_no_roofline(tmp_path: 
         )
     )
 
-    assert [kind for kind, _payload in client.submitted] == ["eval", "profile"]
-    assert client.submitted[1][1]["level"] == "sol"
-    assert client.submitted[1][1]["top_kernels"] == 10
+    assert [kind for kind, _payload in client.submitted] == ["eval", "eval", "profile"]
+    assert client.submitted[-1][1]["level"] == "sol"
+    assert client.submitted[-1][1]["top_kernels"] == 10
     assert isinstance(result.profile_result, dict)
     assert result.profile_result["status"] == "succeeded"
     jobs.close()
@@ -698,7 +810,7 @@ async def test_submission_validation_rejection_is_a_candidate_outcome(tmp_path: 
             },
         },
         "rejected_batch_index": 0,
-        "shape_batch_count": 1,
+        "shape_batch_count": 2,
     }
     assert mapped.worker_result == {
         "status": "rejected",

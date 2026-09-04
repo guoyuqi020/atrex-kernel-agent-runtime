@@ -299,6 +299,8 @@ def agent_catalog_entry(
 def _attempt_disposition(attempt: Attempt) -> str:
     if attempt.status is AttemptStatus.RUNNING:
         return "running"
+    if attempt.status is AttemptStatus.INTERRUPTED:
+        return "interrupted"
     if attempt.status is AttemptStatus.INFRASTRUCTURE_FAILED:
         return "infrastructure-failed"
     if attempt.output_kernel_revision_id is not None:
