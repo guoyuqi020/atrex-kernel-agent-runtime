@@ -4,10 +4,11 @@ Read `README.md` first. This wiki is **two independent JSON record stores**, and
 which one to ask depends on whether a benchmark could prove the answer wrong.
 
 **Default door — describe your situation, do not compose a query.**
-`python3 gpu-wiki/tools/query_nl.py "<prose>"` spawns `query_bridge_agent` for one
-store-blind intent extraction. Deterministic code then normalizes, queries, safely
-widens, and returns verbatim payloads keyed by stable record id. The bridge cannot
-invoke either query tool or carry a record.
+`python3 gpu-wiki/tools/query_nl.py "<prose>"` parses AKA's standard request
+format deterministically; other prose gets one store-blind intent extraction by
+`query_bridge_agent`. Deterministic code then resolves operator aliases and
+components, queries isolated lanes, safely widens, and returns payloads keyed by
+stable record id. The bridge cannot invoke either query tool or carry a record.
 
 Every call independently attempts both `gpu_wiki` and `internal_gpu_wiki`. A missing
 directory, the tracked `SOURCE.txt` placeholder alone, an incomplete interface, or a
@@ -30,6 +31,10 @@ Do not pre-compress into keywords.
 
 Read each record's `source`, `type`, `match.arch`, and isolated `payload`, plus
 deterministic `notes`. Evidence and bridge commentary are not served.
+
+For attribution, copy the response's top-level `query_id` and each materially
+used record's own canonical `wiki_id`; never reconstruct either value from prose
+or from the backward-compatible mapping key.
 
 When a returned record materially informs an optimization decision, preserve its
 stable mapping key in that iteration's `memory/vN.json` under

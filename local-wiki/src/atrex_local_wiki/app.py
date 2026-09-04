@@ -172,7 +172,6 @@ def build_application(
         max_concurrent_queries=settings.max_concurrent_queries,
         max_results=settings.max_results,
         max_response_bytes=settings.max_response_bytes,
-        operator_families=settings.operator_families,
     )
     return LocalWikiApplication(
         index,

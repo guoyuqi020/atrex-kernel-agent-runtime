@@ -131,13 +131,15 @@ python3 agent/optimizer/src/runtime_tools.py \
   wiki-query --request scratch/wiki-query.json
 ```
 
-Agent-visible output is the upstream GPU Wiki `records/notes` envelope:
+Agent-visible output is the upstream GPU Wiki `query_id/records/notes` envelope:
 
 ```json
 {
+  "query_id": "wiki-query-0123456789abcdef0123456789abcdef",
   "records": {
     "nvidia.hopper.any.kernel-opt.mbarrier-software-pipeline.pipeline-in-gluon": {
       "store": "gpu_wiki",
+      "wiki_id": "gpu_wiki::nvidia.hopper.any.kernel-opt.mbarrier-software-pipeline.pipeline-in-gluon",
       "source": "kernel_wiki",
       "type": "technique-card",
       "applies_to": {},

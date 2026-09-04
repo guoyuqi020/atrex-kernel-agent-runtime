@@ -16,8 +16,9 @@ Runtime 已经拥有严格的实时 Query Client，但生产 GPU Wiki 由外部�
 
 本地适配器只保留 HTTP Envelope，直接执行 Commit 固定的参考 Wiki `tools/query_nl.py`，不重新
 实现 Intent 抽取、归一化、Widening、排序、硬件查询、Store 隔离或服务 Record 投影。因此 Query
-返回上游 `records`/`notes` 接口，包括按稳定 ID 索引的完整安全服务 Record。工作区 Fixture 使
-单元测试不依赖 Reference Checkout。
+返回上游 `query_id`/`records`/`notes` 接口，包括规范化的 `wiki_id` 和按稳定 ID 索引的完整安全服务
+Record。内容与 notes 不作改写；算子别名和子算子解析由复制的上游实现负责。工作区 Fixture 使
+单元测试不依赖 Reference Checkout；集成测试运行复制后的真实检索工具和语料，仅替换模型进程。
 
 固定 Reference 保持不可变，并原子同步到可写本地 Store。SQLite 只保留准确 Query 观察；服务不提供 Feedback Endpoint。
 

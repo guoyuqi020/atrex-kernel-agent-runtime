@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -32,6 +33,9 @@ from atrex_runtime.knowledge import (
 
 from atrex_local_wiki.app import LocalWikiApplication, build_application
 from atrex_local_wiki.config import LocalWikiSettings
+from atrex_local_wiki.upstream import synchronize_store
+
+CORPUS = Path(__file__).resolve().parents[1] / "corpus/gpu-wiki"
 
 
 def _digest(label: str) -> ArtifactDigest:
@@ -131,9 +135,11 @@ async def test_query_response_is_runtime_compatible_and_architecture_scoped(
             0,
             json.dumps(
                 {
+                    "query_id": "wiki-query-0123456789abcdef0123456789abcdef",
                     "records": {
                         record_id: {
                             "store": "gpu_wiki",
+                            "wiki_id": f"gpu_wiki::{record_id}",
                             "source": "kernel_wiki",
                             "type": "technique-card",
                             "applies_to": {"arch": "hopper", "dsl": "triton"},
@@ -160,8 +166,12 @@ async def test_query_response_is_runtime_compatible_and_architecture_scoped(
     records = response.content["records"]
     assert isinstance(records, dict)
     assert list(records) == [record_id]
+    assert response.content["query_id"] == "wiki-query-0123456789abcdef0123456789abcdef"
+    assert records[record_id]["wiki_id"] == f"gpu_wiki::{record_id}"
     assert Path(commands[0][1]).name == "query_nl.py"
     assert "Target hardware reported by the runtime: nvidia-h100" in commands[0][2]
+    assert "Operator: reduction." in commands[0][2]
+    assert "store family scope" not in commands[0][2]
     assert "--agent-cli" not in commands[0]
     assert "--timeout" not in commands[0]
     assert "--max-records" not in commands[0]
@@ -169,7 +179,7 @@ async def test_query_response_is_runtime_compatible_and_architecture_scoped(
 
 
 @pytest.mark.anyio
-async def test_absent_internal_store_note_is_dropped_without_hiding_a_public_outage(
+async def test_upstream_notes_are_preserved_verbatim(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -179,6 +189,7 @@ async def test_absent_internal_store_note_is_dropped_without_hiding_a_public_out
             0,
             json.dumps(
                 {
+                    "query_id": "wiki-query-0123456789abcdef0123456789abcdef",
                     "records": {},
                     "notes": [
                         "[internal_gpu_wiki] store unavailable; module returned empty",
@@ -204,6 +215,7 @@ async def test_absent_internal_store_note_is_dropped_without_hiding_a_public_out
     response = RuntimeKnowledgeSnapshotResponseV1.model_validate_json(body)
     assert isinstance(response.content, dict)
     assert response.content["notes"] == [
+        "[internal_gpu_wiki] store unavailable; module returned empty",
         "[gpu_wiki] store unavailable; module returned empty",
         "[internal_gpu_wiki] retrieval failed; module returned empty: boom",
         "[gpu_wiki] widened to any dsl",
@@ -236,7 +248,7 @@ async def test_query_execution_uses_bounded_concurrency(
             return subprocess.CompletedProcess(
                 (),
                 0,
-                json.dumps({"records": {}, "notes": []}).encode(),
+                json.dumps({"query_id": "wiki-query-test", "records": {}, "notes": []}).encode(),
                 b"",
             )
         finally:
@@ -308,3 +320,115 @@ async def test_optional_bearer_auth_and_readiness(tmp_path: Path) -> None:
     assert ready == 200
     assert json.loads(body) == {"status": "ready"}
     app.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("backend", ["claude", "qodercli"])
+@pytest.mark.parametrize("dsl", list(Dsl))
+async def test_real_corpus_query_passes_through_http_verbatim(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str, dsl: Dsl
+) -> None:
+    """Use real copied retrieval and corpus; replace only the paid model process."""
+    intent = {
+        "architecture": "sm_120",
+        "vendor": "nvidia",
+        "dsl": dsl.value,
+        "operator_terms": ["fused_moe_fp8"],
+        "component_terms": [],
+        "measured_symptoms": [],
+        "free_text_terms": [],
+        "intents": ["technique"],
+        "hardware_requests": [{"kind": "product", "value": "sm120", "field": None, "vs": None}],
+    }
+    cli = tmp_path / backend
+    envelope = json.dumps({"result": intent})
+    cli.write_text(
+        f"#!{sys.executable}\n"
+        "import sys\n"
+        "assert sys.argv[sys.argv.index('--tools') + 1] == ''\n"
+        "assert '--dangerously-skip-permissions' not in sys.argv\n"
+        "assert 'Operator: fused_moe_fp8.' in sys.argv[-1]\n"
+        "assert 'sm_120' in sys.argv[-1]\n"
+        f"print({envelope!r})\n",
+        encoding="utf-8",
+    )
+    cli.chmod(0o700)
+    monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("ATREX_WIKI_BRIDGE_CLI", backend)
+    monkeypatch.delenv("ATREX_WIKI_METRICS_LOG", raising=False)
+    monkeypatch.delenv("ATREX_WIKI_TASK_ID", raising=False)
+    settings = _settings(tmp_path).model_copy(
+        update={"reference_root": CORPUS, "agent_cli": backend, "query_timeout_seconds": 30}
+    )
+    app = build_application(settings, {})
+    original_run = subprocess.run
+    outputs: list[dict[str, Any]] = []
+
+    def capture(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
+        process = original_run(*args, **kwargs)
+        assert process.returncode == 0, process.stderr.decode()
+        outputs.append(json.loads(process.stdout))
+        return process
+
+    monkeypatch.setattr(subprocess, "run", capture)
+    query = _query().model_copy(
+        update={"dsl": dsl, "operator": "fused_moe_fp8", "hardware_target": "sm_120"}
+    )
+    try:
+        status, body = await _request(app, "/v1/knowledge/query", query.canonical_json_bytes())
+        assert status == 200, body.decode()
+        response = RuntimeKnowledgeSnapshotResponseV1.model_validate_json(body)
+        assert response.content == outputs[0]
+        content = outputs[0]
+        assert content["query_id"].startswith("wiki-query-")
+        assert content["records"]
+        assert any(record["source"] == "kernel_wiki" for record in content["records"].values())
+        assert any(record["source"] == "hardware_wiki" for record in content["records"].values())
+        for key, record in content["records"].items():
+            assert record["wiki_id"] == f"gpu_wiki::{key}"
+        # Alias resolution and component lanes now belong to AKA, not this adapter.
+        assert any("isolated scope lane" in note for note in content["notes"])
+    finally:
+        app.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "upstream",
+    [
+        {"records": {}, "notes": []},
+        {"query_id": None, "records": {}, "notes": []},
+        {"query_id": "q", "records": [], "notes": []},
+    ],
+)
+async def test_incompatible_upstream_response_reports_service_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, upstream: dict[str, Any]
+) -> None:
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *args, **kwargs: subprocess.CompletedProcess(
+            (), 0, json.dumps(upstream).encode(), b""
+        ),
+    )
+    app = build_application(_settings(tmp_path), {})
+    try:
+        status, body = await _request(app, "/v1/knowledge/query", _query().canonical_json_bytes())
+        assert status == 503
+        assert json.loads(body)["error"] == "upstream_unavailable"
+    finally:
+        app.close()
+
+
+def test_store_refreshes_when_upstream_helpers_change(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    helper = source / "operator_scope.py"
+    helper.write_text("old", encoding="utf-8")
+    store = tmp_path / "store"
+    assert synchronize_store(source, store).refreshed
+    assert not synchronize_store(source, store).refreshed
+    helper.write_text("new", encoding="utf-8")
+    assert synchronize_store(source, store).refreshed
+    assert (store / "operator_scope.py").read_text() == "new"
+    assert not synchronize_store(source, store).refreshed

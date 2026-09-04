@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import subprocess
 import threading
 from collections.abc import Mapping
@@ -12,17 +11,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .models import JsonValue, KnowledgeQueryV1
-from .operator_family import OperatorFamilyResolver
 
 
 class GpuWikiQueryError(ValueError):
     """The pinned GPU Wiki rejected or failed one natural-language query."""
-
-
-# The pinned tool probes two fixed Store slots and always reports the private
-# `internal_gpu_wiki` sibling as missing, because upstream never publishes it.
-# Matching the wording exactly keeps a genuine `gpu_wiki` outage visible.
-_ABSENT_INTERNAL_STORE_NOTE = "[internal_gpu_wiki] store unavailable; module returned empty"
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +38,6 @@ class CorpusIndex:
         max_concurrent_queries: int,
         max_results: int | None,
         max_response_bytes: int,
-        operator_families: Mapping[str, str] | None = None,
     ) -> None:
         self._root = root.resolve()
         self._python = python_executable.resolve()
@@ -59,20 +50,16 @@ class CorpusIndex:
         self._kernel_index = self._root / "kernel_wiki" / "records" / "index.json"
         self._hardware_index = self._root / "hardware_wiki" / "records" / "index.json"
         self._validate_layout()
-        self._operators = OperatorFamilyResolver.from_index(
-            self._kernel_index, declared=operator_families
-        )
 
     def check_health(self) -> None:
         """Fail when the pinned tools or either public record store disappear."""
         self._validate_layout()
 
     def query(self, request: KnowledgeQueryV1) -> GpuWikiQueryResult:
-        """Return the public ``query_nl.py`` envelope less the absent-internal-Store note."""
+        """Return the public ``query_nl.py`` envelope without rewriting its contents."""
         description = (
             f"Target hardware reported by the runtime: {request.hardware_target}. "
-            f"Required DSL: {request.dsl}. Operator: {request.operator}"
-            f"{self._operator_scope(request.operator)}. "
+            f"Required DSL: {request.dsl}. Operator: {request.operator}. "
             f"Optimization question: {request.query}"
         )
         command: list[str] = [
@@ -100,9 +87,6 @@ class CorpusIndex:
                     check=False,
                     capture_output=True,
                     timeout=outer_timeout,
-                    # The pinned query tool drives the Backend CLI with
-                    # --dangerously-skip-permissions, which the CLI refuses under uid 0.
-                    env={**os.environ, "IS_SANDBOX": "1"},
                 )
             except subprocess.TimeoutExpired as error:
                 raise GpuWikiQueryError("GPU Wiki natural-language query timed out") from error
@@ -118,29 +102,15 @@ class CorpusIndex:
                 value: object = json.loads(stdout)
             except (UnicodeDecodeError, json.JSONDecodeError) as error:
                 raise GpuWikiQueryError("GPU Wiki query returned invalid JSON") from error
-            if not isinstance(value, dict) or set(value) != {"records", "notes"}:
+            if not isinstance(value, dict) or set(value) != {"query_id", "records", "notes"}:
                 raise GpuWikiQueryError("GPU Wiki query returned an incompatible envelope")
+            if not isinstance(value["query_id"], str) or not value["query_id"]:
+                raise GpuWikiQueryError("GPU Wiki query_id must be a nonempty string")
             if not isinstance(value.get("records"), dict) or not isinstance(
                 value.get("notes"), list
             ):
                 raise GpuWikiQueryError("GPU Wiki records/notes have incompatible types")
-            value["notes"] = [
-                note for note in value["notes"] if note != _ABSENT_INTERNAL_STORE_NOTE
-            ]
             return GpuWikiQueryResult(_json_object(value), self._revision())
-
-    def _operator_scope(self, operator: str) -> str:
-        """Name the Store's own operator token so the query reaches that axis.
-
-        The pinned tool derives scope from prose alone, and its extractor is told
-        to copy the caller's spellings. A Runtime Kernel name such as
-        `fused_moe_fp8` is filed under `moe`, which the extractor cannot know, so
-        the axis stays open unless the token appears here.
-        """
-        scope = self._operators.resolve(operator)
-        if not scope.is_hard_filter:
-            return ""
-        return f" (store {scope.axis} scope: {scope.value})"
 
     def _validate_layout(self) -> None:
         required = (self._query_tool, self._kernel_index, self._hardware_index)

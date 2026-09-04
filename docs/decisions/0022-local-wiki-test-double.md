@@ -17,8 +17,11 @@ Add `local-wiki` as an independently packaged Python test service. Its productio
 The local adapter keeps only the HTTP envelope and executes the commit-pinned reference Wiki's own
 `tools/query_nl.py`; it does not reimplement intent extraction, normalization, widening, ranking,
 hardware lookup, Store isolation, or served-record projection. Query therefore returns the upstream
-`records`/`notes` interface, including complete safe served Records keyed by stable ID. A workspace
-fixture makes unit tests independent of the reference checkout.
+`query_id`/`records`/`notes` interface, including canonical `wiki_id` fields and complete safe served
+Records keyed by stable ID. Contents and notes pass through unchanged; operator aliases and
+component decomposition are owned by the copied upstream implementation. A workspace
+fixture makes unit tests independent of the reference checkout. Integration tests execute the
+vendored query tools and corpus, replacing only the model process.
 
 The pinned reference remains immutable and is atomically synchronized into a writable local Store.
 SQLite retains exact Query observations. The service has no feedback endpoint.

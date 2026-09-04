@@ -49,7 +49,7 @@ The Skills Workshop in the diagram represents three distinct responsibilities:
 
 | Skill | Input | Output |
 |---|---|---|
-| [`opt-trace-mining`](skills/opt-trace-mining/) | Git history of successive kernel versions | Candidate optimization experience |
+| [`opt-trace-mining`](skills/opt-trace-mining/) | Legacy version ladders or long-horizon Git/journal traces | Candidate optimization experience with commit-resolved provenance |
 | [`session-trace-mining`](skills/session-trace-mining/) | AI coding-agent session transcripts | Candidate agent-discovered knowledge |
 | [`wiki-gate`](skills/wiki-gate/) | One candidate record | Insert, confirm, conflict, or reject decision |
 
@@ -126,23 +126,27 @@ cannot query either Wiki store, read records, rank results, or write files.
 After the bridge returns plain JSON, deterministic code owns the rest:
 
 1. strictly validate the intent;
-2. normalize product, architecture, DSL, operator, and symptom vocabulary;
-3. construct isolated kernel and hardware lookups;
+2. normalize product, architecture, DSL, operator aliases, components, and symptoms;
+3. construct isolated operator/component lanes plus hardware lookups;
 4. widen safely without dropping the architecture boundary;
 5. execute the store-specific query tools;
 6. deduplicate, project, budget, and return the records.
 
-The Claude success path uses one tool-free bridge call. Invalid bridge JSON gets
-at most one fresh repair attempt. `claude` is the default agent CLI; `codex` and
-`qodercli` are also supported.
+AKA's standard optimizer request format is parsed deterministically and launches
+no bridge model. Other prose uses one low-effort, tool-free JSON call, with at
+most one fresh repair attempt after strict local validation. `claude` is the
+default agent CLI and `qodercli` is also supported; a CLI without a verified
+no-tools protocol is rejected.
 
-The consuming agent receives only two top-level fields:
+The consuming agent receives a per-invocation attribution id plus records and notes:
 
 ```json
 {
+  "query_id": "wiki-query-0123456789abcdef0123456789abcdef",
   "records": {
     "stable.record.id": {
       "store": "gpu_wiki",
+      "wiki_id": "gpu_wiki::stable.record.id",
       "source": "kernel_wiki",
       "type": "technique-card",
       "applies_to": {},
@@ -154,10 +158,12 @@ The consuming agent receives only two top-level fields:
 }
 ```
 
-Record IDs are stable mapping keys, and every payload remains an independent JSON
-value. Evidence, retrieval metadata, rank decomposition, bridge commentary, and
-other engine-side fields are deliberately not served, so they cannot anchor AKA's
-judgement.
+Record IDs remain stable, backward-compatible mapping keys, and every payload is
+an independent JSON value. For attribution, consumers copy the top-level
+`query_id` and a record's own canonical `wiki_id` exactly rather than reconstructing
+them from mapping keys. Evidence, retrieval metadata, rank decomposition, bridge
+commentary, and other engine-side fields are deliberately not served, so they
+cannot anchor AKA's judgement.
 
 ### Direct structured queries
 

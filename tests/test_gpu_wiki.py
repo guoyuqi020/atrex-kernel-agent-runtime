@@ -39,9 +39,11 @@ NOW_DATETIME = datetime(2026, 8, 14, tzinfo=UTC)
 
 def _snapshot_value() -> dict[str, JsonValue]:
     content: JsonValue = {
+        "query_id": "wiki-query-0123456789abcdef0123456789abcdef",
         "records": {
             "nvidia.hopper.triton.kernel-opt.reduction": {
                 "store": "gpu_wiki",
+                "wiki_id": "gpu_wiki::nvidia.hopper.triton.kernel-opt.reduction",
                 "source": "kernel_wiki",
                 "type": "technique-card",
                 "applies_to": {"arch": "hopper", "dsl": "triton"},
