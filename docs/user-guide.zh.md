@@ -80,10 +80,10 @@ Manager 管理。
 
 1. 初始化 Bundle 和固定版本的 Skills：`git submodule update --init --recursive src/kernel-design-agents`。HTTPS 不可用时，可使用仅本次命令生效的 SSH 替换：`git -c url.git@github.com:.insteadOf=https://github.com/ submodule update --init --recursive src/kernel-design-agents`。
 2. 在 Worker 使用的 Python 环境中，从 Runtime 根目录执行 `python3 -m pip install -e .`。离线 KernelWiki 查询所需的 PyYAML 已列为标准依赖；不安装本地 GPU 或 Profiler 依赖。
-3. 默认配置已包含 KDA 仓库、Skill 子模块 URL 白名单和适合完整离线 Wiki 的限额。[kernel-agent.example.json](../examples/kernel-design-agents/kernel-agent.example.json) 是使用远端仓库时对应的配置段。`git_executable` 填 `command -v git` 返回的绝对路径；相对路径按配置目录解析，不按 `PATH` 查找。
-4. 新 Campaign 的 `base_revision.commit` 固定到包含 `atrex-bundle.json` 和 `src/main.py` 的完整可执行 Commit。先提交本地修改，其他机器拉取前还需推送；不要选择原始只有工作流的版本。也支持本地源码仓库。
+3. 默认配置已包含本地 KDA Checkout、Skill 子模块声明 URL 白名单和适合完整离线 Wiki 的限额。[kernel-agent.example.json](../examples/kernel-design-agents/kernel-agent.example.json) 是可复用的对应配置段。`git_executable` 填 `command -v git` 返回的绝对路径；相对路径按配置目录解析，不按 `PATH` 查找。
+4. 新 Campaign 的 `base_revision.commit` 固定到包含 `atrex-bundle.json` 和 `src/main.py` 的完整可执行 Commit。选择前先提交本地修改。Bootstrap 要求准确 Commit 和 Skill Gitlink 已存在于本地，不会下载缺失对象。
 
-导入器展开 `KernelWiki` 和 `ncu-report-skill` 的精确 Gitlink Commit，并记录来源；拒绝未获准的 URL、链接和更深层子模块，检查 Bundle 限额。仅对外层仓库执行 `git archive` 会遗漏 Skills，不能作为完整 Bundle。默认 Optimizer Bundle 限额为 16,384 文件、128 MiB。已有 Campaign 固定版本不变。Example 准备脚本会用本地 KDA HEAD 替换模板 Commit；可执行迁移必须已提交进该 HEAD，仅存在未提交的工作树文件不够。
+导入器封存准确的本地 KDA Commit，展开本地已有的 `KernelWiki` 和 `ncu-report-skill` Gitlink Commit，并记录来源。它不执行 Fetch；缺失本地对象、未初始化或未获准的 Submodule、链接和更深层子模块都会被拒绝，同时检查 Bundle 限额。仅对外层仓库执行 `git archive` 会遗漏 Skills，不能作为完整 Bundle。默认 Optimizer Bundle 限额为 16,384 文件、128 MiB。已有 Campaign 固定版本不变。Example 准备脚本会用本地 KDA HEAD 替换模板 Commit；可执行迁移必须已提交进该 HEAD，仅存在未提交的工作树文件不够。
 
 六个可继承目录及其规则不变：Runtime 在工作区根目录播种状态后，移除只读实现副本中的重复默认内容。Claude/Codex 通过 Session 私有安装发现 Skills；其他 Backend 可以直接读取 `skills/*/SKILL.md`。语料按需读取，不拼入初始 Prompt。`skills/README.md` 说明上游示例如何遵循实际硬件、DSL 和 Gateway 约束；Profile 结果不保证提供本地 NCU 报告或 `ncu_report` 模块。工程文档不属于可继承状态。
 

@@ -4,7 +4,7 @@
   "max_entrypoint_bytes": 524288,
   "max_agent_problem_bytes": 262144,
   "base_source": {
-    "repository": "git@github.com:guoyuqi020/kernel-design-agents.git",
+    "repository": "../../src/kernel-design-agents",
     "git_executable": "/usr/bin/git",
     "fetch_timeout_seconds": 600,
     "max_archive_bytes": 268435456,

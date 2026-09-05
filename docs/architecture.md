@@ -145,10 +145,12 @@ Attempt history.
 
 ## Agent source and Runtime State
 
-One full Core commit is imported without executing repository content, checked for unsafe paths,
-links, special files, unresolved submodules, manifest violations, and size limits, then sealed as a
-complete Agent source Artifact. Git commit and Artifact digest are both retained: the commit names
-reviewed source provenance, while the digest names the exact validated snapshot.
+One full Optimizer commit is read from the initialized local checkout without executing repository
+content or accessing the network. Runtime verifies the exact commit and submodule gitlinks, rejects
+unsafe paths, links, special files, unresolved submodules, manifest violations, and size-limit
+violations, then seals a complete Agent source Artifact. Git commit and Artifact digest are both
+retained: the commit names reviewed source provenance, while the digest names the exact validated
+snapshot.
 
 Optimizer Sessions mount Agent source read-only and writable `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/`. Runtime seals the
 terminal State of every Session. Serial Attempts restore the preceding State. Evolution presents

@@ -49,9 +49,10 @@ their values.
 
 ### `kernel_agent`
 
-Agent Bundle and public-contract size limits. Optional `base_source` identifies the approved Core
-repository, Git executable, fetch/archive bounds, and explicitly allowed submodules. Bootstrap
-still supplies a full commit SHA; branches and tags are not persisted identities.
+Agent Bundle and public-contract size limits. Optional `base_source` identifies an initialized local
+Optimizer checkout, Git executable, command/archive bounds, and explicitly allowed submodule source
+identities. Bootstrap supplies a full commit SHA and archives that exact local commit without a
+fetch or other network access; branches and tags are not persisted identities.
 
 ### `gpu_wiki`
 

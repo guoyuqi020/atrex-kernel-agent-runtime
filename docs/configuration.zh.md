@@ -46,9 +46,9 @@ Agate URL、认证模式（`none`、`token` 或 `ak_sk`）、凭据环境变量�
 
 ### `kernel_agent`
 
-Agent Bundle 与公开 Contract 大小上限。可选 `base_source` 指定批准的 Core 仓库、Git 程序、
-Fetch/Archive 上限和显式允许的 Submodule。Bootstrap 仍必须提供完整 Commit SHA；Branch/Tag
-不是持久身份。
+Agent Bundle 与公开 Contract 大小上限。可选 `base_source` 指定已初始化的本地 Optimizer
+Checkout、Git 程序、命令/Archive 上限和显式允许的 Submodule 来源身份。Bootstrap 必须提供完整
+Commit SHA，并直接封存对应本地 Commit，不执行 Fetch 或其他网络访问；Branch/Tag 不是持久身份。
 
 ### `gpu_wiki`
 

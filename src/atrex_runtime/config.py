@@ -122,7 +122,7 @@ class AgateSettings(BaseModel):
 
 
 class GitOptimizerBaseSettings(BaseModel):
-    """Approved Core repository and trusted Git import process settings."""
+    """Approved local Optimizer checkout and trusted Git archive settings."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

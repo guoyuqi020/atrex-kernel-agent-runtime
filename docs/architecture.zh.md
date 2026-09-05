@@ -131,8 +131,9 @@ Campaign、Lineage 或 Attempt 历史。
 
 ## Agent Source 与 Runtime State
 
-Runtime 导入完整 Core Commit，不执行仓库内容；拒绝不安全路径、链接、特殊文件、未解析 Submodule、
-Manifest 违规和超限内容，然后封存完整 Agent Source Artifact。Git Commit 表示经审查源码来源，
+Runtime 从已初始化的本地 Checkout 读取完整 Optimizer Commit，不执行仓库内容，也不访问网络；
+它校验准确 Commit 与 Submodule Gitlink，拒绝不安全路径、链接、特殊文件、未初始化 Submodule、
+Manifest 或大小违规，随后封存完整 Agent Source Artifact。Git Commit 表示经审查源码来源，
 Artifact Digest 表示实际使用的精确校验 Snapshot，两者都保留。
 
 Optimizer Session 只读挂载 Agent Source，并提供可写 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 和 `hooks/`。Runtime 封存每个 Session

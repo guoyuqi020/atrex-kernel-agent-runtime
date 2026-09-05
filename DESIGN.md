@@ -439,8 +439,8 @@ private to Runtime.
 
 Bootstrap then:
 
-1. safely import the complete Core commit, rejecting links, unsafe paths, unapproved submodules,
-   and oversized Bundles;
+1. safely import the complete Optimizer commit from its initialized local checkout without a fetch,
+   rejecting links, unsafe paths, unapproved or missing submodules, and oversized Bundles;
 2. create a stable Bootstrap Attempt and materialize Agent Source, public contract, input Kernel,
    and Runtime Tools;
 3. launch a fresh `framework_baseline` Core Session;

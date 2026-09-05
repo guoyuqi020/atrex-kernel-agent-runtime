@@ -6,7 +6,7 @@
 
 Agate 兼容 Gateway 与生产 GPU Wiki 作为外部服务运行。部署一个 Runtime Service 和一个或多个独立 Campaign Task/Scheduler 进程。SQLite 只支持单节点部署。Runtime 数据库使用 rollback journal，因此 Runtime 与 CLI 跨进程访问 Lima `virtiofs` 工作区也是安全的；不要使用无法可靠提供 POSIX 文件锁的远端文件系统。
 
-Core 与 Evolver 是部署批准、按完整 Commit 固定的 Git 仓库；相邻 Submodule 只是开发 Checkout，不是 Runtime Import。`third_party/atrex-bench` Submodule 是 ABBA 与可选 Roofline 构建使用的本地可用、按 Commit 固定的可信 Evaluator Source。仓库验证前执行 `git submodule update --init --recursive` 初始化三者。
+Optimizer 与 Evolver 是部署批准、按完整 Commit 固定的 Git 仓库。Bootstrap 只从已初始化的本地 Checkout 导入 Optimizer 及其 Skill Submodule，绝不现场 Fetch。`third_party/atrex-bench` Submodule 是 ABBA 与可选 Roofline 构建使用的本地可用、按 Commit 固定的可信 Evaluator Source。部署准备阶段、Runtime 启动和仓库验证之前执行 `git submodule update --init --recursive`。
 
 ## 启动
 

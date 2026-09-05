@@ -93,7 +93,7 @@ def _loader(
     )
 
 
-def test_loader_fetches_exact_commit_and_seals_complete_tree(tmp_path: Path) -> None:
+def test_loader_reads_exact_local_commit_and_seals_complete_tree(tmp_path: Path) -> None:
     repository, commit = _repository(tmp_path)
     loader, artifacts = _loader(tmp_path, repository)
 
@@ -110,12 +110,35 @@ def test_loader_fetches_exact_commit_and_seals_complete_tree(tmp_path: Path) -> 
     assert value["optimizer_digest"] == result.candidate.optimizer_digest
 
 
+def test_loader_rejects_remote_repository(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    builder = KernelAgentRevisionBuilder(artifacts, limits=kernel_agent_limits())
+
+    with pytest.raises(ValueError, match="must be a local Git checkout"):
+        GitOptimizerBaseLoader(
+            artifacts,
+            builder,
+            repository="git@github.com:example/optimizer.git",
+            git_executable=_git(),
+            timeout_seconds=10,
+            max_archive_bytes=1_000_000,
+        )
+
+
 def test_loader_requires_full_lowercase_commit(tmp_path: Path) -> None:
     repository, commit = _repository(tmp_path)
     loader, _artifacts = _loader(tmp_path, repository)
 
     with pytest.raises(ValueError, match="full lowercase commit"):
         loader.build_candidate(Dsl.TRITON, commit[:12])
+
+
+def test_loader_requires_pinned_commit_to_exist_locally(tmp_path: Path) -> None:
+    repository, _commit = _repository(tmp_path)
+    loader, _artifacts = _loader(tmp_path, repository)
+
+    with pytest.raises(ValueError, match="does not contain pinned commit"):
+        loader.build_candidate(Dsl.TRITON, "1" * 40)
 
 
 def test_loader_rejects_symlink_in_tracked_tree(tmp_path: Path) -> None:
@@ -226,4 +249,17 @@ def test_loader_rejects_submodule_url_mismatch(tmp_path: Path) -> None:
     )
 
     with pytest.raises(ValueError, match="URL is not approved"):
+        loader.build_candidate(Dsl.TRITON, commit)
+
+
+def test_loader_requires_initialized_local_submodule(tmp_path: Path) -> None:
+    repository, commit, submodule, _submodule_commit = _repository_with_submodule(tmp_path)
+    shutil.rmtree(repository / "vendor/example-extension")
+    loader, _artifacts = _loader(
+        tmp_path,
+        repository,
+        allowed_submodules={"vendor/example-extension": submodule.as_uri()},
+    )
+
+    with pytest.raises(ValueError, match="submodule checkout is not initialized"):
         loader.build_candidate(Dsl.TRITON, commit)

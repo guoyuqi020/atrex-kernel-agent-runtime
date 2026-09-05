@@ -144,6 +144,9 @@ def test_git_import_expands_both_real_pinned_skills(
         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
         "commit", "-m", "Temporary migration test snapshot",
     )
+    for name in skills:
+        shutil.rmtree(repository / name)
+    git("-c", "protocol.file.allow=always", "submodule", "update", "--init", "--recursive")
     settings = KernelAgentSettings.model_validate_json(
         KDA_CONFIG.read_text(),
     )

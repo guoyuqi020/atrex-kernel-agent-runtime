@@ -6,7 +6,7 @@ English | [中文](operations.zh.md)
 
 Run the Agate-compatible Gateway and production GPU Wiki as external services. Run one Runtime service process and one or more independent Campaign task/scheduler processes. SQLite deployments are single-node. Runtime databases use rollback journals so Lima `virtiofs` workspaces remain safe across the Runtime and CLI processes; do not use a remote filesystem whose POSIX file locks are not reliable.
 
-Core and Evolver are deployment-approved Git repositories pinned by full commit. Their adjacent submodules are development checkouts, not Runtime imports. The `third_party/atrex-bench` submodule is the locally available, commit-pinned trusted evaluator source used by ABBA and optional Roofline construction. Initialize all three with `git submodule update --init --recursive` before repository verification.
+Optimizer and Evolver are deployment-approved Git repositories pinned by full commit. Bootstrap imports the Optimizer and its Skill submodules only from their initialized local checkouts; it never fetches them. The `third_party/atrex-bench` submodule is the locally available, commit-pinned trusted evaluator source used by ABBA and optional Roofline construction. Run `git submodule update --init --recursive` during deployment preparation, before Runtime startup and repository verification.
 
 ## Startup
 
