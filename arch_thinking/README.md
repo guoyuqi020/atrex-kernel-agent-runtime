@@ -141,7 +141,7 @@ flowchart TB
     subgraph SYSTEM["System boundary"]
         direction LR
 
-        U["User / administration"]
+        U["User / Admin"]
 
         subgraph POD["Pod boundary"]
             direction LR
@@ -149,27 +149,37 @@ flowchart TB
             subgraph SIDECAR["Sidecar"]
                 direction TB
                 R["Atrex Runtime"]
-                O["Other traffic proxy"]
+                O["Other Traffic"]
             end
 
-            subgraph SB["Agent Sandbox | mutable and untrusted"]
+            subgraph SB["Agent Sandbox"]
                 direction TB
-                A["Agent<br/>propose · edit · interpret"]
-                K["Candidate Kernel<br/>mutable source in Workspace"]
-                A -->|"read, write, and iterate"| K
+                A["Agent"]
+                K["Candidate Kernel"]
+                A -->|"edit"| K
             end
 
-            R -->|"materialize inputs · scope authority"| K
-            A -->|"Runtime Tool traffic · Candidate submission"| R
+            R -->|"materialize"| K
+            A -->|"Runtime Tools"| R
             A -->|"other traffic"| O
         end
 
+        subgraph SERVICES[" "]
+            direction TB
+            S[("Registry + Artifact Store")]
+            G["Agate"]
+            W["GPU Wiki"]
+            P["Model Provider"]
+        end
+
         U --> POD
-        R --> S[("Registry + Artifact Store<br/>facts · versions · recovery points")]
-        R <--> G["Agate<br/>GPU execution authority"]
-        R <--> W["GPU Wiki<br/>external knowledge"]
-        R <--> P["Model Provider"]
+        R --> S
+        R <--> G
+        R <--> W
+        R <--> P
     end
 
     O --> GW
+
+    style SERVICES fill:none,stroke:none
 ```
