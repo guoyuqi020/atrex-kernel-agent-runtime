@@ -116,9 +116,10 @@ Kernel Revision 的主评测是 Runtime 选择的 Bootstrap 或 Retention Result
 Direction 表示研究/探索假设，不只表示代码修改。定义不可变，状态变化 Append-only。同一时刻最多
 一个 Direction 为 In Progress；一个 Attempt 最多推进三个不同 Direction，但可提出更多未来方向。
 
-Experiment 把一个 Direction 绑定到精确测量的 `before`/`after` Kernel、Trial、Gateway Result
-身份，以及事实 Evidence、分析和 Action。Bootstrap 首次锚点使用 `action="baseline"`、
-`before=null` 和完整 `after`。
+Experiment 把一个 Direction 绑定到已测量的 `before`/`after` Kernel Trial，以及事实 Evidence、
+分析和 Action。Agent 只提交每一侧的 Trial ID；Runtime 在追加 Experiment 时解析并冻结其准确的
+Kernel 与 Result Artifact 身份。Bootstrap 首次锚点使用 `action="baseline"`、`before=null` 和
+已测量的 `after` Trial。
 
 Journal 调用会在响应前同步校验并持久化。Authority 作用于逻辑 Attempt，因此物理 Session 失败或
 Retry Generation 不会丢记录。终态 `attempt-report` 快照同一 Journal，要求没有 Direction 仍在

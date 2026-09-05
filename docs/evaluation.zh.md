@@ -18,7 +18,7 @@ Agent 不会看到精确 Validation Shapes、`reference.py`、`input.py`、Metad
 ## 探索性操作
 
 Optimizer Runtime Tools 通过 `gateway-execute` 暴露 `check`、`dev`、`evaluate`、`profile`、
-`disassemble`、`poll`、`jobs`、`cancel`、`env`、`health` 和 `config`。携带 Candidate 的操作会在
+`disassemble` 和 `env`。携带 Candidate 的操作会在
 调用 Agate 前封存精确源码，每个结果都不可变，并可通过返回给 Agent 的身份查询。
 
 探索性 `evaluate` 是可信测量证据，但不会直接创建 `vN` Kernel Revision。Agent 可以在一个

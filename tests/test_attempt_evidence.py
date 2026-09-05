@@ -404,14 +404,14 @@ def _complete_attempt(
                     "before": {
                         "kernel_artifact_digest": str(baseline.artifact_digest),
                         "kernel_trial_id": "gtrial_0123456789abcdef0123456789abcdef",
-                        "gateway_result_digests": [
+                        "result_artifact_digests": [
                             str(baseline.evaluation.gateway_result_digest)
                         ],
                     },
                     "after": {
                         "kernel_artifact_digest": str(output.artifact_digest),
                         "kernel_trial_id": "gtrial_abcdef0123456789abcdef0123456789",
-                        "gateway_result_digests": [str(agent_evaluate_gateway)],
+                        "result_artifact_digests": [str(agent_evaluate_gateway)],
                     },
                     "evidence": "Correct and faster on both shapes",
                     "analysis": "The coalescing hypothesis is supported",
@@ -588,7 +588,7 @@ def test_attempt_evidence_contains_only_earlier_same_branch_history(
                 / "value.json"
             ).read_text(encoding="utf-8")
         )
-        assert raw_agent_report["experiments"][0]["after"]["gateway_result_digests"]
+        assert raw_agent_report["experiments"][0]["after"]["result_artifact_digests"]
         assert "same_allocation_abba" not in json.dumps(raw_agent_report)
         assert "same_allocation_abba" in json.dumps(report_value)
         serialized = (stored.payload_path / "lessons.json").read_text(encoding="utf-8")

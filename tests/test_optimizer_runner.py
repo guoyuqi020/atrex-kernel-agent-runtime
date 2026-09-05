@@ -224,7 +224,7 @@ def _session_result(
                         "operation": "profile",
                         "kernel_artifact_digest": digest("candidate-experiment"),
                         "kernel_trial_id": "gtrial_" + "b" * 32,
-                        "gateway_result_digest": digest("gateway-experiment"),
+                        "result_artifact_digest": digest("gateway-experiment"),
                     }
                 ],
             },
@@ -253,12 +253,12 @@ def _session_result(
                     before={
                         "kernel_artifact_digest": digest("before-experiment"),
                         "kernel_trial_id": "gtrial_" + "a" * 32,
-                        "gateway_result_digests": [digest("before-gateway")],
+                        "result_artifact_digests": [digest("before-gateway")],
                     },
                     after={
                         "kernel_artifact_digest": digest("candidate-experiment"),
                         "kernel_trial_id": "gtrial_" + "b" * 32,
-                        "gateway_result_digests": [digest("gateway-experiment")],
+                        "result_artifact_digests": [digest("gateway-experiment")],
                     },
                     evidence="SOL memory traffic",
                     analysis="the hypothesis held and the candidate is faster",
@@ -410,7 +410,7 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
             "operation": "profile",
             "kernel_artifact_digest": digest("candidate-experiment"),
             "kernel_trial_id": "gtrial_" + "b" * 32,
-            "gateway_result_digest": digest("gateway-experiment"),
+            "result_artifact_digest": digest("gateway-experiment"),
         },
     )
     assert [kind for kind, _aggregate, _payload in events.records] == [

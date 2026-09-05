@@ -231,7 +231,7 @@ class AttemptReportRequestV2(_CandidateRequestV2):
 
 
 class KernelTrialShowRequestV2(_GatewayRequestV2):
-    """Read one visible Kernel Trial's provenance, observations, and decisions."""
+    """Read one visible Kernel Trial's Kernel and Result Artifact index."""
 
     operation: Literal["kernel_trial_show"]
     kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
@@ -255,15 +255,15 @@ class KernelArtifactReadRequestV2(_GatewayRequestV2):
         return None if value is None else _safe_relative_path(value, "Kernel Artifact file")
 
 
-class GatewayResultReadRequestV2(_GatewayRequestV2):
-    """Read one exact visible upstream Gateway Result Artifact."""
+class ResultArtifactReadRequestV2(_GatewayRequestV2):
+    """Read one exact visible Agent-facing Result Artifact."""
 
-    operation: Literal["gateway_result_read"]
-    gateway_result_digest: str = Field(max_length=80)
+    operation: Literal["result_artifact_read"]
+    result_artifact_digest: str = Field(max_length=80)
 
-    @field_validator("gateway_result_digest")
+    @field_validator("result_artifact_digest")
     @classmethod
-    def _validate_gateway_result_digest(cls, value: str) -> str:
+    def _validate_result_artifact_digest(cls, value: str) -> str:
         return str(parse_artifact_digest(value))
 
 
@@ -340,7 +340,7 @@ type GatewayProxyRequestV2 = Annotated[
     | AttemptReportRequestV2
     | KernelTrialShowRequestV2
     | KernelArtifactReadRequestV2
-    | GatewayResultReadRequestV2
+    | ResultArtifactReadRequestV2
     | DirectionHistoryRequestV2
     | ExperimentHistoryRequestV2
     | DirectionUpdateRequestV2
@@ -362,7 +362,7 @@ _RUNTIME_QUERY_OPERATION_NAMES = frozenset(
         "attempt_report",
         "kernel_trial_show",
         "kernel_artifact_read",
-        "gateway_result_read",
+        "result_artifact_read",
         "direction_history",
         "experiment_history",
     }
@@ -393,7 +393,7 @@ _GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
     "attempt_report": AttemptReportRequestV2,
     "kernel_trial_show": KernelTrialShowRequestV2,
     "kernel_artifact_read": KernelArtifactReadRequestV2,
-    "gateway_result_read": GatewayResultReadRequestV2,
+    "result_artifact_read": ResultArtifactReadRequestV2,
     "direction_history": DirectionHistoryRequestV2,
     "experiment_history": ExperimentHistoryRequestV2,
     "direction_update": DirectionUpdateRequestV2,
@@ -522,7 +522,7 @@ class GatewayProxyResponseV2(BaseModel):
         "attempt_report",
         "kernel_trial_show",
         "kernel_artifact_read",
-        "gateway_result_read",
+        "result_artifact_read",
         "direction_history",
         "experiment_history",
         "direction_update",
@@ -536,10 +536,15 @@ class GatewayProxyResponseV2(BaseModel):
     status: Literal["completed", "queued", "failed", "cancelled"]
     kernel_artifact_digest: str | None = None
     kernel_trial_id: str | None = Field(default=None, pattern=r"^gtrial_[0-9a-f]{32}$")
-    gateway_result_digest: str
+    result_artifact_digest: str
     job_id: str | None = None
     evaluation: EvaluationV2 | None = None
     result: JsonValue
+
+    @field_validator("result_artifact_digest")
+    @classmethod
+    def _validate_result_artifact_digest(cls, value: str) -> str:
+        return str(parse_artifact_digest(value))
 
 
 def _safe_relative_path(value: str, label: str) -> str:

@@ -73,7 +73,7 @@ direction_id = "direction_" + "5" * 32
 subject = {
     "kernel_artifact_digest": "sha256:" + "a" * 64,
     "kernel_trial_id": "gtrial_" + "c" * 32,
-    "gateway_result_digests": ["sha256:" + "b" * 64],
+    "result_artifact_digests": ["sha256:" + "b" * 64],
 }
 Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
     "schema_version": 12,

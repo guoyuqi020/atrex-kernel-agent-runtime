@@ -184,8 +184,8 @@ def test_attempt_input_runtime_state_is_recorded_once(tmp_path: Path) -> None:
             False,
         ),
         (
-            "gateway_result_read",
-            {"gateway_result_digest": "sha256:" + "b" * 64},
+            "result_artifact_read",
+            {"result_artifact_digest": "sha256:" + "b" * 64},
             False,
         ),
         ("direction_history", {}, False),
@@ -417,7 +417,18 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
 
     assert response.status == "completed"
     assert response.evaluation == EvaluationV2(correct=True, latency_us=12.0)
-    assert response.result == {"correct": True, "latency_us": 12.0, "backend": "fake"}
+    assert response.result == {
+        "correct": True,
+        "correctness": {
+            "status": "PASS",
+            "rel_err": None,
+            "max_abs_err": None,
+            "max_rel_err": None,
+        },
+        "latency_us_geomean": 12.0,
+        "latency_us_arith_mean": None,
+        "latency_us_by_shape": {},
+    }
     assert response.kernel_artifact_digest is not None
     assert response.kernel_trial_id is not None
     assert len(adapter.requests) == 1
@@ -478,14 +489,34 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
     response = await service.execute(capability_value.token, _request(attempt))
 
     assert response.result == {
-        "all_pass": True,
+        "correct": True,
+        "correctness": {
+            "status": "PASS",
+            "rel_err": None,
+            "max_abs_err": None,
+            "max_rel_err": None,
+        },
         "latency_us_geomean": 12.0,
-        "shape_ids_are_opaque": True,
+        "latency_us_arith_mean": None,
+        "latency_us_by_shape": {},
     }
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
-    raw = artifacts.verify(response.gateway_result_digest).payload_path / "value.json"
-    assert "secret_size" in raw.read_text(encoding="utf-8")
+    result_artifact = artifacts.verify(response.result_artifact_digest)
+    assert result_artifact.kind is ArtifactKind.RESULT_ARTIFACT
+    canonical = json.loads((result_artifact.payload_path / "value.json").read_bytes())
+    assert canonical == {
+        "operation": "evaluate",
+        "status": "completed",
+        "result": response.result,
+    }
+    assert "secret_size" not in json.dumps(canonical)
     assert "secret_size" not in json.dumps(response.model_dump(mode="json"))
+    assert "gateway_result_digest" not in response.model_dump(mode="json")
+    evaluation = control.list_evaluations(attempt.id)[0]
+    raw = artifacts.verify(evaluation.gateway_result_digest)
+    assert raw.kind is ArtifactKind.GATEWAY_RESULT
+    assert "secret_size" in (raw.payload_path / "value.json").read_text(encoding="utf-8")
+    assert response.result_artifact_digest != evaluation.gateway_result_digest
     reread = await service.execute(
         capability_value.token,
         json.dumps(
@@ -493,28 +524,14 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
                 "schema_version": 2,
                 "attempt_id": attempt.id,
                 "idempotency_key": "private-result-read-1",
-                "operation": "gateway_result_read",
-                "gateway_result_digest": response.gateway_result_digest,
+                "operation": "result_artifact_read",
+                "result_artifact_digest": response.result_artifact_digest,
             }
         ).encode(),
     )
     assert "secret_size" not in json.dumps(reread.result)
-    assert reread.result == {
-        "operation": "evaluate",
-        "status": "completed",
-        "result": {
-            "correct": True,
-            "correctness": {
-                "status": "PASS",
-                "rel_err": None,
-                "max_abs_err": None,
-                "max_rel_err": None,
-            },
-            "latency_us_geomean": 12.0,
-            "latency_us_arith_mean": None,
-            "latency_us_by_shape": {},
-        },
-    }
+    assert "gateway_result_digest" not in json.dumps(reread.result)
+    assert reread.result == canonical
     control.close()
     registry.close()
 
@@ -544,7 +561,7 @@ async def test_proxy_seals_paired_profile_with_agent_evaluation(tmp_path: Path) 
     response = await service.execute(capability_value.token, _request(attempt))
 
     evaluation = control.list_evaluations(attempt.id)[0]
-    assert response.gateway_result_digest == evaluation.gateway_result_digest
+    assert response.result_artifact_digest != evaluation.gateway_result_digest
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     summary = gateway_result_sol_summary(artifacts, evaluation.gateway_result_digest)
     assert summary.percent == 65.0
@@ -848,6 +865,45 @@ async def test_runtime_queries_use_the_dedicated_http_endpoint(tmp_path: Path) -
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("operation", "extra"),
+    [
+        ("poll", {"job_id": "job-1"}),
+        ("jobs", {}),
+        ("cancel", {"job_id": "job-1"}),
+        ("health", {}),
+        ("config", {}),
+    ],
+)
+async def test_control_operations_are_not_agent_visible(
+    tmp_path: Path,
+    operation: str,
+    extra: dict[str, object],
+) -> None:
+    registry, control, attempt, capability_value, service, adapter = _service(tmp_path)
+    payload = json.dumps(
+        {
+            "schema_version": 2,
+            "attempt_id": attempt.id,
+            "idempotency_key": f"hidden-{operation}",
+            "operation": operation,
+            **extra,
+        }
+    ).encode()
+
+    with pytest.raises(ValueError, match="is not exposed to Agents"):
+        await service.execute(
+            capability_value.token,
+            payload,
+            operation_scope="gateway",
+        )
+
+    assert adapter.requests == []
+    control.close()
+    registry.close()
+
+
+@pytest.mark.anyio
 async def test_runtime_journal_history_reads_terminal_report_artifacts(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -945,11 +1001,31 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     evaluated = await service.execute(capability.token, _request(attempt))
     assert evaluated.kernel_trial_id is not None
     assert evaluated.kernel_artifact_digest is not None
-    assert evaluated.gateway_result_digest is not None
-    subject = {
+    assert evaluated.result_artifact_digest is not None
+    adapter.result = GatewayAdapterResult(
+        status="completed",
+        result={"status": "succeeded", "result": {"kernels": []}},
+        profile_result={"status": "succeeded", "kernels": []},
+    )
+    profile_request = json.loads(_request(attempt))
+    profile_request.update(
+        {
+            "idempotency_key": "journal-profile-candidate-1",
+            "operation": "profile",
+            "level": "sol",
+        }
+    )
+    profiled = await service.execute(capability.token, json.dumps(profile_request).encode())
+    assert profiled.kernel_trial_id == evaluated.kernel_trial_id
+    assert profiled.result_artifact_digest is not None
+    subject = {"kernel_trial_id": evaluated.kernel_trial_id}
+    resolved_subject = {
         "kernel_artifact_digest": evaluated.kernel_artifact_digest,
         "kernel_trial_id": evaluated.kernel_trial_id,
-        "gateway_result_digests": [evaluated.gateway_result_digest],
+        "result_artifact_digests": [
+            evaluated.result_artifact_digest,
+            profiled.result_artifact_digest,
+        ],
     }
     recorded = await journal(
         "experiment_record",
@@ -1000,22 +1076,31 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     assert cast(dict[str, Any], experiments.result)["experiments"] == [
         {
             "experiment_id": experiment_id,
-            "sequence": 1,
             "name": "vectorize load",
+            "hypothesis": "one transaction replaces two",
+            "change": "use a vector load",
+            "evidence": "the authoritative Evaluate result",
+            "analysis": "the candidate remained correct",
             "action": "keep_after",
         }
     ]
-    assert cast(dict[str, Any], loaded_experiment.result)["after"] == subject
+    assert "sequence" not in cast(dict[str, Any], loaded_experiment.result)
+    assert cast(dict[str, Any], loaded_experiment.result)["after"] == resolved_subject
     assert len(cast(dict[str, Any], snapshot.result)["direction_events"]) == 3
     assert len(cast(dict[str, Any], snapshot.result)["experiments"]) == 1
     assert cast(dict[str, Any], snapshot.result)["citable_profile_results"] == [
         {
             "kernel_artifact_digest": evaluated.kernel_artifact_digest,
             "kernel_trial_id": evaluated.kernel_trial_id,
-            "gateway_result_digest": evaluated.gateway_result_digest,
-        }
+            "result_artifact_digest": evaluated.result_artifact_digest,
+        },
+        {
+            "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+            "kernel_trial_id": evaluated.kernel_trial_id,
+            "result_artifact_digest": profiled.result_artifact_digest,
+        },
     ]
-    assert len(adapter.requests) == 1
+    assert len(adapter.requests) == 2
 
     control.close()
     reopened = SqliteGatewayControl(
@@ -1198,11 +1283,7 @@ async def test_runtime_journal_survives_attempt_recovery_generation(
         ),
     )
     assert recovered_capability.recovery_generation == 1
-    subject = {
-        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
-        "kernel_trial_id": evaluated.kernel_trial_id,
-        "gateway_result_digests": [evaluated.gateway_result_digest],
-    }
+    subject = {"kernel_trial_id": evaluated.kernel_trial_id}
     recorded = await journal(
         recovered_capability.token,
         "experiment_record",
@@ -1337,12 +1418,12 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
                 "before": {
                     "kernel_artifact_digest": evaluated.kernel_artifact_digest,
                     "kernel_trial_id": evaluated.kernel_trial_id,
-                    "gateway_result_digests": [evaluated.gateway_result_digest],
+                    "result_artifact_digests": [evaluated.result_artifact_digest],
                 },
                 "after": {
                     "kernel_artifact_digest": evaluated.kernel_artifact_digest,
                     "kernel_trial_id": evaluated.kernel_trial_id,
-                    "gateway_result_digests": [evaluated.gateway_result_digest],
+                    "result_artifact_digests": [evaluated.result_artifact_digest],
                 },
                 "action": "restore_before",
                 "hypothesis": "larger tile was slower",
@@ -1354,6 +1435,23 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
     assert len(adapter.requests) == 1
     trial_id = evaluated.kernel_trial_id
     assert isinstance(trial_id, str)
+
+    adapter.result = GatewayAdapterResult(
+        status="completed",
+        result={"status": "succeeded", "result": {"kernels": []}},
+        profile_result={"status": "succeeded", "kernels": []},
+    )
+    profile_request = json.loads(_request(attempt))
+    profile_request.update(
+        {
+            "idempotency_key": "profile-candidate-1",
+            "operation": "profile",
+            "level": "sol",
+        }
+    )
+    profiled = await service.execute(capability.token, json.dumps(profile_request).encode())
+    assert profiled.kernel_trial_id == trial_id
+    assert profiled.result_artifact_digest != evaluated.result_artifact_digest
 
     shown = await service.execute(
         capability.token,
@@ -1368,27 +1466,21 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
         ).encode(),
     )
 
-    assert len(adapter.requests) == 1
+    assert len(adapter.requests) == 2
     assert isinstance(shown.result, dict)
     assert shown.result == {
         "kernel_artifact_digest": evaluated.kernel_artifact_digest,
-        "gateway_results": [
+        "result_artifacts": [
             {
+                "result_artifact_digest": evaluated.result_artifact_digest,
                 "operation": "evaluate",
                 "status": "completed",
-                "result": {
-                    "correct": True,
-                    "correctness": {
-                        "status": "PASS",
-                        "rel_err": None,
-                        "max_abs_err": None,
-                        "max_rel_err": None,
-                    },
-                    "latency_us_geomean": 12.0,
-                    "latency_us_arith_mean": 12.0,
-                    "latency_us_by_shape": {"0": 10.0, "1": 14.0},
-                },
-            }
+            },
+            {
+                "result_artifact_digest": profiled.result_artifact_digest,
+                "operation": "profile",
+                "status": "completed",
+            },
         ],
     }
 
@@ -1412,20 +1504,20 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
     assert source.result["kernel_artifact_digest"] == evaluated.kernel_artifact_digest
     assert source.result["kernel_trial_ids"] == [trial_id]
 
-    gateway_result = await service.execute(
+    result_artifact = await service.execute(
         capability.token,
         json.dumps(
             {
                 "schema_version": 2,
                 "attempt_id": attempt.id,
-                "idempotency_key": "gateway-result-read-1",
-                "operation": "gateway_result_read",
-                "gateway_result_digest": evaluated.gateway_result_digest,
+                "idempotency_key": "result-artifact-read-1",
+                "operation": "result_artifact_read",
+                "result_artifact_digest": evaluated.result_artifact_digest,
             }
         ).encode(),
     )
 
-    assert gateway_result.result == {
+    assert result_artifact.result == {
         "operation": "evaluate",
         "status": "completed",
         "result": {

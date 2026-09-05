@@ -39,7 +39,7 @@ class GatewayOperation(StrEnum):
     KERNEL_TRIALS = "kernel_trials"
     KERNEL_TRIAL_SHOW = "kernel_trial_show"
     KERNEL_ARTIFACT_READ = "kernel_artifact_read"
-    GATEWAY_RESULT_READ = "gateway_result_read"
+    RESULT_ARTIFACT_READ = "result_artifact_read"
     DIRECTION_HISTORY = "direction_history"
     EXPERIMENT_HISTORY = "experiment_history"
     DIRECTION_UPDATE = "direction_update"

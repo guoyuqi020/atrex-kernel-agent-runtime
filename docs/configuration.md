@@ -151,10 +151,12 @@ surrounding network namespace and therefore allow public egress and reachable ho
 
 ## Evidence
 
-`campaign.evidence` bounds trace files/bytes/events, normalized text, and Kernel diffs. Redaction
-patterns apply only to normalized projections. Original Session Artifacts remain immutable and may
-be materialized into authorized Agent Evidence or retrieved by administration; they are never
-uploaded to GPU Wiki.
+`campaign.evidence.max_trace_files` bounds only Runtime-normalized JSONL ledgers selected for
+semantic projection; Provider-native main and child-Agent transcripts remain opaque and do not
+count toward it. `max_trace_bytes` bounds the complete Session Artifact, including those Provider
+files. The remaining limits bound projected events/text and Kernel diffs. Redaction patterns apply
+only to normalized projections. Original Session Artifacts remain immutable and may be materialized
+into authorized Agent Evidence or retrieved by administration; they are never uploaded to GPU Wiki.
 
 ## Campaign configuration
 

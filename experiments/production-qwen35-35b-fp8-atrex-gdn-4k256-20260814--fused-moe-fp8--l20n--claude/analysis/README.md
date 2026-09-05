@@ -1,9 +1,12 @@
 # Token 分析：用量复核与文本估算
 
-本目录保存 [实验报告](../report.md) 的离线分析方法与复核数据。[Provider 用量复核](#provider-用量复核) 包含总账校正和 pooled/evolve 横向统计；下述 Bash 分析覆盖从同一 Bootstrap DSL seed 出发的 114 个 AKA 主 Optimizer Episode、120 个 retained Optimizer Attempt，共 13,745 / 6,922 次调用，不含 Bootstrap 或独立 Reviewer/子 Agent。
+本目录保存 [实验报告](../report.md) 的离线分析方法与复核数据。主报告统一采用 Runtime Epoch 10 与 AKA `max-iters=20` 的完整归档；AKA 实际完成 19 个非 Bootstrap Optimizer Episode。当前 AKA/isolated/pooled/retained 主对照见 [Trace 复核说明](pooled/README.md)和 `pooled/comparison.json`，各臂性能与用量见 `checkpoint-summary.json` 的 `full_budget`。其中 `matched_checkpoint` 继续保留早期 Epoch 5 / Episode 10 对齐结果，供复核历史结论，不再作为主报告口径。下述未位于 `pooled/` 的 Bash 汇总是更早的 AKA/retained 补充分析，继续保留用于方法复核。
 
 ## 文件
 
+- `checkpoint_summary.py` / `checkpoint-summary.json`：只读归档 Registry、Session Trace 和 AKA Episode Journal，生成 Epoch 5 / Episode 10 检查点的性能、时间、用量、终态与 Evolution 文件差异。
+- `latency-curves/generate.py` / `latency-curves/curves.json`：从归档 Registry 和两次 AKA Episode 记录重建 CUDA、Triton、CuteDSL 的历史最优 Kernel latency；同一串行深度的并行 Attempt 合并为一点，并生成主报告中的三张 SVG 曲线图。
+- `best-kernels/`：三种 DSL 最低 latency 曲线对应的完整 `kernel.py`，从归档 Artifact Store 逐字节复制，并附 Kernel Artifact 与生产 Attempt 的映射。
 - `provider-usage-audit.json`：237 份 AKA Trace 复核所得精确用量、来源摘要及按实验时价格快照重算的费用；包含分项未知的 Policy Review 说明。
 - `bash_text_tokens.py`：只读取 Trace、做分词和汇总，不执行任何 Trace 命令。
 - `bash-action-index.json.gz`：冻结此前 Shell/heredoc/Python AST 审核得到的动作标签；按 Session 保存相对 Trace 路径、Trace SHA-256、调用行号、命令 SHA-256、字符数和类别。它不包含命令或返回原文。
@@ -104,7 +107,7 @@ ARCHIVE_ROOT="$HOME/atrex-runs/production-qwen35-35b-fp8-atrex-gdn-4k256-2026081
 
 ## Shell 案例证据索引
 
-对应 [主报告的代表性 Shell 案例](../report.md#代表性-shell-案例)。两侧在各自 DSL 内从同一 Bootstrap seed 开始；AKA 为两次运行合计，retained 为双 Trajectory，不含 Bootstrap。下表仅含单条命令及返回，不含相邻思考；k 为千 Token，“可见”为一次分词量，“累计”包括后续上下文读取，均为估算而非精确计费。未单列单条调用数值的样本标为 —。
+以下是早期 AKA/retained 补充分析的 Shell 案例索引，不对应主报告当前的 pooled 案例。两侧在各自 DSL 内从同一 Bootstrap seed 开始；AKA 为两次运行合计，retained 为双 Trajectory，不含 Bootstrap。下表仅含单条命令及返回，不含相邻思考；k 为千 Token，“可见”为一次分词量，“累计”包括后续上下文读取，均为估算而非精确计费。未单列单条调用数值的样本标为 —。
 
 | 编号 | 会话与原始 Trace | 对应调用 | 可见，k | 累计，k |
 |---|---|---|---:|---:|

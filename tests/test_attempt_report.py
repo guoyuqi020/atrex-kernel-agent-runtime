@@ -45,7 +45,7 @@ def _value(attempt_id: str) -> dict[str, object]:
                     "operation": "profile",
                     "kernel_artifact_digest": "sha256:" + "d" * 64,
                     "kernel_trial_id": "gtrial_" + "e" * 32,
-                    "gateway_result_digest": "sha256:" + "f" * 64,
+                    "result_artifact_digest": "sha256:" + "f" * 64,
                 }
             ],
         },
@@ -80,12 +80,12 @@ def _value(attempt_id: str) -> dict[str, object]:
                 "before": {
                     "kernel_artifact_digest": "sha256:" + "a" * 64,
                     "kernel_trial_id": "gtrial_" + "b" * 32,
-                    "gateway_result_digests": ["sha256:" + "c" * 64],
+                    "result_artifact_digests": ["sha256:" + "c" * 64],
                 },
                 "after": {
                     "kernel_artifact_digest": "sha256:" + "d" * 64,
                     "kernel_trial_id": "gtrial_" + "e" * 32,
-                    "gateway_result_digests": [
+                    "result_artifact_digests": [
                         "sha256:" + "f" * 64,
                         "sha256:" + "1" * 64,
                     ],

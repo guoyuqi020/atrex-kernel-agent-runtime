@@ -37,6 +37,7 @@ from ..gateway.control_models import (
     BootstrapRunRecord,
     BootstrapRunStatus,
     GatewayCapabilityPolicy,
+    GatewayEvaluationRecord,
     GatewayEvaluationSource,
     GatewayOperation,
     gateway_kernel_trial_id,
@@ -777,8 +778,26 @@ class CoreLineageBaselineGenerator:
                 ):
                     referenced_bindings.update(
                         (subject.kernel_trial_id, result)
-                        for result in subject.gateway_result_digests
+                        for result in subject.result_artifact_digests
                     )
+        trials = {
+            trial.id: trial
+            for trial in self._control.list_kernel_trials((attempt_id,), limit=5_000)
+        }
+
+        def is_referenced_evaluation(item: GatewayEvaluationRecord) -> bool:
+            generation = item.recovery_generation
+            gateway_result = item.gateway_result_digest
+            trial_id = gateway_kernel_trial_id(attempt_id, generation, candidate_digest)
+            trial = trials.get(trial_id)
+            return trial is not None and any(
+                observation.operation is GatewayOperation.EVALUATE
+                and observation.gateway_result_digest == gateway_result
+                and observation.result_artifact_digest is not None
+                and (trial_id, observation.result_artifact_digest) in referenced_bindings
+                for observation in trial.observations
+            )
+
         evaluation = next(
             (
                 item
@@ -786,15 +805,7 @@ class CoreLineageBaselineGenerator:
                 if (recovery_generation is None or item.recovery_generation == recovery_generation)
                 and item.source is GatewayEvaluationSource.AGENT
                 and item.kernel_artifact_digest == candidate_digest
-                and (
-                    gateway_kernel_trial_id(
-                        attempt_id,
-                        item.recovery_generation,
-                        candidate_digest,
-                    ),
-                    item.gateway_result_digest,
-                )
-                in referenced_bindings
+                and is_referenced_evaluation(item)
                 and item.correct
             ),
             None,

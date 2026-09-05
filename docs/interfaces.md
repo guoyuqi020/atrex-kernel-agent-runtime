@@ -90,25 +90,29 @@ tables and progress messages are operator presentation.
 Candidate operations upload a complete Base64 file Bundle. Runtime seals it before execution.
 Every key is idempotent: the same key/request replays the committed response; changed content with
 the same key returns conflict. `evaluate` creates an exploratory evaluation record but does not by
-itself retain a Kernel revision. The wire response retains `schema_version` for validation and
-persistence. Before printing the response to the Agent, the Core tool removes that top-level field
-and merges the authoritative `evaluation.correct` and `evaluation.latency_us` into `result` as
-`correct` and `latency_us`; it removes the top-level `evaluation` and equivalent result aliases.
-For `dev`, `disassemble`, `jobs`, `poll`, `cancel`, `env`, `health`, and `config`, Core returns the
-Agent-safe `result` object directly. `profile` additionally returns the Kernel Artifact, Kernel Trial, and Gateway Result
+itself retain a Kernel revision. Runtime keeps the original Agate response and its
+`gateway_result_digest` private for evaluation, comparison, and audit. Separately, it seals the
+canonical Agent-visible `operation`/`status`/`result` projection as a Result Artifact. The Agent
+receives its `result_artifact_digest`; initial execution and later reads expose the same canonical
+content and never expose the private Gateway Result identity.
+For `dev`, `disassemble`, and `env`, Core returns the
+Agent-safe `result` object directly. `profile` additionally returns the Kernel Artifact, Kernel Trial, and Result Artifact
 identities beside the flattened Agent-safe Job result. Its nested `result` uses a numeric opaque
 `shape_id`, normalizes Kernel duration to microseconds and common resource aliases, retains safe
 profiler counters, and adds `kernel_count`, `total_duration_us`, per-Kernel
 `duration_share_pct`, `dominant_kernel`, duration-weighted `weighted_sol_pct`, and
 `dominant_bound`. Shape inputs and dimensions remain private.
 
-`kernel_trial_show` retrieves one known experimental Candidate provenance record by the
-`kernel_trial_id` returned by a Gateway response or retained Experiment record.
+`kernel_trial_show` retrieves one known experimental Candidate by the `kernel_trial_id` returned by
+a Gateway response or retained Experiment record. It returns the Kernel Artifact Digest and a
+compact list of Result Artifact Digest, operation, and status entries. Use
+`result_artifact_read` to expand only the selected result.
 `kernel_artifact_read` accepts the Trial's `kernel_artifact_digest` (as
 `kernel_artifact_digest`), required `file` destination under `scratch/`, and optional
 `artifact_file` source path (defaulting to the destination basename). The Core tool atomically
-writes the exact bytes and returns only status, path, byte count, and SHA-256. `gateway_result_read` accepts one
-Observation's `gateway_result_digest` and returns a normalized Agent-visible view. Evaluate views
+writes the exact bytes and returns only status, path, byte count, and SHA-256. `result_artifact_read` accepts one
+Observation's `result_artifact_digest` and reads its normalized Agent-visible Result Artifact.
+The returned `operation`, `status`, and `result` match the initial operation. Evaluate views
 contain `operation`, `status`, a correctness verdict plus worst-case `rel_err`, `max_abs_err`, and
 `max_rel_err`, both aggregate latencies, and
 latency by opaque Shape ID; private evaluator inputs and hidden-case details remain withheld. These
@@ -164,15 +168,15 @@ python3 src/runtime_tools.py <command> --request scratch/request.json
 | Command | Agent-authored request |
 | --- | --- |
 | `gateway-execute` | One GPU/Agate operation and its operation-specific parameters; Candidate operations upload the working Kernel tree. |
-| `kernel-trial-show` | Reads one visible Trial's Kernel Artifact Digest and normalized Gateway results; request JSON omits `operation`. |
+| `kernel-trial-show` | Reads one visible Trial's Kernel Artifact Digest and compact Result Artifact index; request JSON omits `operation`. |
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
-| `gateway-result-read` | Reads a normalized Agent-visible measurement for a Gateway Result Digest; request JSON omits `operation`. |
+| `result-artifact-read` | Reads a normalized Agent-visible Result Artifact by digest; request JSON omits `operation`. |
 | `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Experiment associations are derived automatically; returns the stable Direction ID. |
 | `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, and current status to that file and returns only status, file, and count. |
 | `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction. Its supporting IDs automatically include every visible Experiment bound to it and associations snapshotted internally by status events. |
-| `record-experiment` | Records its `direction_id`, measured Kernel/Trial/Result identities, factual `evidence`, interpretive `analysis`, and action. Ordinary comparisons require complete `before`/`after`; Bootstrap alone may use `baseline` with `before=null` and complete `after`. Returns the stable Experiment ID. |
-| `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, sequence, name, and action from frozen history plus the current live Journal, then returns only status, file, and count. |
-| `load-experiment` | With exactly one `experiment_id`, returns that complete original Experiment. |
+| `record-experiment` | Records its `direction_id`, before/after Kernel Trial IDs, factual `evidence`, interpretive `analysis`, and action. Runtime freezes the Trials' Kernel and Result Artifact identities. Bootstrap alone may use `baseline` with `before=null`. Returns the stable Experiment ID. |
+| `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, hypothesis, change, evidence, analysis, and action from frozen history plus the current live Journal, then returns only status, file, and count. |
+| `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
 | `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
 
 `attempt-report` requires non-empty matching Runtime-owned Direction and Experiment journals. Its first successful
@@ -194,7 +198,7 @@ the logical Attempt rather than a physical Session or recovery generation. There
 `scratch/directions.json` or `scratch/experiments.json` authority files. The list/load tools query
 the live Runtime Journal merged with authorized frozen history; only their requested compact index
 files are written under `scratch/`. A Bootstrap Session starts without prior journal history; after it succeeds, its
-terminal journals, Kernel Trials, and Gateway Results become the root history of ordinary Attempts
+terminal journals, Kernel Trials, and Result Artifacts become the root history of ordinary Attempts
 in that Lineage.
 `list-experiments` and `load-experiment` combine the current live Runtime Journal with prior durable
 Journals; terminal Report Artifacts remain a compatibility fallback for older records. Completed Epoch history includes journals from the
@@ -215,13 +219,13 @@ provide them. Loaded live and snapshotted associations are merged into one de-du
 `profile_evidence` is either `null` or an exact object containing `tool_used`, `profiler`,
 `profile_level`, `bottleneck_type`, `evidence_summary`, `evidence_chain`, and a non-empty
 `supporting_results` array. Each supporting result binds `operation` (`profile` or `dev`),
-`kernel_artifact_digest`, `kernel_trial_id`, and `gateway_result_digest`. At least one item must be a
+`kernel_artifact_digest`, `kernel_trial_id`, and `result_artifact_digest`. At least one item must be a
 Profile result. Core requires every binding to appear in the Attempt's Experiment Journal; Runtime
 then verifies that the declared operation and three identities match one durable visible Gateway
 observation. `null` is required when no Profile was executed.
 Every Finding requires a non-empty unique `supporting_experiment_ids` array. Each ID must name an
 Experiment in the same attached Journal, so a Finding resolves through that Experiment's available
-before/after subjects to exact Kernel Artifacts, Trials, and Gateway Results without repeating those
+before/after subjects to exact Kernel Artifacts, Trials, and Result Artifacts without repeating those
 identities in the Finding itself.
 `contributing_kernel_trial_ids` is a required sorted unique array naming the historical Kernel Trials
 whose code or approach the Attempt drew content from, and is empty when it drew from none. Core and
@@ -242,8 +246,9 @@ arithmetic aggregate latency, and latency keyed by opaque Shape ID. Correctness 
 plus the worst safe aggregate relative-L2, elementwise absolute, and elementwise relative errors;
 it never exposes the hidden Shape or Case that produced them. The Candidate additionally
 contains its Runtime retention status and aggregate/per-Shape comparison with the parent. No
-Gateway Result Digest is repeated inside the Kernel outcome projections; Experiment provenance
-continues to retain its exact Gateway Result Digests. The Runtime-owned `production_gate` reports
+private Gateway Result Digest is repeated inside the Kernel outcome projections; Experiment
+provenance retains the exact Agent-visible Result Artifact Digests. The Runtime-owned
+`production_gate` reports
 whether content-level production policy was disabled, passed, failed, or not reached. A failed
 Gate includes the exact trusted rejection reason.
 
@@ -305,14 +310,14 @@ the retention comparator.
 The JSON below is the content of the file passed with `--request`. Digests and IDs are abbreviated
 only for readability.
 
-`kernel-trial-show` returns only the Kernel identity and normalized Gateway results:
+`kernel-trial-show` returns only the Kernel identity and a compact Result Artifact index:
 
 ```json
 {"kernel_trial_id":"gtrial_<id>"}
 ```
 
 ```json
-{"kernel_artifact_digest":"sha256:<kernel>","gateway_results":[{"operation":"evaluate","status":"completed","result":{"correct":true,"correctness":{"status":"PASS","rel_err":null,"max_abs_err":0.0009765625,"max_rel_err":0.0078125},"latency_us_geomean":12.288,"latency_us_arith_mean":12.400,"latency_us_by_shape":{"0":12.288}}}]}
+{"kernel_artifact_digest":"sha256:<kernel>","result_artifacts":[{"result_artifact_digest":"sha256:<evaluate-result>","operation":"evaluate","status":"completed"},{"result_artifact_digest":"sha256:<profile-result>","operation":"profile","status":"completed"}]}
 ```
 
 `kernel-artifact-read` copies one Artifact file into `scratch/`; source is not printed:
@@ -325,10 +330,10 @@ only for readability.
 {"status":"completed","file":"scratch/recovered/kernel.py","bytes":4281,"sha256":"<file-sha256>"}
 ```
 
-`gateway-result-read` reads one normalized Agent-visible result:
+`result-artifact-read` reads one normalized Agent-visible Result Artifact:
 
 ```json
-{"gateway_result_digest":"sha256:<result>"}
+{"result_artifact_digest":"sha256:<result-artifact>"}
 ```
 
 ```json

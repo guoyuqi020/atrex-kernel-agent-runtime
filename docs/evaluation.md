@@ -19,8 +19,8 @@ by opaque numeric Shape ID, and sanitized profiler data.
 
 ## Exploratory operations
 
-Optimizer Runtime Tools expose `check`, `dev`, `evaluate`, `profile`, `disassemble`, `poll`, `jobs`,
-`cancel`, `env`, `health`, and `config` through `gateway-execute`. Candidate-bearing operations seal
+Optimizer Runtime Tools expose `check`, `dev`, `evaluate`, `profile`, `disassemble`, and `env`
+through `gateway-execute`. Candidate-bearing operations seal
 the exact source before calling Agate. Every result is immutable and queryable by the identities
 returned to the Agent.
 

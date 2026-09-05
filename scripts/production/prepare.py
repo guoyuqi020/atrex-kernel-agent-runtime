@@ -574,12 +574,7 @@ def _runtime_config(
             "dev",
             "check",
             "disassemble",
-            "poll",
-            "jobs",
-            "cancel",
             "env",
-            "health",
-            "config",
         ],
         "gateway_max_calls": int(runtime_policy["gateway_max_calls"]),
         "gateway_capability_lifetime_seconds": int(

@@ -105,7 +105,7 @@ def _bootstrap_report(
                 generation,
                 candidate,
             ),
-            "gateway_result_digests": [gateway_result],
+            "result_artifact_digests": [gateway_result],
         }
     )
     terminal_action = "block" if blocked else "complete"

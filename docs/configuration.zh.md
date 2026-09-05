@@ -142,9 +142,11 @@ Resource Block，由外层容器持有总限制。两个 Mode 都保留所在 Ne
 
 ## Evidence
 
-`campaign.evidence` 限制 Trace File/Byte/Event、归一化文本和 Kernel Diff。Redaction Pattern 只
-作用于归一化投影；原始 Session Artifact 保持不可变，可物化进授权 Agent Evidence 或由管理端
-读取，但不会上传到 GPU Wiki。
+`campaign.evidence.max_trace_files` 只限制参与语义投影的 Runtime 归一化 JSONL Ledger；Provider
+原生主 Session/子 Agent Transcript 作为不透明原文保留，不计入该数量。`max_trace_bytes` 限制包含
+这些 Provider 文件在内的完整 Session Artifact。其余配置限制投影 Event/Text 与 Kernel Diff。
+Redaction Pattern 只作用于归一化投影；原始 Session Artifact 保持不可变，可物化进授权 Agent
+Evidence 或由管理端读取，但不会上传到 GPU Wiki。
 
 ## Campaign 配置
 

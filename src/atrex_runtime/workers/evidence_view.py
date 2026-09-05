@@ -916,37 +916,49 @@ def _materialize_epoch_kernel_trials(
             if not isinstance(observations, list):
                 raise ValueError("completed Epoch Kernel Trial observations are invalid")
             materialized_results: set[str] = set()
+            projected_observations: list[JsonValue] = []
             for observation in observations:
                 if not isinstance(observation, dict):
                     raise ValueError("completed Epoch Kernel Trial observation is invalid")
-                raw_result_digest = observation.get("gateway_result_digest")
-                if raw_result_digest is None:
-                    continue
                 raw_response_digest = observation.get("result_artifact_digest")
-                if not isinstance(raw_result_digest, str) or not isinstance(
-                    raw_response_digest, str
-                ):
-                    raise ValueError("completed Epoch Gateway Result identity is invalid")
-                result_digest = parse_artifact_digest(raw_result_digest)
+                if raw_response_digest is None:
+                    continue
+                if not isinstance(raw_response_digest, str):
+                    raise ValueError("completed Epoch Result Artifact identity is invalid")
                 response_digest = parse_artifact_digest(raw_response_digest)
-                if raw_result_digest in materialized_results:
+                if raw_response_digest in materialized_results:
                     continue
                 response = artifacts.verify(response_digest)
-                if response.kind is not ArtifactKind.GATEWAY_RESULT:
-                    raise ValueError("Kernel Trial Gateway response has the wrong Artifact kind")
+                if response.kind not in {
+                    ArtifactKind.RESULT_ARTIFACT,
+                    ArtifactKind.GATEWAY_RESULT,
+                }:
+                    raise ValueError("Kernel Trial Result Artifact has the wrong kind")
                 artifacts.materialize(
                     response_digest,
                     root
                     / trial_id
-                    / "gateway-results"
-                    / str(result_digest).removeprefix("sha256:"),
+                    / "result-artifacts"
+                    / str(response_digest).removeprefix("sha256:"),
                 )
-                materialized_results.add(raw_result_digest)
+                projected_observations.append(
+                    {
+                        key: value
+                        for key, value in observation.items()
+                        if key != "gateway_result_digest"
+                    }
+                )
+                materialized_results.add(raw_response_digest)
             values.append(
                 {
-                    **{key: value for key, value in raw.items() if key != "disposition"},
+                    **{
+                        key: value
+                        for key, value in raw.items()
+                        if key not in {"disposition", "observations"}
+                    },
+                    "observations": projected_observations,
                     "source_path": f"{trial_id}/source/",
-                    "gateway_results_path": f"{trial_id}/gateway-results/",
+                    "result_artifacts_path": f"{trial_id}/result-artifacts/",
                 }
             )
     write_canonical_json(

@@ -87,22 +87,16 @@ class EvidenceArtifactProjector:
 
     def session_projection(self, digest: ArtifactDigest) -> dict[str, JsonValue]:
         """Project a bounded normalized summary while retaining only the source digest."""
-        _artifact, all_files = self._bounded_session(digest)
-        compressed = [path for path in all_files if path.name.endswith(".jsonl.zstd")]
+        artifact, all_files = self._bounded_session(digest)
+        files, compressed = self._semantic_session_files(artifact, all_files)
         if compressed:
             raise ValueError("Session projection requires uncompressed JSONL")
+        if len(files) > self._limits.max_trace_files:
+            raise ValueError("Session projection exceeds the configured file limit")
 
         sessions: list[JsonValue] = []
         remaining_events = self._limits.max_trace_events
         remaining_text = self._limits.max_projection_text_bytes
-        # conversation.jsonl is the unredacted, backend-neutral transcript. It is
-        # available through raw_session_projection; only normalized Provider event
-        # ledgers belong in the bounded semantic projection below.
-        files = [
-            path
-            for path in all_files
-            if path.suffix == ".jsonl" and path.name != "conversation.jsonl"
-        ]
         for path in files:
             projected, used_events, used_text = self._project_session_file(
                 path,
@@ -149,11 +143,35 @@ class EvidenceArtifactProjector:
         if artifact.kind is not ArtifactKind.SESSION_LOG:
             raise ValueError("Session projection source has the wrong artifact kind")
         all_files = sorted(path for path in artifact.payload_path.rglob("*") if path.is_file())
-        if len(all_files) > self._limits.max_trace_files:
-            raise ValueError("Session trace exceeds the configured file limit")
         if sum(path.stat().st_size for path in all_files) > self._limits.max_trace_bytes:
             raise ValueError("Session trace exceeds the configured byte limit")
         return artifact, all_files
+
+    @staticmethod
+    def _semantic_session_files(
+        artifact: StoredArtifact,
+        all_files: list[Path],
+    ) -> tuple[list[Path], list[Path]]:
+        """Separate Runtime event ledgers from opaque Provider transcripts.
+
+        Provider-native JSONL, including Claude child-Agent transcripts, is retained in the
+        immutable Session Artifact and in raw projections. It does not implement Runtime's
+        normalized Session envelope and must never be parsed as one. ``conversation.jsonl`` is
+        likewise a backend-neutral reading view rather than a semantic event ledger.
+        """
+        semantic: list[Path] = []
+        compressed: list[Path] = []
+        for path in all_files:
+            relative = path.relative_to(artifact.payload_path)
+            if not relative.parts or relative.parts[0] in {"provider", "input"}:
+                continue
+            if path.name == "conversation.jsonl":
+                continue
+            if path.name.endswith(".jsonl.zstd"):
+                compressed.append(path)
+            elif path.suffix == ".jsonl":
+                semantic.append(path)
+        return semantic, compressed
 
     def kernel_diff(
         self,

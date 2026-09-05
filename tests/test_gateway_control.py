@@ -181,12 +181,12 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
         "before": {
             "kernel_artifact_digest": str(candidate),
             "kernel_trial_id": control.list_kernel_trials((attempt.id,))[0].id,
-            "gateway_result_digests": [str(result), str(profile_result)],
+            "result_artifact_digests": [str(result), str(profile_result)],
         },
         "after": {
             "kernel_artifact_digest": str(candidate),
             "kernel_trial_id": control.list_kernel_trials((attempt.id,))[0].id,
-            "gateway_result_digests": [str(result), str(profile_result)],
+            "result_artifact_digests": [str(result), str(profile_result)],
         },
         "evidence": "dev-reverted-1",
         "analysis": "the larger tile regressed latency",
@@ -197,7 +197,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
         "operation": "profile",
         "kernel_artifact_digest": str(candidate),
         "kernel_trial_id": control.list_kernel_trials((attempt.id,))[0].id,
-        "gateway_result_digest": str(profile_result),
+        "result_artifact_digest": str(profile_result),
     }
     control.record_kernel_trial_annotations(
         attempt.id,
@@ -222,7 +222,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
             attempt.id,
             (experiment,),
             profile_supporting_results=(
-                {**profile_reference, "gateway_result_digest": str(digest("unrecorded"))},
+                {**profile_reference, "result_artifact_digest": str(digest("unrecorded"))},
             ),
         )
     with pytest.raises(ValueError, match="must be profile"):
@@ -234,7 +234,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
                     "operation": "dev",
                     "kernel_artifact_digest": str(candidate),
                     "kernel_trial_id": control.list_kernel_trials((attempt.id,))[0].id,
-                    "gateway_result_digest": str(result),
+                    "result_artifact_digest": str(result),
                 },
             ),
         )
@@ -260,7 +260,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
                     **experiment,
                     "after": {
                         **experiment["after"],
-                        "gateway_result_digests": [str(digest("foreign-result"))],
+                        "result_artifact_digests": [str(digest("foreign-result"))],
                     },
                 },
             ),
@@ -273,7 +273,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
                     **experiment,
                     "before": {
                         **experiment["before"],
-                        "gateway_result_digests": [str(digest("foreign-before-result"))],
+                        "result_artifact_digests": [str(digest("foreign-before-result"))],
                     },
                 },
             ),
@@ -352,7 +352,7 @@ def test_kernel_trial_baseline_annotation_preserves_action_and_maps_to_continue(
         "after": {
             "kernel_artifact_digest": str(candidate),
             "kernel_trial_id": trial_id,
-            "gateway_result_digests": [str(result)],
+            "result_artifact_digests": [str(result)],
         },
         "evidence": "the Agent-visible Evaluate passed",
         "analysis": "the first measured candidate establishes the baseline anchor",
@@ -1443,7 +1443,7 @@ def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_pat
     historical_subject = {
         "kernel_artifact_digest": str(historical_candidate),
         "kernel_trial_id": historical_trial_id,
-        "gateway_result_digests": [str(historical_profile_result)],
+        "result_artifact_digests": [str(historical_profile_result)],
     }
     control.append_experiment(
         historical_attempt_id,
@@ -1511,7 +1511,7 @@ def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_pat
         "after": {
             "kernel_artifact_digest": str(current_candidate),
             "kernel_trial_id": control.list_kernel_trials((current.id,))[0].id,
-            "gateway_result_digests": [str(current_result)],
+            "result_artifact_digests": [str(current_result)],
         },
         "evidence": "current-dev-1",
         "analysis": "latency improved",
@@ -1521,7 +1521,7 @@ def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_pat
         "operation": "profile",
         "kernel_artifact_digest": str(historical_candidate),
         "kernel_trial_id": historical_trial_id,
-        "gateway_result_digest": str(historical_profile_result),
+        "result_artifact_digest": str(historical_profile_result),
     }
 
     assert control.live_visible_experiments(current.id)[0]["after"] == historical_subject
@@ -1538,7 +1538,7 @@ def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_pat
             profile_supporting_results=(
                 {
                     **historical_profile_reference,
-                    "gateway_result_digest": str(digest("uncited")),
+                    "result_artifact_digest": str(digest("uncited")),
                 },
             ),
         )

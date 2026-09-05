@@ -12,13 +12,13 @@ from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest, parse
 
 
 class AttemptExperimentSubjectV1(BaseModel):
-    """One exact Kernel and all Gateway results used on one side of a comparison."""
+    """One exact Kernel Trial snapshot materialized by Runtime when recorded."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kernel_artifact_digest: ArtifactDigest
     kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
-    gateway_result_digests: tuple[ArtifactDigest, ...] = Field(min_length=1, max_length=32)
+    result_artifact_digests: tuple[ArtifactDigest, ...] = Field(min_length=1, max_length=4_096)
 
     @field_validator("kernel_artifact_digest", mode="before")
     @classmethod
@@ -27,19 +27,19 @@ class AttemptExperimentSubjectV1(BaseModel):
             raise ValueError("Experiment Kernel Artifact Digest must be text")
         return parse_artifact_digest(value)
 
-    @field_validator("gateway_result_digests", mode="before")
+    @field_validator("result_artifact_digests", mode="before")
     @classmethod
-    def _validate_gateway_digests(cls, value: object) -> tuple[ArtifactDigest, ...]:
+    def _validate_result_digests(cls, value: object) -> tuple[ArtifactDigest, ...]:
         if not isinstance(value, (list, tuple)):
-            raise ValueError("Experiment Gateway Result Digests must be an array")
+            raise ValueError("Experiment Result Artifact Digests must be an array")
         parsed_values: list[ArtifactDigest] = []
         for item in value:
             if not isinstance(item, str):
-                raise ValueError("Experiment Gateway Result Digest must be text")
+                raise ValueError("Experiment Result Artifact Digest must be text")
             parsed_values.append(parse_artifact_digest(item))
         parsed = tuple(parsed_values)
         if len(set(parsed)) != len(parsed):
-            raise ValueError("Experiment Gateway Result Digests must be unique")
+            raise ValueError("Experiment Result Artifact Digests must be unique")
         return parsed
 
 
@@ -181,9 +181,9 @@ class AttemptProfileEvidenceReferenceV1(BaseModel):
     operation: Literal["profile"]
     kernel_artifact_digest: ArtifactDigest
     kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
-    gateway_result_digest: ArtifactDigest
+    result_artifact_digest: ArtifactDigest
 
-    @field_validator("kernel_artifact_digest", "gateway_result_digest", mode="before")
+    @field_validator("kernel_artifact_digest", "result_artifact_digest", mode="before")
     @classmethod
     def _validate_digest(cls, value: object) -> ArtifactDigest:
         if not isinstance(value, str):
@@ -223,9 +223,9 @@ class AttemptProfileEvidenceV1(BaseModel):
 
     @model_validator(mode="after")
     def _validate_supporting_results(self) -> AttemptProfileEvidenceV1:
-        digests = tuple(item.gateway_result_digest for item in self.supporting_results)
+        digests = tuple(item.result_artifact_digest for item in self.supporting_results)
         if len(set(digests)) != len(digests):
-            raise ValueError("Profile evidence Gateway Result Digests must be unique")
+            raise ValueError("Profile evidence Result Artifact Digests must be unique")
         if not any(item.operation == "profile" for item in self.supporting_results):
             raise ValueError("Profile evidence requires at least one profile result")
         return self

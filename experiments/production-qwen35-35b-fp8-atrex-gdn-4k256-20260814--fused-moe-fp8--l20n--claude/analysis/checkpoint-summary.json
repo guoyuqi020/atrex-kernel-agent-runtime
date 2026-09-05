@@ -1,0 +1,974 @@
+{
+  "matched_checkpoint": {
+    "scope": {
+      "runtime_through_epoch": 5,
+      "aka_through_episode": 10,
+      "bootstrap_included": false
+    },
+    "runtime": {
+      "cuda/ablation-isolated-01": {
+        "dsl": "cuda",
+        "arm": "ablation-isolated-01",
+        "lineage_id": "lineage_7baf392d8ca30a24a725043504dff98b",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1818.9201117082303,
+        "epoch_wall_hours": 11.611053146388889,
+        "agent_hours": 11.514369139166668,
+        "optimizer_sessions": 10,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 1807078,
+          "cache_read": 94931252,
+          "cache_write": 2567625,
+          "output": 1415410,
+          "total": 100721365,
+          "cost_cny": 206.085323
+        }
+      },
+      "cuda/ablation-isolated-02": {
+        "dsl": "cuda",
+        "arm": "ablation-isolated-02",
+        "lineage_id": "lineage_e4b89335bcf53b55fab3847815b49e50",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1691.8751004211047,
+        "epoch_wall_hours": 11.871174752777778,
+        "agent_hours": 11.795716609722223,
+        "optimizer_sessions": 10,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 1799475,
+          "cache_read": 87735942,
+          "cache_write": 2529515,
+          "output": 1497173,
+          "total": 93562105,
+          "cost_cny": 201.170595
+        }
+      },
+      "cuda/ablation-pooled": {
+        "dsl": "cuda",
+        "arm": "ablation-pooled",
+        "lineage_id": "lineage_09f833862de727e942c2a254c50f676a",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1332.5034711827032,
+        "epoch_wall_hours": 12.745718881666667,
+        "agent_hours": 20.965034183333334,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3102023,
+          "cache_read": 193174779,
+          "cache_write": 4881978,
+          "output": 2645914,
+          "total": 203804694,
+          "cost_cny": 398.881629
+        }
+      },
+      "cuda/ablation-retained": {
+        "dsl": "cuda",
+        "arm": "ablation-retained",
+        "lineage_id": "lineage_42127ede43a33ad22ea17023d1abb633",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1337.3782829405538,
+        "epoch_wall_hours": 12.548134463333334,
+        "agent_hours": 20.601657081944442,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3239843,
+          "cache_read": 176832674,
+          "cache_write": 4754590,
+          "output": 2620154,
+          "total": 187447261,
+          "cost_cny": 381.355184
+        }
+      },
+      "cutedsl/ablation-isolated-01": {
+        "dsl": "cutedsl",
+        "arm": "ablation-isolated-01",
+        "lineage_id": "lineage_6989deda14f307ace1dd0fe9f22eac57",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1942.8812749150288,
+        "epoch_wall_hours": 12.22747139888889,
+        "agent_hours": 12.120058882222219,
+        "optimizer_sessions": 10,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 1688407,
+          "cache_read": 110584157,
+          "cache_write": 2644616,
+          "output": 1480638,
+          "total": 116397818,
+          "cost_cny": 223.817249
+        }
+      },
+      "cutedsl/ablation-isolated-02": {
+        "dsl": "cutedsl",
+        "arm": "ablation-isolated-02",
+        "lineage_id": "lineage_2efc49d047559595e5f231487e19fefd",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 2094.546449252887,
+        "epoch_wall_hours": 11.081546458055556,
+        "agent_hours": 10.958974716666669,
+        "optimizer_sessions": 10,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 1551500,
+          "cache_read": 102820044,
+          "cache_write": 2415928,
+          "output": 1303822,
+          "total": 108091294,
+          "cost_cny": 204.614556
+        }
+      },
+      "cutedsl/ablation-pooled": {
+        "dsl": "cutedsl",
+        "arm": "ablation-pooled",
+        "lineage_id": "lineage_9e73f2b4e677a56fda4ba910f62e8f0d",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1878.7888961285569,
+        "epoch_wall_hours": 14.483211213055554,
+        "agent_hours": 23.52457483555556,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3653860,
+          "cache_read": 208793949,
+          "cache_write": 5269427,
+          "output": 2917954,
+          "total": 220635190,
+          "cost_cny": 436.728018
+        }
+      },
+      "cutedsl/ablation-retained": {
+        "dsl": "cutedsl",
+        "arm": "ablation-retained",
+        "lineage_id": "lineage_25f5bf59772720269df27825363e8272",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1222.8259716170646,
+        "epoch_wall_hours": 13.272148654444445,
+        "agent_hours": 22.12261418361111,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3737475,
+          "cache_read": 209221721,
+          "cache_write": 5234166,
+          "output": 2786689,
+          "total": 220980051,
+          "cost_cny": 432.904715
+        }
+      },
+      "triton/ablation-isolated-01": {
+        "dsl": "triton",
+        "arm": "ablation-isolated-01",
+        "lineage_id": "lineage_0347ab2ee1b3aa4ef0da55f0ff278b1c",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1056.7241302659122,
+        "epoch_wall_hours": 10.473882324722224,
+        "agent_hours": 10.39800122861111,
+        "optimizer_sessions": 10,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 1417908,
+          "cache_read": 97908644,
+          "cache_write": 2381532,
+          "output": 1254966,
+          "total": 102963050,
+          "cost_cny": 195.825296
+        }
+      },
+      "triton/ablation-isolated-02": {
+        "dsl": "triton",
+        "arm": "ablation-isolated-02",
+        "lineage_id": "lineage_616aa14bfe0eeafb30878777e538460e",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1093.0454172123013,
+        "epoch_wall_hours": 12.620699653333334,
+        "agent_hours": 12.556731140555556,
+        "optimizer_sessions": 10,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 1974576,
+          "cache_read": 98773199,
+          "cache_write": 2696632,
+          "output": 1576692,
+          "total": 105021099,
+          "cost_cny": 219.678503
+        }
+      },
+      "triton/ablation-pooled": {
+        "dsl": "triton",
+        "arm": "ablation-pooled",
+        "lineage_id": "lineage_7d46350538051efb5466d8477f5d70ca",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1096.0401768779627,
+        "epoch_wall_hours": 13.07720245638889,
+        "agent_hours": 23.861377293055554,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3458221,
+          "cache_read": 172560074,
+          "cache_write": 5319446,
+          "output": 3005721,
+          "total": 184343462,
+          "cost_cny": 402.056372
+        }
+      },
+      "triton/ablation-retained": {
+        "dsl": "triton",
+        "arm": "ablation-retained",
+        "lineage_id": "lineage_706e6003bacbaa224031f49b84585af8",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1150.2232837330857,
+        "epoch_wall_hours": 9.880944643055557,
+        "agent_hours": 16.95079612583333,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 2262679,
+          "cache_read": 139655296,
+          "cache_write": 3995221,
+          "output": 2067818,
+          "total": 147981014,
+          "cost_cny": 301.177207
+        }
+      },
+      "cuda/evolve": {
+        "dsl": "cuda",
+        "arm": "evolve",
+        "lineage_id": "lineage_a5d488ac474161cb15f8316eca19b180",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1453.789571951199,
+        "epoch_wall_hours": 13.2872478725,
+        "agent_hours": 20.198325859722225,
+        "optimizer_sessions": 18,
+        "evolver_sessions": 4,
+        "usage": {
+          "input": 3387343,
+          "cache_read": 174873442,
+          "cache_write": 5259660,
+          "output": 2542345,
+          "total": 186062790,
+          "cost_cny": 385.940878
+        }
+      },
+      "cutedsl/evolve": {
+        "dsl": "cutedsl",
+        "arm": "evolve",
+        "lineage_id": "lineage_bd83b13b810cd9d9d4e1291e90a08ef5",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1635.944365003595,
+        "epoch_wall_hours": 12.320482716111112,
+        "agent_hours": 18.46437581861111,
+        "optimizer_sessions": 18,
+        "evolver_sessions": 4,
+        "usage": {
+          "input": 3112471,
+          "cache_read": 164588924,
+          "cache_write": 5140069,
+          "output": 2288416,
+          "total": 175129880,
+          "cost_cny": 361.422587
+        }
+      },
+      "triton/evolve": {
+        "dsl": "triton",
+        "arm": "evolve",
+        "lineage_id": "lineage_2c15e6e21668ba9a46883575d3b59d50",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1148.0378639180942,
+        "epoch_wall_hours": 12.91843638361111,
+        "agent_hours": 20.898194725833328,
+        "optimizer_sessions": 18,
+        "evolver_sessions": 4,
+        "usage": {
+          "input": 3090956,
+          "cache_read": 171793427,
+          "cache_write": 4757573,
+          "output": 2548288,
+          "total": 182190244,
+          "cost_cny": 371.986862
+        }
+      }
+    },
+    "aka": {
+      "runs": {
+        "AKA-1/cuda": {
+          "system": "AKA-1",
+          "dsl": "cuda",
+          "latency_us": 1388.8857320108295,
+          "episode_wall_hours": 10.824929143055556,
+          "episodes": 10,
+          "outcomes": {
+            "promoted": 9,
+            "pivot": 1
+          },
+          "usage": {
+            "input": 7884,
+            "cache_read": 119845739,
+            "cache_write": 4165994,
+            "output": 1507900,
+            "total": 125527517,
+            "cost_cny": 236.714657
+          }
+        },
+        "AKA-1/triton": {
+          "system": "AKA-1",
+          "dsl": "triton",
+          "latency_us": 1124.2708090084698,
+          "episode_wall_hours": 11.996888912222223,
+          "episodes": 10,
+          "outcomes": {
+            "protocol_failure": 2,
+            "promoted": 4,
+            "pivot": 4
+          },
+          "usage": {
+            "input": 9144,
+            "cache_read": 144429446,
+            "cache_write": 4302394,
+            "output": 1552971,
+            "total": 150293955,
+            "cost_cny": 264.98204
+          }
+        },
+        "AKA-1/cutedsl": {
+          "system": "AKA-1",
+          "dsl": "cutedsl",
+          "latency_us": 1728.4883688467464,
+          "episode_wall_hours": 17.578907865555554,
+          "episodes": 10,
+          "outcomes": {
+            "promoted": 4,
+            "protocol_failure": 1,
+            "pivot": 4,
+            "rejected": 1
+          },
+          "usage": {
+            "input": 11718,
+            "cache_read": 189622406,
+            "cache_write": 5737435,
+            "output": 2269620,
+            "total": 197641179,
+            "cost_cny": 357.530867
+          }
+        },
+        "AKA-2/cuda": {
+          "system": "AKA-2",
+          "dsl": "cuda",
+          "latency_us": 1264.5834858445064,
+          "episode_wall_hours": 20.677184513611113,
+          "episodes": 10,
+          "outcomes": {
+            "promoted": 8,
+            "pivot": 2
+          },
+          "usage": {
+            "input": 13578,
+            "cache_read": 215984258,
+            "cache_write": 6870463,
+            "output": 2504262,
+            "total": 225372561,
+            "cost_cny": 409.357571
+          }
+        },
+        "AKA-2/triton": {
+          "system": "AKA-2",
+          "dsl": "triton",
+          "latency_us": 1322.8851428004589,
+          "episode_wall_hours": 13.192910777222222,
+          "episodes": 10,
+          "outcomes": {
+            "promoted": 4,
+            "pivot": 5,
+            "rejected": 1
+          },
+          "usage": {
+            "input": 8070,
+            "cache_read": 122283396,
+            "cache_write": 3996276,
+            "output": 1520995,
+            "total": 127808737,
+            "cost_cny": 237.080196
+          }
+        },
+        "AKA-2/cutedsl": {
+          "system": "AKA-2",
+          "dsl": "cutedsl",
+          "latency_us": 1389.4436100566313,
+          "episode_wall_hours": 17.069405323055555,
+          "episodes": 10,
+          "outcomes": {
+            "promoted": 7,
+            "protocol_failure": 1,
+            "pivot": 2
+          },
+          "usage": {
+            "input": 9524,
+            "cache_read": 144691482,
+            "cache_write": 7772594,
+            "output": 1582519,
+            "total": 154056119,
+            "cost_cny": 318.365364
+          }
+        }
+      },
+      "included_traces": {
+        "optimizer": 60,
+        "subagent": 5,
+        "policy_review": 90
+      },
+      "included_usage_by_role": {
+        "optimizer": {
+          "input": 54974,
+          "cache_read": 908047913,
+          "cache_write": 28446477,
+          "output": 10100589,
+          "total": 946649953,
+          "cost_cny": 1699.02596
+        },
+        "subagent": {
+          "input": 1236,
+          "cache_read": 12492500,
+          "cache_write": 467550,
+          "output": 138986,
+          "total": 13100272,
+          "cost_cny": 24.524078
+        },
+        "policy_review": {
+          "input": 3708,
+          "cache_read": 16316314,
+          "cache_write": 3931129,
+          "output": 698692,
+          "total": 20949843,
+          "cost_cny": 100.480657
+        }
+      },
+      "unassigned_usage": {
+        "system": "AKA-2",
+        "dsl": "triton",
+        "total_tokens": 221597,
+        "reason": "Timed-out policy review; only total is available",
+        "cost_bounds": "All cache read (minimum) through all output (maximum)"
+      }
+    },
+    "evolution": {
+      "sessions": 12,
+      "proposals": {
+        "evolved": 10,
+        "evolve_from_history": 2
+      },
+      "file_changes": {
+        "prompt/modified": 12,
+        "skills/added": 9,
+        "skills/modified": 18,
+        "skills/deleted": 1,
+        "tools/modified": 10,
+        "tools/added": 7
+      },
+      "line_changes": {
+        "prompt/added": 269,
+        "prompt/deleted": 27,
+        "skills/added": 568,
+        "skills/deleted": 96,
+        "tools/added": 375,
+        "tools/deleted": 18
+      },
+      "modified_file_size_direction": {
+        "prompt/longer": 12,
+        "skills/shorter": 2,
+        "skills/longer": 16,
+        "tools/longer": 10
+      }
+    }
+  },
+  "full_budget": {
+    "scope": {
+      "runtime_through_epoch": 10,
+      "aka_configured_max_iters": 20,
+      "aka_archived_optimizer_episodes": 19,
+      "bootstrap_included": false
+    },
+    "runtime": {
+      "cuda/ablation-isolated-01": {
+        "dsl": "cuda",
+        "arm": "ablation-isolated-01",
+        "lineage_id": "lineage_7baf392d8ca30a24a725043504dff98b",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1662.8130250221343,
+        "epoch_wall_hours": 20.702369089166666,
+        "agent_hours": 20.56618228972222,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3754370,
+          "cache_read": 186091301,
+          "cache_write": 5390932,
+          "output": 2721094,
+          "total": 197957697,
+          "cost_cny": 409.967105
+        }
+      },
+      "cuda/ablation-isolated-02": {
+        "dsl": "cuda",
+        "arm": "ablation-isolated-02",
+        "lineage_id": "lineage_e4b89335bcf53b55fab3847815b49e50",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1517.6813598813028,
+        "epoch_wall_hours": 22.780956247777777,
+        "agent_hours": 22.6835445075,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 4136741,
+          "cache_read": 189557210,
+          "cache_write": 5521515,
+          "output": 3026190,
+          "total": 202241656,
+          "cost_cny": 430.963667
+        }
+      },
+      "cuda/ablation-pooled": {
+        "dsl": "cuda",
+        "arm": "ablation-pooled",
+        "lineage_id": "lineage_09f833862de727e942c2a254c50f676a",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1086.3248802141777,
+        "epoch_wall_hours": 24.154503531666666,
+        "agent_hours": 41.73223521055556,
+        "optimizer_sessions": 40,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 7059261,
+          "cache_read": 384430601,
+          "cache_write": 10505956,
+          "output": 5619160,
+          "total": 407614978,
+          "cost_cny": 829.020833
+        }
+      },
+      "cuda/ablation-retained": {
+        "dsl": "cuda",
+        "arm": "ablation-retained",
+        "lineage_id": "lineage_42127ede43a33ad22ea17023d1abb633",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1199.8961055633938,
+        "epoch_wall_hours": 23.353353145277776,
+        "agent_hours": 40.452963897777785,
+        "optimizer_sessions": 40,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 7180827,
+          "cache_read": 374745816,
+          "cache_write": 10298517,
+          "output": 5416560,
+          "total": 397641720,
+          "cost_cny": 810.389655
+        }
+      },
+      "cutedsl/ablation-isolated-01": {
+        "dsl": "cutedsl",
+        "arm": "ablation-isolated-01",
+        "lineage_id": "lineage_6989deda14f307ace1dd0fe9f22eac57",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1713.2436067058952,
+        "epoch_wall_hours": 21.805591703333334,
+        "agent_hours": 21.639561691944436,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3363970,
+          "cache_read": 206891027,
+          "cache_write": 5174864,
+          "output": 2879635,
+          "total": 218309496,
+          "cost_cny": 428.548487
+        }
+      },
+      "cutedsl/ablation-isolated-02": {
+        "dsl": "cutedsl",
+        "arm": "ablation-isolated-02",
+        "lineage_id": "lineage_2efc49d047559595e5f231487e19fefd",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1309.9053269241185,
+        "epoch_wall_hours": 23.49207921861111,
+        "agent_hours": 23.297492598333335,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3933447,
+          "cache_read": 222511749,
+          "cache_write": 5567927,
+          "output": 3006949,
+          "total": 235020072,
+          "cost_cny": 461.482182
+        }
+      },
+      "cutedsl/ablation-pooled": {
+        "dsl": "cutedsl",
+        "arm": "ablation-pooled",
+        "lineage_id": "lineage_9e73f2b4e677a56fda4ba910f62e8f0d",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1365.0185361381436,
+        "epoch_wall_hours": 26.77319227,
+        "agent_hours": 44.71549953722223,
+        "optimizer_sessions": 40,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 7332399,
+          "cache_read": 415603557,
+          "cache_write": 11016498,
+          "output": 5819466,
+          "total": 439771920,
+          "cost_cny": 878.340591
+        }
+      },
+      "cutedsl/ablation-retained": {
+        "dsl": "cutedsl",
+        "arm": "ablation-retained",
+        "lineage_id": "lineage_25f5bf59772720269df27825363e8272",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1126.0741554763679,
+        "epoch_wall_hours": 26.49741270666667,
+        "agent_hours": 42.84891965527777,
+        "optimizer_sessions": 40,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 8059329,
+          "cache_read": 411714854,
+          "cache_write": 11117821,
+          "output": 5744174,
+          "total": 436636178,
+          "cost_cny": 881.984381
+        }
+      },
+      "triton/ablation-isolated-01": {
+        "dsl": "triton",
+        "arm": "ablation-isolated-01",
+        "lineage_id": "lineage_0347ab2ee1b3aa4ef0da55f0ff278b1c",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1044.368611337444,
+        "epoch_wall_hours": 21.00542619777778,
+        "agent_hours": 20.907842707222223,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3235011,
+          "cache_read": 193464388,
+          "cache_write": 4950570,
+          "output": 2745683,
+          "total": 204395652,
+          "cost_cny": 405.387658
+        }
+      },
+      "triton/ablation-isolated-02": {
+        "dsl": "triton",
+        "arm": "ablation-isolated-02",
+        "lineage_id": "lineage_616aa14bfe0eeafb30878777e538460e",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1058.5296171032162,
+        "epoch_wall_hours": 21.963995239722223,
+        "agent_hours": 21.867316679166663,
+        "optimizer_sessions": 20,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 3807574,
+          "cache_read": 177817431,
+          "cache_write": 5347505,
+          "output": 2906384,
+          "total": 189878894,
+          "cost_cny": 408.350718
+        }
+      },
+      "triton/ablation-pooled": {
+        "dsl": "triton",
+        "arm": "ablation-pooled",
+        "lineage_id": "lineage_7d46350538051efb5466d8477f5d70ca",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1096.0401768779627,
+        "epoch_wall_hours": 21.160176349444445,
+        "agent_hours": 38.55288070833333,
+        "optimizer_sessions": 40,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 5801390,
+          "cache_read": 293994998,
+          "cache_write": 9384497,
+          "output": 5187596,
+          "total": 314368481,
+          "cost_cny": 691.132589
+        }
+      },
+      "triton/ablation-retained": {
+        "dsl": "triton",
+        "arm": "ablation-retained",
+        "lineage_id": "lineage_706e6003bacbaa224031f49b84585af8",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1138.2172806423243,
+        "epoch_wall_hours": 17.969410464166668,
+        "agent_hours": 30.975508485833327,
+        "optimizer_sessions": 40,
+        "evolver_sessions": 0,
+        "usage": {
+          "input": 4498079,
+          "cache_read": 263117904,
+          "cache_write": 7627022,
+          "output": 3974826,
+          "total": 279217831,
+          "cost_cny": 574.593918
+        }
+      },
+      "cuda/evolve": {
+        "dsl": "cuda",
+        "arm": "evolve",
+        "lineage_id": "lineage_a5d488ac474161cb15f8316eca19b180",
+        "baseline_latency_us": 26694.082962443576,
+        "latency_us": 1295.6456732267923,
+        "epoch_wall_hours": 24.969590772222222,
+        "agent_hours": 38.11585595166667,
+        "optimizer_sessions": 38,
+        "evolver_sessions": 9,
+        "usage": {
+          "input": 7176416,
+          "cache_read": 351988267,
+          "cache_write": 11802531,
+          "output": 5125711,
+          "total": 376092925,
+          "cost_cny": 799.66882
+        }
+      },
+      "cutedsl/evolve": {
+        "dsl": "cutedsl",
+        "arm": "evolve",
+        "lineage_id": "lineage_bd83b13b810cd9d9d4e1291e90a08ef5",
+        "baseline_latency_us": 303764.8910472649,
+        "latency_us": 1391.772295496912,
+        "epoch_wall_hours": 23.480872272499997,
+        "agent_hours": 36.366579965833346,
+        "optimizer_sessions": 38,
+        "evolver_sessions": 9,
+        "usage": {
+          "input": 6073188,
+          "cache_read": 324754354,
+          "cache_write": 11092978,
+          "output": 4797031,
+          "total": 346717551,
+          "cost_cny": 736.720396
+        }
+      },
+      "triton/evolve": {
+        "dsl": "triton",
+        "arm": "evolve",
+        "lineage_id": "lineage_2c15e6e21668ba9a46883575d3b59d50",
+        "baseline_latency_us": 1686.1149584300745,
+        "latency_us": 1084.7679963078212,
+        "epoch_wall_hours": 24.26550918555556,
+        "agent_hours": 38.84639646777777,
+        "optimizer_sessions": 38,
+        "evolver_sessions": 9,
+        "usage": {
+          "input": 6357617,
+          "cache_read": 333799293,
+          "cache_write": 10173546,
+          "output": 5111839,
+          "total": 355442295,
+          "cost_cny": 746.720091
+        }
+      }
+    },
+    "aka": {
+      "runs": {
+        "AKA-1/cuda": {
+          "system": "AKA-1",
+          "dsl": "cuda",
+          "latency_us": 1275.3506570538866,
+          "episode_wall_hours": 26.39361815361111,
+          "episodes": 19,
+          "outcomes": {
+            "promoted": 12,
+            "pivot": 7
+          },
+          "usage": {
+            "input": 16800,
+            "cache_read": 266001891,
+            "cache_write": 8526446,
+            "output": 3165875,
+            "total": 277711012,
+            "cost_cny": 508.071681
+          }
+        },
+        "AKA-1/triton": {
+          "system": "AKA-1",
+          "dsl": "triton",
+          "latency_us": 1105.9620604794468,
+          "episode_wall_hours": 29.038496494722224,
+          "episodes": 19,
+          "outcomes": {
+            "protocol_failure": 2,
+            "promoted": 7,
+            "pivot": 10
+          },
+          "usage": {
+            "input": 19098,
+            "cache_read": 312034332,
+            "cache_write": 9634879,
+            "output": 3401377,
+            "total": 325089686,
+            "cost_cny": 579.236265
+          }
+        },
+        "AKA-1/cutedsl": {
+          "system": "AKA-1",
+          "dsl": "cutedsl",
+          "latency_us": 1626.6425965213334,
+          "episode_wall_hours": 33.72832600638889,
+          "episodes": 19,
+          "outcomes": {
+            "promoted": 10,
+            "protocol_failure": 1,
+            "pivot": 7,
+            "rejected": 1
+          },
+          "usage": {
+            "input": 20682,
+            "cache_read": 334863334,
+            "cache_write": 10432550,
+            "output": 4097469,
+            "total": 349414035,
+            "cost_cny": 639.108652
+          }
+        },
+        "AKA-2/cuda": {
+          "system": "AKA-2",
+          "dsl": "cuda",
+          "latency_us": 1161.881897507617,
+          "episode_wall_hours": 35.15013634222222,
+          "episodes": 19,
+          "outcomes": {
+            "promoted": 12,
+            "pivot": 6,
+            "protocol_failure": 1
+          },
+          "usage": {
+            "input": 23352,
+            "cache_read": 374235349,
+            "cache_write": 11242666,
+            "output": 4136928,
+            "total": 389638295,
+            "cost_cny": 692.084971
+          }
+        },
+        "AKA-2/triton": {
+          "system": "AKA-2",
+          "dsl": "triton",
+          "latency_us": 1293.9788590674007,
+          "episode_wall_hours": 22.471815534444442,
+          "episodes": 19,
+          "outcomes": {
+            "promoted": 5,
+            "pivot": 9,
+            "rejected": 3,
+            "protocol_failure": 2
+          },
+          "usage": {
+            "input": 14052,
+            "cache_read": 218159104,
+            "cache_write": 6998745,
+            "output": 2631435,
+            "total": 228024933,
+            "cost_cny": 418.040563,
+            "unknown": 221597,
+            "cost_cny_min": 418.26216,
+            "cost_cny_max": 426.018055
+          }
+        },
+        "AKA-2/cutedsl": {
+          "system": "AKA-2",
+          "dsl": "cutedsl",
+          "latency_us": 1205.152951397466,
+          "episode_wall_hours": 35.904656080277775,
+          "episodes": 19,
+          "outcomes": {
+            "promoted": 13,
+            "protocol_failure": 1,
+            "pivot": 5
+          },
+          "usage": {
+            "input": 20390,
+            "cache_read": 325186152,
+            "cache_write": 13120749,
+            "output": 3701084,
+            "total": 342028375,
+            "cost_cny": 655.481091
+          }
+        }
+      },
+      "included_traces": {
+        "optimizer": 114,
+        "subagent": 10,
+        "policy_review": 113
+      },
+      "included_usage_by_role": {
+        "optimizer": {
+          "input": 107390,
+          "cache_read": 1785293641,
+          "cache_write": 53772391,
+          "output": 19965902,
+          "total": 1859139324,
+          "cost_cny": 3311.940658
+        },
+        "subagent": {
+          "input": 2292,
+          "cache_read": 23623727,
+          "cache_write": 935864,
+          "output": 270798,
+          "total": 24832681,
+          "cost_cny": 47.437919
+        },
+        "policy_review": {
+          "input": 4692,
+          "cache_read": 21562794,
+          "cache_write": 5247780,
+          "output": 897468,
+          "total": 27712734,
+          "cost_cny": 132.644646
+        }
+      },
+      "unassigned_usage": null
+    },
+    "evolution": {
+      "sessions": 27,
+      "proposals": {
+        "evolved": 25,
+        "evolve_from_history": 2
+      },
+      "file_changes": {
+        "prompt/modified": 26,
+        "skills/added": 44,
+        "skills/modified": 77,
+        "skills/deleted": 1,
+        "tools/modified": 23,
+        "tools/added": 15,
+        "tests/modified": 1
+      },
+      "line_changes": {
+        "prompt/added": 454,
+        "prompt/deleted": 67,
+        "skills/added": 2966,
+        "skills/deleted": 514,
+        "tools/added": 742,
+        "tools/deleted": 57,
+        "tests/added": 13,
+        "tests/deleted": 1
+      },
+      "modified_file_size_direction": {
+        "prompt/longer": 26,
+        "skills/shorter": 2,
+        "skills/longer": 75,
+        "tools/longer": 23,
+        "tests/longer": 1
+      }
+    }
+  }
+}

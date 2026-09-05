@@ -760,12 +760,7 @@ class CampaignRuntimeSettings(BaseModel):
             "dev",
             "check",
             "disassemble",
-            "poll",
-            "jobs",
-            "cancel",
             "env",
-            "health",
-            "config",
         ],
         ...,
     ] = ("evaluate",)

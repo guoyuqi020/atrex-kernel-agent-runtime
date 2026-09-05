@@ -14,7 +14,7 @@ from ..domain.errors import DirectionConcurrencyError, InfrastructureError
 from ..domain.ids import AttemptId, parse_artifact_digest
 from ..workers.attempt_report import AttemptDirectionEventV1, AttemptExperimentV8
 from .control import SqliteGatewayControl
-from .control_models import GatewayAuthorization
+from .control_models import GatewayAuthorization, GatewayKernelTrialRecord
 from .protocol import (
     DirectionLoadRequestV2,
     DirectionUpdateRequestV2,
@@ -119,8 +119,11 @@ class RuntimeJournalService:
                     "experiments": [
                         {
                             "experiment_id": experiment["experiment_id"],
-                            "sequence": experiment["sequence"],
                             "name": experiment["name"],
+                            "hypothesis": experiment["hypothesis"],
+                            "change": experiment["change"],
+                            "evidence": experiment["evidence"],
+                            "analysis": experiment["analysis"],
                             "action": experiment["action"],
                         }
                         for experiment in self._visible_experiments(request.attempt_id)
@@ -130,7 +133,9 @@ class RuntimeJournalService:
         if isinstance(request, ExperimentLoadRequestV2):
             for experiment in self._visible_experiments(request.attempt_id):
                 if experiment["experiment_id"] == request.experiment_id:
-                    return cast(dict[str, JsonValue], experiment)
+                    visible = dict(experiment)
+                    visible.pop("sequence", None)
+                    return cast(dict[str, JsonValue], visible)
             raise ValueError("Experiment ID is outside the current Attempt's visible history")
         if request.operation == "journal_snapshot":
             return cast(
@@ -147,12 +152,12 @@ class RuntimeJournalService:
     def _citable_profile_results(self, attempt_id: AttemptId) -> list[JsonValue]:
         """Project every Kernel/Trial/Result identity already cited by a visible Experiment."""
         bindings: dict[tuple[str, str, str], None] = {}
-        for experiment in self.control.live_visible_experiments(attempt_id):
+        for experiment in self._visible_experiments(attempt_id):
             for side_name in ("before", "after"):
                 side = experiment.get(side_name)
                 if not isinstance(side, Mapping):
                     continue
-                results = side.get("gateway_result_digests")
+                results = side.get("result_artifact_digests")
                 if not isinstance(results, (list, tuple)):
                     continue
                 for result in results:
@@ -169,7 +174,7 @@ class RuntimeJournalService:
                 {
                     "kernel_artifact_digest": kernel,
                     "kernel_trial_id": trial_id,
-                    "gateway_result_digest": result,
+                    "result_artifact_digest": result,
                 },
             )
             for kernel, trial_id, result in bindings
@@ -212,7 +217,80 @@ class RuntimeJournalService:
         return self.control.list_direction_events(attempt_id)
 
     def _current_experiments(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
-        return self.control.list_experiments(attempt_id)
+        values = self.control.list_experiments(attempt_id)
+        trials = self._visible_trials(attempt_id) if self._needs_legacy_mapping(values) else {}
+        return tuple(
+            self._normalized_experiment(item, trials)
+            for item in values
+        )
+
+    def _visible_trials(self, attempt_id: AttemptId) -> dict[str, GatewayKernelTrialRecord]:
+        return {
+            trial.id: trial
+            for trial in self.control.list_kernel_trials(
+                self._visible_attempt_ids(attempt_id),
+                limit=5_000,
+            )
+        }
+
+    @staticmethod
+    def _needs_legacy_mapping(values: object) -> bool:
+        if not isinstance(values, (list, tuple)):
+            return False
+        return any(
+            isinstance(side, Mapping) and "gateway_result_digests" in side
+            for value in values
+            if isinstance(value, Mapping)
+            for side in (value.get("before"), value.get("after"))
+        )
+
+    @staticmethod
+    def _normalized_experiment(
+        value: Mapping[str, object],
+        trials: Mapping[str, GatewayKernelTrialRecord],
+    ) -> dict[str, object]:
+        """Upgrade historical raw Gateway references without exposing them to an Agent."""
+        normalized = dict(value)
+        for side_name in ("before", "after"):
+            raw_side = normalized.get(side_name)
+            if not isinstance(raw_side, Mapping):
+                continue
+            side = dict(raw_side)
+            if "result_artifact_digests" in side:
+                normalized[side_name] = side
+                continue
+            raw_results = side.pop("gateway_result_digests", None)
+            if not isinstance(raw_results, (list, tuple)):
+                normalized[side_name] = side
+                continue
+            trial = trials.get(str(side.get("kernel_trial_id")))
+            if trial is None:
+                raise InfrastructureError(
+                    "Historical Experiment references a missing Kernel Trial"
+                )
+            result_artifacts: list[str] = []
+            for raw_result in raw_results:
+                mapping = next(
+                    (
+                        observation.result_artifact_digest
+                        for observation in trial.observations
+                        if observation.gateway_result_digest is not None
+                        and str(observation.gateway_result_digest) == str(raw_result)
+                        and observation.result_artifact_digest is not None
+                    ),
+                    None,
+                )
+                if mapping is None:
+                    raise InfrastructureError(
+                        "Historical Experiment has no Agent-visible Result Artifact mapping"
+                    )
+                result_artifacts.append(str(mapping))
+            side["result_artifact_digests"] = result_artifacts
+            normalized[side_name] = side
+        return cast(
+            dict[str, object],
+            AttemptExperimentV8.model_validate(normalized).model_dump(mode="json"),
+        )
 
     def _visible_direction_events(self, attempt_id: AttemptId) -> list[dict[str, object]]:
         reports = self._report_values(attempt_id, "direction_events")
@@ -236,13 +314,17 @@ class RuntimeJournalService:
 
     def _visible_experiments(self, attempt_id: AttemptId) -> list[dict[str, object]]:
         reports = self._report_values(attempt_id, "experiments")
-        values: list[dict[str, object]] = []
+        raw_values: list[dict[str, object]] = []
         for visible_attempt_id in self._visible_attempt_ids(attempt_id):
             live = self.control.list_experiments(visible_attempt_id)
             source = list(live) if live else reports.get(visible_attempt_id, [])
-            values.extend(
-                AttemptExperimentV8.model_validate(item).model_dump(mode="json") for item in source
-            )
+            raw_values.extend(source)
+        trials = (
+            self._visible_trials(attempt_id)
+            if self._needs_legacy_mapping(raw_values)
+            else {}
+        )
+        values = [self._normalized_experiment(item, trials) for item in raw_values]
         if len(values) > 4_096:
             raise ValueError("Visible Experiment history exceeds its entry limit")
         experiment_ids = [str(experiment["experiment_id"]) for experiment in values]
@@ -414,6 +496,20 @@ class RuntimeJournalService:
             experiment.get("action") == "baseline" for experiment in current
         ):
             raise ValueError("Bootstrap Experiment journal may contain only one baseline action")
+        _lineage_id, visible_attempt_ids = self.control.visible_kernel_trial_attempt_ids(
+            request.attempt_id
+        )
+        trials = {
+            trial.id: trial
+            for trial in self.control.list_kernel_trials(visible_attempt_ids, limit=5_000)
+        }
+        for side_name in ("before", "after"):
+            value[side_name] = self._materialize_experiment_subject(
+                request.attempt_id,
+                side_name,
+                value.get(side_name),
+                trials,
+            )
         experiment = AttemptExperimentV8.model_validate(
             {
                 "experiment_id": f"experiment_{uuid4().hex}",
@@ -437,6 +533,52 @@ class RuntimeJournalService:
             allow_baseline=allow_baseline,
         )
         return {"status": "recorded", "experiment_id": str(recorded["experiment_id"])}
+
+    @staticmethod
+    def _materialize_experiment_subject(
+        attempt_id: AttemptId,
+        side_name: str,
+        value: object,
+        trials: Mapping[str, GatewayKernelTrialRecord],
+    ) -> dict[str, JsonValue] | None:
+        """Resolve one Agent-supplied Trial ID into an immutable evidence snapshot."""
+        if value is None:
+            return None
+        if not isinstance(value, Mapping) or set(value) != {"kernel_trial_id"}:
+            raise ValueError(
+                f"Experiment {side_name} fields must be exactly ['kernel_trial_id']; "
+                "Runtime resolves the Kernel and Result Artifacts"
+            )
+        trial_id = value.get("kernel_trial_id")
+        if not isinstance(trial_id, str):
+            raise ValueError(f"Experiment {side_name} kernel_trial_id must be text")
+        trial = trials.get(trial_id)
+        if trial is None:
+            raise ValueError(f"Experiment {side_name} Kernel Trial is outside visible history")
+        if side_name == "after" and trial.attempt_id != attempt_id:
+            raise ValueError(
+                "Experiment after Kernel Trial must belong to this logical Attempt; "
+                "historical Trials may only be used as before evidence"
+            )
+        result_artifacts = list(
+            dict.fromkeys(
+                str(observation.result_artifact_digest)
+                for observation in trial.observations
+                if observation.result_artifact_digest is not None
+            )
+        )
+        if not result_artifacts:
+            raise ValueError(
+                f"Experiment {side_name} Kernel Trial has no recorded Result Artifacts"
+            )
+        return cast(
+            dict[str, JsonValue],
+            {
+                "kernel_artifact_digest": str(trial.kernel_artifact_digest),
+                "kernel_trial_id": trial.id,
+                "result_artifact_digests": result_artifacts,
+            },
+        )
 
     def _validate_experiment_trials(
         self,
@@ -469,17 +611,18 @@ class RuntimeJournalService:
                     f"Experiment {side_name} Kernel Trial does not match its Kernel Artifact"
                 )
             observed = {
-                observation.gateway_result_digest
+                observation.result_artifact_digest
                 for observation in trial.observations
-                if observation.gateway_result_digest is not None
+                if observation.result_artifact_digest is not None
             }
-            result_values = side.get("gateway_result_digests")
+            result_values = side.get("result_artifact_digests")
             if not isinstance(result_values, (list, tuple)):
-                raise ValueError(f"Experiment {side_name} Gateway results must be an array")
+                raise ValueError(f"Experiment {side_name} Result Artifacts must be an array")
             for result_value in result_values:
                 if parse_artifact_digest(str(result_value)) not in observed:
                     raise ValueError(
-                        f"Experiment {side_name} references a Kernel/Result pair not observed "
+                        f"Experiment {side_name} references a Kernel/Result Artifact pair "
+                        "not observed "
                         "in visible history"
                     )
 

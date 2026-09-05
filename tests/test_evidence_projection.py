@@ -161,6 +161,88 @@ def test_session_projection_keeps_summary_bounded_and_marks_annotation(
     assert len(projection["sessions"]) == 1
 
 
+def test_session_projection_keeps_many_claude_subagent_transcripts_opaque(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    source = tmp_path / "session-with-subagents"
+    (source / "provider/claude-subagents").mkdir(parents=True)
+    events = [
+        {"type": "session", "version": 0, "id": "parent-session"},
+        {
+            "type": "assistant/message",
+            "seq": 0,
+            "time": 1,
+            "data": {
+                "message": {
+                    "content": [{"type": "text", "text": "Parent session result"}]
+                }
+            },
+        },
+    ]
+    (source / "events.jsonl").write_text(
+        "".join(json.dumps(row) + "\n" for row in events),
+        encoding="utf-8",
+    )
+    (source / "conversation.jsonl").write_text("{}\n", encoding="utf-8")
+    (source / "provider/claude-session.raw-jsonl").write_text(
+        json.dumps({"type": "assistant", "message": {"id": "parent"}}) + "\n",
+        encoding="utf-8",
+    )
+    for ordinal in range(12):
+        (source / f"provider/claude-subagents/agent-{ordinal}.jsonl").write_text(
+            json.dumps(
+                {
+                    "parentUuid": "parent",
+                    "isSidechain": True,
+                    "promptId": f"prompt-{ordinal}",
+                    "agentId": f"agent-{ordinal}",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+    session_digest = artifacts.put_directory(source, ArtifactKind.SESSION_LOG)
+    projector = _projector(artifacts)
+
+    projection = projector.session_projection(session_digest)
+    assert len(projection["sessions"]) == 1
+    assert projection["sessions"][0]["session_id"] == "parent-session"
+    assert projection["sessions"][0]["final_agent_annotation"] == "Parent session result"
+    raw = projector.raw_session_projection(session_digest)
+    raw_paths = {entry["path"] for entry in raw["files"]}
+    assert "provider/claude-subagents/agent-11.jsonl" in raw_paths
+    assert len(raw_paths) == 15
+
+
+def test_session_projection_still_rejects_too_many_or_malformed_runtime_ledgers(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    too_many = tmp_path / "too-many-ledgers"
+    too_many.mkdir()
+    for ordinal in range(9):
+        (too_many / f"events-{ordinal}.jsonl").write_text(
+            json.dumps({"type": "session", "version": 0, "id": f"session-{ordinal}"})
+            + "\n",
+            encoding="utf-8",
+        )
+    too_many_digest = artifacts.put_directory(too_many, ArtifactKind.SESSION_LOG)
+    with pytest.raises(ValueError, match="projection exceeds the configured file limit"):
+        _projector(artifacts).session_projection(too_many_digest)
+
+    malformed = tmp_path / "malformed-runtime-ledger"
+    malformed.mkdir()
+    (malformed / "events.jsonl").write_text(
+        json.dumps({"parentUuid": "parent", "agentId": "misplaced-child"}) + "\n",
+        encoding="utf-8",
+    )
+    malformed_digest = artifacts.put_directory(malformed, ArtifactKind.SESSION_LOG)
+    with pytest.raises(ValueError, match="invalid header"):
+        _projector(artifacts).session_projection(malformed_digest)
+
+
 def test_session_projection_rejects_compressed_or_unknown_required_events(
     tmp_path: Path,
 ) -> None:
@@ -269,6 +351,20 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
         "raw provider credential",
         encoding="utf-8",
     )
+    (session_source / "provider/claude-subagents").mkdir()
+    for ordinal in range(10):
+        (session_source / f"provider/claude-subagents/agent-{ordinal}.jsonl").write_text(
+            json.dumps(
+                {
+                    "parentUuid": "parent",
+                    "isSidechain": True,
+                    "promptId": f"prompt-{ordinal}",
+                    "agentId": f"agent-{ordinal}",
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
     session_digest = artifacts.put_directory(session_source, ArtifactKind.SESSION_LOG)
     parent_id = new_kernel_agent_revision_id()
     challenger_id = new_kernel_agent_revision_id()
@@ -488,6 +584,7 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
     assert "raw private reasoning" in raw["provider/stdout.stream-json"]
     assert "thinking_tokens" not in raw["provider/stdout.stream-json"]
     assert raw["provider/stderr.log"] == "raw provider credential"
+    assert "agent-9" in raw["provider/claude-subagents/agent-9.jsonl"]
     measurements = json.loads((staging / "measurements/00000001.json").read_text())
     assert measurements["measurements"][0]["metrics"] == {"compute_sol_pct": 72.5}
     assert derived["measurements"] == "measurements/00000001.json"

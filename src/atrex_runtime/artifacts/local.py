@@ -36,6 +36,7 @@ class ArtifactKind(StrEnum):
     ATTEMPT_EVIDENCE = "attempt_evidence"
     SESSION_LOG = "session_log"
     GATEWAY_RESULT = "gateway_result"
+    RESULT_ARTIFACT = "result_artifact"
     EVOLUTION = "evolution"
     ATTEMPT_REPORT = "attempt_report"
     WIKI_INTERACTION = "wiki_interaction"

@@ -1016,12 +1016,12 @@ async def test_administration_exposes_every_evaluation_source_and_result(
                     "before": {
                         "kernel_artifact_digest": str(candidate),
                         "kernel_trial_id": control.list_kernel_trials((attempt_id,))[0].id,
-                        "gateway_result_digests": [str(agent_result)],
+                        "result_artifact_digests": [str(agent_result)],
                     },
                     "after": {
                         "kernel_artifact_digest": str(candidate),
                         "kernel_trial_id": control.list_kernel_trials((attempt_id,))[0].id,
-                        "gateway_result_digests": [str(agent_result)],
+                        "result_artifact_digests": [str(agent_result)],
                     },
                     "evidence": "agent-1",
                     "analysis": "the hypothesis failed because latency regressed",

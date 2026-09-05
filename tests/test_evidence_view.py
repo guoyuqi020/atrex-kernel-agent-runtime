@@ -37,7 +37,7 @@ def _raw_trace(
 ) -> ArtifactDigest:
     source = root / f"raw-{label}"
     (source / "input").mkdir(parents=True)
-    (source / "provider").mkdir()
+    (source / "provider/claude-subagents").mkdir(parents=True)
     (source / "input/prompt.md").write_text(
         f"private prompt {label}",
         encoding="utf-8",
@@ -54,6 +54,17 @@ def _raw_trace(
     }
     (source / "provider/stdout.stream-json").write_text(
         json.dumps(thinking_tokens) + "\n" + json.dumps(provider_event) + "\n",
+        encoding="utf-8",
+    )
+    child_event = {
+        "type": "assistant",
+        "message": {
+            "id": f"child-{label}",
+            "content": [{"type": "text", "text": f"subagent result {label}"}],
+        },
+    }
+    (source / "provider/claude-subagents/agent-child.jsonl").write_text(
+        json.dumps(child_event) + "\n",
         encoding="utf-8",
     )
     (source / "conversation.jsonl").write_text(
@@ -76,6 +87,17 @@ def _raw_trace(
                 "source": "provider",
                 "path": "provider/stdout.stream-json",
                 "event": provider_event,
+            }
+        )
+        + "\n"
+        + json.dumps(
+            {
+                "schema_version": 1,
+                "sequence": 3,
+                "type": "provider_event",
+                "source": "provider",
+                "path": "provider/claude-subagents/agent-child.jsonl",
+                "event": child_event,
             }
         )
         + "\n",
@@ -576,7 +598,7 @@ def test_optimizer_view_projects_every_completed_branch_by_epoch(tmp_path: Path)
     assert "durably appended by Runtime before its tool call returns" in EVIDENCE_PROMPT_TEXT
     assert "`kernel-trial-show`" not in EVIDENCE_PROMPT_TEXT
     assert "`kernel-artifact-read`" not in EVIDENCE_PROMPT_TEXT
-    assert "`gateway-result-read`" not in EVIDENCE_PROMPT_TEXT
+    assert "`result-artifact-read`" not in EVIDENCE_PROMPT_TEXT
     assert "`list-directions`" not in EVIDENCE_PROMPT_TEXT
     assert "`load-direction`" not in EVIDENCE_PROMPT_TEXT
     assert "`measurements-query`" not in EVIDENCE_PROMPT_TEXT
@@ -627,6 +649,8 @@ def test_optimizer_view_projects_every_completed_branch_by_epoch(tmp_path: Path)
     assert "hidden reasoning current-1" in completed_trace.read_text()
     assert "secret-current-1" in completed_trace.read_text()
     assert "raw result current-1" in completed_trace.read_text()
+    assert "subagent result current-1" in completed_trace.read_text()
+    assert "provider/claude-subagents/agent-child.jsonl" in completed_trace.read_text()
     assert "thinking_tokens" not in completed_trace.read_text()
     losing_trace = losing_attempt_root / "conversation.jsonl"
     assert "hidden reasoning challenger" in losing_trace.read_text()

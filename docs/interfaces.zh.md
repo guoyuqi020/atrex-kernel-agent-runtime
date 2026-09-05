@@ -79,23 +79,27 @@
 | `POST /v1/wiki/query` | 保留的 Wiki 集成端点；不再向新建托管 Agent Session 下发 Wiki 权限。 |
 
 Candidate 操作上传完整 Base64 File Bundle，Runtime 在执行前封存。相同 Key/Request 重放已提交响应；
-同 Key 不同内容返回冲突。`evaluate` 生成探索性评测记录，但不会单独保留 Kernel Revision。Wire
-Response 仍保留 `schema_version` 以支持校验和持久化。Core 工具在向 Agent 打印结果前移除该顶层
-字段，并把权威的 `evaluation.correct` 和 `evaluation.latency_us` 作为 `correct`、`latency_us`
-合入 `result`，同时移除顶层 `evaluation` 和等价别名。对于 `dev`、`disassemble`、`jobs`、
-`poll`、`cancel`、`env`、`health` 和 `config`，Core 直接返回 Agent-safe `result` Object。`profile` 还会在展平后的安全 Job
-Result 旁返回 Kernel Artifact、Kernel Trial 和 Gateway Result 身份。其嵌套 `result` 仅用数字型
+同 Key 不同内容返回冲突。`evaluate` 生成探索性评测记录，但不会单独保留 Kernel Revision。Runtime
+将 Agate 原始响应及其 `gateway_result_digest` 保留为私有事实，只供评测、比较和审计；同时把规范化的
+Agent 可见 `operation`、`status`、`result` 独立封存为 Result Artifact。Agent 始终收到
+`result_artifact_digest`，初次执行和后续读取暴露同一份规范化内容，不暴露私有 Gateway Result 身份。
+对于 `dev`、`disassemble` 和 `env`，Core 直接返回 Agent-safe
+`result` Object。`profile` 还会在展平后的安全 Job
+Result 旁返回 Kernel Artifact、Kernel Trial 和 Result Artifact 身份。其嵌套 `result` 仅用数字型
 不透明 `shape_id` 标识 Shape，把 Kernel Duration 和常见资源字段规范化，并保留安全的 Profiler
 Counters；同时增加 `kernel_count`、`total_duration_us`、逐 Kernel `duration_share_pct`、
 `dominant_kernel`、按耗时加权的 `weighted_sol_pct` 和 `dominant_bound`。具体 Shape 输入和维度
 仍然不可见。
 
 `kernel_trial_show` 按 Gateway 响应或已保留 Experiment 记录返回的已知 `kernel_trial_id`
-获取一条实验 Candidate 溯源记录。`kernel_artifact_read` 接收 Trial 的 `kernel_artifact_digest`（请求字段
+获取一条实验 Candidate。它返回 Kernel Artifact Digest，以及由 Result Artifact Digest、Operation 和
+Status 组成的精简索引；仅对需要分析的条目调用 `result_artifact_read` 展开内容。
+`kernel_artifact_read` 接收 Trial 的 `kernel_artifact_digest`（请求字段
 名为 `kernel_artifact_digest`）、必填的 `scratch/` 下目标 `file`，以及可选的 Artifact 内源路径
 `artifact_file`（默认取目标文件名）。Core 工具原子写入准确字节，stdout 只返回状态、路径、字节数
-和 SHA-256。`gateway_result_read` 接收 Observation 的 `gateway_result_digest`，返回当时
-规范化 Agent 可见视图。Evaluate 视图包含 `operation`、`status`、正确性结论、最坏情况的
+和 SHA-256。`result_artifact_read` 接收 Observation 的 `result_artifact_digest`，读取规范化的
+Agent 可见 Result Artifact；返回的 `operation`、`status` 和 `result` 与初次调用一致。
+Evaluate 视图包含正确性结论、最坏情况的
 `rel_err`、`max_abs_err`、`max_rel_err`、两种聚合延迟以及按不透明 Shape ID 的延迟；私有评测输入与隐藏 Case 细节仍不暴露。这些操作均不计配额、不访问 Agate，且调用方不能自行选择 Lineage
 或 Attempt。当前 Attempt 的身份信息来自原始 Operation 响应和已保留的 Experiment 记录。
 
@@ -146,15 +150,15 @@ python3 src/runtime_tools.py <command> --request scratch/request.json
 | 命令 | Agent 提供的请求 |
 | --- | --- |
 | `gateway-execute` | GPU/Agate Operation 与参数；Candidate 操作上传当前 Working Kernel。 |
-| `kernel-trial-show` | 按 Trial ID 查询 Kernel Artifact Digest 和规范化 Gateway Results；请求 JSON 不写 `operation`。 |
+| `kernel-trial-show` | 按 Trial ID 查询 Kernel Artifact Digest 和精简 Result Artifact 索引；请求 JSON 不写 `operation`。 |
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
-| `gateway-result-read` | 按 Gateway Result Digest 读取规范化的 Agent 可见测量；请求 JSON 不写 `operation`。 |
+| `result-artifact-read` | 按 Result Artifact Digest 读取规范化的 Agent 可见结果；请求 JSON 不写 `operation`。 |
 | `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；Experiment 关联自动派生，返回稳定 Direction ID。 |
 | `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称和当前状态原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction；支持 ID 自动包含所有绑定它的可见 Experiment，以及状态事件在内部形成的关联快照。 |
-| `record-experiment` | 记录 `direction_id`、测量对应的 Kernel/Trial/Result 身份、`evidence`、`analysis` 与 Action。普通比较要求完整 `before`/`after`；只有 Bootstrap 可用 `baseline`，此时 `before=null`、`after` 完整。返回稳定 Experiment ID。 |
-| `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、序号、名称和 Action 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
-| `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整原始记录。 |
+| `record-experiment` | 记录 `direction_id`、前后 Kernel Trial ID、`evidence`、`analysis` 与 Action；Runtime 冻结 Trial 对应的 Kernel 和 Result Artifact 身份。只有 Bootstrap 可用 `baseline` 与 `before=null`。返回稳定 Experiment ID。 |
+| `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis 和 Action 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
+| `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
 
 `attempt-report` 要求匹配的非空 Runtime 自管 Direction/Experiment Journal。第一次成功调用会发布不可覆盖的终态
@@ -173,7 +177,7 @@ Direction 的规范化状态是下一方向的唯一来源。Runtime 不信任 A
 作为权威数据的 `scratch/directions.json` 或 `scratch/experiments.json`。list/load 工具直接查询实时
 Runtime Journal 与授权冻结历史的合并视图，只有显式请求的紧凑索引文件会写到 `scratch/`。
 Bootstrap Session 开始时没有更早 Journal；成功后，
-其终态 Journal、Kernel Trial 与 Gateway Result 会成为该 Lineage 后续普通 Attempt 的根历史。
+其终态 Journal、Kernel Trial 与 Result Artifact 会成为该 Lineage 后续普通 Attempt 的根历史。
 `list-experiments` 和 `load-experiment` 把当前实时 Runtime Journal 与历史持久 Journal 合并；终态
 Attempt Report Artifact 只作为旧数据的兼容回退。已完成 Epoch 包含获胜分支以及所有未获胜 Active/Challenger 分支的
 Journal，但不向 Agent 暴露分支、Epoch、Attempt、选中状态或当前/历史来源；普通 Agent/Kernel Evidence
@@ -188,12 +192,12 @@ Branch、Epoch、Attempt、选中状态或当前/历史来源。
 `profile_evidence` 必须为 `null`，或包含 `tool_used`、`profiler`、`profile_level`、
 `bottleneck_type`、`evidence_summary`、`evidence_chain` 和非空 `supporting_results` 的精确
 Object。每项 Supporting Result 绑定 `operation`（`profile` 或 `dev`）、
-`kernel_artifact_digest`、`kernel_trial_id` 与 `gateway_result_digest`，且至少包含一项 Profile。
+`kernel_artifact_digest`、`kernel_trial_id` 与 `result_artifact_digest`，且至少包含一项 Profile。
 Core 要求每组绑定已出现在本 Attempt 的 Experiment Journal；Runtime 再核验声明的 Operation 与
 三个身份确实匹配一条持久化、当前可见的 Gateway Observation。没有执行 Profile 时必须为 `null`。
 每个 Finding 必须包含非空且唯一的 `supporting_experiment_ids`；每个 ID 都必须属于同一份随 Report
 附加的 Experiment Journal。这样 Finding 可通过 Experiment 中实际存在的 before/after Subject 追溯到准确
-Kernel Artifact、Trial 和 Gateway Result，而无需在 Finding 中重复这些身份。
+Kernel Artifact、Trial 和 Result Artifact，而无需在 Finding 中重复这些身份。
 `contributing_kernel_trial_ids` 是必填的有序去重数组，列出本次 Attempt 取用过其代码或思路的历史
 Kernel Trial；没有取用时为空。Core 与 Runtime 都只校验它的形状，都不去解析它是否在可见历史内 ——
 因为 Report 是 Agent 的解读而非测量事实，与 Experiment Subject 里的 Trial 身份同理。Runtime 会把它带入
@@ -207,8 +211,8 @@ Snapshot 派生 schema-v1 最终 Attempt Report：保留工程叙述，并补充
 都包含规范化 `gateway_result`，展示 Operation、完成状态、正确性、几何平均/算术平均延迟，以及按
 不透明 Shape ID 索引的延迟。Correctness 包含 `status`，以及安全聚合后的最坏 relative-L2、逐元素
 绝对误差和逐元素相对误差，但不暴露产生该值的隐藏 Shape/Case。Candidate 还包含 Runtime 判定的保留状态，以及相对 parent 的整体和
-逐 Shape 对比。Kernel Outcome 投影本身不会重复 Gateway Result Digest；Experiment 溯源仍保留
-准确 Result Digest。
+逐 Shape 对比。Kernel Outcome 投影本身不会重复私有 Gateway Result Digest；Experiment 溯源保留
+准确的 Agent 可见 Result Artifact Digest。
 Runtime 自管的 `production_gate` 会说明内容级生产策略是未启用、通过、失败，还是尚未执行；失败时
 携带可信控制层给出的准确拒绝原因。
 
@@ -268,14 +272,14 @@ Report 对外展示。缺失或非 ready 的 Handoff 会直接终结，不会运
 
 以下输入是 `--request` 指向文件中的 JSON；Digest 和 ID 仅为便于阅读而缩写。
 
-`kernel-trial-show` 只返回 Kernel 身份和规范化 Gateway Results：
+`kernel-trial-show` 只返回 Kernel 身份和精简 Result Artifact 索引：
 
 ```json
 {"kernel_trial_id":"gtrial_<id>"}
 ```
 
 ```json
-{"kernel_artifact_digest":"sha256:<kernel>","gateway_results":[{"operation":"evaluate","status":"completed","result":{"correct":true,"correctness":{"status":"PASS","rel_err":null,"max_abs_err":0.0009765625,"max_rel_err":0.0078125},"latency_us_geomean":12.288,"latency_us_arith_mean":12.400,"latency_us_by_shape":{"0":12.288}}}]}
+{"kernel_artifact_digest":"sha256:<kernel>","result_artifacts":[{"result_artifact_digest":"sha256:<evaluate-result>","operation":"evaluate","status":"completed"},{"result_artifact_digest":"sha256:<profile-result>","operation":"profile","status":"completed"}]}
 ```
 
 `kernel-artifact-read` 把一个 Artifact 文件复制进 `scratch/`，不会打印源码：
@@ -288,10 +292,10 @@ Report 对外展示。缺失或非 ready 的 Handoff 会直接终结，不会运
 {"status":"completed","file":"scratch/recovered/kernel.py","bytes":4281,"sha256":"<file-sha256>"}
 ```
 
-`gateway-result-read` 读取一条规范化的 Agent 可见 Result：
+`result-artifact-read` 读取一条规范化的 Agent 可见 Result Artifact：
 
 ```json
-{"gateway_result_digest":"sha256:<result>"}
+{"result_artifact_digest":"sha256:<result-artifact>"}
 ```
 
 ```json

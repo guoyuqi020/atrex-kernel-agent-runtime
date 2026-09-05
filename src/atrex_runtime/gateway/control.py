@@ -107,7 +107,26 @@ def _validate_profile_supporting_results(
                 continue
             kernel_value = side.get("kernel_artifact_digest")
             trial_id = side.get("kernel_trial_id")
-            result_values = side.get("gateway_result_digests")
+            result_values = side.get("result_artifact_digests")
+            if result_values is None:
+                legacy_values = side.get("gateway_result_digests")
+                trial = visible_trials.get(str(trial_id))
+                if isinstance(legacy_values, (list, tuple)) and trial is not None:
+                    mapped: list[str] = []
+                    for legacy in legacy_values:
+                        result_artifact = next(
+                            (
+                                observation.result_artifact_digest
+                                for observation in trial.observations
+                                if observation.gateway_result_digest is not None
+                                and str(observation.gateway_result_digest) == str(legacy)
+                                and observation.result_artifact_digest is not None
+                            ),
+                            None,
+                        )
+                        if result_artifact is not None:
+                            mapped.append(str(result_artifact))
+                    result_values = mapped
             if (
                 not isinstance(kernel_value, str)
                 or not isinstance(trial_id, str)
@@ -125,7 +144,7 @@ def _validate_profile_supporting_results(
         "operation",
         "kernel_artifact_digest",
         "kernel_trial_id",
-        "gateway_result_digest",
+        "result_artifact_digest",
     }
     for reference in supporting_results:
         if set(reference) != expected_fields:
@@ -142,7 +161,7 @@ def _validate_profile_supporting_results(
         has_profile = True
         kernel_value = reference.get("kernel_artifact_digest")
         trial_id = reference.get("kernel_trial_id")
-        result_value = reference.get("gateway_result_digest")
+        result_value = reference.get("result_artifact_digest")
         if not isinstance(kernel_value, str) or not isinstance(result_value, str):
             raise ValueError("Profile supporting result requires Artifact Digests")
         if not isinstance(trial_id, str):
@@ -159,14 +178,14 @@ def _validate_profile_supporting_results(
         if trial.kernel_artifact_digest != kernel:
             raise ValueError("Profile supporting Kernel Trial does not match its Kernel")
         if not any(
-            observation.operation is operation and observation.gateway_result_digest == result
+            observation.operation is operation and observation.result_artifact_digest == result
             for observation in trial.observations
         ):
             raise ValueError(
                 "Profile supporting result does not match the declared Gateway operation"
             )
         if result in seen_results:
-            raise ValueError("Profile supporting Gateway results must be unique")
+            raise ValueError("Profile supporting Result Artifacts must be unique")
         seen_results.add(result)
     if not has_profile:
         raise ValueError("Profile evidence requires at least one profile result")
@@ -182,7 +201,7 @@ _UNMETERED_OPERATIONS = frozenset(
         GatewayOperation.ATTEMPT_REPORT,
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
-        GatewayOperation.GATEWAY_RESULT_READ,
+        GatewayOperation.RESULT_ARTIFACT_READ,
         GatewayOperation.DIRECTION_HISTORY,
         GatewayOperation.EXPERIMENT_HISTORY,
         GatewayOperation.DIRECTION_UPDATE,
@@ -201,7 +220,7 @@ _IMPLICIT_RUNTIME_OPERATIONS = frozenset(
         GatewayOperation.ATTEMPT_REPORT,
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
-        GatewayOperation.GATEWAY_RESULT_READ,
+        GatewayOperation.RESULT_ARTIFACT_READ,
         GatewayOperation.DIRECTION_HISTORY,
         GatewayOperation.EXPERIMENT_HISTORY,
         GatewayOperation.DIRECTION_UPDATE,
@@ -1103,7 +1122,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         raise ValueError("Kernel Trial annotation before evidence is invalid")
                     before_digest_value = before.get("kernel_artifact_digest")
                     before_trial_id = before.get("kernel_trial_id")
-                    before_gateway_result_values = before.get("gateway_result_digests")
+                    before_result_artifact_values = before.get("result_artifact_digests")
                     if not isinstance(before_digest_value, str):
                         raise ValueError(
                             "Kernel Trial annotation before requires a candidate Artifact Digest"
@@ -1121,32 +1140,31 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                             "Kernel Trial annotation before Trial does not match its candidate"
                         )
                     if (
-                        not isinstance(before_gateway_result_values, (list, tuple))
-                        or not before_gateway_result_values
+                        not isinstance(before_result_artifact_values, (list, tuple))
+                        or not before_result_artifact_values
                     ):
                         raise ValueError(
-                            "Kernel Trial annotation before requires Gateway result "
-                            "Artifact Digests"
+                            "Kernel Trial annotation before requires Result Artifact Digests"
                         )
                     before_observed_results = {
-                        observation.gateway_result_digest
+                        observation.result_artifact_digest
                         for observation in before_trial.observations
-                        if observation.gateway_result_digest is not None
+                        if observation.result_artifact_digest is not None
                     }
-                    for value in before_gateway_result_values:
+                    for value in before_result_artifact_values:
                         if not isinstance(value, str):
                             raise ValueError(
-                                "Kernel Trial annotation before Gateway result must be text"
+                                "Kernel Trial annotation before Result Artifact must be text"
                             )
-                        before_gateway_result = parse_artifact_digest(value)
-                        if before_gateway_result not in before_observed_results:
+                        before_result_artifact = parse_artifact_digest(value)
+                        if before_result_artifact not in before_observed_results:
                             raise ValueError(
                                 "Kernel Trial annotation before references a candidate/result pair "
                                 "not observed in visible history"
                             )
                 digest_value = after.get("kernel_artifact_digest")
                 trial_id = after.get("kernel_trial_id")
-                gateway_result_values = after.get("gateway_result_digests")
+                result_artifact_values = after.get("result_artifact_digests")
                 if not isinstance(digest_value, str):
                     raise ValueError("Kernel Trial annotation requires a candidate Artifact Digest")
                 candidate = parse_artifact_digest(digest_value)
@@ -1163,27 +1181,25 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         "Kernel Trial annotation kernel_trial_id does not match its candidate"
                     )
                 if (
-                    not isinstance(gateway_result_values, (list, tuple))
-                    or not gateway_result_values
+                    not isinstance(result_artifact_values, (list, tuple))
+                    or not result_artifact_values
                 ):
-                    raise ValueError(
-                        "Kernel Trial annotation requires Gateway result Artifact Digests"
-                    )
-                gateway_results_list: list[ArtifactDigest] = []
-                for value in gateway_result_values:
+                    raise ValueError("Kernel Trial annotation requires Result Artifact Digests")
+                result_artifacts_list: list[ArtifactDigest] = []
+                for value in result_artifact_values:
                     if not isinstance(value, str):
-                        raise ValueError("Kernel Trial annotation Gateway result must be text")
-                    gateway_results_list.append(parse_artifact_digest(value))
-                gateway_results = tuple(gateway_results_list)
+                        raise ValueError("Kernel Trial annotation Result Artifact must be text")
+                    result_artifacts_list.append(parse_artifact_digest(value))
+                result_artifacts = tuple(result_artifacts_list)
                 if not isinstance(recorded_at, str) or not recorded_at:
                     raise ValueError("Kernel Trial annotation requires recorded_at")
                 observed_after_results = {
-                    observation.gateway_result_digest
+                    observation.result_artifact_digest
                     for observation in after_trial.observations
-                    if observation.gateway_result_digest is not None
+                    if observation.result_artifact_digest is not None
                 }
-                for gateway_result in gateway_results:
-                    if gateway_result not in observed_after_results:
+                for result_artifact in result_artifacts:
+                    if result_artifact not in observed_after_results:
                         raise ValueError(
                             "Kernel Trial annotation references a candidate/result pair not "
                             "observed for the selected Trial"

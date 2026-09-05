@@ -141,9 +141,10 @@ immutable; status changes are append-only. At most one Direction may be in progr
 one Attempt may advance at most three distinct Directions, while proposing additional future
 Directions remains allowed.
 
-Experiments bind one Direction to exact measured `before`/`after` Kernel, Trial, and Gateway
-result identities plus factual evidence, interpretation, and action. Bootstrap establishes its
-first measured anchor with `action="baseline"`, `before=null`, and complete `after`.
+Experiments bind one Direction to measured `before`/`after` Kernel Trials plus factual evidence,
+interpretation, and action. The Agent supplies only each Trial ID; Runtime resolves and freezes its
+exact Kernel and Result Artifact identities when appending the Experiment. Bootstrap establishes
+its first measured anchor with `action="baseline"`, `before=null`, and a measured `after` Trial.
 
 Journal calls synchronously validate and persist before replying. Their authority is scoped to the
 logical Attempt, so a failed physical Session or retry generation does not erase records. The

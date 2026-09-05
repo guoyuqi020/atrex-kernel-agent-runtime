@@ -148,7 +148,7 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
         "gateway-execute",
         "kernel-trial-show",
         "kernel-artifact-read",
-        "gateway-result-read",
+        "result-artifact-read",
         "update-direction",
         "list-directions",
         "load-direction",
@@ -166,7 +166,7 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
         "gateway-execute",
         "kernel-trial-show",
         "kernel-artifact-read",
-        "gateway-result-read",
+        "result-artifact-read",
         "update-direction",
         "list-directions",
         "load-direction",
@@ -180,7 +180,7 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
     assert "kernel-trials --request" not in baseline_prompt
     assert "kernel-trial-show --request" in baseline_prompt
     assert "kernel-artifact-read --request" in baseline_prompt
-    assert "gateway-result-read --request" in baseline_prompt
+    assert "result-artifact-read --request" in baseline_prompt
     assert '"kernel_artifact_digest":"sha256:<digest>"' in baseline_prompt
     for prompt in (attempt_prompt, baseline_prompt):
         assert '"artifact_file"' in prompt

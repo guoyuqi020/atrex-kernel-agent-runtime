@@ -12,7 +12,7 @@
 
 ## 决策
 
-Runtime 直接使用 `build_eval_request_from_content` 和适用的 `Client` 方法，并在 AnyIO Worker Thread 中执行同步 SDK 调用。Runtime 不启动 `agate` CLI，也不复制 Agate 的 HTTP 或 AK/SK 实现。协议 v2 为 eval/submit/get/profile/dev/check/sol/disassemble/jobs/cancel/env/health/config 提供规范命令等价接口。包升级不是 Gateway 请求且会修改可信 Python 安装，因此仍由部署管理。
+Runtime 直接使用 `build_eval_request_from_content` 和适用的 `Client` 方法，并在 AnyIO Worker Thread 中执行同步 SDK 调用。Runtime 不启动 `agate` CLI，也不复制 Agate 的 HTTP 或 AK/SK 实现。面向 Agent 的协议 v2 仅暴露 evaluate/profile/dev/check/disassemble/env；Runtime 内部保留 Job 查询、轮询、取消、健康检查和连接信息，用于恢复与管理。包升级不是 Gateway 请求且会修改可信 Python 安装，因此仍由部署管理。
 
 SDK 是上游 Wire 的权威实现。Runtime 自己负责校验部署配置、解析封存的 Campaign Evaluation Contract、封存 Candidate、校验响应 JSON 与 Atrex-Bench Result 字段、分类故障、持久化外部 Job 归属，以及提交权威 Attempt Outcome。只有 `evaluate` 可以提交 Outcome；原始 EvalRequest Submit 和 SOL Result 只用于诊断。Job 列表、轮询和取消保持 Attempt 范围。
 
