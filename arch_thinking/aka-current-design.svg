@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="600" viewBox="0 0 1180 600" role="img" aria-labelledby="title desc">
+  <title id="title">AKA current design</title>
+  <desc id="desc">Lifecycle control contains the User and AKA Orchestrator, also called Supervisor. The User directs the Orchestrator, which starts, waits for, stops, and recovers the AKA Agent. A directly accessible environment, explicitly not a Sandbox boundary, contains the Agent, Kernel or Candidate, and Agent-visible and writable Journal or Memory. The Agent reads and writes both local resources and directly calls the external services Agate for evaluation and GPU Wiki for queries.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="arrowhead"/>
+    </marker>
+  </defs>
+  <style>
+    svg { color-scheme: light dark; --page:#ffffff; --text:#243247; --muted:#63748a; --line:#65788f; --system:#fafbfd; --pod:#f1f5f9; --panel:#ffffff; --border:#bac7d5; --node:#ffffff; --accent:#eaf2ff; --accent-border:#799bcc; }
+    @media (prefers-color-scheme: dark) {
+      svg { --page:#151b24; --text:#e0e8f2; --muted:#a5b3c5; --line:#b1c1d6; --system:#1c2430; --pod:#242f3d; --panel:#1c2633; --border:#64768d; --node:#2b384a; --accent:#273e5c; --accent-border:#86a9d8; }
+    }
+    text { font-family:Arial,Helvetica,sans-serif; fill:var(--text); font-size:17px; }
+    .boundary { stroke:var(--border); stroke-width:1.5; }
+    .system { fill:var(--system); }
+    .pod { fill:var(--pod); }
+    .node { fill:var(--node); stroke:var(--border); stroke-width:1.5; }
+    .primary { fill:var(--accent); stroke:var(--accent-border); stroke-width:1.5; }
+    .heading { font-size:18px; font-weight:500; }
+    .detail { font-size:15px; fill:var(--muted); }
+    .label { font-size:15px; fill:var(--muted); }
+    .edge { fill:none; stroke:var(--line); stroke-width:1.6; stroke-linejoin:round; stroke-linecap:round; marker-end:url(#arrow); }
+    .arrowhead { fill:var(--line); }
+  </style>
+
+  <rect width="1180" height="600" fill="var(--page)"/>
+
+  <!-- The environment is directly accessible; its outline is not a sandbox. -->
+  <g id="lifecycle-boundary">
+    <rect class="boundary system" x="20" y="20" width="1140" height="135" rx="12"/>
+    <text class="heading" x="42" y="50">Lifecycle control</text>
+  </g>
+  <g id="environment-boundary">
+    <rect class="boundary pod" x="20" y="225" width="760" height="355" rx="10"/>
+    <text class="heading" x="42" y="255">Directly accessible environment</text>
+    <text class="detail" x="42" y="279">not a Sandbox boundary</text>
+  </g>
+  <g id="services-boundary">
+    <rect class="boundary system" x="815" y="225" width="345" height="355" rx="10"/>
+    <text class="heading" x="837" y="255">External services</text>
+  </g>
+
+  <!-- Lifecycle control is separate from the Agent's direct data and tool paths. -->
+  <g id="user">
+    <rect class="node" x="135" y="72" width="240" height="60" rx="7"/>
+    <text x="255" y="108" text-anchor="middle">User</text>
+  </g>
+  <g id="orchestrator">
+    <rect class="node" x="620" y="65" width="350" height="80" rx="7"/>
+    <text x="795" y="99" text-anchor="middle">AKA Orchestrator</text>
+    <text x="795" y="122" text-anchor="middle">/ Supervisor</text>
+  </g>
+  <g id="agent">
+    <rect class="primary" x="345" y="315" width="260" height="72" rx="7"/>
+    <text x="475" y="357" text-anchor="middle">AKA Agent</text>
+  </g>
+  <g id="kernel">
+    <rect class="node" x="65" y="485" width="250" height="70" rx="7"/>
+    <text x="190" y="526" text-anchor="middle">Kernel / Candidate</text>
+  </g>
+  <g id="journal">
+    <rect class="node" x="460" y="475" width="280" height="92" rx="7"/>
+    <text x="600" y="513" text-anchor="middle">Journal / Memory</text>
+    <text class="detail" x="600" y="540" text-anchor="middle">Agent-visible and writable</text>
+  </g>
+  <g id="agate">
+    <rect class="node" x="925" y="303" width="210" height="70" rx="7"/>
+    <text x="1030" y="344" text-anchor="middle">Agate</text>
+  </g>
+  <g id="wiki">
+    <rect class="node" x="925" y="485" width="210" height="70" rx="7"/>
+    <text x="1030" y="526" text-anchor="middle">GPU Wiki</text>
+  </g>
+
+  <path id="user-to-orchestrator" class="edge" d="M375 102 H620"/>
+  <path id="orchestrator-to-agent" class="edge" d="M795 145 V192 H475 V315"/>
+  <text class="label" x="635" y="180" text-anchor="middle">start / wait / stop / recover</text>
+
+  <path id="agent-to-kernel" class="edge" d="M390 387 V430 H190 V485"/>
+  <text class="label" x="285" y="417" text-anchor="middle">read / write</text>
+  <path id="agent-to-journal" class="edge" d="M575 387 V475"/>
+  <text class="label" x="589" y="437">read / write</text>
+
+  <!-- External calls originate at the Agent without an intermediary. -->
+  <path id="agent-to-agate" class="edge" d="M605 338 H925"/>
+  <text class="label" x="690" y="323" text-anchor="middle">direct evaluation</text>
+  <path id="agent-to-wiki" class="edge" d="M605 365 H797 V520 H925"/>
+  <text class="label" x="690" y="389" text-anchor="middle">direct query</text>
+</svg>

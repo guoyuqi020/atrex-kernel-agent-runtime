@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="700" viewBox="0 0 1180 700" role="img" aria-labelledby="title desc">
+  <title id="title">Atrex Runtime interaction model</title>
+  <desc id="desc">The Agent Sandbox is on the left, Atrex Runtime is in the center, and four services form a vertical column on the right. User administration targets the Agent Sandbox boundary. Runtime materializes inputs, launches the Agent and scopes authority. The Agent sends Runtime Tool requests and receives safe result projections. Inside the mutable and untrusted Sandbox, the Agent edits the Candidate Kernel, which submits its exact source to Runtime. Runtime writes Registry and Artifact Store and communicates with Agate, GPU Wiki and Model Provider. Agent access to these services goes through Runtime.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" class="arrowhead"/>
+    </marker>
+  </defs>
+  <style>
+    svg { color-scheme:light dark; --page:#ffffff; --text:#243247; --muted:#63748a; --line:#65788f; --system:#fafbfd; --pod:#f1f5f9; --panel:#ffffff; --border:#bac7d5; --node:#ffffff; --accent:#eaf2ff; --accent-border:#799bcc; }
+    @media (prefers-color-scheme:dark) {
+      svg { --page:#151b24; --text:#e0e8f2; --muted:#a5b3c5; --line:#b1c1d6; --system:#1c2430; --pod:#242f3d; --panel:#1c2633; --border:#64768d; --node:#2b384a; --accent:#273e5c; --accent-border:#86a9d8; }
+    }
+    text { font-family:Arial,Helvetica,sans-serif; font-size:17px; fill:var(--text); }
+    .boundary { fill:var(--pod); stroke:var(--border); stroke-width:1.5; }
+    .node { fill:var(--node); stroke:var(--border); stroke-width:1.5; }
+    .runtime { fill:var(--accent); stroke:var(--accent-border); stroke-width:1.5; }
+    .heading { font-size:18px; font-weight:500; }
+    .secondary { font-size:15px; fill:var(--muted); }
+    .label { font-size:15px; fill:var(--muted); paint-order:stroke; stroke:var(--page); stroke-width:6px; stroke-linejoin:round; }
+    .inside { stroke:var(--pod); }
+    .edge { fill:none; stroke:var(--line); stroke-width:1.6; stroke-linejoin:round; stroke-linecap:round; marker-end:url(#arrow); }
+    .duplex { marker-start:url(#arrow); }
+    .arrowhead { fill:var(--line); }
+  </style>
+
+  <rect width="1180" height="700" fill="var(--page)"/>
+  <rect id="sandbox" class="boundary" x="20" y="140" width="300" height="500" rx="10"/>
+  <text class="heading" x="45" y="174">Agent Sandbox</text>
+  <text class="secondary" x="45" y="197">mutable and untrusted</text>
+
+  <g id="user">
+    <rect class="node" x="55" y="35" width="230" height="64" rx="7"/>
+    <text x="170" y="73" text-anchor="middle">User / administration</text>
+  </g>
+  <g id="runtime">
+    <rect class="runtime" x="580" y="235" width="230" height="200" rx="7"/>
+    <text class="heading" x="695" y="327" text-anchor="middle">Atrex Runtime</text>
+    <text class="secondary" x="695" y="356" text-anchor="middle">trusted control plane</text>
+  </g>
+  <g id="agent">
+    <rect class="node" x="45" y="225" width="250" height="160" rx="7"/>
+    <text class="heading" x="170" y="298" text-anchor="middle">Agent</text>
+    <text class="secondary" x="170" y="327" text-anchor="middle">propose · edit · interpret</text>
+  </g>
+  <g id="kernel">
+    <rect class="node" x="45" y="490" width="250" height="95" rx="7"/>
+    <text x="170" y="530" text-anchor="middle">Candidate Kernel</text>
+    <text class="secondary" x="170" y="558" text-anchor="middle">mutable source in Workspace</text>
+  </g>
+  <g id="agate">
+    <rect class="node" x="930" y="295" width="225" height="92" rx="7"/>
+    <text x="1042.5" y="334" text-anchor="middle">Agate</text>
+    <text class="secondary" x="1042.5" y="360" text-anchor="middle">GPU execution authority</text>
+  </g>
+  <g id="wiki">
+    <rect class="node" x="930" y="435" width="225" height="92" rx="7"/>
+    <text x="1042.5" y="474" text-anchor="middle">GPU Wiki</text>
+    <text class="secondary" x="1042.5" y="500" text-anchor="middle">external knowledge</text>
+  </g>
+  <g id="registry">
+    <rect class="node" x="930" y="145" width="225" height="112" rx="7"/>
+    <text x="1042.5" y="172" text-anchor="middle">Registry +</text>
+    <text x="1042.5" y="194" text-anchor="middle">Artifact Store</text>
+    <text class="secondary" x="1042.5" y="221" text-anchor="middle">facts · versions</text>
+    <text class="secondary" x="1042.5" y="241" text-anchor="middle">recovery points</text>
+  </g>
+  <g id="provider">
+    <rect class="node" x="930" y="575" width="225" height="92" rx="7"/>
+    <text x="1042.5" y="627" text-anchor="middle">Model Provider</text>
+  </g>
+
+  <path id="user-to-sandbox" class="edge" d="M170 99 V140"/>
+  <path id="runtime-launches-agent" class="edge" d="M580 272 H295"/>
+  <text class="label" x="437.5" y="239" text-anchor="middle">materialize inputs · launch</text>
+  <text class="label" x="437.5" y="259" text-anchor="middle">scope authority</text>
+  <path id="agent-to-runtime" class="edge" d="M295 317 H580"/>
+  <text class="label" x="437.5" y="304" text-anchor="middle">Runtime Tool request</text>
+  <path id="runtime-to-agent-result" class="edge" d="M580 362 H295"/>
+  <text class="label" x="437.5" y="349" text-anchor="middle">safe result projection</text>
+  <path id="agent-to-kernel" class="edge" d="M170 385 V490"/>
+  <text class="label inside" x="170" y="445" text-anchor="middle">read, write, and iterate</text>
+  <path id="kernel-to-runtime" class="edge" d="M295 535 H500 V410 H580"/>
+  <text class="label" x="402" y="501" text-anchor="middle">submit exact source</text>
+  <text class="label" x="402" y="521" text-anchor="middle">with request</text>
+
+  <path id="runtime-to-registry" class="edge" d="M810 265 H850 V201 H930"/>
+  <path id="runtime-to-agate" class="edge duplex" d="M810 310 H890 V341 H930"/>
+  <path id="runtime-to-wiki" class="edge duplex" d="M810 360 H870 V481 H930"/>
+  <path id="runtime-to-provider" class="edge duplex" d="M810 410 H850 V621 H930"/>
+</svg>

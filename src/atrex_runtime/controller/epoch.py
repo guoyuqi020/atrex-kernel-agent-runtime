@@ -396,11 +396,21 @@ class EpochController:
 
     @classmethod
     def _contains_infrastructure_error(cls, error: BaseException) -> bool:
+        return cls._first_infrastructure_error(error) is not None
+
+    @classmethod
+    def _first_infrastructure_error(
+        cls,
+        error: BaseException,
+    ) -> InfrastructureError | None:
         if isinstance(error, InfrastructureError):
-            return True
+            return error
         if isinstance(error, BaseExceptionGroup):
-            return any(cls._contains_infrastructure_error(item) for item in error.exceptions)
-        return False
+            for item in error.exceptions:
+                found = cls._first_infrastructure_error(item)
+                if found is not None:
+                    return found
+        return None
 
     async def _run_trajectory(
         self,
@@ -496,7 +506,16 @@ class EpochController:
 
             registered = self._registry.find_kernel_revision_by_attempt(attempt.id)
             if registered is not None:
-                await self._complete_registered_attempt(attempt, registered)
+                try:
+                    await self._complete_registered_attempt(attempt, registered)
+                except Exception as error:
+                    infrastructure = self._first_infrastructure_error(error)
+                    if infrastructure is None:
+                        raise
+                    self._registry.record_infrastructure_failure(
+                        attempt.id,
+                        str(infrastructure),
+                    )
                 attempt = self._registry.get_attempt(attempt.id)
                 continue
 
@@ -542,7 +561,7 @@ class EpochController:
                     latency_us=result.candidate.latency_us,
                     gateway_result_digest=result.candidate.gateway_result_digest,
                 )
-                registered = self._registry.register_kernel_revision(
+                self._registry.register_kernel_revision(
                     KernelRevision(
                         id=new_kernel_revision_id(),
                         parent_id=attempt.input_kernel_revision_id,
@@ -552,7 +571,6 @@ class EpochController:
                         created_at=self._clock(),
                     )
                 )
-                await self._complete_registered_attempt(attempt, registered)
             attempt = self._registry.get_attempt(attempt.id)
         return attempt
 

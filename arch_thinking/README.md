@@ -16,34 +16,7 @@ AKA 当前没有 Agent Sandbox，也没有位于 Agent 与外部服务之间的 
 文件操作和外部工具调用的执行路径上，
 因此它并不约束 Agent 在一次运行中的具体行为。
 
-```mermaid
-flowchart LR
-    subgraph LIFECYCLE["Lifecycle control"]
-        direction TB
-        U["User"]
-        S["AKA Orchestrator / Supervisor"]
-        U --> S
-    end
-
-    subgraph HOST["Directly accessible environment<br/>not a Sandbox boundary"]
-        direction TB
-        A["AKA Agent"]
-        K["Kernel / Candidate"]
-        J["Journal / Memory<br/>Agent-visible and writable"]
-        A -->|"read / write"| K
-        A -->|"read / write"| J
-    end
-
-    subgraph SERVICES["External services"]
-        direction TB
-        G["Agate"]
-        W["GPU Wiki"]
-    end
-
-    S -->|"start / wait / stop / recover"| A
-    A -->|"direct evaluation"| G
-    A -->|"direct query"| W
-```
+![AKA 的现有设计](aka-current-design.svg)
 
 ### 存在的问题
 
@@ -108,78 +81,10 @@ flowchart LR
    本地文件，而是由 Agent 工作区之外的组件持有。Agent 只能通过受控接口提交 Journal
    内容，不能直接修改或删除已经保存的记录。
 
-## 系统边界图
+## Runtime 交互模型
 
-```mermaid
-flowchart LR
-    U["User / administration"] --> R["Atrex Runtime<br/>trusted control plane"]
-
-    subgraph SB["Agent Sandbox | mutable and untrusted"]
-        direction TB
-        A["Agent<br/>propose · edit · interpret"]
-        K["Candidate Kernel<br/>mutable source in Workspace"]
-        A -->|"read, write, and iterate"| K
-    end
-
-    R -->|"materialize inputs · launch · scope authority"| A
-    A -->|"Runtime Tool request"| R
-    R -->|"safe result projection"| A
-    K -->|"submit exact source with request"| R
-
-    R <--> G["Agate<br/>GPU execution authority"]
-    R <--> W["GPU Wiki<br/>external knowledge"]
-    A <--> P["Model Provider"]
-    R --> S[("Registry + Artifact Store<br/>facts · versions · recovery points")]
-```
+![Runtime 交互模型](system-boundary.svg)
 
 ## 系统整体架构图
 
-```mermaid
-flowchart TB
-    GW["Gateway"]
-
-    subgraph SYSTEM["System boundary"]
-        direction LR
-
-        U["User / Admin"]
-
-        subgraph POD["Pod boundary"]
-            direction LR
-
-            subgraph SIDECAR["Sidecar"]
-                direction TB
-                R["Atrex Runtime"]
-                O["Other Traffic"]
-            end
-
-            subgraph SB["Agent Sandbox"]
-                direction TB
-                A["Agent"]
-                K["Candidate Kernel"]
-                A -->|"edit"| K
-            end
-
-            R -->|"materialize"| K
-            A -->|"Runtime Tools"| R
-            A -->|"other traffic"| O
-        end
-
-        subgraph SERVICES[" "]
-            direction TB
-            S[("Registry + Artifact Store")]
-            G["Agate"]
-            W["GPU Wiki"]
-            P["Model Provider"]
-        end
-
-        U --> POD
-        R --> S
-        R <--> G
-        R <--> W
-        R <--> P
-    end
-
-    O --> GW
-
-    style SERVICES fill:none,stroke:none
-```
+![系统整体架构图](system-architecture.svg)

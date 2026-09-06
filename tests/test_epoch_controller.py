@@ -244,6 +244,26 @@ class FailingKernelComparator:
         raise InfrastructureError("authoritative comparison unavailable")
 
 
+class TransientKernelComparator:
+    """Fail one grouped comparison, then return a trusted retention decision."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[KernelRevision, KernelRevision]] = []
+
+    async def compare(
+        self,
+        incumbent: KernelRevision,
+        candidate: KernelRevision,
+    ) -> KernelComparisonResult:
+        self.calls.append((incumbent, candidate))
+        if len(self.calls) == 1:
+            raise ExceptionGroup(
+                "ABBA Shape batches failed",
+                [InfrastructureError("transient ABBA infrastructure failure")],
+            )
+        return KernelComparisonResult(True, "ABBA retry passed")
+
+
 class ReportAwareKernelComparator:
     """Require a durable candidate-ready Report before every retention call."""
 
@@ -827,6 +847,7 @@ async def test_operator_recovery_resumes_registered_candidate_finalization(
             optimizer,
             FakeAttemptEvidence(),
             kernel_retention_comparator=FailingKernelComparator(),
+            max_infrastructure_retries=0,
         ).run_epoch(seeded.lineage_id, 1)
 
     failed_epoch = registry.find_epoch(seeded.lineage_id, 1)
@@ -840,7 +861,8 @@ async def test_operator_recovery_resumes_registered_candidate_finalization(
         1,
     )
     assert failed_attempt is not None
-    assert failed_attempt.status is AttemptStatus.RUNNING
+    assert failed_attempt.status is AttemptStatus.INFRASTRUCTURE_FAILED
+    assert failed_attempt.infrastructure_failures == 1
     registered = registry.find_kernel_revision_by_attempt(failed_attempt.id)
     assert registered is not None
     assert failed_attempt.output_kernel_revision_id is None
@@ -872,6 +894,46 @@ async def test_operator_recovery_resumes_registered_candidate_finalization(
     assert completed_attempt.output_kernel_revision_id == registered.id
     assert completed_attempt.accepted_as_branch_best is True
     assert unused_optimizer.calls == {}
+    registry.close()
+
+
+@pytest.mark.anyio
+async def test_transient_comparator_failure_retries_registered_candidate_only(
+    tmp_path: Path,
+) -> None:
+    registry = SqliteRegistry(tmp_path / "runtime.db")
+    seeded = seed_lineage(
+        registry,
+        challenger_count=0,
+        attempts_per_trajectory=1,
+    )
+    optimizer = ScriptedOptimizer(
+        seeded.active_revision_id,
+        active=[candidate("candidate-before-transient-comparison", 80)],
+        challenger=[],
+    )
+    comparator = TransientKernelComparator()
+
+    result = await EpochController(
+        registry,
+        FakeEvolver(),
+        optimizer,
+        FakeAttemptEvidence(),
+        kernel_retention_comparator=comparator,
+        max_infrastructure_retries=2,
+    ).run_epoch(seeded.lineage_id, 1)
+
+    assert result.epoch.status is EpochStatus.COMPLETED
+    attempt = registry.list_attempts(result.epoch.id)[0]
+    assert attempt.status is AttemptStatus.COMPLETED
+    assert attempt.infrastructure_failures == 1
+    assert attempt.recovery_generation == 1
+    assert attempt.accepted_as_branch_best is True
+    assert attempt.output_kernel_revision_id is not None
+    assert optimizer.calls[BranchRole.ACTIVE] == [attempt.id]
+    assert len(comparator.calls) == 2
+    assert comparator.calls[0] == comparator.calls[1]
+    assert registry.find_kernel_revision_by_attempt(attempt.id) is not None
     registry.close()
 
 

@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1180" height="740" viewBox="0 0 1180 740" role="img" aria-labelledby="title desc">
+  <title id="title">Atrex Runtime system architecture</title>
+  <desc id="desc">The system contains a user, a pod, and four services. The pod contains an Agent Sandbox and a Sidecar. The Agent edits the Candidate Kernel and calls Atrex Runtime and Other Traffic directly. Runtime materializes the Kernel, writes to Registry and Artifact Store, and communicates directly with Agate, GPU Wiki and Model Provider. Other Traffic connects to Gateway outside the system. User administration targets the Pod.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" class="arrowhead"/>
+    </marker>
+  </defs>
+  <style>
+    svg { color-scheme: light dark; --page:#ffffff; --text:#243247; --muted:#63748a; --line:#65788f; --system:#fafbfd; --pod:#f1f5f9; --panel:#ffffff; --border:#bac7d5; --node:#ffffff; --accent:#eaf2ff; --accent-border:#799bcc; }
+    @media (prefers-color-scheme: dark) {
+      svg { --page:#151b24; --text:#e0e8f2; --muted:#a5b3c5; --line:#b1c1d6; --system:#1c2430; --pod:#242f3d; --panel:#1c2633; --border:#64768d; --node:#2b384a; --accent:#273e5c; --accent-border:#86a9d8; }
+    }
+    text { font-family:Arial,Helvetica,sans-serif; fill:var(--text); font-size:17px; }
+    .boundary { stroke:var(--border); stroke-width:1.5; }
+    .system { fill:var(--system); }
+    .pod { fill:var(--pod); }
+    .panel { fill:var(--panel); }
+    .node { fill:var(--node); stroke:var(--border); stroke-width:1.5; }
+    .runtime { fill:var(--accent); stroke:var(--accent-border); stroke-width:1.5; }
+    .heading { font-size:18px; font-weight:500; }
+    .label { font-size:15px; fill:var(--muted); paint-order:stroke; stroke:var(--panel); stroke-width:6px; stroke-linejoin:round; }
+    .edge { fill:none; stroke:var(--line); stroke-width:1.6; stroke-linejoin:round; stroke-linecap:round; marker-end:url(#arrow); }
+    .duplex { marker-start:url(#arrow); }
+    .arrowhead { fill:var(--line); }
+  </style>
+
+  <rect width="1180" height="740" fill="var(--page)"/>
+
+  <!-- Explicit boundary geometry keeps cross-boundary edges attached to nodes. -->
+  <rect class="boundary system" x="20" y="115" width="1140" height="605" rx="12"/>
+  <text class="heading" x="42" y="147">System boundary</text>
+  <rect class="boundary pod" x="225" y="185" width="580" height="495" rx="10"/>
+  <text class="heading" x="247" y="215">Pod boundary</text>
+  <rect class="boundary panel" x="250" y="240" width="230" height="410" rx="8"/>
+  <text class="heading" x="270" y="269">Agent Sandbox</text>
+  <rect class="boundary panel" x="520" y="240" width="255" height="410" rx="8"/>
+  <text class="heading" x="540" y="269">Sidecar</text>
+
+  <!-- Nodes -->
+  <g id="user">
+    <rect class="node" x="45" y="380" width="140" height="60" rx="7"/>
+    <text x="115" y="415" text-anchor="middle">User / Admin</text>
+  </g>
+  <g id="agent">
+    <rect class="node" x="280" y="340" width="170" height="64" rx="7"/>
+    <text x="365" y="378" text-anchor="middle">Agent</text>
+  </g>
+  <g id="kernel">
+    <rect class="node" x="280" y="548" width="170" height="64" rx="7"/>
+    <text x="365" y="586" text-anchor="middle">Candidate Kernel</text>
+  </g>
+  <g id="other-traffic">
+    <rect class="node" x="550" y="294" width="195" height="60" rx="7"/>
+    <text x="647.5" y="330" text-anchor="middle">Other Traffic</text>
+  </g>
+  <g id="runtime">
+    <rect class="runtime" x="550" y="430" width="195" height="88" rx="7"/>
+    <text x="647.5" y="480" text-anchor="middle">Atrex Runtime</text>
+  </g>
+  <g id="gateway">
+    <rect class="node" x="550" y="25" width="195" height="60" rx="7"/>
+    <text x="647.5" y="61" text-anchor="middle">Gateway</text>
+  </g>
+  <g id="registry">
+    <rect class="node" x="940" y="252" width="195" height="66" rx="7"/>
+    <text x="1037.5" y="279" text-anchor="middle">Registry +</text>
+    <text x="1037.5" y="300" text-anchor="middle">Artifact Store</text>
+  </g>
+  <g id="agate">
+    <rect class="node" x="940" y="362" width="195" height="60" rx="7"/>
+    <text x="1037.5" y="398" text-anchor="middle">Agate</text>
+  </g>
+  <g id="wiki">
+    <rect class="node" x="940" y="472" width="195" height="60" rx="7"/>
+    <text x="1037.5" y="508" text-anchor="middle">GPU Wiki</text>
+  </g>
+  <g id="provider">
+    <rect class="node" x="940" y="582" width="195" height="60" rx="7"/>
+    <text x="1037.5" y="618" text-anchor="middle">Model Provider</text>
+  </g>
+
+  <!-- User targets the pod boundary, not Runtime. -->
+  <path id="user-to-pod" class="edge" d="M185 410 H225"/>
+
+  <!-- Agent traffic terminates at the two Sidecar components themselves. -->
+  <path id="agent-to-other" class="edge" d="M450 357 H496 V324 H550"/>
+  <text class="label" x="492" y="308" text-anchor="middle">other traffic</text>
+  <path id="agent-to-runtime" class="edge" d="M450 386 H496 V452 H550"/>
+  <text class="label" x="494" y="419" text-anchor="middle">Runtime Tools</text>
+
+  <path id="agent-to-kernel" class="edge" d="M365 404 V548"/>
+  <text class="label" x="379" y="480">edit</text>
+  <path id="runtime-to-kernel" class="edge" d="M550 492 H496 V580 H450"/>
+  <text class="label" x="496" y="541" text-anchor="middle">materialize</text>
+
+  <!-- Separate direct connections: no shared service endpoint. -->
+  <path id="runtime-to-registry" class="edge" d="M745 444 H844 V285 H940"/>
+  <path id="runtime-to-agate" class="edge duplex" d="M745 462 H880 V392 H940"/>
+  <path id="runtime-to-wiki" class="edge duplex" d="M745 480 H880 V502 H940"/>
+  <path id="runtime-to-provider" class="edge duplex" d="M745 498 H844 V612 H940"/>
+
+  <!-- Gateway is outside System boundary and only receives Other Traffic. -->
+  <path id="other-to-gateway" class="edge" d="M647.5 294 V85"/>
+</svg>

@@ -127,7 +127,9 @@ generates a public Agent Problem, runs one Core baseline Session per configured 
 Bootstrap execution generation/evaluation, then publishes `agent-v0` and authoritative Kernel `v0`.
 Bootstrap process exits and infrastructure failures are retried automatically up to
 `campaign.max_infrastructure_retries`, using a fresh capability, workspace, Session, and execution
-Generation each time. The same limit governs Optimizer Attempt infrastructure retries.
+Generation each time. The same limit governs Optimizer Attempt infrastructure retries, including
+authoritative Kernel-retention comparison after a Candidate has been registered. Comparison retries
+reuse that Candidate and do not rerun the Optimizer.
 Evolver process exits and infrastructure failures use the same limit and preserve every failed
 Worker Session and Evolution failure trace before retrying in a fresh workspace.
 Retrying the same Campaign resumes completed work; changing immutable inputs is rejected.

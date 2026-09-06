@@ -122,7 +122,8 @@ Bootstrap 以 `creation_key` 幂等。它冻结 Campaign Contract 与 Commit，�
 `agent-v0` 与权威 Kernel `v0`。相同输入重试会继续已有进度；改变不可变输入会被拒绝。
 Bootstrap 发生进程退出或基础设施错误时，会在 `campaign.max_infrastructure_retries` 上限内自动
 重试；每次重试都会获得新的 Capability、Workspace、Session 和执行 Generation。Optimizer Attempt
-的基础设施重试也由同一个配置项控制。
+及 Candidate 注册后的权威 Kernel Retention 比较均由同一个配置项控制；比较重试复用已注册
+Candidate，不会重新运行 Optimizer。
 Evolver 的进程退出和基础设施错误同样使用该上限；Runtime 会先保留失败 Worker Session 和
 Evolution Failure Trace，再使用新 Workspace 重试。
 生成的 Epoch-0 Evidence 对后续 Optimizer/Evolver 只暴露 `bootstrap/report.json` 和
