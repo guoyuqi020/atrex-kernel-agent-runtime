@@ -6,6 +6,13 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- 新增 Agent `evaluate.comparison`（`method="abba"`）：Core 与 KDA 从工作区文件或目录上传
+  A/B 两份 Kernel。Runtime 封存源码，并通过 Agate `dev` 使用固定版本评测器及相同输入运行
+  测试；记录逐侧测量与相对
+  加速，不改变 Kernel 保留与 Agent 晋升的权威决策。不再提供独立的 `abba` 操作。
+- Agent `evaluate` 支持自定义输入生成器与 Shapes，并新增不测性能、不自动 Profile 的
+  `mode="correctness_only"`。Core 可从工作区文件上传输入；Runtime 封存探索性请求与结果，
+  但不允许其代替 Candidate 提交所需的可信 Contract 完整评测。未完成的检查可以重试。
 - 新增 `ablation-evolve-1` 和 `ablation-evolve-5`，分别运行 15 x 1 和 3 x 5；现有主臂标为
   `evolve-3`（5 x 3）。三臂均为 30 次 Optimizer Attempt，分别进化 14/4/2 次。首轮同一 Agent
   在两个独立分支运行，不调用 Evolver 或创建新 Agent Revision；从 Epoch 2 开始正常进化。

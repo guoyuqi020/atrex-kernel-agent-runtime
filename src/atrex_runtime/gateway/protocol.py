@@ -85,10 +85,80 @@ class _DependencyRequestV2(_CandidateRequestV2):
     deps_mode: Literal["freeze_installed", "no_deps"] | None = None
 
 
-class EvaluateRequestV2(_CandidateRequestV2):
-    """Seal and evaluate one candidate against the trusted Evaluation Contract."""
+class EvaluateComparisonV2(BaseModel):
+    """Optional paired measurement strategy; source uploads stay at the wire boundary."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    method: Literal["abba"]
+    repeats: int = Field(default=2, ge=2, le=20)
+
+
+class EvaluateParametersV2(BaseModel):
+    """Optional exploratory overrides; the Campaign contract remains immutable."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    input_py: str | None = Field(default=None, min_length=1, max_length=131_072)
+    shapes: dict[str, JsonValue] | None = None
+    mode: Literal["full", "correctness_only"] = "full"
+    comparison: EvaluateComparisonV2 | None = None
+
+    @model_validator(mode="after")
+    def _validate_comparison_mode(self) -> EvaluateParametersV2:
+        if self.comparison is not None and self.mode != "full":
+            raise ValueError("comparison requires mode='full'; correctness_only has no timing")
+        return self
+
+    @field_validator("input_py")
+    @classmethod
+    def _validate_input_py(cls, value: str | None) -> str | None:
+        if value is not None and (not value.strip() or len(value.encode("utf-8")) > 131_072):
+            raise ValueError("input_py must be nonblank UTF-8 source of at most 128 KiB")
+        return value
+
+    @field_validator("shapes")
+    @classmethod
+    def _validate_shapes(cls, value: dict[str, JsonValue] | None) -> dict[str, JsonValue] | None:
+        if value is None:
+            return None
+        if not value:
+            raise ValueError("custom shapes must be non-empty")
+        for shape_id, shape in value.items():
+            try:
+                int(shape_id)
+            except ValueError as error:
+                raise ValueError("custom shape IDs must be integer-parseable strings") from error
+            if not isinstance(shape, dict):
+                raise ValueError("each custom shape must be a JSON object")
+        return value
+
+    @property
+    def input_scope(self) -> Literal["contract", "custom"]:
+        return "custom" if self.input_py is not None or self.shapes is not None else "contract"
+
+    @property
+    def is_contract_evaluation(self) -> bool:
+        return (
+            self.mode == "full" and self.input_scope == "contract" and self.comparison is None
+        )
+
+
+class EvaluateRequestV2(_CandidateRequestV2, EvaluateParametersV2):
+    """Evaluate a sealed candidate with contract inputs or explicit exploratory overrides."""
 
     operation: Literal["evaluate"]
+    baseline: CandidateBundleV2 | None = None
+
+    @model_validator(mode="after")
+    def _validate_baseline(self) -> EvaluateRequestV2:
+        if self.comparison is not None and self.baseline is None:
+            raise ValueError(
+                "comparison requires a baseline source uploaded from comparison.baseline_path"
+            )
+        if self.comparison is None and self.baseline is not None:
+            raise ValueError("baseline is only allowed when comparison is specified")
+        return self
 
 
 class ProfileRequestV2(_DependencyRequestV2):
@@ -448,6 +518,8 @@ def gateway_agent_request_schema(
         or operation in _RUNTIME_JOURNAL_OPERATION_NAMES
         else set()
     )
+    if operation == "evaluate":
+        runtime_owned_fields = runtime_owned_fields | {"baseline"}
     return cast(
         dict[str, JsonValue],
         {
@@ -470,6 +542,8 @@ def _agent_operation_schema(
     if not isinstance(properties, dict):
         raise TypeError(f"Gateway request schema has no properties: {model.__name__}")
     hidden_fields = _AGENT_HIDDEN_REQUEST_FIELDS | ({"operation"} if runtime_bound else set())
+    if model is EvaluateRequestV2:
+        hidden_fields = hidden_fields | {"baseline"}
     for field_name in hidden_fields:
         properties.pop(field_name, None)
     required = schema.get("required")
@@ -477,8 +551,54 @@ def _agent_operation_schema(
         schema["required"] = [
             field_name for field_name in required if field_name not in hidden_fields
         ]
-    # CandidateBundleV2 is the only nested definition and becomes unreachable after projection.
-    schema.pop("$defs", None)
+    if model is EvaluateRequestV2:
+        for source, path in (("input_py", "input_path"), ("shapes", "shapes_path")):
+            properties[path] = {
+                "type": "string",
+                "minLength": 1,
+                "description": f"Workspace-relative file expanded by the Core tool into {source}.",
+            }
+        schema["allOf"] = [
+            {"not": {"required": ["input_py", "input_path"]}},
+            {"not": {"required": ["shapes", "shapes_path"]}},
+        ]
+        properties["candidate_path"] = {
+            "type": "string", "minLength": 1,
+            "description": "Workspace Kernel file or directory; defaults to current Kernel.",
+        }
+        comparison = schema["$defs"]["EvaluateComparisonV2"]
+        comparison["properties"]["baseline_path"] = {
+            "type": "string", "minLength": 1,
+            "description": "Workspace-relative Kernel file or directory for comparison baseline A.",
+        }
+        comparison["required"].append("baseline_path")
+        schema["allOf"].append({
+            "if": {"properties": {"comparison": {"type": "object"}}, "required": ["comparison"]},
+            "then": {"properties": {"mode": {"const": "full"}}},
+        })
+    # Keep definitions reachable from Agent fields (such as recursive JsonValue), not
+    # the hidden Candidate bundle and Runtime-owned request fields.
+    definitions = schema.pop("$defs", {})
+    if isinstance(definitions, dict):
+        reachable: set[str] = set()
+
+        def visit(value: object) -> None:
+            if isinstance(value, dict):
+                reference = value.get("$ref")
+                if isinstance(reference, str) and reference.startswith("#/$defs/"):
+                    name = reference.removeprefix("#/$defs/")
+                    if name not in reachable and name in definitions:
+                        reachable.add(name)
+                        visit(definitions[name])
+                for nested in value.values():
+                    visit(nested)
+            elif isinstance(value, list):
+                for nested in value:
+                    visit(nested)
+
+        visit(schema)
+        if reachable:
+            schema["$defs"] = {name: definitions[name] for name in sorted(reachable)}
     suffix = " Runtime request" if runtime_bound else " gateway-execute request"
     schema["title"] = model.__name__.removesuffix("RequestV2") + suffix
     return schema

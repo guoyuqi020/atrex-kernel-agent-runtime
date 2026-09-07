@@ -62,6 +62,15 @@
 - Core 工具对预期失败输出单个 JSON Object 并以非零状态退出；保留 Runtime 的 `error`、`detail`、
   `issues`、`request_schema` 或 `supported_operations`，并补充 `status="error"`、`command` 及适用时的
   `http_status`，不再输出 Python Traceback。
+- Core 和 Kernel Design Agent 的本地 Evaluate 文件错误通过 `issues[].path` 精确指向
+  出错字段，并附上对应的本地 `request_schema`。Evaluate 包含规范的
+  `full`/`correctness_only` 模式、内联/文件参数及形式互斥约束，同时提供针对该字段的有界
+  `recovery` 步骤。Evaluate 支持可选 `candidate_path`；其 `comparison` 对象要求
+  `method: "abba"` 及 `baseline_path`，`repeats` 范围为 2–20。启用比较时 `mode` 必须为
+  `full`。嵌套字段错误指向 `comparison.method`、`comparison.baseline_path` 或
+  `comparison.repeats`；输入文件
+  错误指向 `input_path`/`shapes_path`。这些操作已有的 Runtime `issues`、`request_schema` 和 `recovery`
+  会保留，不被本地备用提示覆盖。
 - Core 自管的 Trial/Artifact/Result、Wiki、Direction、Experiment 和 Attempt Report 校验器会附加
   对应命令的 JSON Schema。可见性或生命周期错误还会给出有界 `recovery`：指定安全的 list/load
   调用，或说明应复用此前返回的哪类身份；不会枚举不可访问 Lineage 的身份。
@@ -83,6 +92,27 @@ Candidate 操作上传完整 Base64 File Bundle，Runtime 在执行前封存。�
 将 Agate 原始响应及其 `gateway_result_digest` 保留为私有事实，只供评测、比较和审计；同时把规范化的
 Agent 可见 `operation`、`status`、`result` 独立封存为 Result Artifact。Agent 始终收到
 `result_artifact_digest`，初次执行和后续读取暴露同一份规范化内容，不暴露私有 Gateway Result 身份。
+
+`evaluate` 的 Wire Request 可指定 `mode: "full" | "correctness_only"`（默认 `full`）、
+`input_py`（UTF-8 Python 输入生成器源码，上限 128 KiB）和 `shapes`（以整数字符串为键的非空
+Agate Shape Record Object，每条记录也是 Object）。两个输入组件可独立覆盖；未指定的源码或
+Shapes 继续复用私有 Contract，Reference 和可信评测策略保持不变。`correctness_only` 不测性能、
+不自动 Profile。自定义输入或仅正确性调用仍保留 Kernel Trial 和 Result Artifact 身份，其嵌套
+`result` 记录 `mode` 与 `input_scope`（`custom` 或 `contract`）。这些调用不能满足
+`candidate_ready` 前所需的可信 Contract 完整评测；默认 `{"operation":"evaluate"}` 行为不变。
+
+携带 `comparison: {method: "abba", repeats: 2}` 的 `evaluate` Wire Request 通过 `baseline`（A）
+和 `candidate`（B）上传两个源码 Bundle。`comparison.repeats` 默认 2，范围 2–20；比较要求
+`mode: "full"`，`input_py` 和 `shapes` 仍可选。Runtime 校验并封存两侧源码，在每个 Shape
+Batch 的同一 Allocation 内交错观测；`comparison.repeats: 2` 生成
+A、B、B、A，更长 Schedule 还须满足 Allocation 预算。ABBA 始终仅用于探索，不能满足
+`candidate_ready` 或触发 Retention/Promotion。响应返回 B 的 `kernel_trial_id`、
+`kernel_artifact_digest` 与一个 `result_artifact_digest`，并保留 `operation: "evaluate"`。
+`result.comparison` 记录 `method: "abba"` 及 `repeats`；嵌套结果还包含
+`baseline_kernel_artifact_digest`、`baseline`/`candidate` 摘要、`schedule`、所有 `measurements`，
+以及 A/B `speedup` 和 `improvement_pct`。结果通过 Trial/Result Artifact 查询读取，不进入普通
+Evaluate 历史路由。详见[评测说明](evaluation.zh.md#探索性-abba)。
+
 对于 `dev`、`disassemble` 和 `env`，Core 直接返回 Agent-safe
 `result` Object。`profile` 还会在展平后的安全 Job
 Result 旁返回 Kernel Artifact、Kernel Trial 和 Result Artifact 身份。其嵌套 `result` 仅用数字型
@@ -99,8 +129,11 @@ Status 组成的精简索引；仅对需要分析的条目调用 `result_artifac
 `artifact_file`（默认取目标文件名）。Core 工具原子写入准确字节，stdout 只返回状态、路径、字节数
 和 SHA-256。`result_artifact_read` 接收 Observation 的 `result_artifact_digest`，读取规范化的
 Agent 可见 Result Artifact；返回的 `operation`、`status` 和 `result` 与初次调用一致。
-Evaluate 视图包含正确性结论、最坏情况的
-`rel_err`、`max_abs_err`、`max_rel_err`、两种聚合延迟以及按不透明 Shape ID 的延迟；私有评测输入与隐藏 Case 细节仍不暴露。这些操作均不计配额、不访问 Agate，且调用方不能自行选择 Lineage
+不带比较的 Evaluate 视图包含正确性结论及最坏情况的 `rel_err`、`max_abs_err`、`max_rel_err`。
+完整评测还返回两种聚合延迟及按不透明 Shape ID 的延迟；仅正确性结果不包含性能测量。
+自定义输入和仅正确性视图保留 `mode` 与 `input_scope`。比较结果使用前述 `result.comparison`
+标记与 A/B 摘要；私有评测输入与隐藏 Case 细节仍不暴露。
+这些操作均不计配额、不访问 Agate，且调用方不能自行选择 Lineage
 或 Attempt。当前 Attempt 的身份信息来自原始 Operation 响应和已保留的 Experiment 记录。
 
 ### Administration Route
@@ -147,9 +180,40 @@ Attempt ID、Capability 和 Candidate 文件由工具注入。
 python3 src/runtime_tools.py <command> --request scratch/request.json
 ```
 
+`gateway-execute` 的 `operation: "evaluate"` 除 Wire 内联字段外，还支持 `input_path` 和
+`shapes_path`。它们是指向普通 UTF-8 文件的安全 Workspace 相对路径，分别承载 Python 输入源码
+（上限 128 KiB）和 Shape Record JSON Object（上限 256 KiB）。Core 会拒绝绝对路径或路径穿越、
+符号链接、`.runtime` 控制路径、缺失或特殊文件、无效 UTF-8/JSON，以及同一组件同时指定内联和
+路径形式。文件内容在计算请求幂等键前展开，因此内容变化会生成新 Key，与内联内容等价的请求则
+得到相同 Key。例如：
+
+```json
+{"operation": "evaluate", "mode": "correctness_only", "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
+```
+
+使用 `{"operation":"evaluate","mode":"correctness_only"}` 可仅检查 Contract 输入的正确性；
+使用 `{"operation":"evaluate"}` 则执行默认的可信 Contract 完整评测。
+
+若覆盖文件在本地加载失败，先按 `issues[].path` 与 `recovery` 修正指定路径、普通文件内容、
+UTF-8 编码、Shape JSON Object 或内联/路径冲突，再重试。附带的 `request_schema` 描述 Agent
+可填写的 Evaluate 请求，包含内联和路径两种形式，不暴露可信请求字段或私有评测输入。
+
+对于 `operation: "evaluate"`，Core 与 Kernel Design Agent 支持可选 `candidate_path`（默认
+`work/kernel`）。启用 ABBA 比较时，还需提供
+`comparison: {method: "abba", baseline_path: "scratch/baseline.py"}`。两侧路径均为指向 `.py` 源文件或 Kernel Bundle 目录的
+Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留相对文件名。两侧均应用安全
+路径规则及 Candidate Bundle 大小限制。工具自动上传 `baseline` 和 `candidate`，Agent 不能
+直接填写这两个 Wire 字段；本地路径在计算内容幂等键前移除，Wire `comparison` 仅保留
+`method` 和可选 `repeats`。也可使用相同的输入
+文件参数，让两侧共用自定义输入生成器和 Shapes。
+
+```json
+{"operation": "evaluate", "candidate_path": "scratch/candidate.py", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py", "repeats": 2}}
+```
+
 | 命令 | Agent 提供的请求 |
 | --- | --- |
-| `gateway-execute` | GPU/Agate Operation 与参数；Candidate 操作上传当前 Working Kernel。 |
+| `gateway-execute` | GPU/Agate Operation 与参数；Candidate 操作默认上传当前 Working Kernel。Evaluate 可通过 `candidate_path` 选择 B，通过 `comparison.baseline_path` 选择比较基线 A。 |
 | `kernel-trial-show` | 按 Trial ID 查询 Kernel Artifact Digest 和精简 Result Artifact 索引；请求 JSON 不写 `operation`。 |
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
 | `result-artifact-read` | 按 Result Artifact Digest 读取规范化的 Agent 可见结果；请求 JSON 不写 `operation`。 |
@@ -203,7 +267,7 @@ Kernel Trial；没有取用时为空。Core 与 Runtime 都只校验它的形状
 因为 Report 是 Agent 的解读而非测量事实，与 Experiment Subject 里的 Trial 身份同理。Runtime 会把它带入
 派生的 Final Report，供后续 Attempt 与 Evolver 阅读。
 Gateway 不定义低层 Agate `submit` 透传，也不定义独立的 `sol` 操作。评测只能使用由
-Runtime 构造的 `evaluate`；SOL Profile 仍通过 `profile` 的 `level="sol"` 使用。
+Runtime 构造的 `evaluate`，其中可包含探索性比较；SOL Profile 仍通过 `profile` 的 `level="sol"` 使用。
 
 封存的 schema-v12 内容是 Agent Handoff，并非权威结果。Runtime 为管理接口和后续 Evidence
 Snapshot 派生 schema-v1 最终 Attempt Report：保留工程叙述，并补充准确的 `parent_kernel` 与

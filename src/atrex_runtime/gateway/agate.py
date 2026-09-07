@@ -35,6 +35,7 @@ from .contract import (
     AgateEvaluationContractV1,
 )
 from .control_models import GatewayOperation
+from .correctness import correctness_summary
 from .job_recovery import JobExecution, run_with_log_recovery
 from .private_results import (
     project_candidate_rejection,
@@ -42,7 +43,7 @@ from .private_results import (
     project_private_evaluation,
     project_private_job,
 )
-from .protocol import EvaluationV2
+from .protocol import EvaluateParametersV2, EvaluationV2
 from .proxy import GatewayAdapterRequest, GatewayAdapterResult
 from .repeated_evaluate import (
     aggregate_evaluations,
@@ -51,7 +52,7 @@ from .repeated_evaluate import (
 )
 from .retrying_client import RETRYABLE_CLIENT_STATUSES, RetryingAgateClient
 
-AGATE_JOB_SCHEMA_VERSION = 2
+AGATE_JOB_SCHEMA_VERSION = 3
 _JOB_KINDS = frozenset({"eval", "profile", "dev", "compile", "sol", "disassemble"})
 _TERMINAL_STATUSES = frozenset({"succeeded", "failed", "cancelled"})
 _COMPILE_OPERATIONS = frozenset({GatewayOperation.CHECK, GatewayOperation.DISASSEMBLE})
@@ -231,6 +232,9 @@ class AgateJobBinding:
     idempotency_key: str
     kind: Literal["eval", "profile", "dev", "compile", "sol", "disassemble"]
     operation: GatewayOperation = GatewayOperation.EVALUATE
+    evaluation_mode: Literal["full", "correctness_only"] = "full"
+    expected_shape_ids: tuple[str, ...] | None = None
+    input_scope: Literal["contract", "custom"] = "contract"
 
 
 class SqliteAgateJobStore:
@@ -273,17 +277,37 @@ class SqliteAgateJobStore:
                 "SELECT * FROM agate_jobs WHERE job_id = ?", (binding.job_id,)
             ).fetchone()
             for row in (by_request, by_job):
-                if row is not None and self._row_binding(row) != binding:
+                if row is None:
+                    continue
+                current = self._row_binding(row)
+                if (
+                    current.expected_shape_ids is None
+                    and binding.expected_shape_ids is not None
+                    and replace(current, expected_shape_ids=binding.expected_shape_ids) == binding
+                ):
+                    # An idempotent replay supplies the batch metadata absent in v2.
+                    connection.execute(
+                        "UPDATE agate_jobs SET expected_shape_ids = ? WHERE job_id = ?",
+                        (json.dumps(binding.expected_shape_ids), binding.job_id),
+                    )
+                elif current != binding:
                     raise InvalidTransitionError("Agate job binding conflicts with durable state")
             if by_request is None and by_job is None:
                 connection.execute(
-                    "INSERT INTO agate_jobs VALUES (?, ?, ?, ?, ?)",
+                    "INSERT INTO agate_jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         binding.job_id,
                         binding.attempt_id,
                         binding.idempotency_key,
                         binding.kind,
                         binding.operation.value,
+                        binding.evaluation_mode,
+                        (
+                            json.dumps(binding.expected_shape_ids)
+                            if binding.expected_shape_ids is not None
+                            else None
+                        ),
+                        binding.input_scope,
                     ),
                 )
         return binding
@@ -333,6 +357,24 @@ class SqliteAgateJobStore:
             raise RuntimeError(
                 f"invalid persisted Agate operation: {invalid_operation!r}"
             ) from error
+        evaluation_mode = row["evaluation_mode"]
+        if evaluation_mode not in {"full", "correctness_only"}:
+            raise RuntimeError(f"invalid persisted Agate evaluation mode: {evaluation_mode!r}")
+        input_scope = row["input_scope"]
+        if input_scope not in {"contract", "custom"}:
+            raise RuntimeError(f"invalid persisted Agate input scope: {input_scope!r}")
+        shape_ids = (
+            json.loads(row["expected_shape_ids"])
+            if row["expected_shape_ids"] is not None
+            else None
+        )
+        if shape_ids is not None and (
+            not isinstance(shape_ids, list)
+            or not shape_ids
+            or any(not isinstance(value, str) for value in shape_ids)
+            or len(set(shape_ids)) != len(shape_ids)
+        ):
+            raise RuntimeError("invalid persisted Agate expected shape ids")
         return AgateJobBinding(
             job_id=str(row["job_id"]),
             attempt_id=parse_attempt_id(str(row["attempt_id"])),
@@ -342,6 +384,9 @@ class SqliteAgateJobStore:
                 kind,
             ),
             operation=operation,
+            evaluation_mode=cast(Literal["full", "correctness_only"], evaluation_mode),
+            expected_shape_ids=tuple(shape_ids) if shape_ids is not None else None,
+            input_scope=cast(Literal["contract", "custom"], input_scope),
         )
 
     def _transaction(self) -> AbstractContextManager[sqlite3.Connection]:
@@ -366,12 +411,27 @@ class SqliteAgateJobStore:
                             kind IN ('eval', 'profile', 'dev', 'compile', 'sol', 'disassemble')
                         ),
                         operation TEXT NOT NULL,
+                        evaluation_mode TEXT NOT NULL DEFAULT 'full',
+                        expected_shape_ids TEXT,
+                        input_scope TEXT NOT NULL DEFAULT 'contract',
                         UNIQUE(attempt_id, idempotency_key)
                     )
                     """
                 )
                 connection.execute(
                     "INSERT INTO metadata(key, value) VALUES ('schema_version', ?)",
+                    (AGATE_JOB_SCHEMA_VERSION,),
+                )
+            elif row["value"] == 2:
+                connection.execute(
+                    "ALTER TABLE agate_jobs ADD COLUMN evaluation_mode TEXT NOT NULL DEFAULT 'full'"
+                )
+                connection.execute("ALTER TABLE agate_jobs ADD COLUMN expected_shape_ids TEXT")
+                connection.execute(
+                    "ALTER TABLE agate_jobs ADD COLUMN input_scope TEXT NOT NULL DEFAULT 'contract'"
+                )
+                connection.execute(
+                    "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
                     (AGATE_JOB_SCHEMA_VERSION,),
                 )
             elif row["value"] != AGATE_JOB_SCHEMA_VERSION:
@@ -415,6 +475,8 @@ class AgateGatewayAdapter:
 
     async def execute(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
         """Execute one capability-authorized Agate command equivalent."""
+        if request.is_comparison:
+            raise ValueError("Evaluate comparison requires the paired measurement adapter")
         if request.operation in {
             GatewayOperation.EVALUATE,
             GatewayOperation.PROFILE,
@@ -441,6 +503,8 @@ class AgateGatewayAdapter:
 
     async def _submit(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
         context = self._contexts.resolve(request.attempt_id)
+        if request.operation is GatewayOperation.EVALUATE:
+            context = self._evaluation_context(request, context)
         payload = self._build_request(request, context)
         kind_by_operation: dict[
             GatewayOperation,
@@ -454,7 +518,17 @@ class AgateGatewayAdapter:
         }
         kind = kind_by_operation[request.operation]
         if request.operation is GatewayOperation.EVALUATE:
-            if self._optimizer_evaluate_repeats > 1:
+            if context.contract.mode == "correctness_only":
+                mapped = await self._submit_once(
+                    request,
+                    context,
+                    payload,
+                    kind,
+                    binding_key=request.idempotency_key,
+                )
+                if mapped.status == "queued":
+                    raise InfrastructureError("Agate correctness evaluation did not complete")
+            elif self._optimizer_evaluate_repeats > 1:
                 mapped = await self._submit_repeated_evaluate(request, context)
             else:
                 mapped = await self._submit_batched_evaluate(
@@ -503,6 +577,17 @@ class AgateGatewayAdapter:
         expected_shape_ids: tuple[str, ...] | None = None,
     ) -> GatewayAdapterResult:
         """Submit and await a Job, replacing only lost-log executions."""
+        expected = expected_shape_ids
+        if expected is None and request.operation is GatewayOperation.EVALUATE:
+            expected = tuple(context.contract.shapes)
+        evaluation_mode = (
+            context.contract.mode if request.operation is GatewayOperation.EVALUATE else "full"
+        )
+        input_scope = (
+            EvaluateParametersV2.model_validate(dict(request.parameters)).input_scope
+            if request.operation is GatewayOperation.EVALUATE
+            else "contract"
+        )
 
         async def execute(submission: dict[str, object]) -> JobExecution:
             acceptance = await self._call(
@@ -523,6 +608,9 @@ class AgateGatewayAdapter:
                     ),
                     kind,
                     request.operation,
+                    evaluation_mode,
+                    expected,
+                    input_scope,
                 )
             )
             job = await self._call(
@@ -537,21 +625,33 @@ class AgateGatewayAdapter:
         try:
             _, job = await run_with_log_recovery(payload, execute)
         except AgateCandidateRejection as rejection:
-            rejected: JsonValue = {"status": "rejected", "error": rejection.payload}
+            rejected: dict[str, JsonValue] = {"status": "rejected", "error": rejection.payload}
             return GatewayAdapterResult(
                 status="completed",
                 result=rejected,
                 evaluation=(
                     EvaluationV2(correct=False, latency_us=None)
                     if request.operation is GatewayOperation.EVALUATE
+                    and evaluation_mode == "full"
                     else None
                 ),
-                worker_result=project_candidate_rejection(rejection.payload),
+                worker_result=(
+                    {
+                        **_correctness_worker_result(rejected, correct=False),
+                        "mode": evaluation_mode,
+                        "input_scope": input_scope,
+                    }
+                    if evaluation_mode == "correctness_only"
+                    else project_candidate_rejection(rejection.payload)
+                ),
             )
-        expected = expected_shape_ids
-        if expected is None and request.operation is GatewayOperation.EVALUATE:
-            expected = tuple(context.contract.shapes)
-        return self._map_job(job, request.operation, expected)
+        return self._map_job(
+            job,
+            request.operation,
+            expected,
+            evaluation_mode=evaluation_mode,
+            input_scope=input_scope,
+        )
 
     async def _submit_batched_evaluate(
         self,
@@ -715,19 +815,14 @@ class AgateGatewayAdapter:
                 include_spec=include_spec,
             )
         )
-        expected_shape_ids = (
-            tuple(self._contexts.resolve(request.attempt_id).contract.shapes)
-            if binding.operation is GatewayOperation.EVALUATE
-            else None
-        )
-        return self._map_job(job, binding.operation, expected_shape_ids)
+        return self._map_bound_job(binding, job)
 
     async def _cancel(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
         if request.job_id is None:
             raise ValueError("cancel requires job_id")
         binding = self._jobs.require_owned(request.attempt_id, request.job_id)
         job = await self._call(lambda: self._client.cancel_job(request.job_id or ""))
-        return self._map_job(job, binding.operation)
+        return self._map_bound_job(binding, job)
 
     async def _list_jobs(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
         kind_value = request.parameters.get("kind")
@@ -742,12 +837,7 @@ class AgateGatewayAdapter:
         for binding in bindings:
             job = await self._call(partial(self._client.get_job, binding.job_id))
             if status is None or job.get("status") == status:
-                expected_shape_ids = (
-                    tuple(self._contexts.resolve(request.attempt_id).contract.shapes)
-                    if binding.operation is GatewayOperation.EVALUATE
-                    else None
-                )
-                mapped = self._map_job(job, binding.operation, expected_shape_ids)
+                mapped = self._map_bound_job(binding, job)
                 if mapped.worker_result is None:
                     rows.append(mapped.result)
                     continue
@@ -760,6 +850,53 @@ class AgateGatewayAdapter:
                     }
                 rows.append(projected)
         return GatewayAdapterResult("completed", {"jobs": rows[:limit_value]})
+
+    def _map_bound_job(
+        self,
+        binding: AgateJobBinding,
+        job: dict[str, JsonValue],
+    ) -> GatewayAdapterResult:
+        mapped = self._map_job(
+            job,
+            binding.operation,
+            self._binding_shape_ids(binding, job),
+            evaluation_mode=binding.evaluation_mode,
+            input_scope=binding.input_scope,
+        )
+        if binding.input_scope == "custom" or binding.evaluation_mode == "correctness_only":
+            # Inspection must not revive an exploration's submission eligibility.
+            return replace(mapped, evaluation=None)
+        return mapped
+
+    def _binding_shape_ids(
+        self,
+        binding: AgateJobBinding,
+        job: dict[str, JsonValue],
+    ) -> tuple[str, ...] | None:
+        if binding.operation is not GatewayOperation.EVALUATE:
+            return None
+        if binding.expected_shape_ids is not None:
+            return binding.expected_shape_ids
+        # Jobs persisted before schema v3 did not record their physical Shape batch.
+        fallback = tuple(self._contexts.resolve(binding.attempt_id).contract.shapes)
+        return _reported_shape_ids(job, fallback)
+
+    @staticmethod
+    def _evaluation_context(
+        request: GatewayAdapterRequest,
+        context: AgateEvaluationContext,
+    ) -> AgateEvaluationContext:
+        """Derive this request's inputs without altering the trusted Campaign contract."""
+        parameters = EvaluateParametersV2.model_validate(dict(request.parameters))
+        updates: dict[str, object] = {"mode": parameters.mode}
+        if parameters.input_py is not None:
+            updates["input_py"] = parameters.input_py
+        if parameters.shapes is not None:
+            updates["shapes"] = parameters.shapes
+        if parameters.input_py is not None or parameters.shapes is not None:
+            updates.update(metadata=None, roofline=None)
+        contract = context.contract.model_copy(update=updates).model_copy(deep=True)
+        return replace(context, contract=contract)
 
     async def _environment(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
         force = bool(request.parameters.get("force", False))
@@ -1121,12 +1258,35 @@ class AgateGatewayAdapter:
         job: dict[str, JsonValue],
         operation: GatewayOperation,
         expected_shape_ids: tuple[str, ...] | None = None,
+        *,
+        evaluation_mode: Literal["full", "correctness_only"] = "full",
+        input_scope: Literal["contract", "custom"] = "contract",
+    ) -> GatewayAdapterResult:
+        mapped = AgateGatewayAdapter._map_job_result(
+            job, operation, expected_shape_ids, evaluation_mode=evaluation_mode
+        )
+        if operation is GatewayOperation.EVALUATE and (
+            evaluation_mode != "full" or input_scope != "contract"
+        ):
+            worker = mapped.worker_result
+            if isinstance(worker, dict):
+                mapped = replace(
+                    mapped,
+                    worker_result={**worker, "mode": evaluation_mode, "input_scope": input_scope},
+                )
+        return mapped
+
+    @staticmethod
+    def _map_job_result(
+        job: dict[str, JsonValue],
+        operation: GatewayOperation,
+        expected_shape_ids: tuple[str, ...] | None = None,
+        *,
+        evaluation_mode: Literal["full", "correctness_only"] = "full",
     ) -> GatewayAdapterResult:
         status = job.get("status")
         job_id_value = job.get("job_id")
         job_id = job_id_value if isinstance(job_id_value, str) else None
-        if operation is GatewayOperation.EVALUATE and expected_shape_ids is not None:
-            expected_shape_ids = _reported_shape_ids(job, expected_shape_ids)
         if status not in _TERMINAL_STATUSES:
             if status not in {"queued", "running"}:
                 raise InfrastructureError(f"Agate returned an unknown job status: {status!r}")
@@ -1173,6 +1333,14 @@ class AgateGatewayAdapter:
             )
         if operation is GatewayOperation.EVALUATE and expected_shape_ids is None:
             raise InfrastructureError("eval result mapping requires expected shape ids")
+        if operation is GatewayOperation.EVALUATE and evaluation_mode == "correctness_only":
+            correct = parse_agate_correctness(job, expected_shape_ids or ())
+            return GatewayAdapterResult(
+                status="completed",
+                result=job,
+                job_id=job_id,
+                worker_result=_correctness_worker_result(job, correct=correct),
+            )
         evaluation = (
             parse_agate_evaluation(job, expected_shape_ids or ())
             if operation is GatewayOperation.EVALUATE
@@ -1189,6 +1357,107 @@ class AgateGatewayAdapter:
                 else _worker_view(job, operation)
             ),
         )
+
+
+def _correctness_worker_result(
+    job: dict[str, JsonValue],
+    *,
+    correct: bool,
+) -> dict[str, JsonValue]:
+    """Expose correctness evidence without inventing measurements or leaking input cases."""
+    payload = job.get("result")
+    worker: dict[str, JsonValue] = {
+        "correct": correct,
+        "all_pass": correct,
+        "correctness": correctness_summary(payload, passed=correct),
+        "failures": (
+            []
+            if correct
+            else [
+                "one or more hidden evaluator cases failed; "
+                "reproduce within the public shape_domain"
+            ]
+        ),
+        "shape_ids_are_opaque": True,
+        "hidden_case_details": "shape inputs and failure details withheld",
+    }
+    if job.get("status") == "rejected":
+        rejection = project_candidate_rejection(job.get("error"))
+        if isinstance(rejection, dict):
+            worker.update(rejection)
+    return worker
+
+
+def parse_agate_correctness(
+    job: dict[str, JsonValue],
+    expected_shape_ids: tuple[str, ...],
+) -> bool:
+    """Require completed compile and correctness cases for every requested Shape."""
+    result = job.get("result")
+    if not isinstance(result, dict):
+        raise InfrastructureError("successful Agate correctness eval has no structured result")
+    if not expected_shape_ids:
+        raise InfrastructureError("correctness evaluation contract has no expected shape ids")
+    if job.get("error") is not None or result.get("error") is not None:
+        return False
+    passed = result.get("passed")
+    if not isinstance(passed, dict):
+        raise InfrastructureError("Agate correctness eval has no compile/correctness verdicts")
+    for stage in ("compile", "correctness"):
+        verdicts = passed.get(stage)
+        if not isinstance(verdicts, dict):
+            raise InfrastructureError(f"Agate correctness eval has no {stage} verdicts")
+        records = (
+            [verdicts]
+            if stage == "compile" and "status" in verdicts
+            else [verdicts.get(shape_id) for shape_id in expected_shape_ids]
+        )
+        for verdict in records:
+            if not isinstance(verdict, dict) or verdict.get("status") not in (
+                "passed", "failed", "skipped"
+            ):
+                raise InfrastructureError(
+                    f"Agate correctness eval has malformed or missing {stage} shape verdicts"
+                )
+            if verdict["status"] != "passed" or verdict.get("error") is not None:
+                return False
+    correctness = result.get("correctness")
+    shapes = correctness.get("shapes") if isinstance(correctness, dict) else None
+    if not isinstance(shapes, dict):
+        raise InfrastructureError("passing Agate correctness eval has no correctness shapes")
+    if _has_correctness_failure(correctness):
+        return False
+    for shape_id in expected_shape_ids:
+        shape = shapes.get(shape_id)
+        cases = shape.get("cases") if isinstance(shape, dict) else None
+        if not isinstance(cases, list) or not cases or any(
+            not isinstance(case, dict) for case in cases
+        ):
+            raise InfrastructureError(
+                "passing Agate correctness eval has missing or malformed correctness cases"
+            )
+        for case in cases:
+            assert isinstance(case, dict)
+            outputs = case.get("outputs")
+            if not isinstance(outputs, list) or any(
+                not isinstance(output, dict) for output in outputs
+            ):
+                raise InfrastructureError("passing Agate correctness eval has malformed outputs")
+    return result.get("all_pass") is not False
+
+
+def _has_correctness_failure(value: JsonValue | None) -> bool:
+    if isinstance(value, dict):
+        if value.get("error") is not None or value.get("passed") is False:
+            return True
+        if value.get("status") in ("failed", "skipped"):
+            return True
+        if value.get("unexpected_mutations"):
+            return True
+        return any(_has_correctness_failure(child) for child in value.values())
+    if isinstance(value, list):
+        return any(_has_correctness_failure(child) for child in value)
+    return False
 
 
 def parse_agate_evaluation(

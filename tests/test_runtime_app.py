@@ -13,6 +13,7 @@ import pytest
 from atrex_runtime.api.app import RuntimeApplication, build_runtime_application
 from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.gateway.agate import AgateConnectionConfig
+from atrex_runtime.gateway.agent_abba import AgentAbbaGatewayAdapter
 from atrex_runtime.gateway.proxy import GatewayProxyAsgiApp
 
 
@@ -159,6 +160,32 @@ def test_application_requires_all_named_secrets(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="TEST_AGATE_SK"):
         build_runtime_application(_settings(tmp_path), environment, sdk_loader=CapturingSdkLoader())
+
+
+def test_application_wires_agent_abba_with_optimizer_gate(tmp_path: Path) -> None:
+    template = RuntimeSettings.from_file(
+        Path(__file__).resolve().parents[1] / "runtime.example.json"
+    )
+    assert template.campaign is not None
+    gate = template.campaign.gate_policy
+    gate = gate.model_copy(update={
+        "optimizer": gate.optimizer.model_copy(update={"correctness_cases": 7, "bench_iters": 23}),
+        "performance_timeout_seconds": 40,
+    })
+    settings = _settings(tmp_path).model_copy(update={"gate_policy": gate})
+    app = build_runtime_application(settings, _environment(), sdk_loader=CapturingSdkLoader())
+    try:
+        adapter = app._proxy._service._adapter
+        assert isinstance(adapter, AgentAbbaGatewayAdapter)
+        assert adapter._correctness_cases == 7
+        assert adapter._bench_iters == 23
+        assert adapter._per_run_timeout_seconds == 40
+        assert adapter._evaluator is not None
+        assert adapter._evaluator.commit == gate.evaluator.commit
+        # Startup must not export/fetch the evaluator or submit any GPU jobs.
+        assert adapter._evaluator._files is None
+    finally:
+        app.close()
 
 
 @pytest.mark.anyio

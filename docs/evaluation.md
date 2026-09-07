@@ -24,9 +24,85 @@ through `gateway-execute`. Candidate-bearing operations seal
 the exact source before calling Agate. Every result is immutable and queryable by the identities
 returned to the Agent.
 
-An exploratory `evaluate` is authoritative measurement evidence, but it does not create a `vN`
-Kernel revision. The Agent may evaluate several Candidates in one Attempt, record them in the
-Experiment Journal, and nominate one evaluated Candidate in `attempt-report`.
+An exploratory `evaluate` records measurement evidence, but it does not create a `vN` Kernel
+revision. The Agent may evaluate several Candidates in one Attempt and record them in the
+Experiment Journal. A `candidate_ready` nomination still requires a successful full evaluation of
+the exact Candidate against the trusted Evaluation Contract.
+
+`evaluate` accepts optional `mode`, `input_py`, and `shapes`. `mode` is `full` (the default) or
+`correctness_only`; the latter runs correctness checks without performance measurement or automatic
+SOL profiling. `input_py` supplies an Agate-compatible Python `_make_inputs` generator, while
+`shapes` supplies a non-empty JSON object of Shape records keyed by integer strings. Each record
+is an object compatible with that generator. Either component can be overridden independently;
+an omitted component continues to come from the sealed Contract. The trusted reference,
+tolerances, and gate policy remain in force, and the private inputs are never returned to the Agent.
+
+Core additionally accepts `input_path` and `shapes_path` as workspace-relative UTF-8 files and
+uploads their contents as `input_py` and `shapes`. The input source limit is 128 KiB and the Shape
+file limit is 256 KiB. Files must be regular files under real workspace directories; absolute or
+traversal paths, symbolic links, and `.runtime` control paths are rejected. Inline and path forms
+of the same component are mutually exclusive. Contents, rather than local file names, determine
+the request's idempotency key.
+
+```json
+{"operation": "evaluate"}
+```
+
+```json
+{"operation": "evaluate", "mode": "correctness_only"}
+```
+
+```json
+{"operation": "evaluate", "mode": "correctness_only", "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
+```
+
+Custom-input, custom-Shape, and correctness-only results retain Kernel Trial and Result Artifact
+identities, and record the effective `mode` and `input_scope` (`custom` when either component is
+overridden, otherwise `contract`). Correctness-only results contain no performance measurements.
+These calls cannot replace the full trusted-contract evaluation required for `candidate_ready`,
+Kernel retention, or Agent promotion. Omit overrides and use `mode: "full"` (or omit `mode`) for that
+evaluation; the existing default request and result format remain unchanged.
+
+## Exploratory ABBA
+
+`evaluate` accepts optional `candidate_path`, including for ordinary single-Kernel evaluation;
+omitting it selects the current `work/kernel` tree. To compare Candidate B against baseline A,
+provide `comparison: {method: "abba", baseline_path: "scratch/baseline.py"}`. The baseline path is
+required inside `comparison`. Each path is workspace-relative and names a regular `.py` file or a Kernel
+Bundle directory. A single Python file is uploaded as `kernel.py`, while directories preserve
+relative file names. Absolute/traversal paths, symbolic links, `.runtime` control paths, special
+files, and empty Bundles are rejected. Both Bundles are sealed and their contents determine the
+request identity; renaming a source without changing its uploaded contents does not create a new
+comparison.
+
+```json
+{"operation": "evaluate", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py"}}
+```
+
+```json
+{"operation": "evaluate", "candidate_path": "scratch/candidate-kernel", "comparison": {"method": "abba", "baseline_path": "scratch/baseline-kernel", "repeats": 2}, "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
+```
+
+`comparison.repeats` defaults to 2 and counts observations per side, producing A, B, B, A. Its accepted range
+is 2–20, subject to the schedule fitting Runtime's allocation budget. Each Shape batch measures both
+sides within one allocation; different Shape batches may use different allocations. ABBA always
+uses `mode: "full"` (normally omitted), and rejects `correctness_only`. Both sides share the
+selected input generator and Shapes. The same independent `input_py`/`shapes` overrides and
+`input_path`/`shapes_path` file helpers as Evaluate are available; omitted components reuse the
+private Contract without exposing it.
+
+ABBA remains exploratory even when it uses the trusted Contract. It neither retains a Kernel nor
+promotes an Agent, and cannot replace the successful full trusted-contract Evaluate required for
+`candidate_ready`. Runtime's authoritative retention and promotion comparisons remain separate.
+
+The response retains `operation: "evaluate"`; `result.comparison` records `method: "abba"` and
+the actual `repeats` count. There is no standalone ABBA operation or top-level repeat parameter.
+The response's Kernel Trial and Kernel Artifact identities describe B. The retained Result Artifact
+includes A's `baseline_kernel_artifact_digest`, `baseline` and `candidate` correctness/latency
+summaries, all `measurements` and the `schedule`, `mode`, and `input_scope`. `speedup` is
+A/B latency and `improvement_pct` is (A−B)/A × 100; aggregate latency uses a geometric mean.
+Use `kernel-trial-show` and `result-artifact-read` to retrieve this evidence. Exploratory ABBA does
+not create ordinary Evaluate records or normalized measurement rows.
 
 ## Ordinary Evaluate Shape batches
 
@@ -92,16 +168,20 @@ Resolution order is:
 2. reuse the Campaign-sealed Roofline on resume;
 3. if configured, execute the commit-pinned Atrex Bench Roofline builder and validate exact Shape
    coverage;
-4. when the sealed Contract has no Roofline, run an NCU SOL Profile after each correct Evaluate.
+4. when the sealed Contract has no Roofline, run an NCU SOL Profile after each correct full
+   Evaluate. Correctness-only evaluations never trigger automatic profiling.
 
 The builder runs trusted code from one full Atrex Bench commit with bounded input/output and no
 Agent authority. Generated output is sealed into the Campaign Contract before Agent execution.
 Profile failure does not invalidate correctness or latency; SOL remains unavailable.
 
-Automatic NCU fallback is selected only when the sealed Contract's `roofline` field is null. A
-structurally valid explicit Roofline that lacks the actual Agate device key can therefore produce
+For trusted-contract evaluations, automatic NCU fallback is selected only when the sealed
+Contract's `roofline` field is null. A structurally valid explicit Roofline that lacks the actual Agate device key can therefore produce
 no SOL and does not trigger automatic fallback. Operators should generate a device-compatible
 Roofline or omit it.
+
+Custom evaluations omit contract-specific Metadata and Roofline. A correct custom `full`
+evaluation can therefore use the same automatic profiling fallback when enabled.
 
 Kernel catalogs report all-Shape SOL as a geometric mean when every Shape supplies a value;
 otherwise JSON uses `null` and tables show `-`.

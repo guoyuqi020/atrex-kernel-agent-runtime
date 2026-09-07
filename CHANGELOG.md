@@ -6,6 +6,15 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Added Agent `evaluate.comparison` with `method="abba"`, using two workspace Kernel files
+  (or directories) through Agate `dev`. Core and KDA upload A/B sources; Runtime seals both,
+  uses its pinned evaluator and shared input contract, and records per-side measurements and
+  relative speedup without
+  changing Kernel-retention or Agent-promotion authority. There is no standalone `abba` operation.
+- Added custom input generators and Shapes to Agent `evaluate`, plus `mode="correctness_only"`
+  without performance measurement or automatic profiling. Core supports workspace file helpers;
+  Runtime seals exploratory requests/results without allowing them to replace trusted-contract
+  evaluation for Candidate submission. Incomplete checks remain retryable.
 - Added `ablation-evolve-1` and `ablation-evolve-5` with 15 x 1 and 3 x 5 schedules; the existing
   main arm is labeled `evolve-3` (5 x 3). All total 30 Optimizer Attempts, with 14/4/2 Evolutions.
   Epoch 1 runs the same Agent on two isolated Branches without calling Evolver or creating a new

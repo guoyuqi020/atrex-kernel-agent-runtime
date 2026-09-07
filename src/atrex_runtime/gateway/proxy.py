@@ -11,7 +11,7 @@ import shutil
 import statistics
 import tempfile
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol, cast
@@ -54,6 +54,7 @@ from .protocol import (
     DevRequestV2,
     DirectionHistoryRequestV2,
     DisassembleRequestV2,
+    EvaluateParametersV2,
     EvaluateRequestV2,
     EvaluationV2,
     ExperimentHistoryRequestV2,
@@ -281,8 +282,27 @@ def _canonical_agent_result(
     payload: JsonValue,
 ) -> JsonValue:
     """Create the one public result reused by initial execution and later reads."""
+    if request.is_comparison and isinstance(payload, dict):
+        public = {
+            key: payload[key]
+            for key in (
+                "mode", "input_scope", "schedule", "measurements", "baseline",
+                "candidate", "correct", "speedup", "improvement_pct", "aggregation",
+                "shape_batch_count", "error", "failures",
+            )
+            if key in payload
+        }
+        public.update({
+            "comparison": request.parameters["comparison"],
+            "baseline_kernel_artifact_digest": request.baseline_candidate_digest,
+            "kernel_artifact_digest": request.candidate_digest,
+        })
+        return cast(JsonValue, public)
     if request.operation is GatewayOperation.EVALUATE and isinstance(payload, dict):
+        parameters = EvaluateParametersV2.model_validate(request.parameters)
         by_shape = payload.get("latency_us_by_shape")
+        if parameters.mode == "correctness_only":
+            by_shape = {}
         shape_latencies = (
             [
                 float(item)
@@ -305,6 +325,8 @@ def _canonical_agent_result(
             correct = payload.get("all_pass")
         if not isinstance(latency, (int, float)) or isinstance(latency, bool):
             latency = _finite_number(payload.get("latency_us_geomean"), positive=True)
+        if parameters.mode == "correctness_only":
+            latency = None
         normalized: dict[str, JsonValue] = {
             key: payload[key]
             for key in ("failures", "error", "production_gate")
@@ -323,6 +345,9 @@ def _canonical_agent_result(
                 ),
             }
         )
+        if not parameters.is_contract_evaluation:
+            normalized["mode"] = parameters.mode
+            normalized["input_scope"] = parameters.input_scope
         return cast(JsonValue, normalized)
     if request.operation is GatewayOperation.PROFILE and isinstance(payload, dict):
         normalized = cast(dict[str, JsonValue], dict(payload))
@@ -361,6 +386,16 @@ class GatewayAdapterRequest:
     kernel_regex: str | None
     job_id: str | None
     parameters: dict[str, JsonValue] = field(default_factory=dict)
+    baseline_candidate_digest: ArtifactDigest | None = None
+    baseline_candidate_path: Path | None = None
+    recovery_generation: int = 0
+
+    @property
+    def is_comparison(self) -> bool:
+        return (
+            self.operation is GatewayOperation.EVALUATE
+            and self.parameters.get("comparison") is not None
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -459,7 +494,16 @@ class GatewayProxyService:
             )
         if operation_scope == "journal" and not is_runtime_journal:
             raise ValueError(f"Gateway operation {operation.value!r} requires /v1/operations")
-        request_digest = canonical_json_digest(request.model_dump(mode="json"))
+        request_value = request.model_dump(mode="json")
+        if isinstance(request, EvaluateRequestV2):
+            # Adding optional exploration fields must not change the identity of a
+            # pre-existing default Evaluate during recovery.
+            for key in ("input_py", "shapes", "comparison", "baseline"):
+                if request_value.get(key) is None:
+                    request_value.pop(key, None)
+            if request.mode == "full":
+                request_value.pop("mode", None)
+        request_digest = canonical_json_digest(request_value)
         authorization = self._control.authorize(
             GatewayCapability(token, request.attempt_id),
             operation,
@@ -481,7 +525,15 @@ class GatewayProxyService:
 
         candidate_digest: ArtifactDigest | None = None
         candidate_path: Path | None = None
+        baseline_digest: ArtifactDigest | None = None
+        baseline_path: Path | None = None
         production_violations: tuple[str, ...] = ()
+        if isinstance(request, EvaluateRequestV2) and request.comparison is not None:
+            assert request.baseline is not None
+            baseline_digest = self._seal_candidate(request.baseline, request.attempt_id)
+            baseline_path = self._artifacts.verify(baseline_digest).payload_path
+            if self._candidate_production is not None:
+                self._candidate_production.validate(request.attempt_id, baseline_digest)
         if isinstance(request, _CANDIDATE_REQUEST_TYPES):
             if isinstance(request, DevRequestV2):
                 self._validate_dev_files(request)
@@ -493,7 +545,10 @@ class GatewayProxyService:
                 candidate_digest,
                 recovery_generation=authorization.recovery_generation,
             )
-            if self._candidate_diff is not None and isinstance(request, EvaluateRequestV2):
+            if (
+                self._candidate_diff is not None and isinstance(request, EvaluateRequestV2)
+                and request.comparison is None
+            ):
                 self._candidate_diff.validate(request.attempt_id, candidate_digest)
             if self._candidate_production is not None:
                 if isinstance(request, EvaluateRequestV2):
@@ -509,12 +564,22 @@ class GatewayProxyService:
             candidate_digest,
             candidate_path,
         )
+        adapter_request = replace(
+            adapter_request,
+            baseline_candidate_digest=baseline_digest,
+            baseline_candidate_path=baseline_path,
+            recovery_generation=authorization.recovery_generation,
+        )
         event_base = {
             "operation": operation,
             "idempotency_key": request.idempotency_key,
             "request_digest": request_digest,
             "kernel_artifact_digest": candidate_digest,
         }
+        if adapter_request.is_comparison:
+            event_base.update({
+                "baseline_kernel_artifact_digest": baseline_digest,
+            })
         self._events.record_runtime_event(
             "gateway.operation_submitted",
             request.attempt_id,
@@ -550,7 +615,38 @@ class GatewayProxyService:
                 result,
                 agent_payload,
             )
-            result_digest = self._store_gateway_result(result)
+            exploratory_parameters = (
+                EvaluateParametersV2.model_validate(adapter_request.parameters)
+                if isinstance(request, EvaluateRequestV2) and not request.is_contract_evaluation
+                else None
+            )
+            # Validate before binding an immutable result, so an incomplete or malformed
+            # upstream reply cannot prevent the same idempotent request from recovering.
+            if isinstance(request, EvaluateRequestV2):
+                if request.comparison is not None:
+                    if (
+                        result.status not in {"completed", "failed"}
+                        or result.evaluation is not None
+                        or not isinstance(result.worker_result, dict)
+                        or not isinstance(agent_payload, dict)
+                        or not isinstance(agent_payload.get("correct"), bool)
+                    ):
+                        raise InfrastructureError(
+                            "ABBA did not return a terminal exploratory comparison"
+                        )
+                elif request.is_contract_evaluation:
+                    if result.status != "completed" or result.evaluation is None:
+                        raise InfrastructureError("evaluate did not return a completed evaluation")
+                elif result.status == "queued":
+                    raise InfrastructureError("exploratory evaluate did not complete")
+                elif result.status == "completed" and (
+                    not isinstance(agent_payload, dict)
+                    or not isinstance(agent_payload.get("correct"), bool)
+                ):
+                    raise InfrastructureError(
+                        "exploratory evaluate returned no correctness verdict"
+                    )
+            result_digest = self._store_gateway_result(result, exploratory_parameters)
             if replayable:
                 self._control.bind_operation_gateway_result(
                     request.attempt_id,
@@ -560,9 +656,8 @@ class GatewayProxyService:
                     recovery_generation=authorization.recovery_generation,
                 )
 
-            if isinstance(request, EvaluateRequestV2):
-                if result.status != "completed" or result.evaluation is None:
-                    raise InfrastructureError("evaluate did not return a completed evaluation")
+            if isinstance(request, EvaluateRequestV2) and request.is_contract_evaluation:
+                assert result.evaluation is not None
                 if candidate_digest is None:
                     raise AssertionError("evaluate candidate was not sealed")
                 evaluation_record = self._control.record_evaluation(
@@ -579,7 +674,10 @@ class GatewayProxyService:
             else:
                 evaluation_record = None
             measurement_records: tuple[GatewayMeasurementRecord, ...] = ()
-            if candidate_digest is not None and request.operation in {"evaluate", "profile"}:
+            if (
+                candidate_digest is not None and request.operation in {"evaluate", "profile"}
+                and not adapter_request.is_comparison
+            ):
                 measurement_records = self._control.record_measurements(
                     request.attempt_id,
                     source_operation=operation,
@@ -605,8 +703,14 @@ class GatewayProxyService:
                 "status": result.status,
                 "gateway_result_digest": result_digest,
                 "job_id": result.job_id,
-                "correct": None if result.evaluation is None else result.evaluation.correct,
-                "latency_us": (None if result.evaluation is None else result.evaluation.latency_us),
+                "correct": (
+                    agent_payload.get("correct") if isinstance(agent_payload, dict) else None
+                ),
+                "latency_us": (
+                    agent_payload.get("latency_us_geomean")
+                    if isinstance(agent_payload, dict)
+                    else None
+                ),
                 "profile_status": (
                     None
                     if not isinstance(result.profile_result, dict)
@@ -631,7 +735,11 @@ class GatewayProxyService:
             kernel_artifact_digest=(None if candidate_digest is None else str(candidate_digest)),
             kernel_trial_id=kernel_trial_id,
             job_id=result.job_id,
-            evaluation=result.evaluation,
+            evaluation=(
+                None
+                if isinstance(request, EvaluateRequestV2) and not request.is_contract_evaluation
+                else result.evaluation
+            ),
             result=agent_payload,
         )
         if replayable:
@@ -668,6 +776,7 @@ class GatewayProxyService:
                 raise ValueError(
                     "candidate_ready requires a completed Agent evaluate for the exact current "
                     f"work/kernel tree, sealed as {candidate_digest}. No Agent evaluate covers it; "
+                    "custom inputs or correctness_only checks do not qualify; "
                     'run {"operation": "evaluate"} and submit this report again'
                 )
             if not evaluation.correct:
@@ -689,17 +798,7 @@ class GatewayProxyService:
         )
 
     def _show_kernel_trial(self, request: KernelTrialShowRequestV2) -> GatewayAdapterResult:
-        _, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(request.attempt_id)
-        trial = next(
-            (
-                value
-                for value in self._control.list_kernel_trials(visible_attempt_ids, limit=5_000)
-                if value.id == request.kernel_trial_id
-            ),
-            None,
-        )
-        if trial is None:
-            raise ValueError("Kernel Trial is outside the visible Lineage history")
+        trial = self._visible_kernel_trial(request.attempt_id, request.kernel_trial_id)
         return GatewayAdapterResult(
             "completed",
             cast(
@@ -710,6 +809,22 @@ class GatewayProxyService:
                 },
             ),
         )
+
+    def _visible_kernel_trial(
+        self, attempt_id: AttemptId, kernel_trial_id: str
+    ) -> GatewayKernelTrialRecord:
+        _, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(attempt_id)
+        trial = next(
+            (
+                value
+                for value in self._control.list_kernel_trials(visible_attempt_ids, limit=5_000)
+                if value.id == kernel_trial_id
+            ),
+            None,
+        )
+        if trial is None:
+            raise ValueError("Kernel Trial is outside the visible Lineage history")
+        return trial
 
     def _trial_result_artifacts(self, trial: GatewayKernelTrialRecord) -> list[JsonValue]:
         """Return a compact index; callers expand selected results explicitly."""
@@ -748,6 +863,7 @@ class GatewayProxyService:
             trial
             for trial in self._control.list_kernel_trials(visible_attempt_ids, limit=5_000)
             if trial.kernel_artifact_digest == digest
+            or self._trial_has_abba_baseline(trial, digest)
         )
         if not matching:
             raise ValueError("Kernel Artifact is outside the visible Lineage history")
@@ -760,6 +876,27 @@ class GatewayProxyService:
             }
         )
         return GatewayAdapterResult("completed", cast(JsonValue, response))
+
+    def _trial_has_abba_baseline(
+        self, trial: GatewayKernelTrialRecord, digest: ArtifactDigest
+    ) -> bool:
+        """Allow reading A only when a visible, Runtime-sealed comparison names it."""
+        for observation in trial.observations:
+            if (
+                observation.operation is not GatewayOperation.EVALUATE
+                or observation.result_artifact_digest is None
+            ):
+                continue
+            canonical = self._result_artifact_payload(observation.result_artifact_digest)
+            result = canonical.get("result")
+            if canonical.get("operation") != "evaluate" or not isinstance(result, dict):
+                raise InfrastructureError("Evaluate Result Artifact disagrees with its observation")
+            comparison = result.get("comparison")
+            if not isinstance(comparison, dict) or comparison.get("method") != "abba":
+                continue
+            if result.get("baseline_kernel_artifact_digest") == digest:
+                return True
+        return False
 
     def _read_result_artifact(
         self,
@@ -881,7 +1018,7 @@ class GatewayProxyService:
             return {"operation": operation, "status": status, "result": result}
 
         normalized: dict[str, JsonValue] = {}
-        for key in ("failures", "error"):
+        for key in ("failures", "error", "mode", "input_scope", "production_gate"):
             if key in result:
                 normalized[key] = result[key]
         evaluation = value.get("evaluation")
@@ -917,16 +1054,30 @@ class GatewayProxyService:
             "result": normalized,
         }
 
-    def _store_gateway_result(self, result: GatewayAdapterResult) -> ArtifactDigest:
+    def _store_gateway_result(
+        self,
+        result: GatewayAdapterResult,
+        evaluation_parameters: EvaluateParametersV2 | None = None,
+    ) -> ArtifactDigest:
         """Seal the private authoritative Gateway result for Runtime consumers."""
-        if result.profile_result is None:
+        if result.profile_result is None and evaluation_parameters is None:
             return self._artifacts.put_json(result.result, ArtifactKind.GATEWAY_RESULT)
         temporary = Path(tempfile.mkdtemp(prefix="gateway-result-"))
         try:
-            for name, value in (
-                ("value.json", result.result),
-                ("profile.json", result.profile_result),
-            ):
+            documents: list[tuple[str, JsonValue]] = [("value.json", result.result)]
+            if result.profile_result is not None:
+                documents.append(("profile.json", result.profile_result))
+            if evaluation_parameters is not None:
+                documents.append(
+                    (
+                        "evaluation-request.json",
+                        {
+                            **evaluation_parameters.model_dump(mode="json", exclude_none=True),
+                            "input_scope": evaluation_parameters.input_scope,
+                        },
+                    )
+                )
+            for name, value in documents:
                 temporary.joinpath(name).write_text(
                     json.dumps(
                         value,
@@ -1074,6 +1225,7 @@ class GatewayProxyService:
             "operation",
             "idempotency_key",
             "candidate",
+            "baseline",
             "job_id",
             "level",
             "kernel_regex",
@@ -1082,6 +1234,12 @@ class GatewayProxyService:
             dict[str, JsonValue],
             request.model_dump(mode="json", exclude=excluded),
         )
+        if isinstance(request, EvaluateRequestV2):
+            for key in ("input_py", "shapes", "comparison"):
+                if parameters.get(key) is None:
+                    parameters.pop(key, None)
+            if request.mode == "full":
+                parameters.pop("mode", None)
         if isinstance(request, DevRequestV2):
             parameters["files"] = cast(
                 JsonValue,

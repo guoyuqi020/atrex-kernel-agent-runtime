@@ -112,6 +112,88 @@ def _schedule(repeats: int) -> list[dict[str, int | str]]:
     return schedule
 
 
+def build_abba_source_request(
+    *,
+    hardware_target: str,
+    contract: AgateEvaluationContractV1,
+    shape_ids: list[str],
+    schedule: list[dict[str, int | str]],
+    incumbent_source: str,
+    candidate_source: str,
+    evaluator_files: dict[str, str],
+    per_run_timeout_seconds: float,
+    allocation_timeout_seconds: float,
+) -> dict[str, object]:
+    """Build a source-only dev allocation shared by Agent experiments and trusted gates."""
+    files = dict(evaluator_files)
+    files.update(
+        {
+            "__atrex_abba.py": Path(abba_remote.__file__).read_text(encoding="utf-8"),
+            "snapshots/incumbent.py": incumbent_source,
+            "snapshots/candidate.py": candidate_source,
+            "reference/reference.py": contract.reference_py,
+            "reference/input.py": contract.input_py,
+            "reference/shapes.json": _json_text(
+                {shape_id: contract.shapes[shape_id] for shape_id in shape_ids}
+            ),
+        }
+    )
+    metadata = subset_shape_document(contract.metadata, shape_ids, metadata=True)
+    roofline = subset_shape_document(contract.roofline, shape_ids, metadata=False)
+    if metadata is not None:
+        files["reference/metadata.json"] = _json_text(metadata)
+    if roofline is not None:
+        files["reference/roofline.json"] = _json_text(strip_roofline_hardware_suffix(roofline))
+    evaluator = dict(contract.runner_overrides)
+    if _PROTECTED_RUNNER_KEYS.intersection(evaluator):
+        raise ValueError("evaluation runner_overrides cannot replace ABBA-owned paths")
+    evaluator.update(
+        {
+            "schema_version": "v1",
+            "atol": contract.options.atol,
+            "rtol": contract.options.rtol,
+            "num_correctness_cases": contract.options.num_correctness_cases,
+            "warmup_iters": _positive_runner_number(evaluator, "warmup_iters", 10),
+            "bench_iters": contract.options.bench_iters,
+            "candidate_timeout_s": _positive_runner_number(
+                evaluator,
+                "candidate_timeout_s",
+                min(float(contract.options.timeout_s), per_run_timeout_seconds),
+            ),
+            "perf_timeout_s": per_run_timeout_seconds,
+            "validation_mode": contract.mode,
+        }
+    )
+    # The outer Runtime driver owns one lock across the complete A/B
+    # schedule. Each canonical evaluator subprocess either verifies the
+    # inherited marker or explicitly stays off with the Contract policy.
+    evaluator["clock_lock_mode"] = "external" if contract.lock_clocks else "off"
+    request: dict[str, JsonValue] = {
+        "schema_version": 1,
+        "schedule": cast(list[JsonValue], schedule),
+        "shape_ids": list(shape_ids),
+        "sources": {
+            "incumbent": "snapshots/incumbent.py",
+            "candidate": "snapshots/candidate.py",
+        },
+        "evaluator": evaluator,
+        "per_run_timeout_seconds": per_run_timeout_seconds,
+        "lock_clocks": contract.lock_clocks,
+    }
+    files["request.json"] = _json_text(request)
+    dev_request: dict[str, object] = {
+        "spec": {"target_hardware": [hardware_target]},
+        "command": "python3 __atrex_abba.py request.json",
+        "timeout_s": math.ceil(allocation_timeout_seconds),
+        "env_vars": contract.env_vars,
+        "files": files,
+        "recycle": True,
+        "dev_intent": "custom_harness",
+        "dev_note": "trusted same-allocation ABBA performance gate",
+    }
+    return dev_request
+
+
 class CommitPinnedAtrexBenchEvaluator:
     """Lazily export the evaluator-only subset of one exact Atrex Bench commit."""
 
@@ -431,72 +513,17 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         incumbent: KernelRevision,
         candidate: KernelRevision,
     ) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
-        files = dict(evaluator_files)
-        files.update(
-            {
-                "__atrex_abba.py": Path(abba_remote.__file__).read_text(encoding="utf-8"),
-                "snapshots/incumbent.py": incumbent_source,
-                "snapshots/candidate.py": candidate_source,
-                "reference/reference.py": contract.reference_py,
-                "reference/input.py": contract.input_py,
-                "reference/shapes.json": _json_text(
-                    {shape_id: contract.shapes[shape_id] for shape_id in shape_ids}
-                ),
-            }
+        dev_request = build_abba_source_request(
+            hardware_target=hardware_target,
+            contract=contract,
+            shape_ids=shape_ids,
+            schedule=schedule,
+            incumbent_source=incumbent_source,
+            candidate_source=candidate_source,
+            evaluator_files=evaluator_files,
+            per_run_timeout_seconds=per_run_timeout_seconds,
+            allocation_timeout_seconds=allocation_timeout_seconds,
         )
-        metadata = subset_shape_document(contract.metadata, shape_ids, metadata=True)
-        roofline = subset_shape_document(contract.roofline, shape_ids, metadata=False)
-        if metadata is not None:
-            files["reference/metadata.json"] = _json_text(metadata)
-        if roofline is not None:
-            files["reference/roofline.json"] = _json_text(strip_roofline_hardware_suffix(roofline))
-        evaluator = dict(contract.runner_overrides)
-        if _PROTECTED_RUNNER_KEYS.intersection(evaluator):
-            raise ValueError("evaluation runner_overrides cannot replace ABBA-owned paths")
-        evaluator.update(
-            {
-                "schema_version": "v1",
-                "atol": contract.options.atol,
-                "rtol": contract.options.rtol,
-                "num_correctness_cases": contract.options.num_correctness_cases,
-                "warmup_iters": _positive_runner_number(evaluator, "warmup_iters", 10),
-                "bench_iters": contract.options.bench_iters,
-                "candidate_timeout_s": _positive_runner_number(
-                    evaluator,
-                    "candidate_timeout_s",
-                    min(float(contract.options.timeout_s), per_run_timeout_seconds),
-                ),
-                "perf_timeout_s": per_run_timeout_seconds,
-                "validation_mode": contract.mode,
-            }
-        )
-        # The outer Runtime driver owns one lock across the complete A/B
-        # schedule. Each canonical evaluator subprocess either verifies the
-        # inherited marker or explicitly stays off with the Contract policy.
-        evaluator["clock_lock_mode"] = "external" if contract.lock_clocks else "off"
-        request: dict[str, JsonValue] = {
-            "schema_version": 1,
-            "schedule": cast(list[JsonValue], schedule),
-            "shape_ids": list(shape_ids),
-            "sources": {
-                "incumbent": "snapshots/incumbent.py",
-                "candidate": "snapshots/candidate.py",
-            },
-            "evaluator": evaluator,
-            "per_run_timeout_seconds": per_run_timeout_seconds,
-            "lock_clocks": contract.lock_clocks,
-        }
-        files["request.json"] = _json_text(request)
-        dev_request: dict[str, object] = {
-            "spec": {"target_hardware": [hardware_target]},
-            "command": "python3 __atrex_abba.py request.json",
-            "timeout_s": math.ceil(allocation_timeout_seconds),
-            "env_vars": contract.env_vars,
-            "files": files,
-            "recycle": True,
-            "dev_intent": "custom_harness",
-            "dev_note": "trusted same-allocation ABBA performance gate",
-        }
         async def execute(submission: dict[str, object]) -> JobExecution:
             accepted = await self._call(lambda: self._client.submit_job("dev", submission))
             job_id = accepted.get("job_id")

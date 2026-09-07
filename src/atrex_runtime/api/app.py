@@ -15,6 +15,7 @@ from ..composition.bootstrap import (
 from ..composition.gateway import compose_authoritative_candidate_evaluator
 from ..config import RuntimeSettings
 from ..dependency_health import PeriodicHealthMonitor
+from ..gateway.abba import CommitPinnedAtrexBenchEvaluator
 from ..gateway.agate import (
     AgateClient,
     AgateConnectionConfig,
@@ -23,6 +24,7 @@ from ..gateway.agate import (
     SqliteAgateJobStore,
     load_agate_sdk,
 )
+from ..gateway.agent_abba import AgentAbbaGatewayAdapter
 from ..gateway.configuration import build_agate_connection
 from ..gateway.contract import RegistryAgateEvaluationContextResolver
 from ..gateway.control import SqliteGatewayControl
@@ -195,7 +197,7 @@ def build_runtime_application(
         client, request_builder = sdk_loader(connection)
         contexts = RegistryAgateEvaluationContextResolver(registry, artifacts, control)
         production_policy = ProductionKernelPolicy()
-        adapter = AgateGatewayAdapter(
+        agate_adapter = AgateGatewayAdapter(
             client,
             request_builder,
             contexts,
@@ -215,6 +217,33 @@ def build_runtime_application(
                 "url": connection.base_url,
                 "auth": connection.auth_mode,
             },
+        )
+        evaluator_settings = None if gate_policy is None else gate_policy.evaluator
+        evaluator = (
+            None
+            if evaluator_settings is None
+            else CommitPinnedAtrexBenchEvaluator(
+                repository=evaluator_settings.repository,
+                commit=evaluator_settings.commit,
+                git_executable=evaluator_settings.git_executable,
+                fetch_timeout_seconds=evaluator_settings.fetch_timeout_seconds,
+                max_archive_bytes=evaluator_settings.max_archive_bytes,
+                max_bundle_files=evaluator_settings.max_bundle_files,
+                max_bundle_bytes=evaluator_settings.max_bundle_bytes,
+            )
+        )
+        adapter = AgentAbbaGatewayAdapter(
+            agate_adapter,
+            client,
+            contexts,
+            artifacts,
+            evaluator,
+            wait_timeout_s=connection.wait_timeout_s,
+            correctness_cases=5 if gate_policy is None else gate_policy.optimizer.correctness_cases,
+            bench_iters=100 if gate_policy is None else gate_policy.optimizer.bench_iters,
+            per_run_timeout_seconds=(
+                120 if gate_policy is None else gate_policy.performance_timeout_seconds
+            ),
         )
         limits = GatewayProxyLimits(
             settings.gateway_proxy.max_request_bytes,

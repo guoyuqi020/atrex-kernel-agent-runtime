@@ -21,9 +21,76 @@ Optimizer Runtime Tools 通过 `gateway-execute` 暴露 `check`、`dev`、`evalu
 `disassemble` 和 `env`。携带 Candidate 的操作会在
 调用 Agate 前封存精确源码，每个结果都不可变，并可通过返回给 Agent 的身份查询。
 
-探索性 `evaluate` 是可信测量证据，但不会直接创建 `vN` Kernel Revision。Agent 可以在一个
-Attempt 中评测多个 Candidate、将其写入 Experiment Journal，并在 `attempt-report` 中提名一个已
-评测 Candidate。
+探索性 `evaluate` 会记录测量证据，但不会直接创建 `vN` Kernel Revision。Agent 可以在一个
+Attempt 中评测多个 Candidate，并写入 Experiment Journal。通过 `candidate_ready` 提名时，
+该精确 Candidate 仍须成功完成基于可信 Evaluation Contract 的完整评测。
+
+`evaluate` 接受可选的 `mode`、`input_py` 和 `shapes`。`mode` 只能为 `full`（默认）或
+`correctness_only`；后者仅检查正确性，不测量性能，也不自动执行 SOL Profile。`input_py` 提供兼容
+Agate 的 Python `_make_inputs` 生成器；`shapes` 提供以整数字符串为键的非空 JSON Object，每条
+Shape Record 都是与生成器兼容的 Object。两个组件可以独立覆盖；未指定的组件继续使用封存
+Contract 中的值。可信 Reference、容差和 Gate Policy 继续生效，Agent 不会因此获得私有输入。
+
+Core 还支持 `input_path`、`shapes_path`，读取 Workspace 相对路径的 UTF-8 文件并将内容作为
+`input_py`、`shapes` 上传。输入源码上限为 128 KiB，Shape 文件上限为 256 KiB；文件必须位于真实
+Workspace 目录下且为普通文件，绝对路径、路径穿越、符号链接和 `.runtime` 控制路径都会被拒绝。
+同一组件的内联形式与路径形式互斥。请求幂等键按文件内容计算，不依赖本地文件名。
+
+```json
+{"operation": "evaluate"}
+```
+
+```json
+{"operation": "evaluate", "mode": "correctness_only"}
+```
+
+```json
+{"operation": "evaluate", "mode": "correctness_only", "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
+```
+
+自定义输入、自定义 Shape 或仅正确性评测的结果仍有 Kernel Trial 与 Result Artifact 身份，
+并记录实际 `mode` 和 `input_scope`（任一组件被覆盖时为 `custom`，否则为 `contract`）。
+仅正确性结果不包含性能测量。这些调用不能替代 `candidate_ready`、Kernel Retention 或 Agent
+Promotion 所要求的可信 Contract 完整评测。需要完整评测时应省略输入覆盖，并设置
+`mode: "full"` 或省略 `mode`；原有默认请求与结果格式保持不变。
+
+## 探索性 ABBA
+
+`evaluate` 支持可选 `candidate_path`，普通单 Kernel 评测也适用；省略时使用当前 `work/kernel`
+树。若需将 Candidate B 与基线 A 比较，应提供
+`comparison: {method: "abba", baseline_path: "scratch/baseline.py"}`；基线路径在 `comparison`
+内部必填。每个路径均为
+Workspace 相对路径，指向普通 `.py` 文件或 Kernel Bundle 目录。单个 Python 文件上传为
+`kernel.py`，目录保留内部相对文件名。绝对路径、路径穿越、符号链接、`.runtime` 控制路径、
+特殊文件及空 Bundle 会被拒绝。两个 Bundle 都会封存，请求身份按上传内容生成；仅重命名文件而
+不改变上传内容不会产生新的比较。
+
+```json
+{"operation": "evaluate", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py"}}
+```
+
+```json
+{"operation": "evaluate", "candidate_path": "scratch/candidate-kernel", "comparison": {"method": "abba", "baseline_path": "scratch/baseline-kernel", "repeats": 2}, "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
+```
+
+`comparison.repeats` 默认 2，表示每侧的观测次数，生成 A、B、B、A 顺序。取值范围为 2–20，但 Schedule
+还须满足 Runtime 的 Allocation 预算。每个 Shape Batch 在同一个 Allocation 内测量两侧；不同
+Shape Batch 可以使用不同 Allocation。ABBA 始终使用 `mode: "full"`（通常省略），拒绝
+`correctness_only`。两侧共用选定的输入生成器和 Shapes，支持与 Evaluate 相同的独立
+`input_py`/`shapes` 覆盖及 `input_path`/`shapes_path` 文件参数；省略的组件继续复用私有
+Contract，不会将其暴露给 Agent。
+
+即使使用可信 Contract，ABBA 仍仅用于探索，不会保留 Kernel 或晋升 Agent，也不能替代
+`candidate_ready` 所需的成功可信 Contract 完整 Evaluate。Runtime 的权威 Retention 和
+Promotion 比较仍独立执行。
+
+响应保留 `operation: "evaluate"`；`result.comparison` 记录 `method: "abba"` 及实际 `repeats`
+次数。不提供独立 ABBA Operation，也不接受顶层重复次数参数。响应中的 Kernel Trial 和
+Kernel Artifact 身份属于 B。保留的 Result Artifact 包含 A 的
+`baseline_kernel_artifact_digest`、`baseline`/`candidate` 正确性及延迟摘要、所有 `measurements`
+及 `schedule`，以及 `mode`、`input_scope`。`speedup` 为 A/B 延迟比，
+`improvement_pct` 为 (A−B)/A × 100，聚合延迟使用几何平均。通过 `kernel-trial-show` 和
+`result-artifact-read` 查询这些证据；探索性 ABBA 不生成普通 Evaluate Record 或归一化测量行。
 
 ## 普通 Evaluate 的 Shape 分批
 
@@ -78,15 +145,20 @@ Agent Promotion 独立使用 `agent_promotion_comparison`。每个参赛 Agent �
 1. 保留 Evaluation Contract 中显式提供的 Roofline；
 2. 恢复 Campaign 时复用已封存 Roofline；
 3. 若已配置，执行 Commit 固定的 Atrex Bench Roofline Builder，并校验精确 Shape 覆盖；
-4. 当封存 Contract 没有 Roofline 时，在每次正确 Evaluate 后执行 NCU SOL Profile。
+4. 当封存 Contract 没有 Roofline 时，在每次正确的完整 Evaluate 后执行 NCU SOL
+   Profile；仅正确性评测不会触发自动 Profile。
 
 Builder 在受限输入输出下运行一个完整 Atrex Bench Commit 的可信代码，不获得 Agent Authority。
 生成结果会在 Agent 启动前封存进 Campaign Contract。Profile 失败不会使正确性或延迟失效，SOL
 保持不可用。
 
-只有封存 Contract 的 `roofline` 字段为 null 时才会自动回退 NCU。结构合法但不包含实际 Agate
+使用可信 Contract 评测时，只有封存 Contract 的 `roofline` 字段为 null 才会自动回退 NCU。
+结构合法但不包含实际 Agate
 设备 Key 的显式 Roofline 可能无法产生 SOL，同时也不会触发自动回退。运维方应生成与设备兼容
 的 Roofline，或不提供该字段。
+
+自定义评测不携带 Contract 专属 Metadata 和 Roofline。因此，当自动 Profile 已启用时，
+正确的自定义 `full` 评测也可触发同一回退流程。
 
 当每个 Shape 都有 SOL 时，Kernel Catalog 以全 Shape 几何平均值展示；否则 JSON 为 `null`，
 Table 显示 `-`。

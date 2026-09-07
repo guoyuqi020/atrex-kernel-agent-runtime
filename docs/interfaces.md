@@ -68,6 +68,15 @@ tables and progress messages are operator presentation.
   Runtime `error`, `detail`, `issues`, `request_schema`, or `supported_operations`, and adds
   `status="error"`, `command`, and `http_status` when applicable; expected failures do not emit a
   Python traceback.
+- Local Evaluate file errors in Core and Kernel Design Agent identify the failing path
+  in `issues[].path`. Evaluate's local `request_schema` includes the canonical
+  `full`/`correctness_only` modes, inline/file parameters, and mutually exclusive forms, plus bounded
+  field-specific `recovery` steps. Evaluate accepts optional `candidate_path` and a nested
+  `comparison` object requiring `method: "abba"` and `baseline_path`, with `repeats` bounded to
+  2–20. A comparison requires `mode: "full"`. Nested errors identify `comparison.method`,
+  `comparison.baseline_path`, or `comparison.repeats`; input-file errors identify `input_path` or
+  `shapes_path`. Existing Runtime-supplied `issues`, `request_schema`, and `recovery` for these
+  operations are preserved rather than replaced by local fallback guidance.
 - Core-owned Trial/Artifact/Result, Wiki, Direction, Experiment, and Attempt Report validators add
   their command-specific JSON Schema. Visibility or lifecycle errors additionally provide bounded
   `recovery` steps that name safe list/load calls or explain which previously returned identity to
@@ -95,6 +104,30 @@ itself retain a Kernel revision. Runtime keeps the original Agate response and i
 canonical Agent-visible `operation`/`status`/`result` projection as a Result Artifact. The Agent
 receives its `result_artifact_digest`; initial execution and later reads expose the same canonical
 content and never expose the private Gateway Result identity.
+
+The `evaluate` wire request optionally accepts `mode: "full" | "correctness_only"` (default
+`full`), `input_py` (UTF-8 Python input-generator source, at most 128 KiB), and `shapes` (a non-empty
+object of Agate Shape records keyed by integer strings). Each Shape record is an object. Overrides
+are independent: omitted input source or Shapes are reused from the private Contract. The reference
+and trusted evaluation policy remain unchanged. `correctness_only` omits performance measurement
+and automatic profiling. Custom or correctness-only calls keep their Kernel Trial and Result
+Artifact identities, and their nested `result` records `mode` and `input_scope` (`custom` or
+`contract`). They do not satisfy the full trusted-contract evaluation required before
+`candidate_ready`; the default `{"operation":"evaluate"}` behavior remains unchanged.
+
+An `evaluate` wire request with `comparison: {method: "abba", repeats: 2}` carries source Bundles in
+both `baseline` (A) and `candidate` (B). `comparison.repeats` defaults to 2 (range 2–20), and the
+comparison requires `mode: "full"`; `input_py` and `shapes` remain optional.
+Runtime validates and seals both sources. Per-side observations are interleaved within one
+allocation per Shape batch; `comparison.repeats: 2` produces A, B, B, A, and larger schedules must fit the
+allocation budget. ABBA is always exploratory and does not satisfy `candidate_ready` or trigger
+retention/promotion. It returns B's `kernel_trial_id`, `kernel_artifact_digest`, and a
+`result_artifact_digest`. The response retains `operation: "evaluate"` and marks the comparison in
+`result.comparison` with `method: "abba"` and `repeats`. The nested result contains `baseline_kernel_artifact_digest`,
+`baseline`/`candidate` summaries, `schedule`, all `measurements`, and A/B `speedup` plus
+`improvement_pct`. These results are readable through Trial/Result Artifact queries, not the
+ordinary Evaluate history routes. See [Evaluation](evaluation.md#exploratory-abba).
+
 For `dev`, `disassemble`, and `env`, Core returns the
 Agent-safe `result` object directly. `profile` additionally returns the Kernel Artifact, Kernel Trial, and Result Artifact
 identities beside the flattened Agent-safe Job result. Its nested `result` uses a numeric opaque
@@ -112,10 +145,12 @@ compact list of Result Artifact Digest, operation, and status entries. Use
 `artifact_file` source path (defaulting to the destination basename). The Core tool atomically
 writes the exact bytes and returns only status, path, byte count, and SHA-256. `result_artifact_read` accepts one
 Observation's `result_artifact_digest` and reads its normalized Agent-visible Result Artifact.
-The returned `operation`, `status`, and `result` match the initial operation. Evaluate views
+The returned `operation`, `status`, and `result` match the initial operation. Evaluate views without comparison
 contain `operation`, `status`, a correctness verdict plus worst-case `rel_err`, `max_abs_err`, and
-`max_rel_err`, both aggregate latencies, and
-latency by opaque Shape ID; private evaluator inputs and hidden-case details remain withheld. These
+`max_rel_err`. Full evaluations additionally report both aggregate latencies and latency by opaque
+Shape ID; correctness-only results contain no performance measurements. Custom and correctness-only
+views preserve `mode` and `input_scope`. Comparison results use the `result.comparison` marker and A/B
+summary described above; private evaluator inputs and hidden-case details remain withheld. These
 operations are unmetered, never call Agate, and do not accept a caller-selected Lineage or Attempt.
 Current-Attempt identities remain available from the original operation response and retained
 Experiment records.
@@ -165,9 +200,43 @@ candidate files are injected by the tool.
 python3 src/runtime_tools.py <command> --request scratch/request.json
 ```
 
+For `gateway-execute` with `operation: "evaluate"`, Core supports `input_path` and `shapes_path`
+alongside the inline wire fields. These safe workspace-relative paths name regular UTF-8 files:
+Python input source (at most 128 KiB) and a JSON object of Shape records (at most 256 KiB).
+Core rejects absolute/traversal paths, symbolic links, `.runtime` control paths, missing or special
+files, malformed UTF-8/JSON, and both inline and path forms for the same component. It expands files
+before hashing the request, so file-content changes produce a new idempotency key and equivalent
+inline contents produce the same key. For example:
+
+```json
+{"operation": "evaluate", "mode": "correctness_only", "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
+```
+
+Use `{"operation":"evaluate","mode":"correctness_only"}` to check contract inputs without
+timing, or `{"operation":"evaluate"}` for the default full trusted-contract evaluation.
+
+If loading an override fails locally, use its `issues[].path` and `recovery` to repair the named
+path, regular-file contents, UTF-8 encoding, Shape JSON object, or inline/path conflict before
+retrying. The attached `request_schema` describes the Agent-authored Evaluate request, including
+both inline and path forms; it does not expose trusted request fields or private evaluator inputs.
+
+For `operation: "evaluate"`, Core and Kernel Design Agent accept optional `candidate_path`
+(default `work/kernel`). Selecting an ABBA comparison additionally requires
+`comparison: {method: "abba", baseline_path: "scratch/baseline.py"}`. Both source paths name a workspace-relative `.py` file or
+Kernel Bundle directory; a single `.py` file maps to `kernel.py`, and directories preserve relative
+file names. Safe path rules and Candidate Bundle limits apply to both sides. The tool uploads
+`baseline` and `candidate` automatically; these wire fields are not Agent-authored, and the local
+paths are removed before content-based idempotency is computed; the wire `comparison` retains only
+`method` and optional `repeats`. The same Evaluate input-file
+helpers are supported for a shared custom input generator and Shapes.
+
+```json
+{"operation": "evaluate", "candidate_path": "scratch/candidate.py", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py", "repeats": 2}}
+```
+
 | Command | Agent-authored request |
 | --- | --- |
-| `gateway-execute` | One GPU/Agate operation and its operation-specific parameters; Candidate operations upload the working Kernel tree. |
+| `gateway-execute` | One GPU/Agate operation and its parameters; Candidate operations upload the working Kernel by default. Evaluate can select Candidate B with `candidate_path` and comparison baseline A with `comparison.baseline_path`. |
 | `kernel-trial-show` | Reads one visible Trial's Kernel Artifact Digest and compact Result Artifact index; request JSON omits `operation`. |
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
 | `result-artifact-read` | Reads a normalized Agent-visible Result Artifact by digest; request JSON omits `operation`. |
@@ -234,7 +303,7 @@ Agent interpretation rather than a measured fact, exactly like the Trial identit
 subjects. Runtime carries it into the derived Final Report, so later Attempts and the Evolver can read
 it.
 The Gateway defines no low-level Agate `submit` passthrough and no standalone `sol` operation.
-Evaluation uses only Runtime-constructed `evaluate`; SOL profiling remains available through
+Measurements use Runtime-constructed `evaluate`, optionally with an exploratory comparison; SOL profiling remains available through
 `profile` with `level="sol"`.
 
 The sealed schema-v12 value is the Agent handoff, not the authoritative outcome. Runtime derives a

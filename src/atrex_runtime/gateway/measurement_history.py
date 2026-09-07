@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from ..artifacts.local import JsonValue
+from ..serialization import canonical_json_digest
 from .control_models import GatewayMeasurementPoint, GatewayOperation
+from .protocol import EvaluateParametersV2
 
 if TYPE_CHECKING:
     from .proxy import GatewayAdapterRequest, GatewayAdapterResult
@@ -20,8 +23,30 @@ def normalized_measurement_points(
     """Extract only bounded scalar facts that are already safe for an Agent to observe."""
     points: list[GatewayMeasurementPoint] = []
     if request.operation is GatewayOperation.EVALUATE:
-        points.extend(_evaluation_points(result))
-        if result.profile_result is not None:
+        parameters = EvaluateParametersV2.model_validate(request.parameters)
+        if parameters.comparison is not None:
+            # Paired samples belong to the comparative Result Artifact, not single-Kernel rows.
+            return ()
+        if parameters.mode == "correctness_only":
+            worker = result.result if result.worker_result is None else result.worker_result
+            correct = (
+                worker.get("correct", worker.get("all_pass"))
+                if isinstance(worker, dict)
+                else None
+            )
+            if isinstance(correct, bool):
+                points.append(
+                    GatewayMeasurementPoint(
+                        kind=GatewayOperation.EVALUATE,
+                        profile_level=None,
+                        shape_id=None,
+                        kernel_name=None,
+                        metrics={"correct": correct, "aggregate": True},
+                    )
+                )
+        else:
+            points.extend(_evaluation_points(result))
+        if result.profile_result is not None and parameters.mode == "full":
             points.extend(
                 _profile_points(
                     result.profile_result,
@@ -29,6 +54,15 @@ def normalized_measurement_points(
                     requested_shape_id=_text(request.parameters.get("shape_id")),
                 )
             )
+        if not parameters.is_contract_evaluation:
+            labels = {
+                "mode": parameters.mode,
+                "input_scope": parameters.input_scope,
+                "evaluation_parameters_digest": str(
+                    canonical_json_digest(parameters.model_dump(mode="json", exclude_none=True))
+                ),
+            }
+            points = [replace(point, metrics={**point.metrics, **labels}) for point in points]
     elif request.operation is GatewayOperation.PROFILE:
         points.extend(
             _profile_points(

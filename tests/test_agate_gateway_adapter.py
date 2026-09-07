@@ -8,7 +8,7 @@ import math
 import sqlite3
 import threading
 from copy import deepcopy
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
@@ -36,6 +36,7 @@ from atrex_runtime.gateway.agate import (
     AgateJobBinding,
     SqliteAgateJobStore,
     load_agate_sdk,
+    parse_agate_correctness,
 )
 from atrex_runtime.gateway.contract import (
     AgateEvaluationContext,
@@ -459,6 +460,396 @@ async def test_eval_uses_sealed_context_and_maps_raw_atrex_result(tmp_path: Path
         "scratch_inputs": ["workspace"],
     }
     jobs.close()
+
+
+def _exploratory_request(tmp_path: Path, parameters: dict[str, object]) -> GatewayAdapterRequest:
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    candidate.joinpath("kernel.py").write_text("class Model: pass\n")
+    return GatewayAdapterRequest(
+        new_attempt_id(), GatewayOperation.EVALUATE, "exploratory-eval", digest("candidate"),
+        candidate, None, None, None, parameters,  # type: ignore[arg-type]
+    )
+
+
+def _job_for_shapes(*shape_ids: str, correctness_only: bool = False) -> dict[str, object]:
+    job = _successful_job()
+    result = job["result"]
+    assert isinstance(result, dict)
+    for stage in ("compile", "correctness"):
+        result["passed"][stage] = {key: {"status": "passed"} for key in shape_ids}
+    for stage in ("correctness", "performance"):
+        example = result[stage]["shapes"]["0"]
+        result[stage]["shapes"] = {key: deepcopy(example) for key in shape_ids}
+    if correctness_only:
+        result.pop("performance")
+    return job
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "parameters",
+    [
+        {"input_py": "def get_inputs(n=8): return (n,)\n"},
+        {"shapes": {"7": {"input_kwargs": {"n": 8}}, "8": {"input_kwargs": {"n": 16}}}},
+        {"input_py": "def get_inputs(n=8): return (n,)\n", "shapes": {"7": {}, "8": {}}},
+    ],
+)
+async def test_custom_eval_uses_effective_inputs_for_every_batch_and_repeat(
+    tmp_path: Path, parameters: dict[str, object],
+) -> None:
+    contract = _contract().model_copy(update={"roofline": {"shapes": {"0": {"latency": 1}}}})
+    original = contract.model_dump(mode="json")
+    original_parameters = deepcopy(parameters)
+    client = RepeatedEvalAgateClient(_successful_job())
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    builder = CapturingBuilder()
+    adapter = AgateGatewayAdapter(
+        client, builder,
+        StaticContexts(AgateEvaluationContext("vector_add", "H20", Dsl.TRITON, contract)),
+        jobs, wait_timeout_s=30, optimizer_evaluate_repeats=2,
+        optimizer_correctness_cases=3, optimizer_bench_iters=17,
+    )
+    request = _exploratory_request(tmp_path, parameters)
+    try:
+        mapped = await adapter.execute(request)
+        assert mapped.evaluation is not None and mapped.evaluation.correct
+        assert len(client.submitted) == 4
+        shapes = parameters.get("shapes", contract.shapes)
+        assert isinstance(shapes, dict)
+        for kind, payload in client.submitted:
+            assert kind == "eval" and payload["mode"] == "full"
+            reference = payload["reference"]
+            assert isinstance(reference, dict)
+            assert len(reference["shapes"]) == 1
+            assert set(reference["shapes"]).issubset(shapes)
+            assert reference["input_py"] == parameters.get("input_py", contract.input_py)
+            assert reference["reference_py"] == contract.reference_py
+            assert "metadata" not in reference and "roofline" not in reference
+            assert payload["options"] == {
+                "num_correctness_cases": 3, "bench_iters": 17,
+                "atol": contract.options.atol, "rtol": contract.options.rtol,
+                "timeout_s": contract.options.timeout_s,
+            }
+        recorded = jobs.list_owned(request.attempt_id)
+        assert len(recorded) == 4
+        assert all(binding.input_scope == "custom" for binding in recorded)
+        recorded_shapes = {key for binding in recorded for key in binding.expected_shape_ids or ()}
+        assert recorded_shapes == set(shapes)
+        assert contract.model_dump(mode="json") == original
+        assert parameters == original_parameters
+    finally:
+        jobs.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("custom", [False, True])
+async def test_correctness_only_runs_once_without_latency_or_auto_profile(
+    tmp_path: Path, custom: bool,
+) -> None:
+    shape_ids = ("7", "8") if custom else ("0", "1")
+    client = FakeAgateClient(_job_for_shapes(*shape_ids, correctness_only=True))
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    adapter = AgateGatewayAdapter(
+        client, CapturingBuilder(),
+        StaticContexts(AgateEvaluationContext("vector_add", "H20", Dsl.TRITON, _contract())),
+        jobs, wait_timeout_s=30, optimizer_evaluate_repeats=3,
+        optimizer_correctness_cases=4, profile_without_roofline=True,
+    )
+    parameters: dict[str, object] = {"mode": "correctness_only"}
+    if custom:
+        parameters.update(input_py="def get_inputs(n=8): return (n,)\n",
+                          shapes={key: {"input_kwargs": {"n": 8}} for key in shape_ids})
+    request = _exploratory_request(tmp_path, parameters)
+    try:
+        result = await adapter.execute(request)
+        assert result.status == "completed"
+        assert result.evaluation is None and result.profile_result is None
+        worker = result.worker_result
+        assert isinstance(worker, dict)
+        assert worker["correct"] is True and worker["all_pass"] is True
+        assert worker["correctness"] == {
+            "status": "PASS", "rel_err": 0.002, "max_abs_err": 0.001, "max_rel_err": 0.01,
+        }
+        assert worker["mode"] == "correctness_only"
+        assert worker["input_scope"] == ("custom" if custom else "contract")
+        assert "latency" not in json.dumps(worker)
+        assert "input_kwargs" not in json.dumps(worker)
+        assert len(client.submitted) == 1
+        kind, payload = client.submitted[0]
+        assert kind == "eval" and payload["mode"] == "correctness_only"
+        assert set(payload["reference"]["shapes"]) == set(shape_ids)
+        assert payload["options"]["num_correctness_cases"] == 4
+    finally:
+        jobs.close()
+
+
+@pytest.mark.parametrize(
+    "failure", ["compile", "correctness", "shape_error", "case_error", "output", "result", "job"],
+)
+def test_correctness_only_reports_failure_without_performance(failure: str) -> None:
+    job = _job_for_shapes("0", "1", correctness_only=True)
+    result = job["result"]
+    if failure in {"compile", "correctness"}:
+        result["passed"][failure]["0"]["status"] = "failed"
+    elif failure == "shape_error":
+        result["correctness"]["shapes"]["0"]["error"] = "private shape error"
+    elif failure == "case_error":
+        result["correctness"]["shapes"]["0"]["cases"][0]["error"] = "private case error"
+    elif failure == "output":
+        result["correctness"]["shapes"]["0"]["cases"][0]["outputs"][0]["passed"] = False
+    elif failure == "result":
+        result["error"] = "private result error"
+    else:
+        job["error"] = "private job error"
+    mapped = AgateGatewayAdapter._map_job(
+        job, GatewayOperation.EVALUATE, ("0", "1"), evaluation_mode="correctness_only",
+    )
+    assert mapped.evaluation is None
+    assert mapped.worker_result["correct"] is False
+    assert mapped.worker_result["correctness"]["status"] == "FAIL"
+    assert "latency" not in json.dumps(mapped.worker_result)
+    assert "private" not in json.dumps(mapped.worker_result)
+
+
+@pytest.mark.parametrize(
+    "malformed", ["compile", "verdict", "shape", "cases", "outputs", "all_pass_only"],
+)
+def test_correctness_only_rejects_missing_or_malformed_coverage(malformed: str) -> None:
+    job = _job_for_shapes("0", "1", correctness_only=True)
+    result = job["result"]
+    if malformed == "compile":
+        result["passed"].pop("compile")
+    elif malformed == "verdict":
+        result["passed"]["correctness"].pop("1")
+    elif malformed == "shape":
+        result["correctness"]["shapes"].pop("1")
+    elif malformed == "cases":
+        result["correctness"]["shapes"]["1"]["cases"] = []
+    elif malformed == "outputs":
+        result["correctness"]["shapes"]["1"]["cases"][0]["outputs"] = "bad"
+    else:
+        job["result"] = {"all_pass": True}
+    with pytest.raises(InfrastructureError):
+        parse_agate_correctness(job, ("0", "1"))
+
+
+@pytest.mark.anyio
+async def test_comparison_cannot_fall_through_to_single_kernel_eval(tmp_path: Path) -> None:
+    client = FakeAgateClient(_successful_job())
+    adapter, builder, jobs = _adapter(tmp_path, client)
+    try:
+        request = _exploratory_request(tmp_path, {"comparison": {"method": "abba"}})
+        with pytest.raises(ValueError, match="paired measurement adapter"):
+            await adapter.execute(request)
+        assert client.submitted == []
+        assert builder.calls == []
+    finally:
+        jobs.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mode", ["full", "correctness_only"])
+async def test_custom_eval_poll_and_jobs_recover_persisted_mode_and_shapes(
+    tmp_path: Path, mode: str,
+) -> None:
+    client = FakeAgateClient(_job_for_shapes("7", correctness_only=mode == "correctness_only"))
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    request = _exploratory_request(tmp_path, {"mode": mode, "shapes": {"7": {"n": 8}}})
+    result = await adapter.execute(request)
+    assert result.job_id is not None
+    jobs.close()
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    adapter = AgateGatewayAdapter(
+        client, CapturingBuilder(),
+        StaticContexts(AgateEvaluationContext("vector_add", "H20", Dsl.TRITON, _contract())),
+        jobs, wait_timeout_s=30,
+    )
+    try:
+        polled = await adapter.execute(replace(
+            request, operation=GatewayOperation.POLL, job_id=result.job_id, parameters={},
+        ))
+        assert polled.evaluation is None
+        assert polled.worker_result["input_scope"] == "custom"
+        assert polled.worker_result["mode"] == mode
+        if mode == "full":
+            assert polled.worker_result["latency_us_geomean"] > 0
+            assert polled.worker_result["latency_us_by_shape"] == {"7": 2000.0}
+        listed = await adapter.execute(replace(
+            request, operation=GatewayOperation.JOBS, parameters={},
+        ))
+        assert listed.result["jobs"][0]["input_scope"] == "custom"
+        assert listed.result["jobs"][0]["mode"] == mode
+        binding = jobs.require_owned(request.attempt_id, result.job_id)
+        assert binding.expected_shape_ids == ("7",)
+        assert binding.evaluation_mode == mode
+        assert binding.input_scope == "custom"
+    finally:
+        jobs.close()
+
+
+def test_job_store_migrates_v2_bindings_with_default_contract_mode(tmp_path: Path) -> None:
+    database_path = tmp_path / "old-jobs.sqlite"
+    attempt_id = new_attempt_id()
+    with sqlite3.connect(database_path) as connection:
+        connection.execute("CREATE TABLE metadata(key TEXT PRIMARY KEY, value INTEGER NOT NULL)")
+        connection.execute("INSERT INTO metadata VALUES ('schema_version', 2)")
+        connection.execute(
+            "CREATE TABLE agate_jobs(job_id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, "
+            "idempotency_key TEXT NOT NULL, kind TEXT NOT NULL, operation TEXT NOT NULL, "
+            "UNIQUE(attempt_id, idempotency_key))"
+        )
+        connection.execute("INSERT INTO agate_jobs VALUES (?, ?, ?, ?, ?)",
+                           ("ev_old", attempt_id, "old-request", "eval", "evaluate"))
+    jobs = SqliteAgateJobStore(database_path)
+    try:
+        assert jobs.require_owned(attempt_id, "ev_old") == AgateJobBinding(
+            "ev_old", attempt_id, "old-request", "eval",
+        )
+        replayed = AgateJobBinding(
+            "ev_old", attempt_id, "old-request", "eval", expected_shape_ids=("0",),
+        )
+        assert jobs.bind(replayed) == replayed
+        assert jobs.require_owned(attempt_id, "ev_old") == replayed
+        with sqlite3.connect(database_path) as connection:
+            assert connection.execute("SELECT value FROM metadata").fetchone()[0] == 3
+    finally:
+        jobs.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "parameters",
+    [{"mode": "correctness"}, {"mode": "performance_only"}, {"input_py": "  "},
+     {"input_py": 123}, {"shapes": {}}, {"shapes": {"0": []}},
+     {"shapes": {"arbitrary": {}}}, {"reference_py": "replace oracle"}],
+)
+async def test_direct_eval_adapter_validates_overrides_before_submission(
+    tmp_path: Path, parameters: dict[str, object],
+) -> None:
+    client = FakeAgateClient(_successful_job())
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    try:
+        with pytest.raises(ValidationError):
+            await adapter.execute(_exploratory_request(tmp_path, parameters))
+        assert client.submitted == []
+    finally:
+        jobs.close()
+
+
+@pytest.mark.parametrize("mode", ["full", "correctness_only"])
+def test_eval_mapping_does_not_replace_expected_shapes_with_reported_subset(mode: str) -> None:
+    job = _job_for_shapes("0", correctness_only=mode == "correctness_only")
+    if mode == "correctness_only":
+        with pytest.raises(InfrastructureError, match="missing compile shape verdicts"):
+            AgateGatewayAdapter._map_job(
+                job, GatewayOperation.EVALUATE, ("0", "1"), evaluation_mode=mode,
+            )
+    else:
+        mapped = AgateGatewayAdapter._map_job(
+            job, GatewayOperation.EVALUATE, ("0", "1"), evaluation_mode=mode,
+        )
+        assert mapped.evaluation is not None and not mapped.evaluation.correct
+
+
+@pytest.mark.anyio
+async def test_correctness_only_rejection_preserves_failure_without_evaluation(
+    tmp_path: Path,
+) -> None:
+    client = FakeAgateClient(
+        _successful_job(),
+        submit_error=FakeGatewayError(
+            400, "validation", {"reason": "candidate_validation_failed"},
+        ),
+    )
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    try:
+        mapped = await adapter.execute(_exploratory_request(
+            tmp_path, {"mode": "correctness_only", "shapes": {"7": {}}},
+        ))
+        assert mapped.status == "completed" and mapped.evaluation is None
+        assert mapped.worker_result["correct"] is False
+        assert mapped.worker_result["correctness"]["status"] == "FAIL"
+        assert mapped.worker_result["input_scope"] == "custom"
+        assert mapped.worker_result["error"]["category"] == "candidate_rejected"
+        assert "latency" not in json.dumps(mapped.worker_result)
+    finally:
+        jobs.close()
+
+
+@pytest.mark.anyio
+async def test_correctness_only_log_recovery_preserves_custom_request_and_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class LostLogClient(FakeAgateClient):
+        def get_job(self, job_id: str, **kwargs: object) -> dict[str, object]:
+            if job_id == "ev_test":
+                return {
+                    "job_id": job_id, "status": "failed",
+                    "error": {"error_class": "infra", "reason": "logs_unavailable",
+                              "details": {"backend_state": "succeeded"}},
+                }
+            return super().get_job(job_id, **kwargs)
+
+    async def skip_delay(_seconds: float) -> None:
+        return None
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", skip_delay)
+    client = LostLogClient(_job_for_shapes("7", "8", correctness_only=True))
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    request = _exploratory_request(
+        tmp_path, {"mode": "correctness_only", "shapes": {"7": {}, "8": {}}},
+    )
+    try:
+        result = await adapter.execute(request)
+        assert result.evaluation is None and result.worker_result["correct"] is True
+        assert len(client.submitted) == 2
+        original = client.submitted[0][1]
+        recovered = client.submitted[1][1]
+        assert recovered["reference"] == original["reference"]
+        assert recovered["mode"] == original["mode"] == "correctness_only"
+        assert recovered["idempotency_key"].startswith("logs-retry:")
+        bindings = jobs.list_owned(request.attempt_id)
+        assert len(bindings) == 2
+        assert all(binding.expected_shape_ids == ("7", "8") for binding in bindings)
+        assert all(binding.evaluation_mode == "correctness_only" for binding in bindings)
+        assert all(binding.input_scope == "custom" for binding in bindings)
+    finally:
+        jobs.close()
+
+
+@pytest.mark.anyio
+async def test_correctness_only_queued_job_can_complete_on_same_request_retry(
+    tmp_path: Path,
+) -> None:
+    class IdempotentClient(FakeAgateClient):
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            if self.submitted:
+                assert self.submitted == [(kind, request)]
+                return {"job_id": self.acceptance_job_id, "status": "queued"}
+            return super().submit_job(kind, request)
+
+    client = IdempotentClient({"job_id": "ev_test", "status": "running"})
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    request = _exploratory_request(
+        tmp_path, {"mode": "correctness_only", "shapes": {"7": {}}},
+    )
+    try:
+        with pytest.raises(InfrastructureError, match="correctness evaluation did not complete"):
+            await adapter.execute(request)
+        binding = jobs.require_owned(request.attempt_id, "ev_test")
+        assert binding.evaluation_mode == "correctness_only"
+        assert binding.expected_shape_ids == ("7",)
+        assert binding.input_scope == "custom"
+        client.job = _job_for_shapes("7", correctness_only=True)
+        mapped = await adapter.execute(request)
+        assert mapped.status == "completed" and mapped.evaluation is None
+        assert mapped.worker_result["correct"] is True
+        assert len(client.submitted) == 1
+        assert len(client.fetched) == 2
+        assert jobs.list_owned(request.attempt_id) == (binding,)
+    finally:
+        jobs.close()
 
 
 @pytest.mark.anyio
