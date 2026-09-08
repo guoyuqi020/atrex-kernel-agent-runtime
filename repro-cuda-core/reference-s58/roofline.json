@@ -1,0 +1,1 @@
+{"shapes": {"58": {"SOL_time_ms": {"NVIDIA RTX PRO 5000 72GB Blackwell": 0.19567085714285715}, "bottleneck": "memory", "semantic_Q_read_bytes": 262064128, "semantic_Q_write_bytes": 917504, "semantic_W_flops": {"bf16": 8353939456}}}}
