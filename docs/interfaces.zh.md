@@ -101,6 +101,10 @@ Shapes 继续复用私有 Contract，Reference 和可信评测策略保持不变
 `result` 记录 `mode` 与 `input_scope`（`custom` 或 `contract`）。这些调用不能满足
 `candidate_ready` 前所需的可信 Contract 完整评测；默认 `{"operation":"evaluate"}` 行为不变。
 
+完整文件内容见[自定义输入文件示例](evaluation.zh.md#自定义输入文件示例)，其中说明了
+`input_kwargs` → `_make_inputs`、返回字典 → `Model.forward`、`init_kwargs` → Model 构造函数
+的对应关系。HTTP 接收文件内容，不接收本地文件路径。
+
 携带 `comparison: {method: "abba", repeats: 2}` 的 `evaluate` Wire Request 通过 `baseline`（A）
 和 `candidate`（B）上传两个源码 Bundle。`comparison.repeats` 默认 2，范围 2–20；比较要求
 `mode: "full"`，`input_py` 和 `shapes` 仍可选。Runtime 校验并封存两侧源码，在每个 Shape
@@ -225,7 +229,41 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
 
-`attempt-report` 要求匹配的非空 Runtime 自管 Direction/Experiment Journal。第一次成功调用会发布不可覆盖的终态
+示例配置与生产 Workspace 生成器将 `campaign.optimizer.max_attempt_report_bytes` 设为
+`1048576`（1 MiB），限制包含工具自动附加 Journal 的完整终态 Report。Core/KDA 在提交前检查
+组装后的大小，Runtime 代理在接受前检查，Worker 在 Session 结束后读取文件时再次检查。
+Core/KDA 的每份 `--request` JSON 文件也限制为 1 MiB，按实际文件字节数计量，包含空白。
+这两层限制相互独立；HTTP 请求体限制及自定义输入源码、Shape 文件限制保持不变。
+已有 Workspace 配置会保留原值，需要显式更新才会生效。
+
+### 模型正常退出后的报告补交
+
+`campaign.optimizer.report_completion_retries` 默认 `2`，允许整数 `0..10`。
+模型调用成功退出后，Core/KDA 用当前 Attempt Capability 调用
+`POST /v1/runtime/queries` 的 `attempt_report_status`。
+该 Harness 内部查询返回 `missing` 或包含封存 Report 的 `accepted`，不计工具配额，
+也不启动 Agate Job；本地 Agent 文件或聊天中的“已完成”不等价于接受回执。
+已接受的报告必要时恢复到本地，不重复提交。
+
+若尚未接受，Harness 最多追加指定次数的报告补交调用，沿用同一个 Attempt 和工作区，
+提示读取已有 Journal、草稿和 Trace。这是新的 Provider 对话，不是原生 resume，也不是新一轮
+优化，不能编造缺失测量。尚未接受的本地终态文件会移到唯一的 scratch 备份，避免阻塞重新提交。
+所有调用共同消耗原有总时间和 Token/Credit 配额；模型非零退出、超时、配额耗尽、
+Provider 捕获或用量不完整时，不触发补交。`0` 关闭追加调用，但仍检查报告是否接受。
+
+初次调用的 Trace 保留在根目录，后续调用分别放在 `continuations/001/`、`002/` 等目录。
+根 `session.json` 的 `segments` 与 `report_completion` 记录分段及补交状态；
+`conversation.jsonl` 按分段身份合并对话，Provider 用量累计计算。
+补交耗尽时 Worker Session 记录 `report-completion-exhausted`，不会产生成功 Candidate。
+普通 Epoch 可以继续下一个 Attempt，Bootstrap 则失败而非登记 Baseline。
+该机制适用于 Core/KDA 的优化与 Framework Baseline，不用于 Problem Generalization 或 Evolver。
+冻结的旧 Agent Commit 需要升级后才能使用这套机制。
+
+### 终态交接与 Journal
+
+`candidate_ready` 要求匹配的非空 Runtime 自管 Direction/Experiment Journal 及有实验支持的 Findings。
+若未能开展实验，`blocked` 和 `pivot` 允许 Journal 与 Findings 为空；报告需如实说明原因，不应虚构实验。
+已有 in_progress Direction 仍须先 block 或 defer。第一次成功调用 `attempt-report` 会发布不可覆盖的终态
 Report；校验或工具错误不会发布 Report，因此 Agent 可以依据 `issues`、`request_schema` 和 `recovery`
 修正后重试，但成功后不得再次调用。每个 Experiment
 必须绑定一个可见且已开始的 Direction；终态交接前，任何 Direction 都不能保持 in_progress，未产生
@@ -242,6 +280,15 @@ Direction 的规范化状态是下一方向的唯一来源。Runtime 不信任 A
 Runtime Journal 与授权冻结历史的合并视图，只有显式请求的紧凑索引文件会写到 `scratch/`。
 Bootstrap Session 开始时没有更早 Journal；成功后，
 其终态 Journal、Kernel Trial 与 Result Artifact 会成为该 Lineage 后续普通 Attempt 的根历史。
+
+采纳可见历史中的原样 Kernel 时，使用 `record-experiment` 的 `action="adopt"`，before/after 都填写
+真实 Kernel Trial ID。区别于其他动作，`adopt` 允许历史 after：Runtime 要求该精确 Kernel 有成功的
+普通完整 Evaluate、已提交且匹配的 Result Artifact，以及一致的算子、硬件、DSL 和封存评测 Contract。
+现有历史可见边界保持不变，包括显式继承的 Bootstrap 历史。自定义输入、仅正确性检查、Profile 和探索性
+ABBA 不符合采纳资格。Experiment 记录当前采纳决策，保留原始 Trial/测量身份，不新增测量或修改历史
+Trial 的 disposition。这条持久化采纳记录可以满足 `candidate_ready` 预检，无需重测原样候选；如果更改
+候选，则需为新的精确内容提供证据。本 Attempt 新的完整 Evaluate 已失败时，不能用更早成功记录覆盖。
+请求幂等按 Attempt 与 Recovery Generation 隔离，不是全历史同 Artifact 禁止评测。
 `list-experiments` 和 `load-experiment` 把当前实时 Runtime Journal 与历史持久 Journal 合并；终态
 Attempt Report Artifact 只作为旧数据的兼容回退。已完成 Epoch 包含获胜分支以及所有未获胜 Active/Challenger 分支的
 Journal，但不向 Agent 暴露分支、Epoch、Attempt、选中状态或当前/历史来源；普通 Agent/Kernel Evidence
@@ -264,7 +311,7 @@ Core 要求每组绑定已出现在本 Attempt 的 Experiment Journal；Runtime 
 Kernel Artifact、Trial 和 Result Artifact，而无需在 Finding 中重复这些身份。
 `contributing_kernel_trial_ids` 是必填的有序去重数组，列出本次 Attempt 取用过其代码或思路的历史
 Kernel Trial；没有取用时为空。Core 与 Runtime 都只校验它的形状，都不去解析它是否在可见历史内 ——
-因为 Report 是 Agent 的解读而非测量事实，与 Experiment Subject 里的 Trial 身份同理。Runtime 会把它带入
+因为该字段是 Agent 的解读而非测量事实；Experiment Subject 身份则必须通过 Runtime 自管 Trial 的核验。Runtime 会把它带入
 派生的 Final Report，供后续 Attempt 与 Evolver 阅读。
 Gateway 不定义低层 Agate `submit` 透传，也不定义独立的 `sol` 操作。评测只能使用由
 Runtime 构造的 `evaluate`，其中可包含探索性比较；SOL Profile 仍通过 `profile` 的 `level="sol"` 使用。
@@ -285,6 +332,8 @@ Agent Handoff 的 Schema 和已封存 Artifact 都不包含、也不要求 reten
 `kernel_retention_comparison`。当策略为 `same_allocation_abba` 时，Runtime 自行执行 ABBA，
 以该权威 Gateway 结果更新 Candidate Kernel Revision，并且只通过 Runtime Final Attempt
 Report 对外展示。缺失或非 ready 的 Handoff 会直接终结，不会运行 retention comparator。
+权威比较不会生成 Agent `gtrial`，不能等待它来补齐交接前的 Experiment Journal。Agent 主动调用的
+ABBA 有自己的候选 Trial，但仍是探索性比较，不能替代提名要求的成功普通完整 Evaluate。
 
 ```json
 {

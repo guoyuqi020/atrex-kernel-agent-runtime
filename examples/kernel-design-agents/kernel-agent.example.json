@@ -9,7 +9,6 @@
     "fetch_timeout_seconds": 600,
     "max_archive_bytes": 268435456,
     "allowed_submodules": {
-      "skills/KernelWiki": "https://github.com/DongyunZou/KernelWiki.git",
       "skills/ncu-report-skill": "https://github.com/DongyunZou/ncu-report-skill.git"
     }
   }

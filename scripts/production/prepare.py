@@ -615,7 +615,8 @@ def _runtime_config(
             "isolated_home_environment_keys": ["HOME"],
             "session_trace_relative_path": "sessions/core",
             "token_usage_report_relative_path": "scratch/token-usage.json",
-            "max_attempt_report_bytes": 65536,
+            "max_attempt_report_bytes": 1048576,
+            "report_completion_retries": 2,
             "timeout_seconds": int(workers["optimizer_timeout_seconds"]),
             "bootstrap_timeout_seconds": int(workers["bootstrap_timeout_seconds"]),
             "terminate_grace_seconds": 10,
@@ -708,7 +709,6 @@ def _runtime_config(
                 "fetch_timeout_seconds": 600,
                 "max_archive_bytes": 268435456,
                 "allowed_submodules": {
-                    "skills/KernelWiki": "https://github.com/DongyunZou/KernelWiki.git",
                     "skills/ncu-report-skill": "https://github.com/DongyunZou/ncu-report-skill.git",
                 },
             },

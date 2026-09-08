@@ -32,6 +32,14 @@ def test_shipped_configs_select_complete_kda_bundle(config: Path) -> None:
     assert_kda_settings(RuntimeSettings.from_file(config))
 
 
+@pytest.mark.parametrize("config", CONFIGS, ids=lambda path: str(path.relative_to(ROOT)))
+def test_shipped_configs_allow_1_mib_attempt_reports(config: Path) -> None:
+    settings = RuntimeSettings.from_file(config)
+    assert settings.campaign is not None
+    assert settings.campaign.optimizer.max_attempt_report_bytes == 1_048_576
+    assert settings.campaign.optimizer.report_completion_retries == 2
+
+
 def test_production_config_selects_kda(tmp_path: Path) -> None:
     prepare = runpy.run_path(str(ROOT / "scripts/production/prepare.py"))
     build = cast(Any, prepare["_runtime_config"])
@@ -52,6 +60,8 @@ def test_production_config_selects_kda(tmp_path: Path) -> None:
     )
     assert_kda_settings(RuntimeSettings.model_validate(config))
     assert config["campaign"]["optimizer"]["agent_backend"] == "codex"
+    assert config["campaign"]["optimizer"]["max_attempt_report_bytes"] == 1_048_576
+    assert config["campaign"]["optimizer"]["report_completion_retries"] == 2
 
 
 def test_connectivity_probe_defaults_to_kda() -> None:

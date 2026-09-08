@@ -60,6 +60,7 @@ def test_core_process_contract_contains_runtime_binding() -> None:
     assert process.agent_backend == "qodercli"
     assert process.reasoning_effort == "max"
     assert process.session_settings == ""
+    assert process.report_completion_retries == 2
     assert process.timeout_seconds == 28_800
 
     bootstrap = build_core_process_config(
@@ -67,3 +68,21 @@ def test_core_process_contract_contains_runtime_binding() -> None:
         timeout_seconds=campaign.optimizer.bootstrap_timeout_seconds,
     )
     assert bootstrap.timeout_seconds == 14_400
+
+
+@pytest.mark.parametrize("retries", (0, 3, 10))
+def test_report_completion_configuration_reaches_process_policy(retries: int) -> None:
+    value = json.loads(CONFIG.read_text(encoding="utf-8"))
+    value["campaign"]["optimizer"]["report_completion_retries"] = retries
+    settings = RuntimeSettings.model_validate(value, context={"base": CONFIG.parent})
+    assert settings.campaign is not None
+    process = build_core_process_config(with_local_interpreter(settings.campaign))
+    assert process.report_completion_retries == retries
+
+
+@pytest.mark.parametrize("retries", (-1, 11, True, "2", 2.0))
+def test_runtime_rejects_invalid_report_completion_configuration(retries: object) -> None:
+    value = json.loads(CONFIG.read_text(encoding="utf-8"))
+    value["campaign"]["optimizer"]["report_completion_retries"] = retries
+    with pytest.raises(ValidationError):
+        RuntimeSettings.model_validate(value, context={"base": CONFIG.parent})

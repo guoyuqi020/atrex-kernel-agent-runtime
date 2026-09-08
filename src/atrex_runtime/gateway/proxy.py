@@ -28,7 +28,8 @@ from ..domain.errors import (
 )
 from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest
 from ..ports import RuntimeEventRecorder
-from ..serialization import canonical_json_digest
+from ..serialization import canonical_json_bytes, canonical_json_digest
+from ..workers.attempt_report import AttemptReportV12
 from .contract import AgateEvaluationContextResolver, candidate_path_for_attempt
 from .control import SqliteGatewayControl
 from .control_models import (
@@ -47,6 +48,7 @@ from .production_policy import CandidateProductionValidator
 from .protocol import (
     GATEWAY_PROXY_PROTOCOL_VERSION,
     AttemptReportRequestV2,
+    AttemptReportStatusRequestV2,
     CancelRequestV2,
     CandidateBundleV2,
     CandidateFileV2,
@@ -87,6 +89,7 @@ _ADVISORY_PRODUCTION_GATE_TYPES = (
 _RUNTIME_LOCAL_OPERATIONS = frozenset(
     {
         GatewayOperation.ATTEMPT_REPORT,
+        GatewayOperation.ATTEMPT_REPORT_STATUS,
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.RESULT_ARTIFACT_READ,
@@ -123,6 +126,7 @@ _AGENT_GATEWAY_OPERATIONS = frozenset(
 # poll to the job state observed on its first call and never report completion.
 _OBSERVATIONAL_OPERATIONS = frozenset(
     {
+        GatewayOperation.ATTEMPT_REPORT_STATUS,
         GatewayOperation.POLL,
         GatewayOperation.JOBS,
         GatewayOperation.ENV,
@@ -445,8 +449,11 @@ class GatewayProxyService:
         candidate_production: CandidateProductionValidator | None = None,
         *,
         contexts: AgateEvaluationContextResolver | None = None,
+        max_attempt_report_bytes: int = 1_048_576,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
+        if type(max_attempt_report_bytes) is not int or max_attempt_report_bytes <= 0:
+            raise ValueError("max_attempt_report_bytes must be a positive integer")
         self._control = control
         self._artifacts = artifacts
         self._adapter = adapter
@@ -455,6 +462,7 @@ class GatewayProxyService:
         self._candidate_diff = candidate_diff
         self._candidate_production = candidate_production
         self._contexts = contexts
+        self._max_attempt_report_bytes = max_attempt_report_bytes
         self._clock = clock
         self._journals = RuntimeJournalService(control, artifacts)
 
@@ -588,6 +596,8 @@ class GatewayProxyService:
         try:
             if isinstance(request, AttemptReportRequestV2):
                 result = self._register_attempt_report(request, candidate_digest)
+            elif isinstance(request, AttemptReportStatusRequestV2):
+                result = self._attempt_report_status(request, authorization.recovery_generation)
             elif isinstance(request, KernelTrialShowRequestV2):
                 result = self._show_kernel_trial(request)
             elif isinstance(request, KernelArtifactReadRequestV2):
@@ -770,14 +780,28 @@ class GatewayProxyService:
     ) -> GatewayAdapterResult:
         if candidate_digest is None:
             raise InfrastructureError("Attempt report sealed no candidate")
+        report_value = request.report.model_dump(mode="json")
+        report_bytes = len(canonical_json_bytes(report_value))
+        if report_bytes > self._max_attempt_report_bytes:
+            raise ValueError(
+                "Attempt report exceeds byte limit: "
+                f"actual_bytes={report_bytes}, max_bytes={self._max_attempt_report_bytes}. "
+                "Shorten the final report before submitting again."
+            )
+        self._journals.validate_report_journal(request.report)
         if request.report.status == "candidate_ready":
-            evaluation = self._control.find_agent_evaluation(request.attempt_id, candidate_digest)
+            evaluation = self._control.find_candidate_evaluation(
+                request.attempt_id, candidate_digest
+            )
             if evaluation is None:
                 raise ValueError(
                     "candidate_ready requires a completed Agent evaluate for the exact current "
                     f"work/kernel tree, sealed as {candidate_digest}. No Agent evaluate covers it; "
                     "custom inputs or correctness_only checks do not qualify; "
-                    'run {"operation": "evaluate"} and submit this report again'
+                    "record an adopt Experiment referencing a compatible successful historical "
+                    "full-Evaluate Trial, or run {\"operation\": \"evaluate\"}, then submit again. "
+                    "Agent ABBA does not replace full Evaluate; Runtime authoritative ABBA "
+                    "runs only after the terminal report is handed off"
                 )
             if not evaluation.correct:
                 raise ValueError(
@@ -785,6 +809,9 @@ class GatewayProxyService:
                     f"work/kernel tree, sealed as {candidate_digest}. Its evaluate reported "
                     "incorrect results; repair the candidate, re-evaluate, and submit again"
                 )
+        report_digest = self._artifacts.put_json(
+            cast(JsonValue, report_value), ArtifactKind.ATTEMPT_REPORT
+        )
         return GatewayAdapterResult(
             "completed",
             cast(
@@ -793,9 +820,67 @@ class GatewayProxyService:
                     "status": "registered",
                     "candidate_digest": str(candidate_digest),
                     "report_status": request.report.status,
+                    "report_artifact_digest": str(report_digest),
                 },
             ),
         )
+
+    def _attempt_report_status(
+        self,
+        request: AttemptReportStatusRequestV2,
+        recovery_generation: int,
+    ) -> GatewayAdapterResult:
+        """Recover only reports named by a committed acceptance in this exact generation."""
+        receipts = self._control.list_operation_artifacts(
+            (request.attempt_id,),
+            GatewayOperation.ATTEMPT_REPORT,
+            recovery_generation=recovery_generation,
+        )
+        for attempt_id, _key, digest in reversed(receipts):
+            if attempt_id != request.attempt_id:
+                raise InfrastructureError("Attempt report receipt belongs to a different Attempt")
+            response = self._load_response(digest)
+            if response.operation != "attempt_report":
+                raise InfrastructureError("Attempt report receipt has the wrong operation")
+            receipt = response.result
+            if (
+                response.status != "completed"
+                or not isinstance(receipt, dict)
+                or receipt.get("status") != "registered"
+            ):
+                continue
+            report_digest_value = receipt.get("report_artifact_digest")
+            # Historical receipts did not seal a report; local files cannot fill that gap.
+            if report_digest_value is None:
+                continue
+            try:
+                if not isinstance(report_digest_value, str):
+                    raise ValueError("report Artifact Digest is not text")
+                report_digest = parse_artifact_digest(report_digest_value)
+                artifact = self._artifacts.verify(report_digest)
+                if artifact.kind is not ArtifactKind.ATTEMPT_REPORT:
+                    raise ValueError("report Artifact has the wrong kind")
+                report = AttemptReportV12.model_validate_json(
+                    (artifact.payload_path / "value.json").read_bytes()
+                )
+                if report.attempt_id != request.attempt_id:
+                    raise ValueError("report Artifact belongs to a different Attempt")
+                if report.status != receipt.get("report_status"):
+                    raise ValueError("report Artifact status disagrees with its receipt")
+            except (OSError, ValueError) as error:
+                raise InfrastructureError("Accepted Attempt report Artifact is invalid") from error
+            return GatewayAdapterResult(
+                "completed",
+                cast(
+                    JsonValue,
+                    {
+                        "status": "accepted",
+                        "report": report.model_dump(mode="json"),
+                        "report_artifact_digest": str(report_digest),
+                    },
+                ),
+            )
+        return GatewayAdapterResult("completed", {"status": "missing"})
 
     def _show_kernel_trial(self, request: KernelTrialShowRequestV2) -> GatewayAdapterResult:
         trial = self._visible_kernel_trial(request.attempt_id, request.kernel_trial_id)

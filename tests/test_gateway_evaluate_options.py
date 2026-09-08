@@ -49,6 +49,10 @@ def test_agent_schema_has_file_helpers_and_resolvable_json_shape_definitions() -
     assert schema["properties"]["mode"]["default"] == "full"
     assert schema["properties"]["input_path"]["type"] == "string"
     assert schema["properties"]["shapes_path"]["type"] == "string"
+    assert "_make_inputs(**input_kwargs)" in schema["properties"]["input_py"]["description"]
+    assert "Model.forward" in schema["properties"]["input_py"]["description"]
+    assert "input_kwargs" in schema["properties"]["shapes"]["description"]
+    assert "init_kwargs" in schema["properties"]["shapes"]["description"]
     assert {"not": {"required": ["input_py", "input_path"]}} in schema["allOf"]
     assert {"not": {"required": ["shapes", "shapes_path"]}} in schema["allOf"]
     assert "CandidateBundleV2" not in schema.get("$defs", {})

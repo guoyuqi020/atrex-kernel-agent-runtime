@@ -7,7 +7,10 @@ import json
 import os
 import shutil
 import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from threading import Thread
+from typing import Any
 
 import pytest
 from conftest import digest
@@ -23,6 +26,7 @@ from atrex_runtime.domain.ids import (
     new_lineage_id,
 )
 from atrex_runtime.domain.models import Dsl, TokenUsage
+from atrex_runtime.workers.attempt_report import AttemptReportV12
 from atrex_runtime.workers.core import (
     CoreOptimizerProcessConfig,
     CoreOptimizerSessionDriver,
@@ -85,11 +89,14 @@ def test_visible_core_config_matches_runtime_binding(
             terminate_grace_seconds=1,
             max_diagnostic_bytes=4096,
             max_session_tokens=1000,
+            report_completion_retries=3,
         ),
         artifacts,
     )
     prepared = runner.prepare(root, root / "sessions")
     env = runner.runtime_environment(prepared, phase=phase, model=model)
+    assert env["ATREX_REPORT_COMPLETION_RETRIES"] == "3"
+    assert env["ATREX_ATTEMPT_REPORT_MAX_BYTES"] == "65536"
     effective = json.loads((repository / "atrex-agent.json").read_text())
     assert effective == {
         **original,
@@ -400,7 +407,10 @@ print("core-owned optimizer finished")
 
 
 @pytest.mark.anyio
-async def test_runtime_executes_current_core_bundle_with_attempt_v9(tmp_path: Path) -> None:
+@pytest.mark.parametrize("accept_on_segment", [1, 2, None], ids=["accepted", "repair", "exhausted"])
+async def test_runtime_executes_current_core_bundle_with_attempt_v9(
+    tmp_path: Path, accept_on_segment: int | None,
+) -> None:
     root = tmp_path / "attempt"
     repository = root / "agent/optimizer"
     source = Path(__file__).resolve().parents[1] / "src/atrex-kernel-agent-core"
@@ -467,10 +477,20 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v9(tmp_path: Pa
         """#!/usr/bin/env python3
 import json
 import os
+import sys
+import urllib.request
 from pathlib import Path
 
 attempt = json.loads(Path(os.environ["ATREX_ATTEMPT_MANIFEST"]).read_text())
-thread_id = "01234567-89ab-cdef-0123-456789abcdef"
+invocations_path = Path("scratch/fake-provider-invocations.json")
+invocations = json.loads(invocations_path.read_text()) if invocations_path.exists() else []
+ordinal = len(invocations) + 1
+thread_id = f"00000000-0000-0000-0000-{ordinal:012d}"
+invocations.append({
+    "attempt_id": attempt["attempt_id"], "thread_id": thread_id,
+    "prompt": sys.argv[-1],
+})
+invocations_path.write_text(json.dumps(invocations))
 rollout = Path(os.environ["CODEX_HOME"]) / "sessions/2026" / f"rollout-test-{thread_id}.jsonl"
 rollout.parent.mkdir(parents=True)
 usage = {
@@ -486,7 +506,7 @@ rollout.write_text(json.dumps({
         "info": {"last_token_usage": usage, "total_token_usage": usage},
     },
 }) + "\\n")
-Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
+report = {
     "schema_version": 12,
     "attempt_id": attempt["attempt_id"],
     "status": "blocked",
@@ -559,7 +579,25 @@ Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps({
         "analysis": "the smoke Provider cannot produce a candidate",
         "supporting_experiment_ids": ["experiment_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"]
     }]
-}))
+}
+if ordinal == FAKE_ACCEPT_ON_SEGMENT:
+    submission = urllib.request.Request(
+        os.environ["ATREX_GATEWAY_PROXY_URL"] + "/v1/runtime/queries",
+        data=json.dumps({
+            "operation": "attempt_report", "attempt_id": attempt["attempt_id"],
+            "report": report,
+        }).encode(),
+        headers={
+            "authorization": "Bearer " + os.environ["ATREX_GATEWAY_CAPABILITY"],
+            "content-type": "application/json",
+        },
+        method="POST",
+    )
+    with urllib.request.urlopen(submission, timeout=5) as response:
+        assert json.loads(response.read())["result"]["status"] == "registered"
+    # Simulate a lost local write after Runtime accepted the report: Core must restore it.
+else:
+    Path(os.environ["ATREX_ATTEMPT_REPORT_PATH"]).write_text(json.dumps(report))
 print(json.dumps({"type": "thread.started", "thread_id": thread_id}), flush=True)
 print(json.dumps({
     "type": "result",
@@ -570,7 +608,7 @@ print(json.dumps({
         "total_tokens": 16
     }
 }), flush=True)
-""",
+""".replace("FAKE_ACCEPT_ON_SEGMENT", repr(accept_on_segment)),
         encoding="utf-8",
     )
     fake_codex.chmod(0o700)
@@ -583,31 +621,111 @@ print(json.dumps({
             session_trace_relative_path="sessions/core",
             token_usage_report_relative_path="scratch/token-usage.json",
             max_attempt_report_bytes=65_536,
-            timeout_seconds=10,
+            timeout_seconds=30,
             terminate_grace_seconds=1,
             max_diagnostic_bytes=8192,
             max_session_tokens=1000,
             agent_backend="codex",
+            report_completion_retries=2,
         ),
         artifacts,
     )
 
-    result = await driver.run(
-        PreparedAttempt(root, manifest_path, root / "sessions", "real-core"),
-        OptimizerSessionConfig(
-            environment=(("PATH", f"{provider_bin}{os.pathsep}{os.environ['PATH']}"),),
-            gateway_endpoint="http://gateway-proxy",
-            gateway_capability="attempt-capability",
-        ),
-    )
+    requests: list[dict[str, Any]] = []
+    accepted_report: dict[str, Any] | None = None
 
-    assert result.finish_reason == "completed"
-    assert result.attempt_report is not None
-    assert result.attempt_report.status == "blocked"
-    assert result.token_usage == TokenUsage(10, 4, 2, 0)
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self) -> None:
+            nonlocal accepted_report
+            assert self.path == "/v1/runtime/queries"
+            assert self.headers["Authorization"] == "Bearer attempt-capability"
+            request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            requests.append(request)
+            assert request["attempt_id"] == manifest.attempt_id
+            if request["operation"] == "attempt_report":
+                accepted_report = AttemptReportV12.model_validate(request["report"]).model_dump(
+                    mode="json"
+                )
+                value: dict[str, Any] = {"status": "registered"}
+            else:
+                assert request["operation"] == "attempt_report_status"
+                assert set(request) == {
+                    "schema_version", "operation", "attempt_id", "idempotency_key",
+                }
+                value = {"status": "missing"} if accepted_report is None else {
+                    "status": "accepted", "report": accepted_report,
+                    "report_artifact_digest": str(digest("accepted-smoke-report")),
+                }
+            body = json.dumps({
+                "operation": request["operation"], "status": "completed", "result": value,
+            }).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, format: str, *args: object) -> None:
+            pass
+
+    with HTTPServer(("127.0.0.1", 0), Handler) as server:
+        thread = Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        try:
+            result = await driver.run(
+                PreparedAttempt(root, manifest_path, root / "sessions", "real-core"),
+                OptimizerSessionConfig(
+                    environment=(("PATH", f"{provider_bin}{os.pathsep}{os.environ['PATH']}"),),
+                    gateway_endpoint=f"http://127.0.0.1:{server.server_port}",
+                    gateway_capability="attempt-capability",
+                ),
+            )
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+
+    count = accept_on_segment or 3
+    assert result.finish_reason == (
+        "completed" if accept_on_segment is not None else "report-completion-exhausted"
+    )
+    if accept_on_segment is None:
+        assert result.attempt_report is None and result.attempt_report_digest is None
+    else:
+        assert result.attempt_report is not None
+        assert result.attempt_report.status == "blocked"
+        assert result.attempt_report.model_dump(mode="json") == accepted_report
+    assert result.token_usage == TokenUsage(10 * count, 4 * count, 2 * count, 0)
+    assert result.runtime_state_digest is not None
+    invocations = json.loads((root / "scratch/fake-provider-invocations.json").read_text())
+    assert len(invocations) == count
+    assert {item["attempt_id"] for item in invocations} == {manifest.attempt_id}
+    assert len({item["thread_id"] for item in invocations}) == count
+    assert all("report-only" in item["prompt"] for item in invocations[1:])
+    assert sum(item["operation"] == "attempt_report_status" for item in requests) == count
+    assert sum(item["operation"] == "attempt_report" for item in requests) == (
+        0 if accept_on_segment is None else 1
+    )
+    usage_report = json.loads((root / "scratch/token-usage.json").read_text())
+    assert usage_report["session_count"] == count
+    assert usage_report["model_request_count"] == count
+    assert usage_report["consumed"] == 16 * count
+    assert usage_report["usage_complete"] is True
     assert result.session_trace_digest is not None
     trace = artifacts.verify(result.session_trace_digest).payload_path
     assert '"input_tokens": 12' in (trace / "provider/stdout.stream-json").read_text()
+    metadata = json.loads((trace / "session.json").read_text())
+    assert metadata["report_completion"]["retries_used"] == count - 1
+    assert metadata["report_completion"]["state"] == (
+        "complete" if accept_on_segment is not None else "exhausted"
+    )
+    assert metadata["exit_status"] == (0 if accept_on_segment is not None else 127)
+    assert len(metadata["segments"]) == count
+    assert len({item["session_id"] for item in metadata["segments"]}) == count
+    for ordinal in range(1, count):
+        segment = trace / f"continuations/{ordinal:03d}"
+        assert '"input_tokens": 12' in (segment / "provider/stdout.stream-json").read_text()
+        assert (segment / "events.jsonl").is_file()
+        assert (segment / "conversation.jsonl").is_file()
 
 
 def test_inner_agent_timeout_is_reported_as_a_timeout(tmp_path: Path) -> None:

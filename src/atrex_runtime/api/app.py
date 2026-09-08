@@ -272,6 +272,11 @@ def build_runtime_application(
                     production_policy,
                 ),
                 contexts=contexts,
+                max_attempt_report_bytes=(
+                    1_048_576
+                    if settings.campaign is None
+                    else settings.campaign.optimizer.max_attempt_report_bytes
+                ),
             ),
             limits,
         )

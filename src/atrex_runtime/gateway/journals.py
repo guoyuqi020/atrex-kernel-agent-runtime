@@ -12,7 +12,11 @@ from uuid import uuid4
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.errors import DirectionConcurrencyError, InfrastructureError
 from ..domain.ids import AttemptId, parse_artifact_digest
-from ..workers.attempt_report import AttemptDirectionEventV1, AttemptExperimentV8
+from ..workers.attempt_report import (
+    AttemptDirectionEventV1,
+    AttemptExperimentV8,
+    AttemptReportV12,
+)
 from .control import SqliteGatewayControl
 from .control_models import GatewayAuthorization, GatewayKernelTrialRecord
 from .protocol import (
@@ -76,6 +80,40 @@ class RuntimeJournalService:
 
     control: SqliteGatewayControl
     artifacts: LocalArtifactStore
+
+    def validate_report_journal(self, report: AttemptReportV12) -> None:
+        """An empty or edited report must not erase a live authoritative Journal."""
+        in_progress = sorted(
+            direction_id
+            for direction_id, direction in self._direction_views(report.attempt_id).items()
+            if direction["status"] == "in_progress"
+        )
+        if in_progress:
+            raise ValueError(
+                "Attempt report cannot leave a Runtime-owned Direction in progress: "
+                f"{in_progress}; block or defer it before submitting"
+            )
+        events = self._current_direction_events(report.attempt_id)
+        experiments = self._current_experiments(report.attempt_id)
+        if not events and not experiments:
+            # Older report-only clients have no live Journal, but cannot invent the
+            # new adoption action to claim Runtime has registered a reuse decision.
+            if any(experiment.action == "adopt" for experiment in report.experiments):
+                raise ValueError(
+                    "First record an adopt Experiment in the Runtime Journal, "
+                    "then submit the report"
+                )
+            return
+        expected_events = tuple(AttemptDirectionEventV1.model_validate(item) for item in events)
+        expected_experiments = tuple(
+            AttemptExperimentV8.model_validate(item) for item in experiments
+        )
+        if report.direction_events != expected_events or report.experiments != expected_experiments:
+            raise ValueError(
+                "Attempt report must match the Runtime-owned Direction and Experiment journals; "
+                "refresh the journal snapshot using the attempt-report tool. Block or defer any "
+                "in-progress Direction before submitting, even when there are no Experiments"
+            )
 
     def execute(
         self,
@@ -486,7 +524,7 @@ class RuntimeJournalService:
                 f"Experiment Direction must be in progress; current status is {direction['status']}"
             )
         allow_baseline = self._is_bootstrap(request.attempt_id)
-        actions = {"keep_after", "restore_before", "abandon_direction"}
+        actions = {"keep_after", "restore_before", "abandon_direction", "adopt"}
         if allow_baseline:
             actions.add("baseline")
         if value.get("action") not in actions:
@@ -509,6 +547,7 @@ class RuntimeJournalService:
                 side_name,
                 value.get(side_name),
                 trials,
+                allow_historical_after=value.get("action") == "adopt",
             )
         experiment = AttemptExperimentV8.model_validate(
             {
@@ -540,6 +579,8 @@ class RuntimeJournalService:
         side_name: str,
         value: object,
         trials: Mapping[str, GatewayKernelTrialRecord],
+        *,
+        allow_historical_after: bool = False,
     ) -> dict[str, JsonValue] | None:
         """Resolve one Agent-supplied Trial ID into an immutable evidence snapshot."""
         if value is None:
@@ -555,10 +596,10 @@ class RuntimeJournalService:
         trial = trials.get(trial_id)
         if trial is None:
             raise ValueError(f"Experiment {side_name} Kernel Trial is outside visible history")
-        if side_name == "after" and trial.attempt_id != attempt_id:
+        if side_name == "after" and trial.attempt_id != attempt_id and not allow_historical_after:
             raise ValueError(
                 "Experiment after Kernel Trial must belong to this logical Attempt; "
-                "historical Trials may only be used as before evidence"
+                "use action=adopt to adopt eligible historical Trial evidence"
             )
         result_artifacts = list(
             dict.fromkeys(
@@ -600,10 +641,14 @@ class RuntimeJournalService:
             trial = trials.get(str(trial_id))
             if trial is None:
                 raise ValueError(f"Experiment {side_name} Kernel Trial is outside visible history")
-            if side_name == "after" and trial.attempt_id != attempt_id:
+            if (
+                side_name == "after"
+                and trial.attempt_id != attempt_id
+                and experiment.get("action") != "adopt"
+            ):
                 raise ValueError(
                     "Experiment after Kernel Trial must belong to this logical Attempt; "
-                    "historical Trials may only be used as before evidence"
+                    "use action=adopt to adopt eligible historical Trial evidence"
                 )
             kernel_digest = parse_artifact_digest(str(side.get("kernel_artifact_digest")))
             if trial.kernel_artifact_digest != kernel_digest:
@@ -625,6 +670,8 @@ class RuntimeJournalService:
                         "not observed "
                         "in visible history"
                     )
+            if side_name == "after" and experiment.get("action") == "adopt":
+                self.control.validate_adoption_trial(attempt_id, trial.id)
 
 
 __all__ = ["RuntimeJournalService"]

@@ -115,6 +115,10 @@ Artifact identities, and their nested `result` records `mode` and `input_scope` 
 `contract`). They do not satisfy the full trusted-contract evaluation required before
 `candidate_ready`; the default `{"operation":"evaluate"}` behavior remains unchanged.
 
+See the [paired input and Shape file example](evaluation.md#custom-input-file-example) for complete
+contents and the mapping from `input_kwargs` to `_make_inputs`, its return dictionary to
+`Model.forward`, and `init_kwargs` to the Model constructor. HTTP accepts contents, not file paths.
+
 An `evaluate` wire request with `comparison: {method: "abba", repeats: 2}` carries source Bundles in
 both `baseline` (A) and `candidate` (B). `comparison.repeats` defaults to 2 (range 2–20), and the
 comparison requires `mode: "full"`; `input_py` and `shapes` remain optional.
@@ -248,7 +252,46 @@ helpers are supported for a shared custom input generator and Shapes.
 | `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
 | `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
 
-`attempt-report` requires non-empty matching Runtime-owned Direction and Experiment journals. Its first successful
+The example configurations and production workspace generator set
+`campaign.optimizer.max_attempt_report_bytes` to `1048576` (1 MiB). This limits the complete
+terminal Report, including the Journals attached by the tool. Core/KDA check the assembled size
+before submission; the Runtime proxy checks it before acceptance, and the worker checks again
+when reading the file after the Session. Core/KDA also limit each `--request` JSON file to 1 MiB, counted as file bytes including
+whitespace. These are independent limits; the HTTP request-body limit and the custom-input
+source/Shape-file limits are unchanged. Existing workspace configs retain their saved value
+unless explicitly updated.
+
+### Report completion after normal model exit
+
+`campaign.optimizer.report_completion_retries` defaults to `2` (integer `0..10`).
+After a successful model invocation, Core/KDA query Runtime's `attempt_report_status` operation
+on `POST /v1/runtime/queries` with the current Attempt capability. This harness-internal query
+returns `missing` or `accepted` with the sealed Report; it is unmetered, invokes no Agate Job,
+and never treats an Agent-written file or final chat message as acceptance. Accepted Reports are
+restored locally if needed, without repeating the write-once submission.
+
+When missing, the harness starts at most that many report-only provider invocations in the same
+Attempt and workspace, pointing to the existing Journal, draft and Trace. This is a fresh provider
+conversation, not native resume, a new optimization Attempt, or permission to invent measurements.
+An unaccepted local terminal file is moved to a unique scratch backup so it cannot block resubmission.
+All invocations share the original wall-time deadline and token/credit allowance. Nonzero model exits,
+timeouts, exhausted quotas, or incomplete provider capture/usage do not trigger completion.
+`0` disables the extra invocations but still checks acceptance.
+
+The Trace retains the initial capture at its root and later captures under `continuations/001/`,
+`002/`, etc. Root `session.json` indexes `segments` and `report_completion`;
+`conversation.jsonl` combines them with segment identities, and provider usage is cumulative.
+After exhausted retries, the Worker Session ends as `report-completion-exhausted`, with no
+successful candidate. An ordinary Epoch may continue to the next Attempt; Bootstrap fails rather
+than registering a baseline. This mechanism applies to Core/KDA optimization and framework baseline,
+not problem generalization or Evolver. Pinned older Agent commits must be updated to use it.
+
+### Terminal handoff and Journal
+
+`candidate_ready` requires non-empty matching Runtime-owned Direction and Experiment journals and
+evidence-backed Findings. `blocked` and `pivot` may have empty journals and Findings when no
+Experiment was possible; give the genuine reason in the report rather than fabricate an Experiment.
+Any in-progress Direction must still be blocked or deferred first. The first successful `attempt-report`
 call publishes a write-once terminal Report. Validation or tool errors publish nothing, so the Agent
 may correct the request using `issues`, `request_schema`, and `recovery` and retry; a successful call
 must not be repeated.
@@ -269,6 +312,19 @@ the live Runtime Journal merged with authorized frozen history; only their reque
 files are written under `scratch/`. A Bootstrap Session starts without prior journal history; after it succeeds, its
 terminal journals, Kernel Trials, and Result Artifacts become the root history of ordinary Attempts
 in that Lineage.
+
+Use `record-experiment` with `action="adopt"` to select an unchanged Kernel from visible history.
+Both `before` and `after` name real Kernel Trial IDs. Unlike other actions, `adopt` allows a
+historical `after`: Runtime requires a successful ordinary full Evaluate of that exact Kernel,
+a committed matching Result Artifact, and the same operator, hardware, DSL and sealed evaluation
+contract. Existing history visibility still applies, including explicitly inherited Bootstrap
+history. Custom inputs, correctness-only checks, Profile and exploratory ABBA do not qualify.
+The Experiment records the current decision while preserving the original Trial and measurement
+identities; it does not create another measurement or change the historical Trial's disposition.
+This persisted adoption can satisfy `candidate_ready` without reevaluating the unchanged candidate.
+A different candidate needs its own qualifying evidence; a current failed full Evaluate cannot be
+overridden by adopting an earlier success. Request idempotency is scoped to Attempt and recovery
+generation, not a global prohibition on evaluating an Artifact in another Attempt.
 `list-experiments` and `load-experiment` combine the current live Runtime Journal with prior durable
 Journals; terminal Report Artifacts remain a compatibility fallback for older records. Completed Epoch history includes journals from the
 selected branch and every losing Active/Challenger branch, while branch, Epoch, Attempt, selection,
@@ -299,8 +355,8 @@ identities in the Finding itself.
 `contributing_kernel_trial_ids` is a required sorted unique array naming the historical Kernel Trials
 whose code or approach the Attempt drew content from, and is empty when it drew from none. Core and
 Runtime both check its shape; neither resolves it against visible history, because the report is an
-Agent interpretation rather than a measured fact, exactly like the Trial identities inside Experiment
-subjects. Runtime carries it into the derived Final Report, so later Attempts and the Evolver can read
+Agent interpretation rather than a measured fact. Experiment subject identities, by contrast, are
+validated against Runtime-owned Trial records. Runtime carries the contributing IDs into the derived Final Report, so later Attempts and the Evolver can read
 it.
 The Gateway defines no low-level Agate `submit` passthrough and no standalone `sol` operation.
 Measurements use Runtime-constructed `evaluate`, optionally with an exploratory comparison; SOL profiling remains available through
@@ -327,6 +383,9 @@ After a `candidate_ready` handoff is durably recorded, Runtime applies the confi
 updates the Candidate Kernel Revision with that authoritative Gateway result, and exposes it only
 through the Runtime Final Attempt Report. A missing or non-ready handoff terminates without running
 the retention comparator.
+This authoritative comparison does not create an Agent `gtrial`; never wait for it to fill the
+Experiment journal before handoff. Agent-requested ABBA has its own candidate Trial but remains
+exploratory and cannot replace the successful ordinary full Evaluate required for nomination.
 
 ```json
 {

@@ -24,6 +24,10 @@ Optimizer Runtime Tools 通过 `gateway-execute` 暴露 `check`、`dev`、`evalu
 探索性 `evaluate` 会记录测量证据，但不会直接创建 `vN` Kernel Revision。Agent 可以在一个
 Attempt 中评测多个 Candidate，并写入 Experiment Journal。通过 `candidate_ready` 提名时，
 该精确 Candidate 仍须成功完成基于可信 Evaluation Contract 的完整评测。
+这份预检证据可以来自本 Attempt，也可以通过 `adopt` Experiment 显式采纳可见历史中的兼容成功
+完整 Evaluate。Runtime 核验原始 Trial 和精确 Kernel/Result 绑定；采纳只记录当前决策，不新建
+测量，也不改变原测量归属。配置的独立 Retention 比较保持不变。不兼容的历史证据需要重新做完整
+Evaluate，无需通过修改注释来制造不同 Digest。
 
 `evaluate` 接受可选的 `mode`、`input_py` 和 `shapes`。`mode` 只能为 `full`（默认）或
 `correctness_only`；后者仅检查正确性，不测量性能，也不自动执行 SOL Profile。`input_py` 提供兼容
@@ -31,7 +35,7 @@ Agate 的 Python `_make_inputs` 生成器；`shapes` 提供以整数字符串为
 Shape Record 都是与生成器兼容的 Object。两个组件可以独立覆盖；未指定的组件继续使用封存
 Contract 中的值。可信 Reference、容差和 Gate Policy 继续生效，Agent 不会因此获得私有输入。
 
-Core 还支持 `input_path`、`shapes_path`，读取 Workspace 相对路径的 UTF-8 文件并将内容作为
+Core 与 Kernel Design Agent 还支持 `input_path`、`shapes_path`，读取 Workspace 相对路径的 UTF-8 文件并将内容作为
 `input_py`、`shapes` 上传。输入源码上限为 128 KiB，Shape 文件上限为 256 KiB；文件必须位于真实
 Workspace 目录下且为普通文件，绝对路径、路径穿越、符号链接和 `.runtime` 控制路径都会被拒绝。
 同一组件的内联形式与路径形式互斥。请求幂等键按文件内容计算，不依赖本地文件名。
@@ -53,6 +57,69 @@ Workspace 目录下且为普通文件，绝对路径、路径穿越、符号链�
 仅正确性结果不包含性能测量。这些调用不能替代 `candidate_ready`、Kernel Retention 或 Agent
 Promotion 所要求的可信 Contract 完整评测。需要完整评测时应省略输入覆盖，并设置
 `mode: "full"` 或省略 `mode`；原有默认请求与结果格式保持不变。
+
+### 自定义输入文件示例
+
+以下配套示例针对公开的向量加法 ABI：`Model.forward(left, right)`，Model 无构造参数，输入为
+两个 CUDA float32 向量。实际使用时，应根据任务公开 ABI 调整参数名、dtype、device、构造参数
+和合法尺寸；这里的演示 Case 不是私有验证 Shape。生成器沿用公共
+[VecAdd 输入示例](../examples/shared/vecadd/reference/input.py)的格式。
+
+保存为 `scratch/custom-input.py`：
+
+```python
+import torch
+
+
+def _make_inputs(num_elements: int) -> dict[str, torch.Tensor]:
+    left = torch.randn((num_elements,), device="cuda", dtype=torch.float32)
+    return {"left": left, "right": torch.randn_like(left)}
+```
+
+保存为 `scratch/custom-shapes.json`：
+
+```json
+{
+  "0": {"input_kwargs": {"num_elements": 1024}, "init_kwargs": null},
+  "1": {"input_kwargs": {"num_elements": 4097}, "init_kwargs": null}
+}
+```
+
+各字段的职责不同：
+
+- 顶层数字字符串是自定义 Case ID，不是 Tensor 维度，也不是选择同编号隐藏测试的指令。
+  多条记录表示多个 Case；`4097` 用于演示非对齐长度。
+- `input_kwargs` 通过 `_make_inputs(**input_kwargs)` 传给生成器，键名必须匹配函数参数。
+  不要把 `num_elements` 直接放在 `init_kwargs` 旁边，也不要在 JSON 里编码 Tensor。
+- 生成器返回字典，键名匹配 `Model.forward` 参数。这里的 `left`、`right` 是 Tensor，
+  不是 Shape 描述。直接返回该字典，不要返回 tuple 或额外包装成 `{"kwargs": ...}`。
+- `init_kwargs` 用于构造 `Model(**init_kwargs)`；无构造参数时用 `null` 或 `{}`。
+  它不传给输入生成器。
+- 随机种子由评测器控制，不要在生成器里调用 `torch.manual_seed` 固定种子。
+
+保存 `scratch/evaluate-custom.json`，再调用 Session 的 `gateway-execute` 工具：
+
+```json
+{
+  "operation": "evaluate",
+  "mode": "correctness_only",
+  "input_path": "scratch/custom-input.py",
+  "shapes_path": "scratch/custom-shapes.json"
+}
+```
+
+```bash
+python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/evaluate-custom.json
+```
+
+工具路径若不同，以 Session 提示的路径为准。省略 `mode` 即进行正确性与性能评测；
+这两个文件也适用于下文的 ABBA 比较。通常建议成对提供：
+只覆盖 Shapes 时，字段必须与保留的生成器兼容；只覆盖生成器时，函数必须接受保留的 Shapes
+所传参数。任何一种方式都不会暴露未覆盖的私有组件。自定义输入仍须满足公开 ABI，
+自定义测试通过也不能替代可信 Contract 的完整评测。
+
+直接使用 HTTP 时，发送 Python 文件内容作为 `input_py`、解析后的 JSON Object 作为 `shapes`。
+路径由 Core/KDA 工具展开，HTTP 端点不会根据路径去 Agent 容器中读取文件。
 
 ## 探索性 ABBA
 

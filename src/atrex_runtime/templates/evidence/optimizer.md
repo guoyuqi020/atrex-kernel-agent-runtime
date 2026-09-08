@@ -117,5 +117,19 @@ Re-derive conclusions from trusted measurements and exact source.
 Do not repeat a completed Evaluate or Profile for the same Kernel Artifact and identical
 operation-defining parameters. Recover and re-analyze the existing result instead. A failed,
 cancelled, incomplete, differently parameterized, or different-Kernel operation is distinct.
+To select an unchanged Kernel from visible history, record an Experiment with `action="adopt"`
+and the real `before` and `after` Kernel Trial IDs. Runtime validates the source Trial's successful
+ordinary full Evaluate against the same operator, hardware, DSL and sealed contract. The decision
+is new; the measurement and its Trial remain historical. Keep the exact adopted Kernel bytes in
+the candidate workspace. This recorded adoption can satisfy the `candidate_ready` precheck without
+another Evaluate. Other actions still require an `after` Trial from this logical Attempt.
+If adoption is rejected as incompatible, follow the returned error and run a qualifying full
+Evaluate; do not change a comment just to create a different Artifact identity.
+Agent-requested ABBA is exploratory and does not replace the full-Evaluate precheck. Runtime's
+authoritative retention comparison runs only after terminal handoff and creates no Agent Trial;
+never wait for it before recording an Experiment or submitting the Report.
+If no Experiment was possible, `blocked` or `pivot` may contain empty experiments and findings;
+give the genuine reason in the report and block or defer any in-progress Direction first. Do not
+invent an Experiment to satisfy a count. `candidate_ready` still requires journaled evidence.
 Private evaluator inputs remain hidden; opaque Shape identifiers and measurements must not be used
 to reconstruct them.

@@ -109,14 +109,16 @@ class AgateAuthoritativeCandidateEvaluator:
     ) -> AttemptCandidateResult:
         """Validate the nomination and optionally run an independent final Evaluate."""
         candidate_digest = ArtifactDigest(str(kernel_artifact_digest))
-        agent_evaluation = self._control.find_agent_evaluation(
+        agent_evaluation = self._control.find_candidate_evaluation(
             attempt_id,
             candidate_digest,
             gateway_result_digest=nominated_gateway_result_digest,
             recovery_generation=nominated_recovery_generation,
         )
         if agent_evaluation is None:
-            raise ValueError("nominated candidate has no matching Agent evaluation")
+            raise ValueError(
+                "nominated candidate has no matching Agent evaluation or recorded adoption"
+            )
         if not agent_evaluation.correct:
             raise ValueError("nominated candidate's Agent evaluation is not correct")
 
@@ -164,6 +166,8 @@ class AgateAuthoritativeCandidateEvaluator:
                 {
                     "kernel_artifact_digest": candidate_digest,
                     "agent_evaluation_id": agent_evaluation.id,
+                    "evaluation_attempt_id": agent_evaluation.attempt_id,
+                    "evaluation_recovery_generation": agent_evaluation.recovery_generation,
                     "gateway_result_digest": agent_evaluation.gateway_result_digest,
                     "latency_us": agent_evaluation.latency_us,
                 },
@@ -183,6 +187,8 @@ class AgateAuthoritativeCandidateEvaluator:
             "source": GatewayEvaluationSource.RUNTIME_FINAL.value,
             "kernel_artifact_digest": candidate_digest,
             "agent_evaluation_id": agent_evaluation.id,
+            "evaluation_attempt_id": agent_evaluation.attempt_id,
+            "evaluation_recovery_generation": agent_evaluation.recovery_generation,
             "recovery_generation": generation,
         }
         stage_results: list[JsonValue] = []

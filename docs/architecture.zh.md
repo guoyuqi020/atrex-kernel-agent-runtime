@@ -30,8 +30,8 @@ flowchart LR
 | Epoch | 从冻结的 Active Agent、Kernel、Runtime State 和 Evidence Checkpoint 开始的一次竞争。 |
 | Branch | 参与 Epoch 的 Active 或某个 Challenger Agent。 |
 | Trajectory | Branch 内一条独立 Kernel 搜索路径。 |
-| Attempt | Trajectory 中一个全新的 Optimizer 进程与 Session。 |
-| Session | 一次物理模型进程执行；重试创建新 Session，不覆盖逻辑历史。 |
+| Attempt | Trajectory 中一次逻辑优化，从全新的 Optimizer 进程开始。 |
+| Session | 一次 Worker 执行；基础设施恢复创建新 Session，报告补交的 Provider 调用仍归属同一 Session 和 Attempt。 |
 | Kernel Trial | 一份精确测量的实验 Kernel，不消耗 `vN`。 |
 | Kernel Revision | Lineage 内被保留并标记为 `vN` 的 Kernel。 |
 | Agent Revision | Lineage 内标记为 `agent-vN` 的 Agent Bundle。 |
@@ -100,8 +100,9 @@ Revision。Revision 祖先关系仍是树；复用和 Epoch 参赛来源单独�
 Pool 冻结后，Active 与 Challenger Branch 在 `max_parallel_branches` 限制下并发。每个 Branch
 并发运行 `Y` 条 Trajectory，每条 Trajectory 串行运行 `X` 个全新 Session Attempt。所有参与者从
 同一个 Epoch Kernel 开始，不能看到兄弟分支的进行中工作。之后 Runtime 选择最佳 Kernel，并独立
-比较 Agent Revision。因此一个 Epoch 包含 `(1 + K) × Y × X` 个 Optimizer Session 和 `K` 个
-Evolver Session，不含重试。
+比较 Agent Revision。因此一个 Epoch 包含 `(1 + K) × Y × X` 个 Optimizer Attempt 和 `K` 次
+Evolver 执行。物理 Provider 调用还可能包含基础设施重试和有上限的报告补交，均不增加配置的
+Attempt 数量。
 
 完成后的 Evidence 成为下一 Epoch Checkpoint。Optimizer 可以看到全部已完成 Epoch Branch，以及当前
 Trajectory 中更早的 Attempt；Evolver 可以看到上一完成 Epoch 的全部参赛者、所有可见历史 Agent 的

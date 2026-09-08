@@ -28,6 +28,8 @@ _RUNTIME_KEYS = {
     "ATREX_AGENT_MODEL",
     "ATREX_AGENT_REASONING_EFFORT",
     "ATREX_AGENT_SESSION_SETTINGS",
+    "ATREX_REPORT_COMPLETION_RETRIES",
+    "ATREX_ATTEMPT_REPORT_MAX_BYTES",
     "ATREX_CORE_PHASE",
     "ATREX_ATTEMPT_MANIFEST",
     "ATREX_ATTEMPT_REPORT_PATH",
@@ -62,10 +64,16 @@ class CoreOptimizerProcessConfig:
     agent_backend: str = "qodercli"
     reasoning_effort: str = "max"
     session_settings: str = ""
+    report_completion_retries: int = 2
 
     def __post_init__(self) -> None:
         if not self.command_prefix:
             raise ValueError("Optimizer command prefix cannot be empty")
+        if (
+            type(self.report_completion_retries) is not int
+            or not 0 <= self.report_completion_retries <= 10
+        ):
+            raise ValueError("Optimizer report completion retries must be an integer from 0 to 10")
         executable = Path(self.command_prefix[0])
         if not executable.is_absolute() or not executable.is_file():
             raise ValueError("Optimizer command-prefix executable must be an absolute file")

@@ -5,7 +5,6 @@ English | [中文](README.zh.md)
 The standalone Local GPU Wiki server and browser/API queries remain available.
 The Agent-facing `wiki-query` Runtime Tool is temporarily removed. The managed/temporary Agent
 shell walkthroughs below are retained as historical reference, not currently supported workflows.
-KDA's bundled KernelWiki is independent and can still be queried through its included scripts.
 
 When running from a Lima-mounted checkout, create a Linux-local environment instead of reusing the
 repository's macOS `.venv`:

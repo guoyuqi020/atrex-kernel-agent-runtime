@@ -39,6 +39,12 @@ class CoreProcessPolicy(Protocol):
     def session_settings(self) -> str: ...
 
     @property
+    def report_completion_retries(self) -> int: ...
+
+    @property
+    def max_attempt_report_bytes(self) -> int: ...
+
+    @property
     def isolated_home_environment_keys(self) -> tuple[str, ...]: ...
 
     @property
@@ -84,6 +90,8 @@ class CorePhaseResult:
             return "completed"
         if self.process.returncode == 125:
             return "usage-budget-exhausted"
+        if self.process.returncode == 127:
+            return "report-completion-exhausted"
         return f"process-exit-{self.process.returncode}"
 
 
@@ -144,6 +152,8 @@ class CorePhaseRunner:
             "ATREX_AGENT_MODEL": model or "",
             "ATREX_AGENT_REASONING_EFFORT": self._policy.reasoning_effort,
             "ATREX_AGENT_SESSION_SETTINGS": self._policy.session_settings,
+            "ATREX_REPORT_COMPLETION_RETRIES": str(self._policy.report_completion_retries),
+            "ATREX_ATTEMPT_REPORT_MAX_BYTES": str(self._policy.max_attempt_report_bytes),
             "ATREX_CORE_PHASE": phase,
             "ATREX_OPTIMIZER_REPOSITORY": str(prepared.repository),
             "ATREX_SESSION_TIMEOUT_SECONDS": str(self._policy.timeout_seconds),

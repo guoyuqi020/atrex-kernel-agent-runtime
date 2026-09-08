@@ -153,6 +153,45 @@ def test_attempt_report_is_bound_to_expected_attempt(tmp_path: Path) -> None:
     assert report.experiments[0].experiment_id == "experiment_" + "d" * 32
 
 
+def test_attempt_report_accepts_more_than_256_kib_with_1_mib_limit(tmp_path: Path) -> None:
+    attempt_id = new_attempt_id()
+    value = _value(attempt_id)
+    value["analysis"] = "Measured evidence and causal analysis. " * 14_000
+    path = tmp_path / "report.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    assert 262_144 < path.stat().st_size < 1_048_576
+
+    report = AttemptReportV12.from_file(
+        path, expected_attempt_id=attempt_id, max_bytes=1_048_576
+    )
+
+    assert report.analysis == value["analysis"]
+    # An explicitly configured smaller cap remains valid and enforced.
+    with pytest.raises(ValueError, match="Attempt report exceeds byte limit"):
+        AttemptReportV12.from_file(path, expected_attempt_id=attempt_id, max_bytes=262_144)
+
+
+@pytest.mark.parametrize("extra_byte", [False, True])
+def test_attempt_report_enforces_exact_1_mib_boundary(
+    tmp_path: Path, extra_byte: bool
+) -> None:
+    attempt_id = new_attempt_id()
+    value = _value(attempt_id)
+    path = tmp_path / "report.json"
+    content = json.dumps(value).encode("utf-8")
+    path.write_bytes(content + b" " * (1_048_576 + int(extra_byte) - len(content)))
+    assert path.stat().st_size == 1_048_576 + int(extra_byte)
+
+    if extra_byte:
+        with pytest.raises(ValueError, match="Attempt report exceeds byte limit"):
+            AttemptReportV12.from_file(path, expected_attempt_id=attempt_id, max_bytes=1_048_576)
+    else:
+        report = AttemptReportV12.from_file(
+            path, expected_attempt_id=attempt_id, max_bytes=1_048_576
+        )
+        assert report.attempt_id == attempt_id
+
+
 def test_attempt_report_models_one_sided_baseline_experiment(tmp_path: Path) -> None:
     attempt_id = new_attempt_id()
     value = _value(attempt_id)

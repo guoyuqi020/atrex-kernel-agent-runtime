@@ -99,8 +99,23 @@ class EvaluateParametersV2(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    input_py: str | None = Field(default=None, min_length=1, max_length=131_072)
-    shapes: dict[str, JsonValue] | None = None
+    input_py: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=131_072,
+        description=(
+            "Python source defining _make_inputs(**input_kwargs); return a dictionary whose keys "
+            "match Model.forward arguments. Shape input_kwargs supply the generator parameters."
+        ),
+    )
+    shapes: dict[str, JsonValue] | None = Field(
+        default=None,
+        description=(
+            "Non-empty object keyed by numeric case IDs. Each record has input_kwargs for "
+            "_make_inputs(**input_kwargs) and init_kwargs for Model construction (null or {} "
+            "when no constructor arguments are needed). These are custom cases, not hidden IDs."
+        ),
+    )
     mode: Literal["full", "correctness_only"] = "full"
     comparison: EvaluateComparisonV2 | None = None
 
@@ -300,6 +315,12 @@ class AttemptReportRequestV2(_CandidateRequestV2):
         return self
 
 
+class AttemptReportStatusRequestV2(_GatewayRequestV2):
+    """Read this Attempt generation's server-accepted terminal report for local recovery."""
+
+    operation: Literal["attempt_report_status"]
+
+
 class KernelTrialShowRequestV2(_GatewayRequestV2):
     """Read one visible Kernel Trial's Kernel and Result Artifact index."""
 
@@ -408,6 +429,7 @@ type GatewayProxyRequestV2 = Annotated[
     | HealthRequestV2
     | ConfigRequestV2
     | AttemptReportRequestV2
+    | AttemptReportStatusRequestV2
     | KernelTrialShowRequestV2
     | KernelArtifactReadRequestV2
     | ResultArtifactReadRequestV2
@@ -430,6 +452,7 @@ _AGENT_HIDDEN_REQUEST_FIELDS = _RUNTIME_OWNED_REQUEST_FIELDS | {"idempotency_key
 _RUNTIME_QUERY_OPERATION_NAMES = frozenset(
     {
         "attempt_report",
+        "attempt_report_status",
         "kernel_trial_show",
         "kernel_artifact_read",
         "result_artifact_read",
@@ -461,6 +484,7 @@ _GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
     "health": HealthRequestV2,
     "config": ConfigRequestV2,
     "attempt_report": AttemptReportRequestV2,
+    "attempt_report_status": AttemptReportStatusRequestV2,
     "kernel_trial_show": KernelTrialShowRequestV2,
     "kernel_artifact_read": KernelArtifactReadRequestV2,
     "result_artifact_read": ResultArtifactReadRequestV2,
@@ -640,6 +664,7 @@ class GatewayProxyResponseV2(BaseModel):
         "health",
         "config",
         "attempt_report",
+        "attempt_report_status",
         "kernel_trial_show",
         "kernel_artifact_read",
         "result_artifact_read",

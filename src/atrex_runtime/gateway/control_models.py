@@ -34,6 +34,7 @@ class GatewayOperation(StrEnum):
     HEALTH = "health"
     CONFIG = "config"
     ATTEMPT_REPORT = "attempt_report"
+    ATTEMPT_REPORT_STATUS = "attempt_report_status"
     # Decode historical Registry rows only; these operations are not exposed by Agent protocol.
     MEASUREMENTS = "measurements"
     KERNEL_TRIALS = "kernel_trials"

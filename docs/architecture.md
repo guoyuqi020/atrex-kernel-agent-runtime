@@ -30,8 +30,8 @@ flowchart LR
 | Epoch | One competition starting from a frozen Active Agent, Kernel, Runtime State, and Evidence checkpoint. |
 | Branch | The Active or one Challenger Agent participating in an Epoch. |
 | Trajectory | One independent Kernel-search path inside a Branch. |
-| Attempt | One fresh Optimizer process and Session in a Trajectory. |
-| Session | One physical model-backed process execution; retries create new Sessions without rewriting logical history. |
+| Attempt | One logical optimization step in a Trajectory, starting a fresh Optimizer process. |
+| Session | One Worker execution; infrastructure recovery starts another Session. Report-only provider continuations stay inside the same Session and Attempt. |
 | Kernel Trial | One exact measured experimental Kernel; it does not consume a `vN` label. |
 | Kernel Revision | A Lineage-local retained Kernel labeled `vN`. |
 | Agent Revision | A Lineage-local Agent Bundle labeled `agent-vN`. |
@@ -110,8 +110,9 @@ After the pool is frozen, Active and Challenger Branches run concurrently up to
 `max_parallel_branches`. Each Branch runs `Y` Trajectories concurrently; each Trajectory runs `X`
 fresh-session Attempts serially. All participants start from the same Epoch Kernel and cannot see
 sibling in-progress work. Runtime then selects the best Kernel and independently compares Agent
-revisions. An Epoch therefore contains `(1 + K) × Y × X` Optimizer Sessions and `K` Evolver
-Sessions, excluding retries.
+revisions. An Epoch therefore contains `(1 + K) × Y × X` Optimizer Attempts and `K` Evolver
+executions. Physical provider calls may also include infrastructure retries and bounded report-only
+continuations; neither increases the configured Attempt count.
 
 Completed Evidence becomes the next Epoch checkpoint. Optimizers see every completed Epoch Branch,
 plus only earlier Attempts in their own in-progress Trajectory. Evolver sees every participant in the

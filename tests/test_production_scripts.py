@@ -116,6 +116,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert settings.campaign.max_parallel_branches == 2
     assert settings.campaign.gate_policy.production_gate is True
     assert settings.campaign.optimizer.agent_backend == "codex"
+    assert settings.campaign.optimizer.max_attempt_report_bytes == 1_048_576
     assert settings.campaign.optimizer.timeout_seconds == 28_800
     assert settings.campaign.optimizer.bootstrap_timeout_seconds == 14_400
     assert settings.campaign.evolver.agent_backend == "codex"

@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
@@ -53,10 +51,11 @@ def test_complete_kda_bundle_can_be_sealed(exported_bundle: Path, tmp_path: Path
     sealed = artifacts.verify(candidate.optimizer_digest).payload_path
     for path in (
         "src/main.py", "src/runtime_tools.py", "CLAUDE.md", "prompts/episode.md",
-        "skills/KernelWiki/SKILL.md", "skills/ncu-report-skill/SKILL.md",
+        "skills/ncu-report-skill/SKILL.md",
     ):
         assert (sealed / path).is_file(), f"Bundle is missing {path}; initialize KDA submodules"
     assert not list(sealed.rglob(".git"))
+    assert not (sealed / "skills/KernelWiki").exists()
 
 
 @pytest.mark.parametrize("backend", ("claude", "codex"))
@@ -80,40 +79,19 @@ def test_kda_skills_are_seeded_and_installed_per_session(
     assert (repository / "CLAUDE.md").is_file()
     assert not (workspace / "CLAUDE.md").exists()
     discovery = home / (".claude/skills" if backend == "claude" else ".agents/skills")
-    for name in ("KernelWiki", "ncu-report-skill"):
+    for name in ("ncu-report-skill",):
         source = workspace / "skills" / name / "SKILL.md"
         installed = discovery / name / "SKILL.md"
         assert installed.read_bytes() == source.read_bytes()
         assert installed.stat().st_ino != source.stat().st_ino
+    assert not (workspace / "skills/KernelWiki").exists()
+    assert not (discovery / "KernelWiki").exists()
     assert result["WORKSPACE_ROOT"] == str(workspace)
     config = json.loads((repository / "atrex-agent.json").read_text())
     assert config["prompts"]["optimization_attempt"] == "prompts/episode.md"
 
 
-@pytest.mark.parametrize(
-    "arguments", (
-        ("scripts/query.py", "--tag", "tma", "--compact", "--limit", "1"),
-        ("scripts/get_page.py", "kernel-flash-attention-4", "--body-only"),
-    ),
-)
-def test_packaged_wiki_can_query_without_a_service(
-    exported_bundle: Path, arguments: tuple[str, ...],
-) -> None:
-    pytest.importorskip("yaml", reason="install Runtime dependencies")
-    result = subprocess.run(
-        (sys.executable, *arguments),
-        cwd=exported_bundle / "skills/KernelWiki",
-        env={
-            **{key: value for key, value in os.environ.items() if key != "BLACKWELL_WIKI_ROOT"},
-            "PYTHONDONTWRITEBYTECODE": "1",
-        },
-        capture_output=True, text=True, timeout=30, check=False,
-    )
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.strip()
-
-
-def test_git_import_expands_both_real_pinned_skills(
+def test_git_import_expands_real_pinned_profiler_skill(
     exported_bundle: Path, tmp_path: Path,
 ) -> None:
     executable = shutil.which("git")
@@ -128,7 +106,7 @@ def test_git_import_expands_both_real_pinned_skills(
             capture_output=True, text=True, timeout=30,
         ).stdout.strip()
 
-    skills = ("skills/KernelWiki", "skills/ncu-report-skill")
+    skills = ("skills/ncu-report-skill",)
     approved = {name: (KDA / name).as_uri() for name in skills}
     commits = {name: git("rev-parse", "HEAD", cwd=KDA / name) for name in skills}
     (repository / ".gitmodules").write_text("".join(
@@ -164,3 +142,4 @@ def test_git_import_expands_both_real_pinned_skills(
     for name in skills:
         assert (sealed / name / "SKILL.md").read_bytes() == (KDA / name / "SKILL.md").read_bytes()
     assert not list(sealed.rglob(".git"))
+    assert not (sealed / "skills/KernelWiki").exists()

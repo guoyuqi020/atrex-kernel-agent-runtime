@@ -28,6 +28,11 @@ An exploratory `evaluate` records measurement evidence, but it does not create a
 revision. The Agent may evaluate several Candidates in one Attempt and record them in the
 Experiment Journal. A `candidate_ready` nomination still requires a successful full evaluation of
 the exact Candidate against the trusted Evaluation Contract.
+That precheck may come from this Attempt or from an explicit `adopt` Experiment referencing a
+compatible successful full Evaluate in visible history. Runtime verifies the original Trial and
+exact Kernel/Result binding; adoption neither creates a new measurement nor changes its ownership.
+The configured independent retention comparison is unchanged. Incompatible historical evidence
+requires a new full Evaluate; modifying comments to obtain another digest is unnecessary.
 
 `evaluate` accepts optional `mode`, `input_py`, and `shapes`. `mode` is `full` (the default) or
 `correctness_only`; the latter runs correctness checks without performance measurement or automatic
@@ -37,7 +42,7 @@ is an object compatible with that generator. Either component can be overridden 
 an omitted component continues to come from the sealed Contract. The trusted reference,
 tolerances, and gate policy remain in force, and the private inputs are never returned to the Agent.
 
-Core additionally accepts `input_path` and `shapes_path` as workspace-relative UTF-8 files and
+Core and Kernel Design Agent additionally accept `input_path` and `shapes_path` as workspace-relative UTF-8 files and
 uploads their contents as `input_py` and `shapes`. The input source limit is 128 KiB and the Shape
 file limit is 256 KiB. Files must be regular files under real workspace directories; absolute or
 traversal paths, symbolic links, and `.runtime` control paths are rejected. Inline and path forms
@@ -62,6 +67,72 @@ overridden, otherwise `contract`). Correctness-only results contain no performan
 These calls cannot replace the full trusted-contract evaluation required for `candidate_ready`,
 Kernel retention, or Agent promotion. Omit overrides and use `mode: "full"` (or omit `mode`) for that
 evaluation; the existing default request and result format remain unchanged.
+
+### Custom input file example
+
+This paired example is for a public vector-add ABI, `Model.forward(left, right)`, with no Model
+constructor arguments and two CUDA float32 vectors. Adapt names, dtypes, devices, constructor
+arguments, and legal sizes to your task's public ABI; these illustrative cases are not private
+validation Shapes. The generator follows the shared [VecAdd input example](../examples/shared/vecadd/reference/input.py).
+
+Save `scratch/custom-input.py`:
+
+```python
+import torch
+
+
+def _make_inputs(num_elements: int) -> dict[str, torch.Tensor]:
+    left = torch.randn((num_elements,), device="cuda", dtype=torch.float32)
+    return {"left": left, "right": torch.randn_like(left)}
+```
+
+Save `scratch/custom-shapes.json`:
+
+```json
+{
+  "0": {"input_kwargs": {"num_elements": 1024}, "init_kwargs": null},
+  "1": {"input_kwargs": {"num_elements": 4097}, "init_kwargs": null}
+}
+```
+
+The fields have different roles:
+
+- Each numeric string is a local test-case ID, not a tensor dimension or a request to select a
+  hidden case. Multiple records define multiple cases; `4097` illustrates a non-aligned length.
+- `input_kwargs` is passed to `_make_inputs(**input_kwargs)`. Its keys must match the generator's
+  arguments; do not put `num_elements` directly beside `init_kwargs` or encode tensors here.
+- The generator returns a dictionary whose keys match `Model.forward` arguments. Here `left`
+  and `right` are tensors, not Shape descriptions. Return this dictionary directly, not a tuple
+  or an extra `{"kwargs": ...}` wrapper.
+- `init_kwargs` supplies `Model(**init_kwargs)` constructor arguments; use `null` or `{}` when
+  there are none. It is separate from the input-generator arguments.
+- Let the evaluator control random seeds; do not call `torch.manual_seed` inside the generator.
+
+Save `scratch/evaluate-custom.json`, then invoke the session's `gateway-execute` tool:
+
+```json
+{
+  "operation": "evaluate",
+  "mode": "correctness_only",
+  "input_path": "scratch/custom-input.py",
+  "shapes_path": "scratch/custom-shapes.json"
+}
+```
+
+```bash
+python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/evaluate-custom.json
+```
+
+Use the tool path printed in your Session if it differs. Omit `mode` for correctness plus timing;
+the same two files also work with the ABBA comparison
+below. Usually supply both files together. A Shapes-only override requires keys compatible with
+the retained generator, and a generator-only override must accept the retained Shapes' arguments;
+neither override exposes that private component. Custom input values must still satisfy the public
+ABI, and a passing custom test does not replace full trusted-contract evaluation.
+
+For direct HTTP clients, send the Python file's contents as `input_py` and the parsed JSON object
+as `shapes`. File paths are expanded by the Core/KDA tool, not read from the Agent container by the
+HTTP endpoint.
 
 ## Exploratory ABBA
 

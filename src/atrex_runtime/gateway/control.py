@@ -199,6 +199,7 @@ _UNMETERED_OPERATIONS = frozenset(
     {
         GatewayOperation.DEV,
         GatewayOperation.ATTEMPT_REPORT,
+        GatewayOperation.ATTEMPT_REPORT_STATUS,
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.RESULT_ARTIFACT_READ,
@@ -218,6 +219,7 @@ _UNMETERED_OPERATIONS = frozenset(
 _IMPLICIT_RUNTIME_OPERATIONS = frozenset(
     {
         GatewayOperation.ATTEMPT_REPORT,
+        GatewayOperation.ATTEMPT_REPORT_STATUS,
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.RESULT_ARTIFACT_READ,
@@ -1103,10 +1105,11 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     # the selected `after` subject. The exact action remains
                     # preserved in experiment_json.
                     disposition_by_action["baseline"] = "continue"
-                if action not in disposition_by_action:
+                if action != "adopt" and action not in disposition_by_action:
                     raise ValueError("Kernel Trial annotation action is invalid")
-                disposition = disposition_by_action[action]
                 if after is None:
+                    if action == "adopt":
+                        raise ValueError("Kernel Trial adoption requires before and after evidence")
                     if before is not None:
                         raise ValueError(
                             "Kernel Trial annotation before and after must both be present or null"
@@ -1171,7 +1174,9 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 if not isinstance(trial_id, str):
                     raise ValueError("Kernel Trial annotation requires a Trial ID")
                 after_trial = visible_trials.get(trial_id)
-                if after_trial is None or after_trial.attempt_id != attempt_id:
+                if after_trial is None or (
+                    after_trial.attempt_id != attempt_id and action != "adopt"
+                ):
                     raise ValueError(
                         "Kernel Trial annotation after Trial does not match this logical "
                         "Attempt's visible Trials"
@@ -1204,6 +1209,12 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                             "Kernel Trial annotation references a candidate/result pair not "
                             "observed for the selected Trial"
                         )
+                if action == "adopt":
+                    # Adoption records current reasoning, not a new measurement or a
+                    # disposition change to the Trial that supplied historical evidence.
+                    self.validate_adoption_trial(attempt_id, trial_id)
+                    continue
+                disposition = disposition_by_action[action]
                 payload = json.dumps(
                     dict(experiment),
                     ensure_ascii=False,
@@ -1363,18 +1374,27 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         self,
         attempt_ids: tuple[AttemptId, ...],
         operation: GatewayOperation,
+        *,
+        recovery_generation: int | None = None,
     ) -> tuple[tuple[AttemptId, str, ArtifactDigest], ...]:
         """List committed operation Artifacts in deterministic Attempt and call order."""
         if not attempt_ids:
             return ()
         placeholders = ",".join("?" for _value in attempt_ids)
         parameters: tuple[object, ...] = (*attempt_ids, operation.value)
+        generation_filter = ""
+        if recovery_generation is not None:
+            if recovery_generation < 0:
+                raise ValueError("operation Artifact recovery generation cannot be negative")
+            generation_filter = " AND recovery_generation = ?"
+            parameters = (*parameters, recovery_generation)
         with self._lock:
             rows = self._connection.execute(
                 f"""SELECT attempt_id, idempotency_key, result_artifact_digest
                     FROM gateway_operations
                     WHERE attempt_id IN ({placeholders}) AND operation = ?
                       AND result_artifact_digest IS NOT NULL
+                      {generation_filter}
                     ORDER BY attempt_id, recovery_generation, created_at, idempotency_key""",
                 parameters,
             ).fetchall()
@@ -1812,6 +1832,114 @@ class SqliteGatewayControl(AttemptOutcomeSource):
     ) -> tuple[GatewayMeasurementRecord, ...]:
         """Return bounded normalized rows for one frozen Evidence projection."""
         return self.list_measurements(attempt_ids, limit=limit)
+
+    def _evaluation_identity(self, attempt_id: AttemptId) -> tuple[str, str, Dsl, ArtifactDigest]:
+        """Resolve immutable inputs, environment and DSL, including Bootstrap subjects."""
+        try:
+            attempt = self._registry.get_attempt(attempt_id)
+        except KeyError:
+            subject = self.get_bootstrap_subject(attempt_id)
+            return (
+                subject.operator, subject.hardware_target, subject.dsl,
+                subject.evaluation_contract_digest,
+            )
+        epoch = self._registry.get_epoch(attempt.epoch_id)
+        lineage = self._registry.get_lineage(epoch.lineage_id)
+        campaign = self._registry.get_campaign(lineage.campaign_id)
+        return (
+            campaign.operator, campaign.hardware_target, lineage.dsl,
+            campaign.evaluation_contract_digest,
+        )
+
+    def validate_adoption_trial(
+        self, attempt_id: AttemptId, trial_id: str,
+    ) -> GatewayEvaluationRecord:
+        """Resolve reusable full-Evaluate evidence without manufacturing a measurement.
+
+        Visibility includes this Lineage's history and its explicitly inherited Bootstrap.
+        The sealed contract binds reference, input generator, Shapes, evaluation options and
+        dependencies. An exploratory check, comparison or unfinished operation is not enough.
+        """
+        _, visible_attempt_ids = self.visible_kernel_trial_attempt_ids(attempt_id)
+        trial = next(
+            (item for item in self.list_kernel_trials(visible_attempt_ids, limit=5_000)
+             if item.id == trial_id),
+            None,
+        )
+        if trial is None:
+            raise ValueError("Adoption Kernel Trial is outside this Attempt's visible history")
+        if self._evaluation_identity(attempt_id) != self._evaluation_identity(trial.attempt_id):
+            raise ValueError(
+                "Adoption requires matching operator, hardware target, DSL and sealed evaluation "
+                "contract; run an ordinary full evaluate under the current contract instead"
+            )
+        evaluation = self.find_agent_evaluation(
+            trial.attempt_id, trial.kernel_artifact_digest,
+            recovery_generation=trial.recovery_generation,
+        )
+        if evaluation is None or not evaluation.correct:
+            raise ValueError(
+                "Adoption requires a successful ordinary full evaluate for the selected Trial; "
+                "Profile, ABBA, custom-input and correctness_only results do not qualify"
+            )
+        if not any(
+            observation.operation is GatewayOperation.EVALUATE
+            and observation.idempotency_key == evaluation.idempotency_key
+            and observation.gateway_result_digest == evaluation.gateway_result_digest
+            and observation.result_artifact_digest is not None
+            for observation in trial.observations
+        ):
+            raise ValueError(
+                "Adoption requires a completed Evaluate with a recorded Result Artifact"
+            )
+        return evaluation
+
+    def find_candidate_evaluation(
+        self,
+        attempt_id: AttemptId,
+        kernel_artifact_digest: ArtifactDigest,
+        *,
+        gateway_result_digest: ArtifactDigest | None = None,
+        recovery_generation: int | None = None,
+    ) -> GatewayEvaluationRecord | None:
+        """Resolve a fresh precheck or an explicit Runtime-journaled adoption.
+
+        Never turn a historical measurement into a current-Attempt Evaluation row. In
+        particular, a current failed full Evaluate must not be hidden by an older success.
+        """
+        latest = self.find_agent_evaluation(
+            attempt_id, kernel_artifact_digest, recovery_generation=recovery_generation,
+        )
+        if latest is not None and (
+            not latest.correct
+            or gateway_result_digest is None
+            or latest.gateway_result_digest == gateway_result_digest
+        ):
+            return latest
+        if gateway_result_digest is not None:
+            evaluation = self.find_agent_evaluation(
+                attempt_id, kernel_artifact_digest,
+                gateway_result_digest=gateway_result_digest,
+                recovery_generation=recovery_generation,
+            )
+            if evaluation is not None:
+                return evaluation
+        for experiment in reversed(self.list_experiments(attempt_id)):
+            after = experiment.get("after")
+            if experiment.get("action") != "adopt" or not isinstance(after, Mapping):
+                continue
+            if after.get("kernel_artifact_digest") != kernel_artifact_digest:
+                continue
+            trial_id = after.get("kernel_trial_id")
+            if not isinstance(trial_id, str):
+                raise InfrastructureError("Persisted adoption has no source Kernel Trial")
+            adopted = self.validate_adoption_trial(attempt_id, trial_id)
+            if (
+                gateway_result_digest is None
+                or adopted.gateway_result_digest == gateway_result_digest
+            ):
+                return adopted
+        return None
 
     def find_agent_evaluation(
         self,

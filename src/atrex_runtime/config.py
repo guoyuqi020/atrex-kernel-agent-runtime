@@ -262,6 +262,7 @@ class CoreOptimizerWorkerSettings(BaseModel):
     session_trace_relative_path: str | None = None
     token_usage_report_relative_path: str
     max_attempt_report_bytes: int = Field(gt=0)
+    report_completion_retries: int = Field(default=2, strict=True, ge=0, le=10)
     timeout_seconds: float = Field(gt=0)
     bootstrap_timeout_seconds: float = Field(default=14_400.0, gt=0)
     terminate_grace_seconds: float = Field(gt=0)

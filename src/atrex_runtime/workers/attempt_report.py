@@ -59,7 +59,7 @@ class AttemptExperimentV8(BaseModel):
     after: AttemptExperimentSubjectV1 | None
     evidence: str = Field(min_length=1)
     analysis: str = Field(min_length=1)
-    action: Literal["keep_after", "restore_before", "abandon_direction", "baseline"]
+    action: Literal["keep_after", "restore_before", "abandon_direction", "baseline", "adopt"]
 
     @field_validator(
         "recorded_at",
@@ -94,9 +94,9 @@ class AttemptExperimentV8(BaseModel):
             return self
         if (self.before is None) != (self.after is None):
             raise ValueError("Experiment before and after must both be present or both be null")
-        if self.action in {"keep_after", "restore_before"} and self.before is None:
+        if self.action in {"keep_after", "restore_before", "adopt"} and self.before is None:
             raise ValueError(
-                "Experiment keep_after/restore_before requires before and after evidence"
+                f"Experiment {self.action} requires before and after evidence"
             )
         return self
 
@@ -360,15 +360,15 @@ class AttemptReportV12(BaseModel):
     profile_evidence: AttemptProfileEvidenceV1 | None
     analysis: str = Field(min_length=1)
     knowledge_used: tuple[AttemptKnowledgeUseV1, ...]
-    findings: tuple[AttemptFindingV1, ...] = Field(min_length=1)
+    findings: tuple[AttemptFindingV1, ...]
     # Defaulted because sealed historical reports predating this field are re-parsed
     # strictly by composition/bootstrap.py.
     contributing_kernel_trial_ids: tuple[
         Annotated[str, Field(pattern=r"^gtrial_[0-9a-f]{32}$")], ...
     ] = Field(default=(), max_length=64)
     blocker: str | None
-    experiments: tuple[AttemptExperimentV8, ...] = Field(min_length=1)
-    direction_events: tuple[AttemptDirectionEventV1, ...] = Field(min_length=1)
+    experiments: tuple[AttemptExperimentV8, ...]
+    direction_events: tuple[AttemptDirectionEventV1, ...]
 
     @field_validator("hypothesis", "analysis")
     @classmethod
@@ -407,6 +407,10 @@ class AttemptReportV12(BaseModel):
                 raise ValueError("candidate_ready requires final_candidate")
             if self.blocker is not None:
                 raise ValueError("candidate_ready cannot declare a blocker")
+            if not self.experiments or not self.findings or not self.direction_events:
+                raise ValueError(
+                    "candidate_ready requires non-empty experiments, findings, and direction_events"
+                )
         elif self.status == "pivot":
             if self.final_candidate is not None:
                 raise ValueError("pivot cannot nominate final_candidate")

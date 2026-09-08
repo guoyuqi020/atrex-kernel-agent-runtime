@@ -4,7 +4,7 @@
 
 独立 Local GPU Wiki 服务、浏览器与 HTTP 查询仍可使用。
 Agent 的 `wiki-query` Runtime Tool 已暂时移除；下文托管/临时 Agent Shell 的工具调用流程
-仅作为历史参考保留，当前不再支持。KDA 内置 KernelWiki 不受影响，仍可通过其自带脚本查询。
+仅作为历史参考保留，当前不再支持。
 
 从 Lima 挂载的工作区运行时，应创建 Linux 本地虚拟环境，不要复用仓库中的 macOS
 `.venv`：
