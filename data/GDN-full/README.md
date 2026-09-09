@@ -19,13 +19,18 @@ Restored content:
 are identical to the cleaned package; only `UPSTREAM_PROVENANCE.json` differs between the
 seed trees. No optimized implementation, winning Kernel, Session history or memory is imported.
 Reference, inputs, adapter, shape domains/cases, Metadata, Roofline, Gate policy and Agent
-commits remain unchanged. Campaign creation keys are distinct from the cleaned package.
+commits match the cleaned package. Campaign creation keys are distinct from the cleaned package.
 
 Defaults remain **L20D / CuteDSL / Claude**, five Epochs, three Attempts per trajectory,
 100M tokens per Optimizer/Bootstrap Session, and the same seven-arm ablation plan.
 “Full” means original input content, not access to hidden cases. Runtime/Core/KDA prompt
 projection is unchanged: provenance metadata such as `range_evidence` and `value_evidence`
-may still be omitted by the existing Agent formatter. No Agent code or pinned commit is changed.
+may still be omitted by the existing Agent formatter.
+
+Both Campaign definitions pin KDA commit `41af4a45ca4155254f3c2e8d501ae28a5fb5bb62`,
+matching GDN. It bundles neither KernelWiki nor ncu-report-skill; no Skill submodule checkout
+is needed and `allowed_submodules` is empty. Existing workspaces keep their frozen Agent
+revisions. Local uncommitted KDA edits are not included in the Bundle.
 
 In Lima Ubuntu, with the Linux Runtime environment activated:
 

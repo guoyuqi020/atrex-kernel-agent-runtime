@@ -17,14 +17,18 @@
 `7695093a901dc50f595ba0b0cd95df273882a3f14c5c457f6b050789d9437df9`。
 Kernel 源码与清理版完全相同，两个 seed 树仅 `UPSTREAM_PROVENANCE.json` 不同。
 没有导入优化后的实现、获胜 Kernel、历史 Session 或实验经验。Reference、输入生成器、
-adapter、输入范围及测试用例、Metadata、Roofline、Gate 策略和 Agent commit 均不变。
+adapter、输入范围及测试用例、Metadata、Roofline、Gate 策略和 Agent commit 均与清理版相同。
 Campaign 使用独立 creation key，不复用清理版的实验身份。
 
 默认仍为 **L20D / CuteDSL / Claude**、5 个 Epoch、每条轨迹每轮 3 次 Attempt、
 Optimizer/Bootstrap 每 Session 100M tokens，七臂消融方案不变。
 “不屏蔽”指输入恢复原始内容，并不开放隐藏测试集，也不改变 Runtime/Core/KDA 的 Prompt
 投影：例如 `range_evidence`、`value_evidence` 等元数据仍可能被已有 Agent 格式化逻辑省略。
-本次不修改 Agent 实现或其固定 commit。
+
+两个 Campaign 定义与 GDN 一样，固定 KDA commit `41af4a45ca4155254f3c2e8d501ae28a5fb5bb62`。
+此版本不包含 KernelWiki 和 ncu-report-skill，无需初始化 Skill 子模块，
+`allowed_submodules` 为空。已有工作区仍保留冻结的 Agent revision；本地未提交的 KDA
+修改不会进入 Bundle。
 
 在 Lima Ubuntu 中激活 Linux Runtime 环境后执行：
 

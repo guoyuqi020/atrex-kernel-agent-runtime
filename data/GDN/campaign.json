@@ -5,7 +5,7 @@
   "hardware_target": "L20D",
   "evaluation_contract": "evaluation-contract.json",
   "shape_train": "task/shape_train.json",
-  "base_revision": {"commit": "ec2f3f24bd787174667be71ade0f28314b96c82b"},
+  "base_revision": {"commit": "41af4a45ca4155254f3c2e8d501ae28a5fb5bb62"},
   "challenger_count": 1,
   "challenger_start_epoch": 2,
   "trajectories_per_branch": 1,

@@ -85,6 +85,12 @@ The workspace holds `task/` and `initial-evidence/` snapshots, `source/` (the re
 do not optimize here), generated `runtime.json` / `evaluation-contract.json`, Campaign definitions,
 and `prepared.json` (content hashes, pinned commits, and local validation results).
 
+Both Campaign definitions pin KDA commit `41af4a45ca4155254f3c2e8d501ae28a5fb5bb62`.
+This version bundles neither KernelWiki nor ncu-report-skill and needs no Skill submodule
+checkout; the Runtime template's `allowed_submodules` is empty. New workspaces use this
+pin, while existing workspaces keep their frozen Agent revisions. Local uncommitted KDA
+edits are not included in the Bundle.
+
 Copied from these locations inside `GDN_AKA_REPRO_20260907`:
 
 - `gdn_fi_initial_seed/task/` and `gdn_fi_initial_seed/source/`.

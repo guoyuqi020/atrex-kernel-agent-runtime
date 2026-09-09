@@ -21,6 +21,40 @@ def _files(root: Path) -> dict[str, bytes]:
             for path in root.rglob("*") if path.is_file()}
 
 
+@pytest.mark.parametrize("kit", ["GDN", "GDN-full"])
+def test_gdn_pinned_optimizer_builds_without_skill_submodules(tmp_path, kit):
+    from atrex_runtime.artifacts.local import LocalArtifactStore
+    from atrex_runtime.composition.bootstrap import build_optimizer_base_loader
+    from atrex_runtime.domain.models import Dsl
+
+    inputs = REPOSITORY / "data" / kit
+    settings = RuntimeSettings.from_file(inputs / "runtime.template.json")
+    source = settings.kernel_agent.base_source
+    assert source is not None
+    assert source.allowed_submodules == {}
+    if not (Path(source.repository) / ".git").exists():
+        pytest.skip("KDA Optimizer submodule is not initialized")
+    specs = [CampaignSpecV3.from_file(inputs / name) for name in (
+        "campaign.json", "ablation-campaign.json",
+    )]
+    commit = specs[0].base_revision.commit
+    assert all(spec.base_revision.commit == commit for spec in specs)
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    loader = build_optimizer_base_loader(settings, artifacts)
+    assert loader is not None
+    result = loader.build_candidate(Dsl.CUTEDSL, commit)
+    provenance = artifacts.verify(result.source_provenance_digest).payload_path / "value.json"
+    value = json.loads(provenance.read_text())
+    assert value["commit"] == commit
+    assert value["submodules"] == []
+    sealed = artifacts.verify(result.candidate.optimizer_digest).payload_path
+    assert (sealed / "src/main.py").is_file()
+    assert (sealed / "skills/README.md").is_file()
+    assert not (sealed / ".gitmodules").exists()
+    for name in ("KernelWiki", "ncu-report-skill"):
+        assert not (sealed / "skills" / name).exists()
+
+
 @pytest.mark.parametrize(("kit", "custom_workspace"), [
     ("GDN", True), ("GDN-full", True), ("GDN-full", False),
 ])

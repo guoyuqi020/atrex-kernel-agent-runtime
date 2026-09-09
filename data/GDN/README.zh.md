@@ -77,6 +77,11 @@ Attempt 进度实时写入各臂日志，臂完成时打印时间戳。失败不
 生成的 `runtime.json` / `evaluation-contract.json`、Campaign 定义，以及记录文件哈希、
 固定 commit 和本地校验结果的 `prepared.json`。
 
+两个 Campaign 定义均固定 KDA commit `41af4a45ca4155254f3c2e8d501ae28a5fb5bb62`。
+此版本不包含 KernelWiki 和 ncu-report-skill，构建无需初始化这两个 Skill 子模块；
+Runtime 模板的 `allowed_submodules` 为空。新工作区使用此版本，已有工作区仍使用冻结的
+Agent revision。本地未提交的 KDA 修改不会进入 Bundle。
+
 原始资料来自 `GDN_AKA_REPRO_20260907` 中的：
 
 - `gdn_fi_initial_seed/task/`、`gdn_fi_initial_seed/source/`。
