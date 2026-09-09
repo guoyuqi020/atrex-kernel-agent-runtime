@@ -3,6 +3,9 @@
 Task inputs and templates: [`data/GDN`](../../data/GDN/README.md).
 Default workspace: `workspaces/GDN`; no generated files are written to `data/`.
 
+Reusable launch Skill: [`skills/atrex-gdn-launch`](../../skills/atrex-gdn-launch/SKILL.md),
+including the Lima service-management reference and Agent UI metadata.
+
 Use `prepare.py --inputs data/GDN-full` for the [original-hint input variant](../../data/GDN-full/README.md).
 When `--workspace` is omitted, preparation uses `workspaces/<input directory name>`.
 For this variant, pass `--workspace workspaces/GDN-full` to every `run.py` command.
@@ -22,6 +25,7 @@ these scripts do not start or stop it. Preparation does not run Agents or evalua
 Run roles use existing workspace snapshots; they never silently re-prepare changed task inputs.
 
 中文：输入和模板只放在 [`data/GDN`](../../data/GDN/README.zh.md)，脚本放在此目录。
+可复用的[启动 Skill](../../skills/atrex-gdn-launch/SKILL.md) 也随仓库发布，不依赖作者的本机副本。
 保留原始提示的版本位于 [`data/GDN-full`](../../data/GDN-full/README.zh.md)，通过
 `prepare.py --inputs data/GDN-full` 选择，默认输出到 `workspaces/GDN-full`。
 实际配置、源码副本、数据库、Session、凭据、日志及结果均位于 `workspaces/GDN`。

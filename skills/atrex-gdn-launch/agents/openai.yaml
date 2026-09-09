@@ -1,0 +1,4 @@
+interface:
+  display_name: "GDN 源码树优化启动"
+  short_description: "在 Lima 启动或恢复 GDN 源码树七臂消融，保留冻结身份与历史"
+  default_prompt: "使用 $atrex-gdn-launch 检查 Lima 环境并启动 GDN 源码树七臂消融实验，不修改已有任务。"
