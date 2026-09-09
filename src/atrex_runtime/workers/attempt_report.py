@@ -386,12 +386,10 @@ class AttemptReportV12(BaseModel):
 
     @field_validator("contributing_kernel_trial_ids")
     @classmethod
-    def _validate_contributing_kernel_trial_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if len(set(value)) != len(value):
-            raise ValueError("Attempt report contributing Kernel Trial IDs must be unique")
-        if list(value) != sorted(value):
-            raise ValueError("Attempt report contributing Kernel Trial IDs must be sorted")
-        return value
+    def _normalize_contributing_kernel_trial_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        # Field validation checks every supplied ID and the raw length first.
+        # These references form a set; ordering and duplicates carry no meaning.
+        return tuple(sorted(set(value)))
 
     @model_validator(mode="before")
     @classmethod

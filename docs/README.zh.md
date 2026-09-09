@@ -1,5 +1,7 @@
 # Atrex Kernel Agent Runtime 文档
 
+- [多文件 Kernel 源码树](source-trees.zh.md)：源码清单、编辑边界、整树评测和准备示例。
+
 [English](README.md) | 中文
 
 ## 使用与运维

@@ -154,6 +154,9 @@ def build_campaign_runtime(
         artifacts = LocalArtifactStore(settings.storage.artifacts_root)
         agate = settings.agate
         client, request_builder = load_agate_sdk(build_agate_connection(agate, environment))
+        from .gateway import source_tree_client
+
+        client = source_tree_client(settings, client)
         if measurement_runner is None and _requires_evaluate_measurement(campaign):
             measurement_runner = AgateKernelMeasurementRunner(
                 client,

@@ -1092,11 +1092,6 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
         {
             "kernel_artifact_digest": evaluated.kernel_artifact_digest,
             "kernel_trial_id": evaluated.kernel_trial_id,
-            "result_artifact_digest": evaluated.result_artifact_digest,
-        },
-        {
-            "kernel_artifact_digest": evaluated.kernel_artifact_digest,
-            "kernel_trial_id": evaluated.kernel_trial_id,
             "result_artifact_digest": profiled.result_artifact_digest,
         },
     ]
@@ -1591,6 +1586,42 @@ async def test_candidate_ready_needs_an_evaluate_for_the_exact_sealed_candidate(
 
     control.close()
     registry.close()
+
+
+@pytest.mark.anyio
+async def test_attempt_report_api_seals_canonical_contributing_trials(tmp_path: Path) -> None:
+    registry, control, attempt, capability, service, adapter = _service(tmp_path)
+    try:
+        await service.execute(capability.token, _request(attempt))
+        first, second = "gtrial_" + "a" * 32, "gtrial_" + "b" * 32
+        report = _report_value(attempt.id)
+        report["contributing_kernel_trial_ids"] = [second, first, second]
+        payload = {
+            **json.loads(_request(attempt)),
+            "operation": "attempt_report",
+            "idempotency_key": "canonical-report",
+            "report": report,
+        }
+        accepted = await service.execute(
+            capability.token, json.dumps(payload).encode(), operation_scope="runtime",
+        )
+        receipt = cast(dict[str, Any], accepted.result)
+        assert receipt["status"] == "registered"
+        artifacts = LocalArtifactStore(tmp_path / "artifacts")
+        sealed = artifacts.verify(receipt["report_artifact_digest"])
+        stored = json.loads((sealed.payload_path / "value.json").read_text())
+        assert stored["contributing_kernel_trial_ids"] == [first, second]
+
+        # Canonical and noncanonical representations name the same report.
+        report["contributing_kernel_trial_ids"] = [first, second]
+        repeated = await service.execute(
+            capability.token, json.dumps(payload).encode(), operation_scope="runtime",
+        )
+        assert repeated == accepted
+        assert len(adapter.requests) == 1
+    finally:
+        control.close()
+        registry.close()
 
 
 def _direction_event(

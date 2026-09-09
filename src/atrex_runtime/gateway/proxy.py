@@ -1278,7 +1278,11 @@ class GatewayProxyService:
         # Evaluation forwards only the contract's candidate file, so anything else in
         # the bundle would change this address without changing what was measured.
         selected = candidate_path_for_attempt(self._contexts, attempt_id)
-        if selected is not None:
+        source_contract = (
+            None if self._contexts is None or selected is None
+            else self._contexts.resolve(attempt_id).kernel_source
+        )
+        if selected is not None and source_contract is None:
             decoded = [(path, content) for path, content in decoded if path == selected]
             if not decoded:
                 raise ValueError(f"candidate bundle is missing {selected}")
@@ -1290,6 +1294,8 @@ class GatewayProxyService:
                 target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 target.write_bytes(content)
                 os.chmod(target, 0o600)
+            if source_contract is not None:
+                return source_contract.seal(temporary, self._artifacts)
             return self._artifacts.put_directory(temporary, ArtifactKind.KERNEL)
         finally:
             shutil.rmtree(temporary, ignore_errors=True)

@@ -168,9 +168,20 @@ class CampaignLineageSpecV2(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    baseline_kernel: Path
+    baseline_kernel: Path | None = None
+    source_manifest: Path | None = None
+    source_repository: Path | None = None
     initial_evidence: Path
     models: LineageAgentModelsV1 = LineageAgentModelsV1()
+
+    @model_validator(mode="after")
+    def _source(self) -> CampaignLineageSpecV2:
+        if self.source_manifest is None:
+            if self.baseline_kernel is None or self.source_repository is not None:
+                raise ValueError("provide baseline_kernel or source_manifest + source_repository")
+        elif self.source_repository is None or self.baseline_kernel is not None:
+            raise ValueError("source_manifest needs source_repository and replaces baseline_kernel")
+        return self
 
 
 class CampaignSpecV3(BaseModel):
@@ -230,6 +241,8 @@ class CampaignSpecV3(BaseModel):
     def lineage_spec(self, dsl: Dsl) -> _LineageBootstrapSpec:
         """Project one selected DSL into the recoverable internal lineage operation."""
         lineage = self.lineages[dsl]
+        if lineage.baseline_kernel is None:
+            raise ValueError("source-tree baseline must be imported before lineage projection")
         return _LineageBootstrapSpec(
             creation_key=self.creation_key,
             operator=self.operator,
@@ -264,7 +277,21 @@ class CampaignSpecV3(BaseModel):
         lineages = {
             dsl: lineage.model_copy(
                 update={
-                    "baseline_kernel": resolve(lineage.baseline_kernel),
+                    "baseline_kernel": (
+                        None
+                        if lineage.baseline_kernel is None
+                        else resolve(lineage.baseline_kernel)
+                    ),
+                    "source_manifest": (
+                        None
+                        if lineage.source_manifest is None
+                        else resolve(lineage.source_manifest)
+                    ),
+                    "source_repository": (
+                        None
+                        if lineage.source_repository is None
+                        else resolve(lineage.source_repository)
+                    ),
                     "initial_evidence": resolve(lineage.initial_evidence),
                 }
             )
@@ -415,6 +442,30 @@ class CampaignBootstrapper:
         input_contract = AgateEvaluationContractV1.model_validate(
             self._read_json(spec.evaluation_contract, "evaluation contract")
         )
+        # Import from exact Git revisions once, then use CAS paths for every worker.
+        from .kernel_sources import import_source_tree
+
+        sources = dict(input_contract.kernel_sources)
+        lineages = dict(spec.lineages)
+        for dsl, lineage in spec.lineages.items():
+            if lineage.source_manifest is None:
+                continue
+            if lineage.source_repository is None:
+                raise AssertionError("validated source manifest lost its repository")
+            source = import_source_tree(
+                lineage.source_manifest,
+                lineage.source_repository,
+                self._artifacts,
+                candidate_path=input_contract.candidate_path,
+            )
+            sources[dsl] = source
+            lineages[dsl] = lineage.model_copy(
+                update={
+                    "baseline_kernel": self._artifacts.verify(source.seed_digest).payload_path,
+                }
+            )
+        input_contract = input_contract.model_copy(update={"kernel_sources": sources})
+        spec = spec.model_copy(update={"lineages": lineages})
         if input_contract.agate_gpu not in {None, environment.gpu}:
             raise ValueError(
                 "evaluation contract Agate GPU disagrees with the resolved environment"

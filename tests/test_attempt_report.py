@@ -506,22 +506,26 @@ def test_sealed_report_without_contributing_trials_defaults_to_none(tmp_path: Pa
     assert _load(tmp_path, value, attempt_id).contributing_kernel_trial_ids == ()
 
 
-def test_attempt_report_accepts_sorted_unique_contributing_trials(tmp_path: Path) -> None:
+@pytest.mark.parametrize("suffixes", ["", "ab", "ba", "baba", "a" * 64])
+def test_attempt_report_normalizes_contributing_trials(tmp_path: Path, suffixes: str) -> None:
     attempt_id = new_attempt_id()
-    trials = ["gtrial_" + "a" * 32, "gtrial_" + "b" * 32]
+    trials = ["gtrial_" + suffix * 32 for suffix in suffixes]
     value = {**_value(attempt_id), "contributing_kernel_trial_ids": trials}
 
     report = _load(tmp_path, value, attempt_id)
 
-    assert report.contributing_kernel_trial_ids == tuple(trials)
+    assert report.contributing_kernel_trial_ids == tuple(sorted(set(trials)))
+    assert report.model_dump(mode="json")["contributing_kernel_trial_ids"] == sorted(set(trials))
+    assert value["contributing_kernel_trial_ids"] == trials
 
 
 @pytest.mark.parametrize(
     ("trials", "message"),
     [
         (["kerneltrial_" + "a" * 32], "String should match pattern"),
-        (["gtrial_" + "a" * 32, "gtrial_" + "a" * 32], "must be unique"),
-        (["gtrial_" + "b" * 32, "gtrial_" + "a" * 32], "must be sorted"),
+        (["not-a-trial", "not-a-trial"], "String should match pattern"),
+        (["gtrial_" + "a" * 32] * 65, "at most 64"),
+        ([f"gtrial_{index:032x}" for index in range(65)], "at most 64"),
     ],
 )
 def test_attempt_report_rejects_invalid_contributing_trials(

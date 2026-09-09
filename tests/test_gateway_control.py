@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 from conftest import NOW, digest, seed_lineage
 
+from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.domain.errors import (
     DirectionConcurrencyError,
     InfrastructureError,
@@ -45,6 +46,7 @@ from atrex_runtime.gateway.control import (
     BootstrapRunStatus,
     GatewayEvaluationSource,
 )
+from atrex_runtime.gateway.journals import RuntimeJournalService
 from atrex_runtime.ports import RunAttemptRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
@@ -217,7 +219,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
             (experiment,),
             profile_supporting_results=({**profile_reference, "operation": "dev"},),
         )
-    with pytest.raises(ValueError, match="absent from the visible Experiment journal"):
+    with pytest.raises(ValueError, match="does not match the declared Gateway operation"):
         control.record_kernel_trial_annotations(
             attempt.id,
             (experiment,),
@@ -1377,7 +1379,7 @@ def test_optimizer_history_inherits_completed_bootstrap_subject(tmp_path: Path) 
     registry.close()
 
 
-def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_path: Path) -> None:
+def test_profile_evidence_can_cite_visible_bootstrap_without_an_experiment(tmp_path: Path) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     current = _insert_attempt(registry)
     epoch = registry.get_epoch(current.epoch_id)
@@ -1445,25 +1447,6 @@ def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_pat
         "kernel_trial_id": historical_trial_id,
         "result_artifact_digests": [str(historical_profile_result)],
     }
-    control.append_experiment(
-        historical_attempt_id,
-        "historical-experiment-1",
-        {
-            "experiment_id": "experiment_" + "7" * 32,
-            "sequence": 1,
-            "recorded_at": NOW_DATETIME.isoformat(),
-            "direction_id": "direction_" + "7" * 32,
-            "name": "establish the profiled baseline",
-            "hypothesis": "the seed is memory bound",
-            "change": "kept the supplied seed unchanged",
-            "before": None,
-            "after": historical_subject,
-            "evidence": "historical-profile-1",
-            "analysis": "the baseline is memory bound",
-            "action": "baseline",
-        },
-        recovery_generation=0,
-    )
 
     capability = control.issue(
         current.id,
@@ -1524,14 +1507,24 @@ def test_profile_evidence_can_cite_an_earlier_visible_attempt_experiment(tmp_pat
         "result_artifact_digest": str(historical_profile_result),
     }
 
-    assert control.live_visible_experiments(current.id)[0]["after"] == historical_subject
+    assert control.live_visible_experiments(current.id) == ()
+    journals = RuntimeJournalService(control, LocalArtifactStore(tmp_path / "artifacts"))
+    identity = {
+        key: value for key, value in historical_profile_reference.items() if key != "operation"
+    }
+    for reporting_attempt in (historical_attempt_id, current.id):
+        # The Bootstrap itself and a later Attempt both cite the observation directly.
+        assert identity in journals._citable_profile_results(reporting_attempt)
+        assert control.record_kernel_trial_annotations(
+            reporting_attempt, (), profile_supporting_results=(historical_profile_reference,),
+        ) == ()
     annotations = control.record_kernel_trial_annotations(
         current.id,
         (current_experiment,),
         profile_supporting_results=(historical_profile_reference,),
     )
     assert len(annotations) == 1
-    with pytest.raises(ValueError, match="absent from the visible Experiment journal"):
+    with pytest.raises(ValueError, match="does not match the declared Gateway operation"):
         control.record_kernel_trial_annotations(
             current.id,
             (current_experiment,),

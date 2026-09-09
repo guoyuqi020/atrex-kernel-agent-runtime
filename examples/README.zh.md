@@ -6,6 +6,9 @@
   Helper；该目录本身不是可运行流程。
 - [`bootstrap/`](bootstrap/README.zh.md)：通过 Core、Runtime Tools、配置选择的 Agent Backend 和远端 Agate
   真实运行单 DSL VecAdd Campaign Bootstrap。
+- [`source-tree/`](source-tree/README.zh.md)：用 GDN 风格 Source Manifest 和 ATREX 算子资料
+  准备多文件源码 Campaign，固定适配器，并明确声明可编辑范围。
+  包括与单文件生产一致的七个 Campaign 消融实例及公共启动入口。
 - [`lineage/`](lineage/README.zh.md)：Bootstrap 一个 Triton VecAdd Lineage，并按可配置的
   Challenger、Trajectory 和串行 Attempt 数运行一个 Epoch。
 - [`evolution/`](evolution/README.zh.md)：运行三个 Epoch，每个 Branch 一次 Attempt，并仅在前

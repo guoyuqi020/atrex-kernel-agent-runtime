@@ -1,5 +1,11 @@
 # Evidence input
 
+Kernel Artifacts may contain a multi-file source tree, not just `kernel.py`. Inspect the
+complete file list and read the relevant files through Runtime tools. Optimizer workspaces
+place that tree directly in `work/kernel/`; Runtime injects its fixed adapter and editable-root
+rules. Evolving the Agent does not change those rules. Historical reuse restores the entire
+Kernel Artifact, including its locked support files, not just its entrypoint.
+
 Runtime injects this frozen view. Missing participants, Sessions, history, or State are unavailable;
 do not infer them.
 

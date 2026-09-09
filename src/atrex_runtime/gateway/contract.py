@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, AttemptId
 from ..domain.models import Dsl, KernelRevision
+from ..kernel_sources import KernelSourceContract
 from ..registry.base import Registry
 from .control import SqliteGatewayControl
 from .environment import AcceleratorBackend
@@ -82,6 +83,9 @@ class AgateEvaluationContractV1(BaseModel):
     atrex_bench_version: str | None = None
     runner_overrides: dict[str, JsonValue] = Field(default_factory=dict)
     production_gate: bool = False
+    kernel_sources: dict[Dsl, KernelSourceContract] = Field(
+        default_factory=dict, exclude_if=lambda value: not value
+    )
 
     @field_validator("candidate_path")
     @classmethod
@@ -154,6 +158,10 @@ class AgateEvaluationContext:
     dsl: Dsl
     contract: AgateEvaluationContractV1
     evaluation_contract_digest: ArtifactDigest | None = None
+
+    @property
+    def kernel_source(self) -> KernelSourceContract | None:
+        return self.contract.kernel_sources.get(self.dsl)
 
     @property
     def agate_gpu(self) -> str:

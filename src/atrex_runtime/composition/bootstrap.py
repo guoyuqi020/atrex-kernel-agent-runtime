@@ -64,7 +64,7 @@ from .campaign import (
     build_core_process_config,
     build_worker_launcher,
 )
-from .gateway import build_authoritative_candidate_evaluator
+from .gateway import build_authoritative_candidate_evaluator, source_tree_client
 
 
 def build_optimizer_base_loader(
@@ -179,7 +179,7 @@ def build_lineage_seeder(
             limits=settings.kernel_agent.bundle_limits(),
         ),
         AgateLineageSeedEvaluator(
-            client,
+            source_tree_client(settings, client),
             request_builder,
             registry,
             artifacts,
@@ -492,9 +492,7 @@ class CoreLineageBaselineGenerator:
                 )
                 if result.finish_reason.startswith("process-exit-"):
                     terminal_reason = result.finish_reason
-                    raise InfrastructureError(
-                        f"Core lineage baseline {result.finish_reason}"
-                    )
+                    raise InfrastructureError(f"Core lineage baseline {result.finish_reason}")
                 if result.finish_reason != "completed":
                     terminal_reason = result.finish_reason
                     raise RuntimeError(f"Core lineage baseline {result.finish_reason}")
@@ -772,10 +770,7 @@ class CoreLineageBaselineGenerator:
         referenced_bindings: set[tuple[str, ArtifactDigest]] = set()
         for experiment in report.experiments:
             for subject in (experiment.before, experiment.after):
-                if (
-                    subject is not None
-                    and subject.kernel_artifact_digest == candidate_digest
-                ):
+                if subject is not None and subject.kernel_artifact_digest == candidate_digest:
                     referenced_bindings.update(
                         (subject.kernel_trial_id, result)
                         for result in subject.result_artifact_digests

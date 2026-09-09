@@ -51,23 +51,32 @@ def test_complete_kda_bundle_can_be_sealed(exported_bundle: Path, tmp_path: Path
     sealed = artifacts.verify(candidate.optimizer_digest).payload_path
     for path in (
         "src/main.py", "src/runtime_tools.py", "CLAUDE.md", "prompts/episode.md",
-        "skills/ncu-report-skill/SKILL.md",
+        "skills/README.md",
     ):
-        assert (sealed / path).is_file(), f"Bundle is missing {path}; initialize KDA submodules"
+        assert (sealed / path).is_file(), f"Bundle is missing {path}"
     assert not list(sealed.rglob(".git"))
-    assert not (sealed / "skills/KernelWiki").exists()
+    assert not list((sealed / "skills").rglob("SKILL.md"))
+    assert not (sealed / ".gitmodules").exists()
 
 
 @pytest.mark.parametrize("backend", ("claude", "codex"))
 @pytest.mark.parametrize("phase", ("optimization_attempt", "framework_baseline"))
+@pytest.mark.parametrize("custom_skill", (False, True))
 def test_kda_skills_are_seeded_and_installed_per_session(
-    exported_bundle: Path, tmp_path: Path, backend: str, phase: str,
+    exported_bundle: Path, tmp_path: Path, backend: str, phase: str, custom_skill: bool,
 ) -> None:
     workspace = tmp_path / "workspace"
     repository = workspace / "agent/optimizer"
     shutil.copytree(exported_bundle, repository)
     initialize_reusable_agent_state(workspace, repository)
     remove_optimizer_state_seeds(repository)
+    if custom_skill:
+        skill = workspace / "skills/example-method"
+        skill.mkdir()
+        (skill / "SKILL.md").write_text(
+            "---\nname: example-method\ndescription: A reusable test procedure.\n---\n"
+            "Use the supplied task and tool contracts.\n"
+        )
     home = workspace / "sessions/agent-home"
     home.mkdir(parents=True)
     result = install_optimizer_extensions(
@@ -79,19 +88,21 @@ def test_kda_skills_are_seeded_and_installed_per_session(
     assert (repository / "CLAUDE.md").is_file()
     assert not (workspace / "CLAUDE.md").exists()
     discovery = home / (".claude/skills" if backend == "claude" else ".agents/skills")
-    for name in ("ncu-report-skill",):
+    for name in (("example-method",) if custom_skill else ()):
         source = workspace / "skills" / name / "SKILL.md"
         installed = discovery / name / "SKILL.md"
         assert installed.read_bytes() == source.read_bytes()
         assert installed.stat().st_ino != source.stat().st_ino
-    assert not (workspace / "skills/KernelWiki").exists()
-    assert not (discovery / "KernelWiki").exists()
+    assert len(list(discovery.rglob("SKILL.md"))) == int(custom_skill)
+    for name in ("KernelWiki", "ncu-report-skill"):
+        assert not (workspace / "skills" / name).exists()
+        assert not (discovery / name).exists()
     assert result["WORKSPACE_ROOT"] == str(workspace)
     config = json.loads((repository / "atrex-agent.json").read_text())
     assert config["prompts"]["optimization_attempt"] == "prompts/episode.md"
 
 
-def test_git_import_expands_real_pinned_profiler_skill(
+def test_git_import_seals_kda_without_skill_submodules(
     exported_bundle: Path, tmp_path: Path,
 ) -> None:
     executable = shutil.which("git")
@@ -106,25 +117,14 @@ def test_git_import_expands_real_pinned_profiler_skill(
             capture_output=True, text=True, timeout=30,
         ).stdout.strip()
 
-    skills = ("skills/ncu-report-skill",)
-    approved = {name: (KDA / name).as_uri() for name in skills}
-    commits = {name: git("rev-parse", "HEAD", cwd=KDA / name) for name in skills}
-    (repository / ".gitmodules").write_text("".join(
-        f'[submodule "{name}"]\n\tpath = {name}\n\turl = {approved[name]}\n'
-        for name in skills
-    ))
+    assert not (repository / ".gitmodules").exists()
     git("init")
-    git("add", "--", ".", *(f":(exclude){name}" for name in skills))
-    for name in skills:
-        git("update-index", "--add", "--cacheinfo", f"160000,{commits[name]},{name}")
+    git("add", "--", ".")
     git(
         "-c", "user.name=Bundle Test", "-c", "user.email=bundle@example.test",
         "-c", "commit.gpgsign=false", "-c", "core.hooksPath=/dev/null",
         "commit", "-m", "Temporary migration test snapshot",
     )
-    for name in skills:
-        shutil.rmtree(repository / name)
-    git("-c", "protocol.file.allow=always", "submodule", "update", "--init", "--recursive")
     settings = KernelAgentSettings.model_validate_json(
         KDA_CONFIG.read_text(),
     )
@@ -132,14 +132,13 @@ def test_git_import_expands_real_pinned_profiler_skill(
     loader = GitOptimizerBaseLoader(
         artifacts, KernelAgentRevisionBuilder(artifacts, limits=settings.bundle_limits()),
         repository=repository.as_uri(), git_executable=executable,
-        timeout_seconds=30, max_archive_bytes=268435456, allowed_submodules=approved,
+        timeout_seconds=30, max_archive_bytes=268435456,
     )
     result = loader.build_candidate(Dsl.TRITON, git("rev-parse", "HEAD"))
     provenance = artifacts.verify(result.source_provenance_digest).payload_path / "value.json"
     value = json.loads(provenance.read_text())
-    assert {item["path"]: item["commit"] for item in value["submodules"]} == commits
+    assert value["submodules"] == []
     sealed = artifacts.verify(result.candidate.optimizer_digest).payload_path
-    for name in skills:
-        assert (sealed / name / "SKILL.md").read_bytes() == (KDA / name / "SKILL.md").read_bytes()
+    assert (sealed / "skills/README.md").read_bytes() == (KDA / "skills/README.md").read_bytes()
+    assert not list((sealed / "skills").rglob("SKILL.md"))
     assert not list(sealed.rglob(".git"))
-    assert not (sealed / "skills/KernelWiki").exists()

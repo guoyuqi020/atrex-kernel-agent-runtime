@@ -11,6 +11,7 @@ from ..domain.ids import ArtifactDigest, AttemptId
 from ..domain.models import Dsl
 from ..filesystem import regular_file_map
 from ..registry.base import Registry
+from .contract import AgateEvaluationContextResolver
 from .control import SqliteGatewayControl
 
 
@@ -42,11 +43,13 @@ class RegistryCandidateDiffValidator:
         artifacts: LocalArtifactStore,
         policy: CandidateDiffPolicy,
         bootstrap_subjects: SqliteGatewayControl | None = None,
+        contexts: AgateEvaluationContextResolver | None = None,
     ) -> None:
         self._registry = registry
         self._artifacts = artifacts
         self._policy = policy
         self._bootstrap_subjects = bootstrap_subjects
+        self._contexts = contexts
 
     def validate(self, attempt_id: AttemptId, candidate_digest: ArtifactDigest) -> None:
         """Validate one candidate against its ordinary Attempt or Bootstrap input."""
@@ -70,6 +73,12 @@ class RegistryCandidateDiffValidator:
         after = self._artifacts.verify(candidate_digest)
         if before.kind is not ArtifactKind.KERNEL or after.kind is not ArtifactKind.KERNEL:
             raise ValueError("Candidate diff policy requires Kernel artifacts")
+        source = (
+            None if self._contexts is None else self._contexts.resolve(attempt_id).kernel_source
+        )
+        if source is not None:
+            source.validate_tree(after.payload_path)
+            return
         before_files = regular_file_map(before.payload_path)
         after_files = regular_file_map(after.payload_path)
         changed = {

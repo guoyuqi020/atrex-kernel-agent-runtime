@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import cast
 
 from ..artifacts.local import LocalArtifactStore
 from ..config import RuntimeSettings
@@ -16,6 +17,23 @@ from ..gateway.finalization import (
 )
 from ..gateway.production_policy import ProductionKernelPolicy
 from ..registry.base import Registry
+
+
+def source_tree_client(settings: RuntimeSettings, client: AgateClient) -> AgateClient:
+    """Use the deployment's pinned evaluator for multi-file logical Evaluate jobs."""
+    from ..gateway.abba import CommitPinnedAtrexBenchEvaluator
+    from ..gateway.source_tree import SourceTreeAgateClient
+
+    if isinstance(client, SourceTreeAgateClient):
+        return client
+    gate = settings.gate_policy or (
+        None if settings.campaign is None else settings.campaign.gate_policy
+    )
+    evaluator = None
+    if gate is not None:
+        options = gate.evaluator.model_dump(exclude={"agate_package_version"})
+        evaluator = CommitPinnedAtrexBenchEvaluator(**options)
+    return cast(AgateClient, SourceTreeAgateClient(client, evaluator))
 
 
 def compose_authoritative_candidate_evaluator(
@@ -32,7 +50,7 @@ def compose_authoritative_candidate_evaluator(
     campaign = settings.campaign
     gate_policy = settings.gate_policy or (None if campaign is None else campaign.gate_policy)
     return AgateAuthoritativeCandidateEvaluator(
-        client,
+        source_tree_client(settings, client),
         request_builder,
         RegistryAgateEvaluationContextResolver(registry, artifacts, control),
         artifacts,

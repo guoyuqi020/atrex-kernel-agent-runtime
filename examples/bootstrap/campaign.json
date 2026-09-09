@@ -6,7 +6,7 @@
   "evaluation_contract": "../shared/vecadd/evaluation-contract.json",
   "agent_problem": "../shared/vecadd/agent-problem.json",
   "base_revision": {
-    "commit": "ec2f3f24bd787174667be71ade0f28314b96c82b"
+    "commit": "41af4a45ca4155254f3c2e8d501ae28a5fb5bb62"
   },
   "challenger_count": 1,
   "challenger_start_epoch": 1,

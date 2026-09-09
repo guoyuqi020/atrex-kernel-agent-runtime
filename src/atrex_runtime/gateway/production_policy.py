@@ -15,6 +15,7 @@ from typing import Protocol
 from ..artifacts.local import LocalArtifactStore
 from ..domain.ids import ArtifactDigest, AttemptId
 from ..domain.models import Dsl
+from ..kernel_sources import KernelSourceContract
 from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContextResolver
 
@@ -93,35 +94,69 @@ class CandidateProductionValidator(Protocol):
 class ProductionKernelPolicy:
     """Mechanically enforce self-contained, single-DSL production Kernels."""
 
-    def validate(self, root: Path, candidate_path: str, dsl: Dsl) -> None:
+    def validate(
+        self,
+        root: Path,
+        candidate_path: str,
+        dsl: Dsl,
+        source_contract: KernelSourceContract | None = None,
+    ) -> None:
         """Fail closed with every mechanically detected policy violation."""
-        violations = self.violations(root, candidate_path, dsl)
+        violations = self.violations(root, candidate_path, dsl, source_contract)
         if violations:
             raise ValueError("production gate rejected candidate: " + "; ".join(violations))
 
-    def violations(self, root: Path, candidate_path: str, dsl: Dsl) -> tuple[str, ...]:
+    def violations(
+        self,
+        root: Path,
+        candidate_path: str,
+        dsl: Dsl,
+        source_contract: KernelSourceContract | None = None,
+    ) -> tuple[str, ...]:
         kernel_path = root.joinpath(*candidate_path.split("/"))
         if kernel_path.is_symlink() or not kernel_path.is_file():
             return (f"candidate source is missing: {candidate_path}",)
         source = kernel_path.read_text(encoding="utf-8", errors="replace")
+        local_imports: set[str] = set()
         try:
             tree = ast.parse(source, filename=candidate_path)
+            if source_contract is not None:
+                sources = source_contract.validate_tree(root)
+                editable = {
+                    path: text for path, text in sources.items() if source_contract.editable(path)
+                }
+                tree = ast.Module(body=[], type_ignores=[])
+                for path, text in editable.items():
+                    if path.endswith(".py"):
+                        tree.body.extend(ast.parse(text, filename=path).body)
+                source = "\n".join(editable.values())
+                package = root / source_contract.package_root
+                local_imports = {
+                    path.name if path.is_dir() else path.stem
+                    for path in package.iterdir()
+                    if path.is_dir() or path.suffix == ".py"
+                }
         except SyntaxError as error:
             return (f"candidate source is not valid Python: {error.msg} (line {error.lineno})",)
 
         errors: list[str] = []
-        roots, relative_import = _import_roots(tree)
-        if relative_import:
+        roots, relative_import = _import_roots(tree, include_relative=source_contract is None)
+        if relative_import and source_contract is None:
             errors.append("relative/local-module imports are not self-contained")
         for name in sorted(roots & _DYNAMIC_LOADING_IMPORTS):
             errors.append(f"dynamic external-code loading is forbidden: {name}")
-        allowed = _STDLIB_IMPORTS | _ALLOWED_IMPORTS[dsl]
+        allowed = _STDLIB_IMPORTS | _ALLOWED_IMPORTS[dsl] | local_imports
         for name in sorted(roots - allowed):
             errors.append(f"third-party dependency is not approved for {dsl.value}: {name}")
 
         errors.extend(_torch_compute_violations(tree))
         policy_source = _code_without_prose(source)
-        markers = _framework_markers(policy_source, source)
+        marker_source, raw_marker_source = policy_source, source
+        if source_contract is not None:
+            adapter = kernel_path.read_text(encoding="utf-8")
+            marker_source += "\n" + _code_without_prose(adapter)
+            raw_marker_source += "\n" + adapter
+        markers = _framework_markers(marker_source, raw_marker_source)
         if not markers[dsl]:
             if dsl is Dsl.CUDA:
                 detected_loaders = tuple(
@@ -161,6 +196,10 @@ class ProductionKernelPolicy:
             ),
         ):
             matched = _matched_tokens(pattern, policy_source)
+            if source_contract is not None and "third-party kernel/operator" in message:
+                matched = tuple(
+                    token for token in matched if token.split(" ", 1)[0] not in local_imports
+                )
             if matched:
                 errors.append(f"{message}: {', '.join(matched)}")
 
@@ -213,6 +252,7 @@ class RegistryProductionKernelValidator:
             resolved.root,
             context.contract.candidate_path,
             context.dsl,
+            context.kernel_source,
         )
 
 
@@ -259,7 +299,7 @@ def _matched_tokens(pattern: str, source: str, *, limit: int = 5) -> tuple[str, 
     return (*descriptors[:limit], f"and {len(descriptors) - limit} more")
 
 
-def _import_roots(tree: ast.AST) -> tuple[set[str], bool]:
+def _import_roots(tree: ast.AST, *, include_relative: bool = True) -> tuple[set[str], bool]:
     roots: set[str] = set()
     relative = False
     for node in ast.walk(tree):
@@ -267,7 +307,7 @@ def _import_roots(tree: ast.AST) -> tuple[set[str], bool]:
             roots.update(alias.name.split(".", 1)[0] for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
             relative = relative or bool(node.level)
-            if node.module:
+            if node.module and (include_relative or not node.level):
                 roots.add(node.module.split(".", 1)[0])
     return roots, relative
 

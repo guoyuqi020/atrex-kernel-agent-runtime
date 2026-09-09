@@ -138,7 +138,7 @@ class CorePhaseRunner:
         phase: str,
         model: str | None = None,
     ) -> dict[str, str]:
-        self._project_agent_config(prepared, model=model)
+        self._project_agent_config(prepared, model=model, phase=phase)
         usage_unit: UsageUnit = (
             "credits" if self._policy.agent_backend == "qodercli" else "provider_tokens"
         )
@@ -175,7 +175,9 @@ class CorePhaseRunner:
         environment["HOME"] = str(prepared.agent_home)
         return environment
 
-    def _project_agent_config(self, prepared: PreparedCorePhase, *, model: str | None) -> None:
+    def _project_agent_config(
+        self, prepared: PreparedCorePhase, *, model: str | None, phase: str
+    ) -> None:
         """Expose the effective binding in the workspace copy, never the sealed Source."""
         repository = prepared.repository
         path = repository / "atrex-agent.json"
@@ -206,6 +208,9 @@ class CorePhaseRunner:
         temporary: Path | None = None
         try:
             repository.chmod(mode | stat.S_IWUSR)
+            source_instructions = prepared.root / ".runtime/source-instructions.md"
+            if phase == "framework_baseline" and source_instructions.is_file():
+                self._project_bootstrap_prompts(prepared, value, source_instructions)
             with tempfile.NamedTemporaryFile(
                 mode="w", encoding="utf-8", dir=repository, prefix=".agent-config-", delete=False
             ) as stream:
@@ -217,6 +222,41 @@ class CorePhaseRunner:
             if temporary is not None:
                 temporary.unlink(missing_ok=True)
             repository.chmod(mode)
+
+    @staticmethod
+    def _project_bootstrap_prompts(
+        prepared: PreparedCorePhase, value: dict[str, object], source_instructions: Path
+    ) -> None:
+        """Append task rules without modifying the Bundle or inherited prompt State.
+
+        Core/KDA use one prompt_root for both phase prompts and tool fragments,
+        so project all referenced files into a read-only session-local directory.
+        Only the framework-baseline prompt receives the Runtime source rules.
+        """
+        projected = Path(tempfile.mkdtemp(prefix=".bootstrap-prompts-", dir=prepared.repository))
+        for section in ("prompts", "prompt_fragments"):
+            paths = value.get(section)
+            if not isinstance(paths, dict):
+                raise InfrastructureError(f"Core {section} must be a mapping")
+            for index, (name, relative) in enumerate(paths.items()):
+                if not isinstance(relative, str) or not relative.startswith("prompts/"):
+                    raise InfrastructureError("Core prompt must be under workspace prompts/")
+                source = prepared.root / relative
+                if (
+                    source.is_symlink()
+                    or not source.is_file()
+                    or not source.resolve().is_relative_to(prepared.root / "prompts")
+                ):
+                    raise InfrastructureError("Core prompt must be a workspace-local regular file")
+                text = source.read_text(encoding="utf-8")
+                if section == "prompts" and name == "framework_baseline":
+                    text = text.rstrip() + "\n\n" + source_instructions.read_text(encoding="utf-8")
+                target = projected / f"{section}-{index}.md"
+                target.write_text(text, encoding="utf-8")
+                target.chmod(0o400)
+                paths[name] = target.relative_to(prepared.repository).as_posix()
+        projected.chmod(0o500)
+        value["prompt_root"] = "repository"
 
     def run(
         self,

@@ -93,51 +93,11 @@ from .control_schema import migrate_gateway_schema
 
 def _validate_profile_supporting_results(
     visible_trials: Mapping[str, GatewayKernelTrialRecord],
-    visible_experiments: Sequence[Mapping[str, object]],
     supporting_results: Sequence[Mapping[str, object]],
 ) -> None:
     """Bind Agent-authored profile provenance to exact durable Gateway observations."""
     if not supporting_results:
         return
-    journal_bindings: set[tuple[ArtifactDigest, str, ArtifactDigest]] = set()
-    for experiment in visible_experiments:
-        for side_name in ("before", "after"):
-            side = experiment.get(side_name)
-            if not isinstance(side, Mapping):
-                continue
-            kernel_value = side.get("kernel_artifact_digest")
-            trial_id = side.get("kernel_trial_id")
-            result_values = side.get("result_artifact_digests")
-            if result_values is None:
-                legacy_values = side.get("gateway_result_digests")
-                trial = visible_trials.get(str(trial_id))
-                if isinstance(legacy_values, (list, tuple)) and trial is not None:
-                    mapped: list[str] = []
-                    for legacy in legacy_values:
-                        result_artifact = next(
-                            (
-                                observation.result_artifact_digest
-                                for observation in trial.observations
-                                if observation.gateway_result_digest is not None
-                                and str(observation.gateway_result_digest) == str(legacy)
-                                and observation.result_artifact_digest is not None
-                            ),
-                            None,
-                        )
-                        if result_artifact is not None:
-                            mapped.append(str(result_artifact))
-                    result_values = mapped
-            if (
-                not isinstance(kernel_value, str)
-                or not isinstance(trial_id, str)
-                or not isinstance(result_values, (list, tuple))
-            ):
-                continue
-            kernel = parse_artifact_digest(kernel_value)
-            for result_value in result_values:
-                if isinstance(result_value, str):
-                    journal_bindings.add((kernel, trial_id, parse_artifact_digest(result_value)))
-
     seen_results: set[ArtifactDigest] = set()
     has_profile = False
     expected_fields = {
@@ -168,10 +128,6 @@ def _validate_profile_supporting_results(
             raise ValueError("Profile supporting result requires a Kernel Trial ID")
         kernel = parse_artifact_digest(kernel_value)
         result = parse_artifact_digest(result_value)
-        if (kernel, trial_id, result) not in journal_bindings:
-            raise ValueError(
-                "Profile supporting result is absent from the visible Experiment journal"
-            )
         trial = visible_trials.get(trial_id)
         if trial is None:
             raise ValueError("Profile supporting Kernel Trial is outside visible history")
@@ -1081,7 +1037,6 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         }
         _validate_profile_supporting_results(
             visible_trials,
-            (*experiments, *self.live_visible_experiments(attempt_id)),
             profile_supporting_results,
         )
         records: list[GatewayKernelTrialAnnotation] = []

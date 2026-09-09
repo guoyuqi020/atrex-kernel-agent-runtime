@@ -198,6 +198,10 @@ def open_temporary_optimizer_dev_shell(
             problem,
             ArtifactKind.AGENT_PROBLEM,
         )
+        if lineage_spec.baseline_kernel is None:
+            raise ValueError(
+                "temporary dev-shell requires baseline_kernel; bootstrap source-tree tasks first"
+            )
         input_kernel_digest = artifacts.put_directory(
             lineage_spec.baseline_kernel,
             ArtifactKind.KERNEL,

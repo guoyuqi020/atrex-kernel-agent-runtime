@@ -1,0 +1,23 @@
+{
+  "schema_version": 3,
+  "creation_key": "gdn-source-tree",
+  "operator": "chunk_gated_delta_rule",
+  "hardware_target": "REPLACE_WITH_SM103_CAPABLE_AGATE_ENV",
+  "evaluation_contract": "evaluation-contract.json",
+  "shape_train": "shape_train.json",
+  "base_revision": {
+    "commit": "41af4a45ca4155254f3c2e8d501ae28a5fb5bb62"
+  },
+  "challenger_count": 1,
+  "challenger_start_epoch": 2,
+  "first_epoch_same_agent": true,
+  "trajectories_per_branch": 1,
+  "attempts_per_trajectory": 3,
+  "lineages": {
+    "cutedsl": {
+      "source_manifest": "source_manifest.json",
+      "source_repository": "source",
+      "initial_evidence": "initial-evidence"
+    }
+  }
+}

@@ -224,6 +224,10 @@ class CoreOptimizerSessionDriver:
         """
         working = prepared.root / "work/kernel"
         selected = candidate_path_for_attempt(self._contexts, attempt_id)
+        if selected is not None and self._contexts is not None:
+            source_contract = self._contexts.resolve(attempt_id).kernel_source
+            if source_contract is not None:
+                return source_contract.seal(working, self._artifacts)
         if selected is not None:
             source = working.joinpath(*selected.split("/"))
             if source.is_symlink() or not source.is_file():

@@ -6,6 +6,7 @@ English | [中文](README.zh.md)
 
 - [User Guide](user-guide.md): install, configure, Bootstrap, run, inspect, and recover.
 - [Configuration Reference](configuration.md): Runtime schema v1 and Campaign schema v3.
+- [Multi-file Kernel source trees](source-trees.md): pinned source manifests, edit scope and evaluation.
 - [Interface Reference](interfaces.md): CLI, HTTP, Optimizer Runtime Tools, and Evolver filesystem.
 - [Deployment and Operations](operations.md): production topology, isolation, backup, and incidents.
 - [Runnable Examples](../examples/README.md) and

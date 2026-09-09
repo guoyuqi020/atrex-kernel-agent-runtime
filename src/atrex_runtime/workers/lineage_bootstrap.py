@@ -26,6 +26,7 @@ from ..domain.ids import (
 )
 from ..domain.models import Dsl, TokenUsage
 from ..filesystem import make_tree_owner_writable
+from ..kernel_sources import inject_bootstrap_source_instructions, load_kernel_source_contract
 from ..serialization import canonical_json_bytes
 from .attempt_report import AttemptReportV12
 from .core import CoreOptimizerProcessConfig
@@ -184,6 +185,12 @@ class LineageBootstrapWorkspaceAssembler:
         self._artifacts.materialize(manifest.optimizer_digest, root / paths.optimizer)
         shutil.copytree(root / paths.input_kernel, root / paths.working_kernel)
         make_tree_owner_writable(root / paths.working_kernel)
+        source_contract = load_kernel_source_contract(
+            self._artifacts, manifest.evaluation_contract_digest, manifest.dsl
+        )
+        if source_contract is not None:
+            source_contract.validate_tree(root / paths.working_kernel)
+            inject_bootstrap_source_instructions(root, source_contract)
         manifest_path = root / ".runtime/lineage-bootstrap.json"
         manifest_path.write_bytes(manifest.canonical_json_bytes())
         os.chmod(manifest_path, 0o400)
@@ -337,9 +344,14 @@ class CoreLineageBootstrapSessionDriver:
                     report.model_dump(mode="json"), ArtifactKind.ATTEMPT_REPORT
                 )
                 if report.status == "candidate_ready":
-                    candidate_digest = self._artifacts.put_directory(
-                        prepared.root / manifest.paths.working_kernel,
-                        ArtifactKind.KERNEL,
+                    source_contract = load_kernel_source_contract(
+                        self._artifacts, manifest.evaluation_contract_digest, manifest.dsl
+                    )
+                    working = prepared.root / manifest.paths.working_kernel
+                    candidate_digest = (
+                        source_contract.seal(working, self._artifacts)
+                        if source_contract is not None
+                        else self._artifacts.put_directory(working, ArtifactKind.KERNEL)
                     )
         return LineageBootstrapSessionResult(
             result.finish_reason,

@@ -161,7 +161,8 @@ Evidence 或由管理端读取，但不会上传到 GPU Wiki。
   `attempts_per_trajectory`；
 - 以 DSL 为 Key 的非空 `lineages` Map。
 
-每条 Lineage 提供可选 Optimizer/Evolver Model、`baseline_kernel` 与 `initial_evidence`。省略
+每条 Lineage 提供可选 Optimizer/Evolver Model 与 `initial_evidence`，并选择 `baseline_kernel`
+或多文件源码模式的 `source_manifest` + `source_repository`。详见[源码树](source-trees.zh.md)。省略
 Model 时委托给配置的 Backend CLI 默认值。可选 `problem_generalization_model` 只作用于 Core
 Problem Generalization。
 

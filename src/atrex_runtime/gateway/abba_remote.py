@@ -17,6 +17,7 @@ import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 RESULT_PREFIX = "__ATREX_RUNTIME_ABBA_RESULT__="
 RUN_TIMEOUT_GRACE_SECONDS = 60
@@ -281,7 +282,7 @@ def _summarize(payload: object, shape_ids: list[str]) -> dict[str, object]:
 
 def _single(config_path: Path, result_path: Path) -> int:
     try:
-        root = Path.cwd()
+        root = config_path.resolve().parent
         runtime_src = str(root / "atrex-bench" / "src")
         sys.path.insert(0, runtime_src)
         os.environ["PYTHONPATH"] = (
@@ -293,8 +294,9 @@ def _single(config_path: Path, result_path: Path) -> int:
 
         request = json.loads(config_path.read_text(encoding="utf-8"))
         shape_ids = request.pop("shape_ids")
+        raw_result = request.pop("raw_result", False)
         payload = evaluate(request)
-        result = _summarize(payload, shape_ids)
+        result = {"raw_result": payload} if raw_result else _summarize(payload, shape_ids)
     except Exception as error:
         result = {
             "all_pass": False,
@@ -309,6 +311,7 @@ def _single(config_path: Path, result_path: Path) -> int:
 
 def _driver(request_path: Path) -> int:
     runs: list[dict[str, object]] = []
+    request: dict[str, Any] = {}
     try:
         request = json.loads(request_path.read_text(encoding="utf-8"))
         if request.get("schema_version") != 1:
@@ -341,7 +344,29 @@ def _driver(request_path: Path) -> int:
                 if revision not in {"incumbent", "candidate"} or not isinstance(repeat, int):
                     raise ValueError("invalid ABBA schedule entry")
                 source_path = root / str(sources[revision])
-                shutil.copyfile(source_path, kernel)
+                environment = os.environ.copy()
+                run_root = root
+                if source_path.is_dir():
+                    settings = request["source_settings"][revision]
+                    run_root = root / ".runs" / f"run-{index:04d}"
+                    shutil.copytree(source_path, run_root)
+                    kernel = run_root / settings["entrypoint"]
+                    package = str(run_root / settings["package_root"])
+                    environment["PYTHONPATH"] = os.pathsep.join(
+                        (str(run_root), package, environment.get("PYTHONPATH", ""))
+                    )
+                    for name in (
+                        "CUTE_DSL_CACHE_DIR",
+                        "TRITON_CACHE_DIR",
+                        "TORCH_EXTENSIONS_DIR",
+                        "TMPDIR",
+                    ):
+                        cache = root / ".caches" / f"run-{index:04d}" / name
+                        cache.mkdir(parents=True)
+                        environment[name] = str(cache)
+                    _check_requirements(settings.get("runtime_requirements", []))
+                else:
+                    shutil.copyfile(source_path, kernel)
                 config = dict(evaluator)
                 config.update(
                     {
@@ -349,6 +374,7 @@ def _driver(request_path: Path) -> int:
                         "reference_dir": str(root / "reference"),
                         "output": str(root / "outputs" / f"run-{index:04d}"),
                         "shape_ids": shape_ids,
+                        "raw_result": request.get("raw_result", False),
                     }
                 )
                 config_path = root / f"single-{index:04d}.json"
@@ -366,7 +392,8 @@ def _driver(request_path: Path) -> int:
                         capture_output=True,
                         text=True,
                         timeout=timeout,
-                        env=os.environ.copy(),
+                        env=environment,
+                        cwd=run_root,
                     )
                     result = (
                         json.loads(result_path.read_text(encoding="utf-8"))
@@ -396,17 +423,33 @@ def _driver(request_path: Path) -> int:
             "runs": runs,
             "clock_lock": clock_report,
             "error": None,
+            "raw_result": request.get("raw_result", False),
         }
     except Exception as error:
         payload = {
             "schema_version": 1,
             "runs": runs,
             "error": f"{type(error).__name__}: {error}"[:2000],
+            "raw_result": request.get("raw_result", False),
         }
     print(
         RESULT_PREFIX + json.dumps(payload, ensure_ascii=False, separators=(",", ":")), flush=True
     )
     return 0
+
+
+def _check_requirements(requirements: list[dict[str, str]]) -> None:
+    """Check the provisioned GPU environment; never install Agent-selected code."""
+    from importlib.metadata import version
+
+    from packaging.specifiers import SpecifierSet
+
+    for requirement in requirements:
+        installed = version(requirement["distribution"])
+        if installed not in SpecifierSet(requirement.get("version", "")):
+            raise RuntimeError(
+                f"source requirement unavailable: {requirement}, installed={installed}"
+            )
 
 
 def main(argv: list[str] | None = None) -> int:

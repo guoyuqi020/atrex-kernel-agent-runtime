@@ -6,6 +6,9 @@ English | [中文](README.zh.md)
   multiple runnable examples; it is not itself a runnable workflow.
 - [`bootstrap/`](bootstrap/README.md): run a real single-DSL VecAdd Campaign Bootstrap through
   Core, Runtime Tools, the configured Agent Backend, and a remote Agate service.
+- [`source-tree/`](source-tree/README.md): prepare a multi-file source Campaign from a GDN-style
+  source manifest and an ATREX task, with an immutable adapter and explicit editable roots.
+  Includes the same seven Campaign instances as the single-file production ablation suite.
 - [`lineage/`](lineage/README.md): bootstrap one Triton VecAdd Lineage and run one Epoch with
   configurable Challenger, Trajectory, and serial Attempt counts.
 - [`evolution/`](evolution/README.md): run three Epochs with one Attempt per Branch and create a

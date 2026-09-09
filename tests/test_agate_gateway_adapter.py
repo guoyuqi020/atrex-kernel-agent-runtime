@@ -1377,11 +1377,62 @@ def test_job_store_enforces_attempt_ownership_and_idempotency(tmp_path: Path) ->
     assert store.bind(binding) == binding
     assert store.bind(binding) == binding
     assert store.require_owned(owner, "ev_one") == binding
+    assert store.find_request(owner, "candidate-1") == binding
+    assert store.find_request(new_attempt_id(), "candidate-1") is None
+    assert store.find_request(owner, "not-submitted") is None
     with pytest.raises(PermissionError):
         store.require_owned(new_attempt_id(), "ev_one")
     with pytest.raises(InvalidTransitionError):
         store.bind(AgateJobBinding("ev_two", owner, "candidate-1", "eval"))
     store.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "operation,parameters,repeats",
+    [
+        (GatewayOperation.EVALUATE, {}, 1),
+        (GatewayOperation.EVALUATE, {}, 2),
+        (GatewayOperation.EVALUATE, {"mode": "correctness_only"}, 1),
+        (GatewayOperation.PROFILE, {}, 1),
+        (GatewayOperation.CHECK, {}, 1),
+        (GatewayOperation.DISASSEMBLE, {}, 1),
+        (GatewayOperation.DEV, {"command": "python3 kernel.py"}, 1),
+    ],
+)
+async def test_native_jobs_recover_without_resubmit_and_isolate_generations(
+    tmp_path: Path, operation: GatewayOperation, parameters: dict, repeats: int,
+) -> None:
+    client = FakeAgateClient(_successful_job())
+    adapter, _builder, store = _adapter(tmp_path, client)
+    adapter._optimizer_evaluate_repeats = repeats
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    (candidate / "kernel.py").write_text("class Model: pass\n")
+    request = GatewayAdapterRequest(
+        attempt_id=new_attempt_id(), operation=operation, idempotency_key="same-request",
+        candidate_path=candidate, candidate_digest=digest("candidate"),
+        profile_level="sol" if operation is GatewayOperation.PROFILE else None,
+        kernel_regex=None, job_id=None, parameters=parameters,
+    )
+    try:
+        first = await adapter.execute(request)
+        first_jobs = store.list_owned(request.attempt_id)
+        assert first_jobs
+        submitted = len(client.submitted)
+        assert await adapter.execute(request) == first
+        assert len(client.submitted) == submitted
+        recovered = replace(request, recovery_generation=1)
+        second = await adapter.execute(recovered)
+        assert len(client.submitted) == 2 * submitted
+        assert await adapter.execute(recovered) == second
+        assert len(client.submitted) == 2 * submitted
+        all_jobs = store.list_owned(request.attempt_id)
+        assert len(all_jobs) == 2 * len(first_jobs)
+        assert set(first_jobs).issubset(all_jobs)
+        assert all(binding.operation is operation for binding in all_jobs)
+    finally:
+        store.close()
 
 
 @pytest.mark.anyio

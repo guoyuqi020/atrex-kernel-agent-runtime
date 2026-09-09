@@ -172,8 +172,10 @@ Required top-level fields:
   `attempts_per_trajectory`;
 - non-empty `lineages` map keyed by DSL.
 
-Each Lineage provides optional Optimizer/Evolver model identities, `baseline_kernel`, and
-`initial_evidence`. Missing model identity delegates to the configured Backend CLI default.
+Each Lineage provides optional Optimizer/Evolver model identities and `initial_evidence`, plus
+either `baseline_kernel` or `source_manifest` + `source_repository` for a commit-pinned multi-file
+Kernel. See [Source trees](source-trees.md) for the manifest and immutable edit scope.
+Missing model identity delegates to the configured Backend CLI default.
 Optional `problem_generalization_model` applies only when Runtime invokes Core problem
 generalization.
 

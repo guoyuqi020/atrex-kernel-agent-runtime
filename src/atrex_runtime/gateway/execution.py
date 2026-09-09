@@ -15,6 +15,7 @@ from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest
 from ..domain.models import Dsl
+from ..kernel_sources import KernelSourceBundle
 from ..roofline import strip_roofline_hardware_suffix
 from .agate import AgateCandidateRejection, AgateClient, AgateRequestBuilder
 from .contract import AgateEvaluationContractV1
@@ -25,7 +26,7 @@ _JSON_ADAPTER: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 def build_evaluation_request(
     request_builder: AgateRequestBuilder,
     *,
-    candidate_source: str,
+    candidate_source: str | KernelSourceBundle,
     operator: str,
     contract: AgateEvaluationContractV1,
     hardware_target: str,
@@ -44,8 +45,12 @@ def build_evaluation_request(
         reference["metadata"] = contract.metadata
     if contract.roofline is not None:
         reference["roofline"] = strip_roofline_hardware_suffix(contract.roofline)
-    return request_builder(
-        candidate_source,
+    payload = request_builder(
+        (
+            candidate_source.files[candidate_source.entrypoint]
+            if isinstance(candidate_source, KernelSourceBundle)
+            else candidate_source
+        ),
         reference,
         hardware_target,
         name=name,
@@ -61,6 +66,11 @@ def build_evaluation_request(
         runner_overrides=cast(Mapping[str, object], contract.runner_overrides) or None,
         idempotency_key=idempotency_key,
     )
+    if isinstance(candidate_source, KernelSourceBundle):
+        from .source_tree import attach_source_tree
+
+        attach_source_tree(payload, candidate_source, contract, hardware_target)
+    return payload
 
 
 async def call_agate_json(

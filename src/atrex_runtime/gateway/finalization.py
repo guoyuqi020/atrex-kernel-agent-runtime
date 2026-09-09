@@ -14,6 +14,7 @@ from ..artifacts.local import JsonValue, LocalArtifactStore
 from ..domain.errors import InfrastructureError, InvalidTransitionError
 from ..domain.ids import ArtifactDigest, AttemptId
 from ..domain.models import Dsl
+from ..kernel_sources import KernelSourceBundle, read_kernel_source
 from ..ports import AttemptCandidateResult, RuntimeEventRecorder
 from .agate import (
     AgateCandidateRejection,
@@ -119,7 +120,7 @@ class AgateAuthoritativeCandidateEvaluator:
             raise ValueError(
                 "nominated candidate has no matching Agent evaluation or recorded adoption"
             )
-        if not agent_evaluation.correct:
+        if agent_evaluation is not None and not agent_evaluation.correct:
             raise ValueError("nominated candidate's Agent evaluation is not correct")
 
         existing_outcome = self._control.get_committed_outcome(attempt_id)
@@ -152,14 +153,16 @@ class AgateAuthoritativeCandidateEvaluator:
             kind_error="nominated candidate Artifact is not a Kernel",
             missing_error="nominated candidate does not contain the contract candidate path",
         )
-        candidate = resolved.source
         if context.contract.production_gate and self._production_policy is not None:
             self._production_policy.validate(
                 resolved.root,
                 context.contract.candidate_path,
                 context.dsl,
+                context.kernel_source,
             )
         if not independent_evaluate:
+            if agent_evaluation is None:
+                raise AssertionError("ABBA handoff requires an Agent evaluation")
             self._events.record_runtime_event(
                 "gateway.agent_evaluation_adopted_for_abba",
                 attempt_id,
@@ -179,16 +182,22 @@ class AgateAuthoritativeCandidateEvaluator:
                 latency_us=agent_evaluation.latency_us,
             )
         try:
-            candidate_source = candidate.read_text(encoding="utf-8")
+            candidate_source = read_kernel_source(
+                resolved.root, context.contract.candidate_path, context.kernel_source
+            )
         except UnicodeDecodeError as error:
             raise ValueError("nominated candidate source must be UTF-8") from error
 
         event_base = {
             "source": GatewayEvaluationSource.RUNTIME_FINAL.value,
             "kernel_artifact_digest": candidate_digest,
-            "agent_evaluation_id": agent_evaluation.id,
-            "evaluation_attempt_id": agent_evaluation.attempt_id,
-            "evaluation_recovery_generation": agent_evaluation.recovery_generation,
+            "agent_evaluation_id": None if agent_evaluation is None else agent_evaluation.id,
+            "evaluation_attempt_id": None
+            if agent_evaluation is None
+            else agent_evaluation.attempt_id,
+            "evaluation_recovery_generation": None
+            if agent_evaluation is None
+            else agent_evaluation.recovery_generation,
             "recovery_generation": generation,
         }
         stage_results: list[JsonValue] = []
@@ -217,7 +226,7 @@ class AgateAuthoritativeCandidateEvaluator:
                 idempotency_key=stage_key,
             )
             final_payload = payload
-            stage_event = {
+            stage_event: dict[str, object] = {
                 **event_base,
                 "stage": stage_index,
                 "correctness_cases": stage.correctness_cases,
@@ -280,6 +289,7 @@ class AgateAuthoritativeCandidateEvaluator:
             and len(stage_results) == len(self._bootstrap_stages)
             and context.contract.roofline is None
             and self._profile_without_roofline
+            and context.kernel_source is None
             and final_payload is not None
         ):
             profile_job = await self._profile(
@@ -293,7 +303,7 @@ class AgateAuthoritativeCandidateEvaluator:
             candidate_digest,
             idempotency_key=idempotency_key,
             generation=generation,
-            agent_evaluation_id=agent_evaluation.id,
+            agent_evaluation_id=None if agent_evaluation is None else agent_evaluation.id,
             job=job,
             job_id=job_id,
             correct=evaluation.correct and len(stage_results) == len(self._bootstrap_stages),
@@ -305,7 +315,7 @@ class AgateAuthoritativeCandidateEvaluator:
         self,
         attempt_id: AttemptId,
         *,
-        candidate_source: str,
+        candidate_source: str | KernelSourceBundle,
         operator: str,
         contract: AgateEvaluationContractV1,
         hardware_target: str,
@@ -350,7 +360,7 @@ class AgateAuthoritativeCandidateEvaluator:
         self,
         attempt_id: AttemptId,
         *,
-        candidate_source: str,
+        candidate_source: str | KernelSourceBundle,
         operator: str,
         contract: AgateEvaluationContractV1,
         hardware_target: str,
@@ -395,6 +405,7 @@ class AgateAuthoritativeCandidateEvaluator:
         event_base: dict[str, object],
     ) -> tuple[JsonValue, str | None, EvaluationV2]:
         """Submit, await, and parse one authoritative ordinary Evaluate job."""
+
         async def execute(submission: dict[str, object]) -> JobExecution:
             accepted = await self._submit("eval", submission)
             job_id = accepted.get("job_id")
@@ -443,6 +454,7 @@ class AgateAuthoritativeCandidateEvaluator:
                 "top_kernels": 10,
             }
         )
+
         async def execute(submission: dict[str, object]) -> JobExecution:
             accepted = await self._submit("profile", submission)
             job_id = accepted.get("job_id")
@@ -495,7 +507,7 @@ class AgateAuthoritativeCandidateEvaluator:
         *,
         idempotency_key: str,
         generation: int,
-        agent_evaluation_id: str,
+        agent_evaluation_id: str | None,
         job: JsonValue,
         job_id: str | None,
         correct: bool,

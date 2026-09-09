@@ -195,6 +195,9 @@ def build_runtime_application(
         gate_policy = settings.gate_policy or (None if campaign is None else campaign.gate_policy)
         jobs = SqliteAgateJobStore(settings.storage.agate_jobs_database)
         client, request_builder = sdk_loader(connection)
+        from ..composition.gateway import source_tree_client
+
+        client = source_tree_client(settings, client)
         contexts = RegistryAgateEvaluationContextResolver(registry, artifacts, control)
         production_policy = ProductionKernelPolicy()
         agate_adapter = AgateGatewayAdapter(
@@ -265,6 +268,7 @@ def build_runtime_application(
                         settings.gateway_proxy.candidate_diff_require_change,
                     ),
                     control,
+                    contexts=contexts,
                 ),
                 RegistryProductionKernelValidator(
                     contexts,

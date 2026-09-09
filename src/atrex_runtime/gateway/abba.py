@@ -21,6 +21,7 @@ from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest
 from ..domain.models import KernelMeasurement, KernelMeasurementPurpose, KernelRevision
 from ..git_import import SafeGitImporter
+from ..kernel_sources import KernelSourceBundle, read_kernel_source
 from ..ports import (
     KernelMeasurementJournal,
     KernelMeasurementRun,
@@ -118,8 +119,8 @@ def build_abba_source_request(
     contract: AgateEvaluationContractV1,
     shape_ids: list[str],
     schedule: list[dict[str, int | str]],
-    incumbent_source: str,
-    candidate_source: str,
+    incumbent_source: str | KernelSourceBundle,
+    candidate_source: str | KernelSourceBundle,
     evaluator_files: dict[str, str],
     per_run_timeout_seconds: float,
     allocation_timeout_seconds: float,
@@ -129,8 +130,6 @@ def build_abba_source_request(
     files.update(
         {
             "__atrex_abba.py": Path(abba_remote.__file__).read_text(encoding="utf-8"),
-            "snapshots/incumbent.py": incumbent_source,
-            "snapshots/candidate.py": candidate_source,
             "reference/reference.py": contract.reference_py,
             "reference/input.py": contract.input_py,
             "reference/shapes.json": _json_text(
@@ -138,6 +137,21 @@ def build_abba_source_request(
             ),
         }
     )
+    sources: dict[str, JsonValue] = {}
+    source_settings: dict[str, JsonValue] = {}
+    for label, source in (("incumbent", incumbent_source), ("candidate", candidate_source)):
+        if isinstance(source, KernelSourceBundle):
+            prefix = f"snapshots/{label}"
+            files.update({f"{prefix}/{path}": text for path, text in source.files.items()})
+            sources[label] = prefix
+            source_settings[label] = {
+                "entrypoint": source.entrypoint,
+                "package_root": source.contract.package_root,
+                "runtime_requirements": cast(JsonValue, list(source.contract.runtime_requirements)),
+            }
+        else:
+            sources[label] = f"snapshots/{label}.py"
+            files[f"snapshots/{label}.py"] = source
     metadata = subset_shape_document(contract.metadata, shape_ids, metadata=True)
     roofline = subset_shape_document(contract.roofline, shape_ids, metadata=False)
     if metadata is not None:
@@ -172,10 +186,8 @@ def build_abba_source_request(
         "schema_version": 1,
         "schedule": cast(list[JsonValue], schedule),
         "shape_ids": list(shape_ids),
-        "sources": {
-            "incumbent": "snapshots/incumbent.py",
-            "candidate": "snapshots/candidate.py",
-        },
+        "sources": sources,
+        "source_settings": source_settings,
         "evaluator": evaluator,
         "per_run_timeout_seconds": per_run_timeout_seconds,
         "lock_clocks": contract.lock_clocks,
@@ -504,8 +516,8 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         contract: AgateEvaluationContractV1,
         shape_ids: list[str],
         schedule: list[dict[str, int | str]],
-        incumbent_source: str,
-        candidate_source: str,
+        incumbent_source: str | KernelSourceBundle,
+        candidate_source: str | KernelSourceBundle,
         evaluator_files: dict[str, str],
         per_run_timeout_seconds: float,
         allocation_timeout_seconds: float,
@@ -524,6 +536,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             per_run_timeout_seconds=per_run_timeout_seconds,
             allocation_timeout_seconds=allocation_timeout_seconds,
         )
+
         async def execute(submission: dict[str, object]) -> JobExecution:
             accepted = await self._call(lambda: self._client.submit_job("dev", submission))
             job_id = accepted.get("job_id")
@@ -559,7 +572,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         self,
         revision: KernelRevision,
         contract: AgateEvaluationContractV1,
-    ) -> str:
+    ) -> str | KernelSourceBundle:
         candidate = resolve_kernel_candidate(
             self._artifacts,
             revision.artifact_digest,
@@ -567,9 +580,12 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             error_type=InfrastructureError,
             kind_error="ABBA Kernel Artifact has the wrong kind",
             missing_error="ABBA Kernel candidate file is missing",
-        ).source
+        )
         try:
-            return candidate.read_text(encoding="utf-8")
+            context = self._contexts.resolve(revision)
+            return read_kernel_source(
+                candidate.root, contract.candidate_path, context.kernel_source
+            )
         except UnicodeDecodeError as error:
             raise InfrastructureError("ABBA Kernel source is not UTF-8") from error
 

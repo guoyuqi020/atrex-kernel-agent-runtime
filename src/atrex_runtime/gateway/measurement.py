@@ -13,6 +13,7 @@ from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest
 from ..domain.models import KernelMeasurement, KernelMeasurementPurpose, KernelRevision
+from ..kernel_sources import read_kernel_source
 from ..ports import KernelMeasurementJournal, KernelMeasurementRun, KernelMeasurementRunner
 from .agate import (
     AgateCandidateRejection,
@@ -84,9 +85,11 @@ class AgateKernelMeasurementRunner(KernelMeasurementRunner):
             error_type=InfrastructureError,
             kind_error="Kernel measurement Artifact has the wrong kind",
             missing_error="Kernel measurement candidate file is missing",
-        ).source
+        )
         try:
-            candidate_source = candidate.read_text(encoding="utf-8")
+            candidate_source = read_kernel_source(
+                candidate.root, context.contract.candidate_path, context.kernel_source
+            )
         except UnicodeDecodeError as error:
             raise InfrastructureError("Kernel measurement candidate is not UTF-8") from error
 

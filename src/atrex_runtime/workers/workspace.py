@@ -486,6 +486,14 @@ class LocalAttemptWorkspaceAssembler:
         shutil.copytree(root / paths.input_kernel, working_kernel)
         make_tree_owner_writable(working_kernel)
 
+        from ..kernel_sources import inject_source_instructions, load_kernel_source_contract
+
+        source_contract = load_kernel_source_contract(
+            self._artifacts, campaign.evaluation_contract_digest, request.dsl
+        )
+        if source_contract is not None:
+            inject_source_instructions(root, source_contract)
+
         manifest_path = root / ATTEMPT_MANIFEST_RELATIVE_PATH
         manifest_path.parent.mkdir(mode=0o700, exist_ok=True)
         manifest_path.write_bytes(manifest.canonical_json_bytes())

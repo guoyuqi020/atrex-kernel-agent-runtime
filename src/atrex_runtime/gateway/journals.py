@@ -18,7 +18,7 @@ from ..workers.attempt_report import (
     AttemptReportV12,
 )
 from .control import SqliteGatewayControl
-from .control_models import GatewayAuthorization, GatewayKernelTrialRecord
+from .control_models import GatewayAuthorization, GatewayKernelTrialRecord, GatewayOperation
 from .protocol import (
     DirectionLoadRequestV2,
     DirectionUpdateRequestV2,
@@ -188,24 +188,24 @@ class RuntimeJournalService:
         raise ValueError(f"unsupported Runtime Journal operation: {request.operation}")
 
     def _citable_profile_results(self, attempt_id: AttemptId) -> list[JsonValue]:
-        """Project every Kernel/Trial/Result identity already cited by a visible Experiment."""
+        """Project durable visible Profile observations, independently of Experiments."""
         bindings: dict[tuple[str, str, str], None] = {}
-        for experiment in self._visible_experiments(attempt_id):
-            for side_name in ("before", "after"):
-                side = experiment.get(side_name)
-                if not isinstance(side, Mapping):
+        for trial in self.control.list_kernel_trials(
+            self._visible_attempt_ids(attempt_id), limit=5_000,
+        ):
+            for observation in trial.observations:
+                if (
+                    observation.operation is not GatewayOperation.PROFILE
+                    or observation.result_artifact_digest is None
+                ):
                     continue
-                results = side.get("result_artifact_digests")
-                if not isinstance(results, (list, tuple)):
-                    continue
-                for result in results:
-                    bindings[
-                        (
-                            str(side.get("kernel_artifact_digest")),
-                            str(side.get("kernel_trial_id")),
-                            str(result),
-                        )
-                    ] = None
+                bindings[
+                    (
+                        str(trial.kernel_artifact_digest),
+                        trial.id,
+                        str(observation.result_artifact_digest),
+                    )
+                ] = None
         return [
             cast(
                 JsonValue,
@@ -519,10 +519,15 @@ class RuntimeJournalService:
         direction = self._direction_views(request.attempt_id).get(direction_id)
         if direction is None:
             raise ValueError("Experiment Direction is outside visible history")
-        if direction["status"] != "in_progress":
+        if direction["status"] not in {
+            "in_progress", "completed", "abandoned", "blocked", "deferred",
+        }:
             raise ValueError(
-                f"Experiment Direction must be in progress; current status is {direction['status']}"
+                "Experiment Direction must be in progress or closed; "
+                f"current status is {direction['status']}"
             )
+        # Late evidence appends to the Journal without reopening research or
+        # rewriting the Direction's lifecycle events.
         allow_baseline = self._is_bootstrap(request.attempt_id)
         actions = {"keep_after", "restore_before", "abandon_direction", "adopt"}
         if allow_baseline:

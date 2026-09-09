@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "name": "gdn_sm103_independent_m64",
+  "adapter": "adapter.py",
+  "source": {
+    "name": "flashinfer_gdn_seed",
+    "revision": "a39405536f178689d7f60b551c17b2252bcee61d",
+    "archive_paths": [
+      "flashinfer",
+      "LICENSE",
+      "UPSTREAM_PROVENANCE.json"
+    ],
+    "package_root": "."
+  },
+  "editable_roots": [
+    "flashinfer/gdn_kernels/blackwell"
+  ],
+  "repository_search": {
+    "mode": "snapshot",
+    "require_report": false,
+    "seal_before_first_eval": false
+  },
+  "bringup": {
+    "mode": "auto",
+    "probe_repeats": 1
+  },
+  "runtime_requirements": [
+    {
+      "distribution": "torch",
+      "import": "torch",
+      "version": ">=2.9.0"
+    },
+    {
+      "distribution": "nvidia-cutlass-dsl",
+      "import": "cutlass",
+      "version": ">=4.4.2"
+    }
+  ],
+  "runtime_support": [],
+  "measurement": {
+    "warmup": 10,
+    "timed_runs": 100,
+    "repeats": 2,
+    "per_run_timeout": 142,
+    "min_improvement_pct": 1.0
+  }
+}

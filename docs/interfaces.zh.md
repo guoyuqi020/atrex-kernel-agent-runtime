@@ -125,6 +125,11 @@ Counters；同时增加 `kernel_count`、`total_duration_us`、逐 Kernel `durat
 `dominant_kernel`、按耗时加权的 `weighted_sol_pct` 和 `dominant_bound`。具体 Shape 输入和维度
 仍然不可见。
 
+多文件源码树的 `profile/check/disassemble` 保留同一套接口，内部由 Runtime 通过 Agate Dev
+运行完整封存源码树和固定诊断驱动。Check 是单个 case 的编译/运行探针，可选 Compute Sanitizer，
+不是正确性 Gate；transport completed 也必须检查诊断 `passed`。NVIDIA 工具依赖、参数、导出
+及限制见[源码树诊断说明](source-trees.zh.md#profilecheck-与-disassemble)。
+
 `kernel_trial_show` 按 Gateway 响应或已保留 Experiment 记录返回的已知 `kernel_trial_id`
 获取一条实验 Candidate。它返回 Kernel Artifact Digest，以及由 Result Artifact Digest、Operation 和
 Status 组成的精简索引；仅对需要分析的条目调用 `result_artifact_read` 展开内容。
@@ -265,8 +270,12 @@ Provider 捕获或用量不完整时，不触发补交。`0` 关闭追加调用�
 若未能开展实验，`blocked` 和 `pivot` 允许 Journal 与 Findings 为空；报告需如实说明原因，不应虚构实验。
 已有 in_progress Direction 仍须先 block 或 defer。第一次成功调用 `attempt-report` 会发布不可覆盖的终态
 Report；校验或工具错误不会发布 Report，因此 Agent 可以依据 `issues`、`request_schema` 和 `recovery`
-修正后重试，但成功后不得再次调用。每个 Experiment
-必须绑定一个可见且已开始的 Direction；终态交接前，任何 Direction 都不能保持 in_progress，未产生
+修正后重试，但成功后不得再次调用。每个 Experiment 必须绑定可见的 `in_progress` Direction，
+或已关闭的 Direction（`completed`、`abandoned`、`blocked`、`deferred`）。允许关闭后补交已有证据：
+Experiment 追加到当前 Attempt 的 Journal，不重新打开 Direction、不改变其状态、不改写历史事件；
+加载 Direction 时，其支持 Experiment ID 会自动包含补录条目。仅处于 `proposed` 的 Direction 仍须先
+start。Trial 可见性、归属和证据校验不变；补录不代表可以不经 start 就恢复研究。
+终态交接前，任何 Direction 都不能保持 in_progress，未产生
 Experiment 的已启动 Direction 也必须 defer 或 block；complete 和 abandon 仍要求存在支持 Experiment。
 每个 Attempt 最多可以启动并推进三个不同 Direction，包括继承和本 Attempt 新增的 Direction。仅 propose
 不占推进名额，Report 也不限制保持 proposed/deferred 的 Direction 数量。同一时间只能有一个 Direction
@@ -302,15 +311,19 @@ Branch、Epoch、Attempt、选中状态或当前/历史来源。
 无需填写；实时关联与快照关联会合并到同一个去重列表中。
 `profile_evidence` 必须为 `null`，或包含 `tool_used`、`profiler`、`profile_level`、
 `bottleneck_type`、`evidence_summary`、`evidence_chain` 和非空 `supporting_results` 的精确
-Object。每项 Supporting Result 绑定 `operation`（`profile` 或 `dev`）、
-`kernel_artifact_digest`、`kernel_trial_id` 与 `result_artifact_digest`，且至少包含一项 Profile。
-Core 要求每组绑定已出现在本 Attempt 的 Experiment Journal；Runtime 再核验声明的 Operation 与
-三个身份确实匹配一条持久化、当前可见的 Gateway Observation。没有执行 Profile 时必须为 `null`。
+Object。每项 Supporting Result 绑定 `operation`（仅允许 `profile`）、
+`kernel_artifact_digest`、`kernel_trial_id` 与 `result_artifact_digest`。Core/KDA 根据 Runtime
+投影的 `citable_profile_results` 检查引用；Runtime 再独立核验三个身份与 Operation 是否匹配
+持久化、当前可见的 Gateway Observation。不要求先被 Experiment 引用：历史 Profile，以及在
+Experiment 快照之后取得的 Profile，都无需补录 Journal 或重新打开 Direction 即可引用。
+原有历史可见性边界保持不变。尚无 Result Artifact 的进行中操作，以及非 Profile 操作，不能引用。
+没有已记录的 Profile 证据时必须为 `null`。
 每个 Finding 必须包含非空且唯一的 `supporting_experiment_ids`；每个 ID 都必须属于同一份随 Report
 附加的 Experiment Journal。这样 Finding 可通过 Experiment 中实际存在的 before/after Subject 追溯到准确
 Kernel Artifact、Trial 和 Result Artifact，而无需在 Finding 中重复这些身份。
-`contributing_kernel_trial_ids` 是必填的有序去重数组，列出本次 Attempt 取用过其代码或思路的历史
-Kernel Trial；没有取用时为空。Core 与 Runtime 都只校验它的形状，都不去解析它是否在可见历史内 ——
+`contributing_kernel_trial_ids` 是必填数组，列出本次 Attempt 取用过其代码或思路的历史
+Kernel Trial；没有取用时为空。Core/KDA 和 Runtime 接受任意顺序及重复 ID，在提交或封存 Report 前
+自动排序、去重；仍逐项校验 ID 格式，并在去重前限制输入最多 64 项。两侧都不去解析它是否在可见历史内 ——
 因为该字段是 Agent 的解读而非测量事实；Experiment Subject 身份则必须通过 Runtime 自管 Trial 的核验。Runtime 会把它带入
 派生的 Final Report，供后续 Attempt 与 Evolver 阅读。
 Gateway 不定义低层 Agate `submit` 透传，也不定义独立的 `sol` 操作。评测只能使用由

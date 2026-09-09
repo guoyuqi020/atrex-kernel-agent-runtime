@@ -13,6 +13,7 @@ import anyio
 from ..artifacts.local import JsonValue, LocalArtifactStore
 from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest
+from ..kernel_sources import KernelSourceBundle, read_kernel_source
 from ..serialization import canonical_json_text
 from .abba import (
     AgateSameAllocationAbbaRunner,
@@ -222,7 +223,9 @@ class AgentAbbaGatewayAdapter:
             updates.update(metadata=None, roofline=None)
         return replace(context, contract=context.contract.model_copy(update=updates, deep=True))
 
-    def _source(self, digest: ArtifactDigest, context: AgateEvaluationContext) -> str:
+    def _source(
+        self, digest: ArtifactDigest, context: AgateEvaluationContext
+    ) -> str | KernelSourceBundle:
         source = resolve_kernel_candidate(
             self._artifacts,
             digest,
@@ -230,9 +233,11 @@ class AgentAbbaGatewayAdapter:
             error_type=ValueError,
             kind_error="ABBA source Artifact must have Kernel kind",
             missing_error="ABBA source Artifact is missing its contract candidate file",
-        ).source
+        )
         try:
-            return source.read_text(encoding="utf-8")
+            return read_kernel_source(
+                source.root, context.contract.candidate_path, context.kernel_source
+            )
         except UnicodeDecodeError as error:
             raise ValueError("ABBA source must be UTF-8") from error
 
@@ -285,14 +290,18 @@ class AgentAbbaGatewayAdapter:
             if not isinstance(result, dict) or result.get("all_pass") is not True:
                 continue
             latencies = result.get("latency_us_by_shape")
-            if result.get("error") is not None or not isinstance(latencies, dict) or (
-                set(latencies) != set(shape_ids)
-                or any(
-                    isinstance(value, bool)
-                    or not isinstance(value, (int, float))
-                    or not math.isfinite(value)
-                    or value <= 0
-                    for value in latencies.values()
+            if (
+                result.get("error") is not None
+                or not isinstance(latencies, dict)
+                or (
+                    set(latencies) != set(shape_ids)
+                    or any(
+                        isinstance(value, bool)
+                        or not isinstance(value, (int, float))
+                        or not math.isfinite(value)
+                        or value <= 0
+                        for value in latencies.values()
+                    )
                 )
             ):
                 raise InfrastructureError(

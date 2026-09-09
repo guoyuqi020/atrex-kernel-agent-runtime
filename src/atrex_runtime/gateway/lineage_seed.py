@@ -8,6 +8,7 @@ from ..artifacts.local import JsonValue, LocalArtifactStore
 from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest, CampaignId, LineageId
 from ..domain.models import Dsl
+from ..kernel_sources import read_kernel_source
 from ..ports import AttemptCandidateResult, RuntimeEventRecorder
 from ..registry.base import Registry
 from .agate import (
@@ -81,15 +82,17 @@ class AgateLineageSeedEvaluator:
             kind_error="Lineage seed candidate Artifact is not a Kernel",
             missing_error="Lineage seed Kernel does not contain the contract candidate path",
         )
-        candidate = resolved.source
         if contract.production_gate and self._production_policy is not None:
             self._production_policy.validate(
                 resolved.root,
                 contract.candidate_path,
                 dsl,
+                contract.kernel_sources.get(dsl),
             )
         try:
-            candidate_source = candidate.read_text(encoding="utf-8")
+            candidate_source = read_kernel_source(
+                resolved.root, contract.candidate_path, contract.kernel_sources.get(dsl)
+            )
         except UnicodeDecodeError as error:
             raise ValueError("Lineage seed Kernel source must be UTF-8") from error
 
@@ -116,6 +119,7 @@ class AgateLineageSeedEvaluator:
                 name=f"{campaign.operator}_{lineage_id}_seed_batch_{batch.index}",
                 idempotency_key=batch.idempotency_key,
             )
+
             async def execute(submission: dict[str, object]) -> JobExecution:
                 accepted = await self._submit("eval", submission)
                 job_id = accepted.get("job_id")
@@ -158,7 +162,12 @@ class AgateLineageSeedEvaluator:
         job = batched.job
         job_id = batched.job_id
         profile: JsonValue | None = None
-        if evaluation.correct and contract.roofline is None and self._profile_without_roofline:
+        if (
+            evaluation.correct
+            and contract.roofline is None
+            and self._profile_without_roofline
+            and dsl not in contract.kernel_sources
+        ):
             profile = await self._profile(lineage_id, kernel_artifact_digest, profile_payload)
         result = self._store_result(job, profile)
         self._completed(
@@ -190,6 +199,7 @@ class AgateLineageSeedEvaluator:
                 "top_kernels": 10,
             }
         )
+
         async def execute(submission: dict[str, object]) -> JobExecution:
             accepted = await self._submit("profile", submission)
             job_id = accepted.get("job_id")

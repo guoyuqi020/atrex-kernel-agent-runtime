@@ -140,6 +140,12 @@ profiler counters, and adds `kernel_count`, `total_duration_us`, per-Kernel
 `duration_share_pct`, `dominant_kernel`, duration-weighted `weighted_sol_pct`, and
 `dominant_bound`. Shape inputs and dimensions remain private.
 
+For multi-file source-tree Lineages, `profile`, `check` and `disassemble` keep these APIs but use
+Runtime-owned Agate Dev drivers over the complete sealed tree. Check is a one-case compile/launch
+probe, optionally under Compute Sanitizer; it is not a correctness Gate. Diagnostic `passed=false`
+is a failure even when delivery completed. See [source-tree diagnostics](source-trees.md#profile-check-and-disassemble)
+for NVIDIA tool requirements, arguments, output exports and limits.
+
 `kernel_trial_show` retrieves one known experimental Candidate by the `kernel_trial_id` returned by
 a Gateway response or retained Experiment record. It returns the Kernel Artifact Digest and a
 compact list of Result Artifact Digest, operation, and status entries. Use
@@ -295,7 +301,13 @@ Any in-progress Direction must still be blocked or deferred first. The first suc
 call publishes a write-once terminal Report. Validation or tool errors publish nothing, so the Agent
 may correct the request using `issues`, `request_schema`, and `recovery` and retry; a successful call
 must not be repeated.
-Every Experiment names a visible in-progress Direction. Before terminal handoff, no Direction may
+Every Experiment names a visible Direction that is in progress or closed (`completed`, `abandoned`,
+`blocked`, or `deferred`). Late Experiment submissions can attach existing evidence after closure;
+they append to the current Attempt's Journal without reopening the Direction, changing its status,
+or rewriting prior events. Its loaded supporting Experiment IDs update automatically. A merely
+`proposed` Direction still must be started first. Trial visibility, ownership, and evidence validation
+remain unchanged; this is not permission to resume research without `start`.
+Before terminal handoff, no Direction may
 remain in progress, including a started Direction with no Experiment. Such a Direction can be
 deferred or blocked; completed and abandoned Directions require supporting Experiments. One Attempt may start and advance at
 most three distinct Directions, including inherited and newly proposed Directions. Proposals do not
@@ -343,18 +355,23 @@ current/history provenance.
 provide them. Loaded live and snapshotted associations are merged into one de-duplicated list.
 `profile_evidence` is either `null` or an exact object containing `tool_used`, `profiler`,
 `profile_level`, `bottleneck_type`, `evidence_summary`, `evidence_chain`, and a non-empty
-`supporting_results` array. Each supporting result binds `operation` (`profile` or `dev`),
-`kernel_artifact_digest`, `kernel_trial_id`, and `result_artifact_digest`. At least one item must be a
-Profile result. Core requires every binding to appear in the Attempt's Experiment Journal; Runtime
-then verifies that the declared operation and three identities match one durable visible Gateway
-observation. `null` is required when no Profile was executed.
+`supporting_results` array. Each supporting result binds `operation` (`profile` only),
+`kernel_artifact_digest`, `kernel_trial_id`, and `result_artifact_digest`. Core/KDA checks the
+Runtime-projected `citable_profile_results`; Runtime independently verifies the three identities
+and operation against durable, visible Gateway observations. No Experiment reference is required:
+historical Profiles and Profiles obtained after an Experiment snapshot remain citable without
+supplementing the Journal or reopening a Direction. Existing history visibility boundaries still
+apply. Pending operations without a Result Artifact and non-Profile operations are not citable.
+`null` is required when no recorded Profile evidence is available.
 Every Finding requires a non-empty unique `supporting_experiment_ids` array. Each ID must name an
 Experiment in the same attached Journal, so a Finding resolves through that Experiment's available
 before/after subjects to exact Kernel Artifacts, Trials, and Result Artifacts without repeating those
 identities in the Finding itself.
-`contributing_kernel_trial_ids` is a required sorted unique array naming the historical Kernel Trials
-whose code or approach the Attempt drew content from, and is empty when it drew from none. Core and
-Runtime both check its shape; neither resolves it against visible history, because the report is an
+`contributing_kernel_trial_ids` is a required array naming the historical Kernel Trials whose code
+or approach the Attempt drew content from, and is empty when it drew from none. Core/KDA and Runtime
+accept any order and repeated IDs, then sort and deduplicate them before submitting or sealing the
+Report. Both validate every supplied ID and enforce at most 64 input entries before deduplication;
+neither resolves it against visible history, because the report is an
 Agent interpretation rather than a measured fact. Experiment subject identities, by contrast, are
 validated against Runtime-owned Trial records. Runtime carries the contributing IDs into the derived Final Report, so later Attempts and the Evolver can read
 it.

@@ -322,6 +322,15 @@ class SqliteAgateJobStore:
             raise PermissionError("Agate job is not owned by this Attempt")
         return self._row_binding(row)
 
+    def find_request(self, attempt_id: AttemptId, idempotency_key: str) -> AgateJobBinding | None:
+        """Recover a submitted job before allocating another one for the same request."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM agate_jobs WHERE attempt_id = ? AND idempotency_key = ?",
+                (attempt_id, idempotency_key),
+            ).fetchone()
+        return None if row is None else self._row_binding(row)
+
     def list_owned(
         self,
         attempt_id: AttemptId,
@@ -364,9 +373,7 @@ class SqliteAgateJobStore:
         if input_scope not in {"contract", "custom"}:
             raise RuntimeError(f"invalid persisted Agate input scope: {input_scope!r}")
         shape_ids = (
-            json.loads(row["expected_shape_ids"])
-            if row["expected_shape_ids"] is not None
-            else None
+            json.loads(row["expected_shape_ids"]) if row["expected_shape_ids"] is not None else None
         )
         if shape_ids is not None and (
             not isinstance(shape_ids, list)
@@ -502,6 +509,19 @@ class AgateGatewayAdapter:
         raise AssertionError(f"unsupported Gateway operation: {request.operation}")
 
     async def _submit(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
+        if request.recovery_generation > 0:
+            # Gateway operations are generation-scoped, whereas the job store and
+            # upstream idempotency namespace outlive worker Sessions. Preserve the
+            # original generation's keys, but never bind a recovered Session's new
+            # execution to an earlier generation's Job.
+            scope = json.dumps(
+                [request.attempt_id, request.recovery_generation, request.idempotency_key],
+                separators=(",", ":"),
+            )
+            request = replace(
+                request,
+                idempotency_key="agate-recovery:" + hashlib.sha256(scope.encode()).hexdigest(),
+            )
         context = self._contexts.resolve(request.attempt_id)
         if request.operation is GatewayOperation.EVALUATE:
             context = self._evaluation_context(request, context)
@@ -555,6 +575,7 @@ class AgateGatewayAdapter:
             and mapped.evaluation.correct
             and context.contract.roofline is None
             and self._profile_without_roofline
+            and context.kernel_source is None
         ):
             return GatewayAdapterResult(
                 mapped.status,
@@ -565,6 +586,39 @@ class AgateGatewayAdapter:
                 mapped.worker_result,
             )
         return mapped
+
+    async def _submit_bound_job(
+        self,
+        submission: dict[str, object],
+        *,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        kind: Literal["eval", "profile", "dev", "compile", "sol", "disassemble"],
+        operation: GatewayOperation,
+        evaluation_mode: Literal["full", "correctness_only"] = "full",
+        expected_shape_ids: tuple[str, ...] | None = None,
+        input_scope: Literal["contract", "custom"] = "contract",
+    ) -> str:
+        existing = self._jobs.find_request(attempt_id, idempotency_key)
+        if existing is None:
+            acceptance = await self._call(
+                lambda: self._client.submit_job(kind, submission),
+                validation_is_candidate=True,
+            )
+            job_id = acceptance.get("job_id")
+            if not isinstance(job_id, str) or not job_id:
+                raise InfrastructureError("Agate acceptance did not contain a valid job_id")
+        else:
+            # A crash can leave a durable Job without a committed Gateway result.
+            # Resume polling it; Dev may allocate a fresh job if submitted again.
+            job_id = existing.job_id
+        self._jobs.bind(
+            AgateJobBinding(
+                job_id, attempt_id, idempotency_key, kind, operation,
+                evaluation_mode, expected_shape_ids, input_scope,
+            )
+        )
+        return job_id
 
     async def _submit_once(
         self,
@@ -590,28 +644,19 @@ class AgateGatewayAdapter:
         )
 
         async def execute(submission: dict[str, object]) -> JobExecution:
-            acceptance = await self._call(
-                lambda: self._client.submit_job(kind, submission),
-                validation_is_candidate=True,
-            )
-            job_id = acceptance.get("job_id")
-            if not isinstance(job_id, str) or not job_id:
-                raise InfrastructureError("Agate acceptance did not contain a valid job_id")
-            self._jobs.bind(
-                AgateJobBinding(
-                    job_id,
-                    request.attempt_id,
-                    (
-                        str(submission["idempotency_key"])
-                        if submission.get("idempotency_key") != payload.get("idempotency_key")
-                        else binding_key
-                    ),
-                    kind,
-                    request.operation,
-                    evaluation_mode,
-                    expected,
-                    input_scope,
-                )
+            job_id = await self._submit_bound_job(
+                submission,
+                attempt_id=request.attempt_id,
+                idempotency_key=(
+                    str(submission["idempotency_key"])
+                    if submission.get("idempotency_key") != payload.get("idempotency_key")
+                    else binding_key
+                ),
+                kind=kind,
+                operation=request.operation,
+                evaluation_mode=evaluation_mode,
+                expected_shape_ids=expected,
+                input_scope=input_scope,
             )
             job = await self._call(
                 lambda: self._client.get_job(
@@ -631,8 +676,7 @@ class AgateGatewayAdapter:
                 result=rejected,
                 evaluation=(
                     EvaluationV2(correct=False, latency_us=None)
-                    if request.operation is GatewayOperation.EVALUATE
-                    and evaluation_mode == "full"
+                    if request.operation is GatewayOperation.EVALUATE and evaluation_mode == "full"
                     else None
                 ),
                 worker_result=(
@@ -645,6 +689,7 @@ class AgateGatewayAdapter:
                     else project_candidate_rejection(rejection.payload)
                 ),
             )
+        self._require_source_diagnostic(context, request.operation, job)
         return self._map_job(
             job,
             request.operation,
@@ -764,22 +809,14 @@ class AgateGatewayAdapter:
                 "top_kernels": 10,
             }
         )
+
         async def execute(submission: dict[str, object]) -> JobExecution:
-            acceptance = await self._call(
-                lambda: self._client.submit_job("profile", submission),
-                validation_is_candidate=True,
-            )
-            job_id = acceptance.get("job_id")
-            if not isinstance(job_id, str) or not job_id:
-                raise InfrastructureError("Agate Profile acceptance has no job_id")
-            self._jobs.bind(
-                AgateJobBinding(
-                    job_id,
-                    request.attempt_id,
-                    str(submission["idempotency_key"]),
-                    "profile",
-                    GatewayOperation.PROFILE,
-                )
+            job_id = await self._submit_bound_job(
+                submission,
+                attempt_id=request.attempt_id,
+                idempotency_key=str(submission["idempotency_key"]),
+                kind="profile",
+                operation=GatewayOperation.PROFILE,
             )
             job = await self._call(
                 lambda: self._client.get_job(
@@ -856,6 +893,10 @@ class AgateGatewayAdapter:
         binding: AgateJobBinding,
         job: dict[str, JsonValue],
     ) -> GatewayAdapterResult:
+        if binding.operation in {GatewayOperation.PROFILE, *_COMPILE_OPERATIONS}:
+            self._require_source_diagnostic(
+                self._contexts.resolve(binding.attempt_id), binding.operation, job
+            )
         mapped = self._map_job(
             job,
             binding.operation,
@@ -867,6 +908,28 @@ class AgateGatewayAdapter:
             # Inspection must not revive an exploration's submission eligibility.
             return replace(mapped, evaluation=None)
         return mapped
+
+    @staticmethod
+    def _require_source_diagnostic(
+        context: AgateEvaluationContext,
+        operation: GatewayOperation,
+        job: dict[str, JsonValue],
+    ) -> None:
+        if (
+            context.kernel_source is None
+            or job.get("status") != "succeeded"
+            or operation not in {GatewayOperation.PROFILE, *_COMPILE_OPERATIONS}
+        ):
+            return
+        result = job.get("result")
+        if (
+            not isinstance(result, dict)
+            or result.get("operation") != operation.value
+            or not isinstance(result.get("passed"), bool)
+        ):
+            raise InfrastructureError(
+                "source-tree diagnostic completed without its structured result"
+            )
 
     def _binding_shape_ids(
         self,
@@ -925,6 +988,34 @@ class AgateGatewayAdapter:
         if request.operation is GatewayOperation.DEV:
             return self._build_dev(request, context)
         contract = contract_override or context.contract
+        if context.kernel_source is not None and request.operation in {
+            GatewayOperation.PROFILE,
+            GatewayOperation.CHECK,
+            GatewayOperation.DISASSEMBLE,
+        }:
+            from ..kernel_sources import KernelSourceBundle
+            from .source_tree import attach_source_tree
+
+            diagnostic_source = KernelSourceBundle(
+                context.kernel_source.validate_tree(request.candidate_path),
+                context.kernel_source,
+                contract.candidate_path,
+            )
+            shapes, metadata, roofline = self._private_profile_inputs(contract, request.parameters)
+            parameters = dict(request.parameters)
+            if request.profile_level is not None:
+                parameters["level"] = request.profile_level
+            if request.kernel_regex is not None:
+                parameters["kernel_regex"] = request.kernel_regex
+            parameters["shape_id"] = self._profile_shape_id(contract, request.parameters)
+            return attach_source_tree(
+                {"parameters": parameters, "idempotency_key": request.idempotency_key},
+                diagnostic_source,
+                contract.model_copy(
+                    update={"shapes": shapes, "metadata": metadata, "roofline": roofline}
+                ),
+                context.agate_gpu,
+            )
         candidate = request.candidate_path.joinpath(*contract.candidate_path.split("/"))
         if candidate.is_symlink() or not candidate.is_file():
             raise ValueError(f"candidate file is missing: {contract.candidate_path}")
@@ -1009,6 +1100,28 @@ class AgateGatewayAdapter:
                 if value not in (None, False, [], ()):
                     payload[target] = value
             self._apply_dependencies(payload, request.parameters)
+        if context.kernel_source is not None:
+            from ..kernel_sources import KernelSourceBundle
+            from .source_tree import attach_source_tree
+
+            bundle = KernelSourceBundle(
+                context.kernel_source.validate_tree(request.candidate_path),
+                context.kernel_source,
+                contract.candidate_path,
+            )
+            attach_source_tree(
+                payload,
+                bundle,
+                contract.model_copy(
+                    update={
+                        "options": options,
+                        "shapes": shapes,
+                        "metadata": metadata,
+                        "roofline": roofline,
+                    }
+                ),
+                context.agate_gpu,
+            )
         return payload
 
     @staticmethod
@@ -1414,7 +1527,9 @@ def parse_agate_correctness(
         )
         for verdict in records:
             if not isinstance(verdict, dict) or verdict.get("status") not in (
-                "passed", "failed", "skipped"
+                "passed",
+                "failed",
+                "skipped",
             ):
                 raise InfrastructureError(
                     f"Agate correctness eval has malformed or missing {stage} shape verdicts"
@@ -1430,8 +1545,10 @@ def parse_agate_correctness(
     for shape_id in expected_shape_ids:
         shape = shapes.get(shape_id)
         cases = shape.get("cases") if isinstance(shape, dict) else None
-        if not isinstance(cases, list) or not cases or any(
-            not isinstance(case, dict) for case in cases
+        if (
+            not isinstance(cases, list)
+            or not cases
+            or any(not isinstance(case, dict) for case in cases)
         ):
             raise InfrastructureError(
                 "passing Agate correctness eval has missing or malformed correctness cases"
