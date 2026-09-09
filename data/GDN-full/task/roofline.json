@@ -1,0 +1,74 @@
+{
+  "shapes": {
+    "0": {
+      "semantic_W_flops": {"fp16": 2147483648},
+      "semantic_Q_read_bytes": 13893632,
+      "semantic_Q_write_bytes": 9437184,
+      "SOL_time_ms": {"NVIDIA L20D": 0.002916352},
+      "bottleneck": "memory"
+    },
+    "1": {
+      "semantic_W_flops": {"fp16": 8589934592},
+      "semantic_Q_read_bytes": 45088768,
+      "semantic_Q_write_bytes": 35651584,
+      "SOL_time_ms": {"NVIDIA L20D": 0.010092544},
+      "bottleneck": "memory"
+    },
+    "2": {
+      "semantic_W_flops": {"fp16": 10737418240},
+      "semantic_Q_read_bytes": 66322432,
+      "semantic_Q_write_bytes": 44040192,
+      "SOL_time_ms": {"NVIDIA L20D": 0.013795327999999999},
+      "bottleneck": "memory"
+    },
+    "3": {
+      "semantic_W_flops": {"fp16": 8589934592},
+      "semantic_Q_read_bytes": 70254592,
+      "semantic_Q_write_bytes": 35651584,
+      "SOL_time_ms": {"NVIDIA L20D": 0.013238272},
+      "bottleneck": "memory"
+    },
+    "4": {
+      "semantic_W_flops": {"fp16": 32212254720},
+      "semantic_Q_read_bytes": 216793088,
+      "semantic_Q_write_bytes": 128974848,
+      "SOL_time_ms": {"NVIDIA L20D": 0.043220992},
+      "bottleneck": "memory"
+    },
+    "5": {
+      "semantic_W_flops": {"fp16": 68719476736},
+      "semantic_Q_read_bytes": 415236096,
+      "semantic_Q_write_bytes": 272629760,
+      "SOL_time_ms": {"NVIDIA L20D": 0.085983232},
+      "bottleneck": "memory"
+    },
+    "6": {
+      "semantic_W_flops": {"fp16": 8589934592},
+      "semantic_Q_read_bytes": 103809024,
+      "semantic_Q_write_bytes": 35651584,
+      "SOL_time_ms": {"NVIDIA L20D": 0.017432576},
+      "bottleneck": "memory"
+    },
+    "7": {
+      "semantic_W_flops": {"fp16": 17179869184},
+      "semantic_Q_read_bytes": 106954752,
+      "semantic_Q_write_bytes": 71303168,
+      "SOL_time_ms": {"NVIDIA L20D": 0.022282240000000002},
+      "bottleneck": "memory"
+    },
+    "8": {
+      "semantic_W_flops": {"fp16": 68719476736},
+      "semantic_Q_read_bytes": 549453824,
+      "semantic_Q_write_bytes": 272629760,
+      "SOL_time_ms": {"NVIDIA L20D": 0.102760448},
+      "bottleneck": "memory"
+    },
+    "9": {
+      "semantic_W_flops": {"fp16": 137438953472},
+      "semantic_Q_read_bytes": 1631584256,
+      "semantic_Q_write_bytes": 541065216,
+      "SOL_time_ms": {"NVIDIA L20D": 0.271581184},
+      "bottleneck": "memory"
+    }
+  }
+}

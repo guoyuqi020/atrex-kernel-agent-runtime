@@ -21,6 +21,4 @@ coverage/
 .DS_Store
 /runtime.json
 /local-wiki/state/
-/workspaces/bootstrap-example/
-/workspaces/*-example*/
-/workspaces/production/
+/workspaces/

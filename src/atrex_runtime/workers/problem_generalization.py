@@ -247,7 +247,7 @@ class ShapeTrainV1(BaseModel):
     workload_profile: dict[str, JsonValue]
     shape_domain: dict[str, JsonValue]
     invariants: tuple[str, ...]
-    coverage_regimes: tuple[dict[str, JsonValue], ...]
+    coverage_regimes: tuple[dict[str, JsonValue], ...] = ()
     development_cases: tuple[dict[str, JsonValue], ...] = ()
 
     @field_validator("invariants")

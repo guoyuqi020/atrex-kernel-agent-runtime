@@ -1,10 +1,21 @@
-# GDN source-tree optimization kit
+# GDN source-tree task inputs
 
 English | [中文](README.zh.md)
+
+For the counterpart retaining the original optimization hints, see [GDN-full](../GDN-full/README.md).
 
 GPU target: **L20D**. Operator: `chunk_gated_delta_rule`. This kit creates one **CuteDSL**
 Lineage. Preparation does not start Runtime, Wiki, model sessions, or GPU jobs.
 **Both Optimizer and Evolver use the Claude backend, reusing the Lima user's `.claude` configuration.**
+
+`data/GDN/` contains task inputs and configuration templates only. Launch scripts live in
+`scripts/gdn/`; their default workspace is `workspaces/GDN/`. Preparation snapshots the task,
+Campaign definitions, and initial evidence into that workspace and reconstructs the seed there.
+Generated configuration, credentials, databases, sessions, logs, and results never go into `data/`.
+Both scripts accept `--workspace workspaces/GDN-clean` for a separate experiment. Use the same
+workspace for preparation, serving, and execution. Once registered, an experiment retains its
+snapshot; editing `data/GDN/` does not change its inputs. To use revised inputs, prepare a new
+workspace. Do not rerun preparation over historical state to update its task definition.
 
 `campaign.optimizer.max_session_tokens` is **100,000,000 (100M) per Session** for this
 source-tree kit, including Bootstrap and every Active/Challenger Attempt in all ablation
@@ -21,7 +32,7 @@ With this kit prepared and Runtime/Wiki already running, execute in Lima:
 cd ~/atrex-runtime
 source ~/.venvs/atrex-runtime/bin/activate
 source env.sh
-python data/GDN/run.py ablation
+python scripts/gdn/run.py ablation
 ```
 
 This starts tasks only, with the same Sandbox scheduling permissions as `campaign`.
@@ -48,10 +59,10 @@ Runtime journals. Pools restart from the best Kernel at Epoch boundaries; Pool-R
 inherits that trajectory's terminal State, without merging. Arms share no subsequent history
 or writable files.
 
-Outputs live under `data/GDN/ablation/`: frozen inputs, Bootstrap, `campaign-results.json`,
+Outputs live under `workspaces/GDN/ablation/`: frozen inputs, Bootstrap, `campaign-results.json`,
 and per-arm `campaign-result.json` / `campaign.log` (plus control seed definitions/results).
 The summary exposes Campaign/Lineage IDs for inspect. Sessions/Artifacts remain in the shared
-`data/GDN/state/`. Attempt progress streams to each log; arm completion prints a timestamp.
+`workspaces/GDN/state/`. Attempt progress streams to each log; arm completion prints a timestamp.
 Failures do not cancel siblings. Rerunning resumes the same identities and reports completed
 results. `--target-epoch` affects only the main arm; controls retain 15 Attempts per trajectory.
 Changed frozen inputs require a new workspace and creation key.
@@ -61,26 +72,30 @@ before explicitly launching this suite. Adding these configs does not start/stop
 
 ## Contents and provenance
 
-- `task/`: byte-for-byte copies of the adapter, Source Manifest, Torch Reference, input
-  generator, public Shape Train, 10 private test shapes, Metadata, and Roofline.
-- `source.bundle`: an offline Git bundle of the original seed; no external repro directory
+- `task/`: imported adapter, Source Manifest, Torch Reference, input generator, public Shape
+  Train, 10 private test shapes, Metadata, and Roofline. The public objective and evidence
+  annotations have been revised; the Source Manifest pins the updated seed provenance.
+- `source.bundle`: an offline Git bundle of the seed; no external repro directory
   or network checkout is needed.
-- `source/`: the seed Git repository reconstructed by preparation. Do not optimize here.
 - `campaign.json`: pinned L20D task, source and Optimizer revision, and Epoch scheduling.
 - `runtime.template.json`: this task's independent configuration, not a cross-example import.
-- `runtime.json`, `evaluation-contract.json`: generated Linux configuration and sealed inputs.
-- `prepared.json`: content hashes, pinned commits, and local validation results.
 - `initial-evidence/`: seed provenance only, without historical optimization experience.
+
+The workspace holds `task/` and `initial-evidence/` snapshots, `source/` (the reconstructed seed;
+do not optimize here), generated `runtime.json` / `evaluation-contract.json`, Campaign definitions,
+and `prepared.json` (content hashes, pinned commits, and local validation results).
 
 Copied from these locations inside `GDN_AKA_REPRO_20260907`:
 
 - `gdn_fi_initial_seed/task/` and `gdn_fi_initial_seed/source/`.
 - `atrex-bench/data/aka/gdn_prefill_sm103_m64_20260904/chunk_gated_delta_rule/`.
 
-Seed commit: `a39405536f178689d7f60b551c17b2252bcee61d`, based on FlashInfer commit
-`2ab910c58fdd2392914ea05e2a8714946ac0eef6`. No optimized results, `solution.py`, or private
-M64 implementation are included. Original Metadata and Roofline already specify
-`NVIDIA L20D`; measurements for another GPU were not relabeled.
+Seed commit: `60c83174e82e4566e6ee360fd38b85c5bb0794b6`, derived from the original seed
+`a39405536f178689d7f60b551c17b2252bcee61d` and FlashInfer commit
+`2ab910c58fdd2392914ea05e2a8714946ac0eef6`. The seed update changes only
+`UPSTREAM_PROVENANCE.json` to remove an implementation-name hint; Kernel source bytes are
+unchanged. Original Metadata and Roofline already specify `NVIDIA L20D`; measurements for
+another GPU were not relabeled. Existing Campaigns retain their frozen seed and task inputs.
 
 ## Prepare in Lima
 
@@ -90,7 +105,7 @@ Enter Lima from the host and use the **Linux venv**, not the shared macOS `.venv
 limactl shell ubuntu
 cd ~/atrex-runtime
 source ~/.venvs/atrex-runtime/bin/activate
-python data/GDN/prepare.py --backend claude
+python scripts/gdn/prepare.py --backend claude
 ```
 
 Preparation selects the current non-root Linux user as Sandbox Worker and reuses CLI
@@ -109,25 +124,25 @@ Once `state/` exists, preparation refuses to overwrite differing run configurati
 
 Runtime is configured at `http://127.0.0.1:8766`; the independent Wiki service is expected at
 `http://127.0.0.1:8091`. Wiki is not started automatically. State, sessions, and artifacts live
-under `data/GDN/state/`. Agate uses `AGATE_AK` / `AGATE_SK`; set `AGATE_URL` during preparation
+under `workspaces/GDN/state/`. Agate uses `AGATE_AK` / `AGATE_SK`; set `AGATE_URL` during preparation
 to override its endpoint. No credentials are copied into the kit. Runtime and Campaign
 processes need matching `ATREX_CAPABILITY_SIGNING_KEY` and `ATREX_ADMIN_BEARER_TOKEN` values.
 The selected model CLI must already be installed and authenticated.
 
-Alternatively, run `python data/GDN/run.py serve` and
-`python data/GDN/run.py campaign --target-epoch 5` in separate Linux processes with Agate
+Alternatively, run `python scripts/gdn/run.py serve` and
+`python scripts/gdn/run.py campaign --target-epoch 5` in separate Linux processes with Agate
 environment variables loaded and the Sandbox scheduling privileges described below. They
 automatically share persistent `runtime-secrets.json` (mode 0600, Git-ignored), run Bootstrap
 before the requested Epoch, and save `bootstrap-result.json` / `epoch-result.json`. A failed
 Bootstrap prevents optimization from starting. Resume with the same configuration and secrets;
 do not run a second scheduler for the same Campaign concurrently.
 
-The initial Lima trial uses systemd units `atrex-gdn-runtime` and `atrex-gdn-campaign`, with
-logs at `services/runtime.log` / `services/campaign.log`:
+If managed with systemd, the GDN service units can be named `atrex-gdn-runtime` and
+`atrex-gdn-campaign`, with logs redirected under `workspaces/GDN/services/`:
 
 ```bash
 systemctl status atrex-gdn-runtime atrex-gdn-campaign --no-pager
-sudo tail -n 60 data/GDN/services/campaign.log
+sudo tail -n 60 workspaces/GDN/services/campaign.log
 ```
 
 These are the subsequent run entry points, **not commands executed during preparation**.
@@ -136,15 +151,15 @@ to the Worker user, as in the production scripts' root scheduler:
 
 ```bash
 # Service process; Bootstrap and Campaign run in another terminal.
-atrex-kernel-agent-runtime serve --config data/GDN/runtime.json
+atrex-kernel-agent-runtime serve --config workspaces/GDN/runtime.json
 
 # Run a complete Claude Bootstrap Session on the seed, then finalize and register v0.
 atrex-kernel-agent-runtime bootstrap \
-  --config data/GDN/runtime.json --campaign data/GDN/campaign.json
+  --config workspaces/GDN/runtime.json --campaign workspaces/GDN/campaign.json
 
 # Substitute the returned campaign_id. Run through Epoch 5.
 atrex-kernel-agent-runtime run-campaign \
-  --config data/GDN/runtime.json \
+  --config workspaces/GDN/runtime.json \
   --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 5
 ```
 

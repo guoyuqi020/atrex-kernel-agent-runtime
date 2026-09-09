@@ -74,10 +74,11 @@ def test_source_tree_preparation_defaults_to_three_attempts(
 def test_gdn_runner_forwards_absolute_epoch_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arguments: list[str], target: str,
 ) -> None:
-    module = _module("data/GDN/run.py")
-    monkeypatch.setattr(module, "__file__", str(tmp_path / "run.py"))
+    module = _module("scripts/gdn/run.py")
     monkeypatch.setattr(module.sys, "platform", "linux")
-    monkeypatch.setattr(module.sys, "argv", ["run.py", "campaign", *arguments])
+    monkeypatch.setattr(module.sys, "argv", [
+        "run.py", "campaign", "--workspace", str(tmp_path), *arguments,
+    ])
     # Isolate configuration/secrets and fake all process execution.
     (tmp_path / "runtime.json").write_text("{}")
     (tmp_path / "runtime-secrets.json").write_text("{}")

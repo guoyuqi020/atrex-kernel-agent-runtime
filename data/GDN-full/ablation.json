@@ -1,0 +1,85 @@
+{
+  "schema_version": 4,
+  "enabled": true,
+  "optimizer_attempt_budget_per_trajectory": 15,
+  "arms": [
+    {
+      "kind": "isolated",
+      "label": "ablation-isolated-01",
+      "trajectories_per_branch": 1,
+      "attempts_per_trajectory": 3,
+      "target_epoch_number": 5,
+      "ephemeral_agent_state": true,
+      "challenger_count": 0,
+      "challenger_start_epoch": 2,
+      "first_epoch_same_agent": false,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0
+    },
+    {
+      "kind": "isolated",
+      "label": "ablation-isolated-02",
+      "trajectories_per_branch": 1,
+      "attempts_per_trajectory": 3,
+      "target_epoch_number": 5,
+      "ephemeral_agent_state": true,
+      "challenger_count": 0,
+      "challenger_start_epoch": 2,
+      "first_epoch_same_agent": false,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0
+    },
+    {
+      "kind": "pooled",
+      "label": "ablation-pool-3",
+      "trajectories_per_branch": 2,
+      "attempts_per_trajectory": 3,
+      "target_epoch_number": 5,
+      "ephemeral_agent_state": true,
+      "challenger_count": 0,
+      "challenger_start_epoch": 2,
+      "first_epoch_same_agent": false,
+      "optimizer_attempt_budget_total": 30,
+      "evolution_count": 0
+    },
+    {
+      "kind": "pool-retained",
+      "label": "ablation-pool-retained-3",
+      "trajectories_per_branch": 2,
+      "attempts_per_trajectory": 3,
+      "target_epoch_number": 5,
+      "ephemeral_agent_state": false,
+      "challenger_count": 0,
+      "challenger_start_epoch": 2,
+      "first_epoch_same_agent": false,
+      "optimizer_attempt_budget_total": 30,
+      "evolution_count": 0
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-01",
+      "trajectories_per_branch": 1,
+      "attempts_per_trajectory": 3,
+      "target_epoch_number": 5,
+      "ephemeral_agent_state": false,
+      "challenger_count": 0,
+      "challenger_start_epoch": 2,
+      "first_epoch_same_agent": false,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-02",
+      "trajectories_per_branch": 1,
+      "attempts_per_trajectory": 3,
+      "target_epoch_number": 5,
+      "ephemeral_agent_state": false,
+      "challenger_count": 0,
+      "challenger_start_epoch": 2,
+      "first_epoch_same_agent": false,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0
+    }
+  ]
+}

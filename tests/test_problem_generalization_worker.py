@@ -18,6 +18,7 @@ from atrex_runtime.workers import (
     ProblemGeneralizationManifestV1,
     ProblemGeneralizationWorkspaceAssembler,
 )
+from atrex_runtime.workers.problem_generalization import validate_public_operator_contract
 
 
 def _contract() -> dict[str, object]:
@@ -229,3 +230,35 @@ def test_agent_problem_objective_need_not_repeat_structured_privacy(tmp_path: Pa
     )
 
     assert problem.objective == value["objective"]
+
+
+@pytest.mark.parametrize("include_coverage", [False, True])
+def test_shape_train_coverage_regimes_are_optional(include_coverage: bool) -> None:
+    value: dict[str, object] = {
+        "schema_version": "atrex.shape_train.v1",
+        "generator": {},
+        "objective": "Implement vector add across the public input domain.",
+        "operator_contract": {"operation": "vector_add"},
+        "workload_profile": {},
+        "shape_domain": {"n": {"min": 1, "max": 1024}},
+        "invariants": ["input tensors have equal lengths"],
+    }
+    coverage = [{"name": "boundary", "requirement": "cover the public boundaries"}]
+    if include_coverage:
+        value["coverage_regimes"] = coverage
+
+    normalized = validate_public_operator_contract(value, private_shapes={})
+
+    assert normalized["coverage_regimes"] == (coverage if include_coverage else [])
+    assert all(normalized[key] == item for key, item in value.items())
+
+
+def test_gdn_public_contract_omits_coverage_hints() -> None:
+    task = Path(__file__).resolve().parents[1] / "data/GDN/task"
+    value = json.loads((task / "shape_train.json").read_text())
+    private_shapes = json.loads((task / "shape_valid.json").read_text())
+
+    assert "coverage_regimes" not in value
+    normalized = validate_public_operator_contract(value, private_shapes=private_shapes)
+    assert normalized["coverage_regimes"] == []
+    assert all(normalized[key] == item for key, item in value.items())

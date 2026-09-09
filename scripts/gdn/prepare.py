@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare the local GDN kit in Linux/Lima; never start services, Agents or GPU jobs."""
+"""Prepare a GDN workspace from read-only task inputs; never start services or Agents."""
 
 from __future__ import annotations
 
@@ -28,24 +28,63 @@ def git(*arguments: str) -> str:
     return subprocess.check_output(["git", *arguments], text=True, stderr=subprocess.PIPE).strip()
 
 
-def write_json(path: Path, value: object) -> None:
-    text = json.dumps(value, indent=2, ensure_ascii=False) + "\n"
-    if path.exists() and path.read_text() == text:
-        return
-    # Local launch inputs are regenerated only before Runtime state has been created.
-    if path.exists() and (path.parent / "state").exists():
-        raise SystemExit(f"Existing runtime state: refusing to replace {path.name}")
-    path.write_text(text)
+def json_bytes(value: object) -> bytes:
+    return (json.dumps(value, indent=2, ensure_ascii=False) + "\n").encode()
+
+
+def write_inputs(workspace: Path, files: dict[str, bytes]) -> None:
+    """Preflight the entire snapshot before writing; never change a registered run's inputs."""
+    if (workspace / "state").exists():
+        for name, content in files.items():
+            path = workspace / name
+            if not path.is_file() or path.read_bytes() != content:
+                raise SystemExit(
+                    f"Existing runtime state: refusing to replace {name}. "
+                    "Resume with run.py, or prepare a new --workspace for changed inputs."
+                )
+    for name, content in files.items():
+        path = workspace / name
+        if path.is_file() and path.read_bytes() == content:
+            continue
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(content)
+
+
+def rebase_repositories(template: dict, inputs: Path, workspace: Path) -> None:
+    """Keep repository references relative even with a custom workspace depth."""
+    campaign = template["campaign"]
+    for section, key in (
+        (template["kernel_agent"]["base_source"], "repository"),
+        (campaign["evolver"], "repository"),
+        (campaign["gate_policy"]["evaluator"], "repository"),
+        (campaign["roofline_builder"], "repository"),
+        (campaign["launcher"]["sandbox"], "reference_projects_root"),
+    ):
+        value = section[key]
+        if value and (key != "repository" or value.startswith(("./", "../", "/"))):
+            section[key] = "./" + os.path.relpath((inputs / value).resolve(), workspace)
 
 
 def main() -> None:
     if sys.platform != "linux":
         raise SystemExit("Run this preparation inside Lima Ubuntu, not with the macOS .venv.")
     parser = argparse.ArgumentParser(description=__doc__)
+    repository = Path(__file__).resolve().parents[2]
+    parser.add_argument(
+        "--inputs", type=Path, default=repository / "data/GDN",
+        help="task input directory (default: data/GDN)",
+    )
+    parser.add_argument(
+        "--workspace", type=Path,
+        help="run output directory (default: workspaces/<input directory name>)",
+    )
     parser.add_argument("--backend", choices=("qodercli", "claude", "codex", "pi"))
     parser.add_argument("--worker-user", help="existing non-root Linux user; defaults to this user")
     args = parser.parse_args()
-    root = Path(__file__).resolve().parent
+    root = args.inputs.resolve()
+    workspace = (args.workspace or repository / "workspaces" / root.name).resolve()
+    if workspace.is_relative_to(repository / "data") or root.is_relative_to(workspace):
+        raise SystemExit("--workspace must be separate from data; use workspaces/GDN.")
     task = root / "task"
     campaign = CampaignSpecV3.from_file(root / "campaign.json")
     if campaign.hardware_target != "L20D":
@@ -69,13 +108,14 @@ def main() -> None:
     launcher["sandbox"]["worker_user"] = worker.pw_name
     launcher["backend_credentials"]["host_home"] = worker.pw_dir
     template["agate"]["base_url"] = os.environ.get("AGATE_URL") or template["agate"]["base_url"]
-    config_path = root / "runtime.json"
+    rebase_repositories(template, root, workspace)
     RuntimeSettings.model_validate(template)
 
     # This is an offline bundle of one initial commit, not a link to the external repro.
     manifest = json.loads((task / "source_manifest.json").read_text())
     revision = manifest["source"]["revision"]
-    source = root / "source"
+    workspace.mkdir(parents=True, exist_ok=True)
+    source = workspace / "source"
     if not source.exists():
         subprocess.run(
             ["git", "clone", "--quiet", str(root / "source.bundle"), str(source)],
@@ -83,7 +123,10 @@ def main() -> None:
             capture_output=True,
         )
     if git("-C", str(source), "rev-parse", "HEAD") != revision:
-        raise SystemExit("Local source HEAD differs from the pinned GDN seed; not overwriting it.")
+        raise SystemExit(
+            "Workspace seed differs from the current task input; not overwriting it. "
+            "Resume with run.py, or prepare a new --workspace for changed inputs."
+        )
     if git("-C", str(source), "status", "--porcelain", "--untracked-files=all"):
         raise SystemExit(
             "Local source seed is dirty; do not edit it. Agents edit work/kernel instead."
@@ -120,9 +163,13 @@ def main() -> None:
         file_count = len(source_contract.validate_tree(artifact.payload_path))
         digest = str(source_contract.seed_digest)
 
-    write_json(config_path, template)
-    write_json(root / "evaluation-contract.json", contract.model_dump(mode="json"))
-    settings = RuntimeSettings.from_file(config_path)
+    # Resolve repositories against the generated configuration, not the input directory.
+    settings = RuntimeSettings.model_validate(template)
+    assert settings.campaign is not None
+    settings = settings.model_copy(update={
+        "kernel_agent": settings.kernel_agent.resolve_from(workspace),
+        "campaign": settings.campaign.resolve_from(workspace),
+    })
     assert settings.campaign is not None and settings.kernel_agent.base_source is not None
     repositories = (
         (settings.kernel_agent.base_source.repository, campaign.base_revision.commit),
@@ -135,6 +182,7 @@ def main() -> None:
     for repository, commit in repositories:
         git("-C", repository, "cat-file", "-e", f"{commit}^{{commit}}")
     provenance = {
+        "task_inputs": os.path.relpath(root, workspace),
         "hardware_target": campaign.hardware_target,
         "dsl": "cutedsl",
         "source_commit": revision,
@@ -157,8 +205,22 @@ def main() -> None:
         "prepared_on": "Linux/Lima",
         "gpu_jobs_submitted": 0,
     }
-    write_json(root / "prepared.json", provenance)
-    print(f"Prepared: {root}")
+    files = {
+        "runtime.json": json_bytes(template),
+        "evaluation-contract.json": json_bytes(contract.model_dump(mode="json")),
+        "prepared.json": json_bytes(provenance),
+    }
+    for name in ("campaign.json", "ablation-campaign.json", "ablation.json"):
+        files[name] = (root / name).read_bytes()
+    for directory in ("task", "initial-evidence"):
+        for path in sorted((root / directory).rglob("*")):
+            if path.is_symlink():
+                raise SystemExit(f"Task input must not be a symlink: {path}")
+            if path.is_file() and path.name != ".DS_Store" and "__pycache__" not in path.parts:
+                files[path.relative_to(root).as_posix()] = path.read_bytes()
+    write_inputs(workspace, files)
+    print(f"Task inputs: {root}")
+    print(f"Prepared workspace: {workspace}")
     print(f"GPU=L20D DSL=cutedsl backend={settings.campaign.optimizer.agent_backend}")
     print(f"Source: {revision}; {file_count} files; {len(shapes)} private shapes")
     print(f"Source integrity and production policy: passed ({digest})")

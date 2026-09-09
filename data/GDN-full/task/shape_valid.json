@@ -1,0 +1,152 @@
+{
+  "0": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 2048,
+      "num_q_heads": 4,
+      "num_v_heads": 16,
+      "sequence_lengths_values": [2048],
+      "initial_state_mode": "zero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "1": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 4096,
+      "num_q_heads": 4,
+      "num_v_heads": 32,
+      "sequence_lengths_values": [4096],
+      "initial_state_mode": "nonzero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "2": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 5120,
+      "num_q_heads": 8,
+      "num_v_heads": 32,
+      "sequence_lengths_values": [5120],
+      "initial_state_mode": "zero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "3": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 4096,
+      "num_q_heads": 16,
+      "num_v_heads": 32,
+      "sequence_lengths_values": [4096],
+      "initial_state_mode": "nonzero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "4": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 10240,
+      "num_q_heads": 16,
+      "num_v_heads": 48,
+      "sequence_lengths_values": [10240],
+      "initial_state_mode": "zero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "5": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 16384,
+      "num_q_heads": 16,
+      "num_v_heads": 64,
+      "sequence_lengths_values": [16384],
+      "initial_state_mode": "nonzero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "6": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 4096,
+      "num_q_heads": 32,
+      "num_v_heads": 32,
+      "sequence_lengths_values": [4096],
+      "initial_state_mode": "zero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "7": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 8192,
+      "num_q_heads": 8,
+      "num_v_heads": 32,
+      "sequence_lengths_values": [4096, 4096],
+      "initial_state_mode": "zero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "8": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 32768,
+      "num_q_heads": 16,
+      "num_v_heads": 32,
+      "sequence_lengths_values": [1, 32767],
+      "initial_state_mode": "nonzero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "9": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "total_tokens": 65536,
+      "num_q_heads": 32,
+      "num_v_heads": 32,
+      "sequence_lengths_values": [32768, 32768],
+      "initial_state_mode": "nonzero",
+      "head_dim": 128,
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  }
+}

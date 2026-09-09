@@ -14,17 +14,21 @@ from pathlib import Path
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
+    repository = Path(__file__).resolve().parents[2]
     parser.add_argument("role", choices=("serve", "campaign", "ablation"))
+    parser.add_argument("--workspace", type=Path, default=repository / "workspaces/GDN")
     parser.add_argument("--target-epoch", type=int, default=5)
     args = parser.parse_args()
     if sys.platform != "linux":
         raise SystemExit("Run inside Lima Ubuntu with the Linux venv.")
     if args.target_epoch < 1:
         raise SystemExit("--target-epoch must be positive")
-    root = Path(__file__).resolve().parent
+    root = args.workspace.resolve()
+    if root.is_relative_to(repository / "data") or repository.is_relative_to(root):
+        raise SystemExit("--workspace must be separate from data; use workspaces/GDN.")
     config = root / "runtime.json"
     if not config.is_file():
-        raise SystemExit("Run data/GDN/prepare.py first")
+        raise SystemExit(f"Run scripts/gdn/prepare.py --workspace {root} first")
     # Both process roles share these persistent control-plane keys. Never print them.
     secret_path = root / "runtime-secrets.json"
     try:
@@ -45,7 +49,7 @@ def main() -> None:
     if args.role == "serve":
         os.execv(cli, [str(cli), "serve", "--config", str(config)])
     if args.role == "ablation":
-        runner = root.parents[1] / "scripts/source-tree/run.py"
+        runner = repository / "scripts/source-tree/run.py"
         os.execv(sys.executable, [
             sys.executable, str(runner), "--config", str(config),
             "--campaign", str(root / "ablation-campaign.json"),

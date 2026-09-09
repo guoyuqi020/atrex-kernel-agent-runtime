@@ -154,12 +154,12 @@ def test_changed_plan_or_frozen_campaign_rejected_before_execution(tmp_path, mon
 
 
 def test_gdn_ablation_role_uses_separate_definition_and_output(tmp_path, monkeypatch):
-    module = _module("data/GDN/run.py")
-    root = tmp_path / "data/GDN"
+    module = _module("scripts/gdn/run.py")
+    root = tmp_path / "workspaces/GDN"
     root.mkdir(parents=True)
     (root / "runtime.json").write_text("{}")
     (root / "runtime-secrets.json").write_text("{}")
-    monkeypatch.setattr(module, "__file__", str(root / "run.py"))
+    monkeypatch.setattr(module, "__file__", str(tmp_path / "scripts/gdn/run.py"))
     monkeypatch.setattr(module.sys, "platform", "linux")
     monkeypatch.setattr(module.sys, "argv", ["run.py", "ablation"])
 

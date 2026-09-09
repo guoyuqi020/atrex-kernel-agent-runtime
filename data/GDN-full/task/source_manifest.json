@@ -4,7 +4,7 @@
   "adapter": "adapter.py",
   "source": {
     "name": "flashinfer_gdn_seed",
-    "revision": "60c83174e82e4566e6ee360fd38b85c5bb0794b6",
+    "revision": "a39405536f178689d7f60b551c17b2252bcee61d",
     "archive_paths": [
       "flashinfer",
       "LICENSE",

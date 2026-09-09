@@ -1,0 +1,23 @@
+{
+  "schema_version": 3,
+  "creation_key": "gdn-source-tree-full-l20d-claude-ablation",
+  "operator": "chunk_gated_delta_rule",
+  "hardware_target": "L20D",
+  "evaluation_contract": "evaluation-contract.json",
+  "shape_train": "task/shape_train.json",
+  "base_revision": {
+    "commit": "ec2f3f24bd787174667be71ade0f28314b96c82b"
+  },
+  "challenger_count": 1,
+  "challenger_start_epoch": 2,
+  "trajectories_per_branch": 1,
+  "attempts_per_trajectory": 3,
+  "lineages": {
+    "cutedsl": {
+      "source_manifest": "task/source_manifest.json",
+      "source_repository": "source",
+      "initial_evidence": "initial-evidence"
+    }
+  },
+  "first_epoch_same_agent": true
+}

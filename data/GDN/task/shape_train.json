@@ -5,7 +5,7 @@
     "version": 1,
     "domain_policy": "evidence_gated_non_enumerating"
   },
-  "objective": "Implement and optimize an M64-oriented prepared-input GDN prefill path for the documented SM103 workload domain without dispatching on hidden exact cases.",
+  "objective": "Implement and optimize a prepared-input GDN prefill candidate that is correct and fast across the public input domain on the specified target GPU; exact evaluator cases are hidden and must not be used for case-specific dispatch.",
   "operator_contract": {
     "operation": "chunk gated delta rule",
     "category": "OTHER",
@@ -31,208 +31,53 @@
     "total_tokens": {
       "type": "integer",
       "min": 1536,
-      "max": 65536,
-      "range_evidence": {
-        "lower": {
-          "kind": "traffic_spec",
-          "evidence": "The benchmark target includes single-sequence low-parallelism calls beginning at 1536 tokens.",
-          "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-          "locator": "shape_domain.total_tokens.lower",
-          "scope": "per_call",
-          "regimes": ["m64_b1", "m64_b2"]
-        },
-        "upper": {
-          "kind": "traffic_spec",
-          "evidence": "The benchmark target includes packed prefill calls up to 65536 total tokens.",
-          "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-          "locator": "shape_domain.total_tokens.upper",
-          "scope": "per_call",
-          "regimes": ["m64_b1", "m64_b2"]
-        }
-      }
+      "max": 65536
     },
     "num_q_heads": {
       "type": "integer",
       "min": 4,
-      "max": 32,
-      "range_evidence": {
-        "lower": {
-          "kind": "traffic_spec",
-          "evidence": "The benchmark target includes low-parallelism configurations beginning at four query heads.",
-          "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-          "locator": "shape_domain.num_q_heads.lower",
-          "scope": "per_call",
-          "regimes": ["m64_b1", "m64_b2"]
-        },
-        "upper": {
-          "kind": "traffic_spec",
-          "evidence": "The benchmark target includes configurations through 32 query heads.",
-          "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-          "locator": "shape_domain.num_q_heads.upper",
-          "scope": "per_call",
-          "regimes": ["m64_b1", "m64_b2"]
-        }
-      }
+      "max": 32
     },
     "num_v_heads": {
       "type": "integer",
       "min": 16,
-      "max": 64,
-      "range_evidence": {
-        "lower": {
-          "kind": "traffic_spec",
-          "evidence": "The benchmark target includes configurations beginning at 16 value heads.",
-          "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-          "locator": "shape_domain.num_v_heads.lower",
-          "scope": "per_call",
-          "regimes": ["m64_b1", "m64_b2"]
-        },
-        "upper": {
-          "kind": "traffic_spec",
-          "evidence": "The benchmark target includes configurations through 64 value heads.",
-          "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-          "locator": "shape_domain.num_v_heads.upper",
-          "scope": "per_call",
-          "regimes": ["m64_b1", "m64_b2"]
-        }
-      }
+      "max": 64
     },
     "sequence_lengths_values": {
       "type": "array",
       "length": {
         "min": 1,
-        "max": 2,
-        "range_evidence": {
-          "lower": {
-            "kind": "traffic_spec",
-            "evidence": "The benchmark target includes one packed sequence.",
-            "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-            "locator": "shape_domain.sequence_count.lower",
-            "scope": "per_call",
-            "regimes": ["m64_b1"]
-          },
-          "upper": {
-            "kind": "traffic_spec",
-            "evidence": "The benchmark target includes at most two packed sequences.",
-            "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-            "locator": "shape_domain.sequence_count.upper",
-            "scope": "per_call",
-            "regimes": ["m64_b2"]
-          }
-        }
+        "max": 2
       },
       "items": {
         "type": "integer",
         "min": 1,
-        "max": 65536,
-        "range_evidence": {
-          "lower": {
-            "kind": "source_constraint",
-            "evidence": "Every packed sequence is non-empty.",
-            "artifact": "source://flashinfer@2ab910c58fdd2392914ea05e2a8714946ac0eef6/flashinfer/gdn_prefill.py",
-            "locator": "chunk_gated_delta_rule:cu_seqlens",
-            "scope": "per_call",
-            "regimes": ["m64_b1", "m64_b2"]
-          },
-          "upper": {
-            "kind": "derived",
-            "evidence": "A member length is below total_tokens when B=2 and equals total_tokens when B=1.",
-            "formula": "sequence_length <= total_tokens <= 65536",
-            "inputs": [
-              {
-                "kind": "source_constraint",
-                "evidence": "The public baseline derives packed sequences from cumulative, non-empty cu_seqlens intervals.",
-                "artifact": "source://flashinfer@2ab910c58fdd2392914ea05e2a8714946ac0eef6/flashinfer/gdn_prefill.py",
-                "locator": "chunk_gated_delta_rule:cu_seqlens",
-                "scope": "per_call",
-                "regimes": ["m64_b1", "m64_b2"]
-              },
-              {
-                "kind": "traffic_spec",
-                "evidence": "The task bounds total packed tokens at 65536.",
-                "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-                "locator": "shape_domain.total_tokens.upper",
-                "scope": "per_call",
-                "regimes": ["m64_b1", "m64_b2"]
-              }
-            ],
-            "scope": "per_call",
-            "regimes": ["m64_b1", "m64_b2"]
-          }
-        }
+        "max": 65536
       }
     },
     "initial_state_mode": {
       "type": "string",
-      "values": ["zero", "nonzero"],
-      "value_evidence": {
-        "kind": "traffic_spec",
-        "evidence": "The task covers both first-prefill zero state and non-zero continuation state values.",
-        "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-        "locator": "coverage.prefill_state",
-        "scope": "per_call",
-        "regimes": ["prefill_first", "prefill_continuation"]
-      }
+      "values": ["zero", "nonzero"]
     },
     "head_dim": {
       "type": "integer",
-      "values": [128],
-      "value_evidence": {
-        "kind": "source_constraint",
-        "evidence": "The public FlashInfer baseline fixes the Blackwell GDN prefill head dimension at 128.",
-        "artifact": "source://flashinfer@2ab910c58fdd2392914ea05e2a8714946ac0eef6/flashinfer/gdn_prefill.py",
-        "locator": "chunk_gated_delta_rule:head_size",
-        "scope": "per_call",
-        "regimes": ["m64_b1", "m64_b2"]
-      }
+      "values": [128]
     },
     "qkv_dtype": {
       "type": "string",
-      "values": ["fp16"],
-      "value_evidence": {
-        "kind": "traffic_spec",
-        "evidence": "The first-stage optimization target fixes Q, K, V, and output tensors to FP16.",
-        "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-        "locator": "operator_contract.qkv_dtype",
-        "scope": "per_call",
-        "regimes": ["m64_b1", "m64_b2"]
-      }
+      "values": ["fp16"]
     },
     "gate_dtype": {
       "type": "string",
-      "values": ["fp32"],
-      "value_evidence": {
-        "kind": "traffic_spec",
-        "evidence": "The prepared-input task boundary supplies the decay gate in FP32.",
-        "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-        "locator": "operator_contract.gate_dtype",
-        "scope": "per_call",
-        "regimes": ["m64_b1", "m64_b2"]
-      }
+      "values": ["fp32"]
     },
     "beta_dtype": {
       "type": "string",
-      "values": ["fp32"],
-      "value_evidence": {
-        "kind": "traffic_spec",
-        "evidence": "The prepared-input task boundary supplies the update gate in FP32.",
-        "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-        "locator": "operator_contract.beta_dtype",
-        "scope": "per_call",
-        "regimes": ["m64_b1", "m64_b2"]
-      }
+      "values": ["fp32"]
     },
     "state_dtype": {
       "type": "string",
-      "values": ["fp32"],
-      "value_evidence": {
-        "kind": "traffic_spec",
-        "evidence": "The prepared-input task boundary supplies initial and output state tensors in FP32.",
-        "artifact": "task-spec://sm103-gdn-prefill-m64-v1",
-        "locator": "operator_contract.state_dtype",
-        "scope": "per_call",
-        "regimes": ["m64_b1", "m64_b2"]
-      }
+      "values": ["fp32"]
     }
   },
   "invariants": [
@@ -242,28 +87,6 @@
     "(num_q_heads, num_v_heads) in [(4, 16), (4, 32), (8, 32), (16, 32), (16, 48), (16, 64), (32, 32)]",
     "len(sequence_lengths_values) != 1 or (((num_q_heads, num_v_heads) in [(8, 32), (16, 32), (16, 48), (16, 64), (32, 32)] and total_tokens in [2048, 4096, 8192, 16384, 32768, 65536]) or ((num_q_heads, num_v_heads) == (4, 16) and 1536 <= total_tokens <= 3072) or ((num_q_heads, num_v_heads) in [(4, 32), (8, 32), (16, 32), (32, 32)] and 2048 <= total_tokens <= 5120) or ((num_q_heads, num_v_heads) == (16, 48) and 2048 <= total_tokens <= 10240) or ((num_q_heads, num_v_heads) == (16, 64) and 2048 <= total_tokens <= 65536))",
     "len(sequence_lengths_values) != 2 or ((num_q_heads, num_v_heads) in [(8, 32), (16, 32), (32, 32)] and 4096 <= total_tokens <= 65536)"
-  ],
-  "coverage_regimes": [
-    {
-      "name": "m64_b1",
-      "requirement": "cover the promoted single-sequence head and token ranges"
-    },
-    {
-      "name": "m64_b2_balanced",
-      "requirement": "cover two similarly sized packed sequences"
-    },
-    {
-      "name": "m64_b2_ragged",
-      "requirement": "cover two highly imbalanced packed sequences"
-    },
-    {
-      "name": "prefill_first",
-      "requirement": "consume an explicitly present zero initial state"
-    },
-    {
-      "name": "prefill_continuation",
-      "requirement": "consume a non-zero initial state and return the final state"
-    }
   ],
   "development_cases": [
     {

@@ -2,9 +2,18 @@
 
 [English](README.md) | 中文
 
+保留原始优化提示的独立对照输入包见 [GDN-full](../GDN-full/README.zh.md)。
+
 目标 GPU：**L20D**。算子：`chunk_gated_delta_rule`。仅创建 **CuteDSL** Lineage。
 **Optimizer 和 Evolver 均使用 Claude backend，复用 Lima 用户的 `.claude` 配置。**
 这是供后续试跑使用的独立输入包；准备脚本不启动 Runtime、Wiki、模型或 GPU 作业。
+
+`data/GDN/` 只存任务输入和配置模板；启动脚本位于 `scripts/gdn/`，默认工作区为
+`workspaces/GDN/`。准备阶段会把任务、Campaign 定义及初始证据复制为工作区快照，
+并在工作区还原 seed。生成配置、凭据、数据库、Session、日志和结果均不写入 `data/`。
+两个脚本都支持 `--workspace workspaces/GDN-clean`；准备、服务和运行必须指定同一工作区。
+已注册的实验保留原输入快照，修改 `data/GDN/` 不会影响它。要使用新输入，请准备新工作区，
+不要通过重新 prepare 覆盖已有实验的任务定义。
 
 本源码树任务的 `campaign.optimizer.max_session_tokens` 为 **100,000,000（100M）/ Session**，
 覆盖 Bootstrap，以及所有消融臂的每一次 Active/Challenger Attempt；不是整个 Epoch 或
@@ -20,7 +29,7 @@ Campaign 共用 100M。Evolver 仍不限 token，原有超时限制不变。新�
 cd ~/atrex-runtime
 source ~/.venvs/atrex-runtime/bin/activate
 source env.sh
-python data/GDN/run.py ablation
+python scripts/gdn/run.py ablation
 ```
 
 只启动任务，不管理服务；需与原 `campaign` 入口相同的 Sandbox 调度权限。
@@ -44,9 +53,9 @@ python data/GDN/run.py ablation
 重置 State 不会删除 Kernel 进展或 Runtime Journal；Pool 在 Epoch 边界共享最佳 Kernel，
 Pool-Retained 还继承该轨迹的终态 State，不做合并。不同臂不共享后续历史或可写文件。
 
-输出在 `data/GDN/ablation/`：Bootstrap、冻结输入、`campaign-results.json` 汇总，以及每臂
+输出在 `workspaces/GDN/ablation/`：Bootstrap、冻结输入、`campaign-results.json` 汇总，以及每臂
 同名目录中的 `campaign-result.json` / `campaign.log`；对照臂还保存 seed 定义和结果。
-汇总含各臂 Campaign/Lineage ID，可供 inspect 使用。Session/Artifact 仍在共享的 `data/GDN/state/`。
+汇总含各臂 Campaign/Lineage ID，可供 inspect 使用。Session/Artifact 在共享的 `workspaces/GDN/state/`。
 Attempt 进度实时写入各臂日志，臂完成时打印时间戳。失败不取消其他臂；重复运行复用身份并恢复，
 完成后只报告结果。`--target-epoch` 只改变主臂目标，对照臂固定每轨迹 15 次 Attempt。
 修改冻结输入需新 Workspace 和 creation key。
@@ -56,24 +65,29 @@ Attempt 进度实时写入各臂日志，臂完成时打印时间戳。失败不
 
 ## 内容与来源
 
-- `task/`：原始适配器、Source Manifest、Torch Reference、输入生成器、公开 Shape Train、
-  10 个私有测试 Shape、Metadata 和 Roofline，逐字节保留原文件。
+- `task/`：导入的适配器、Source Manifest、Torch Reference、输入生成器、公开 Shape Train、
+  10 个私有测试 Shape、Metadata 和 Roofline。公开目标与证据说明已调整，Source Manifest
+  固定到更新来源说明后的 seed 版本。
 - `source.bundle`：初始源码的离线 Git Bundle，不依赖外部 GDN 目录或联网拉取。
-- `source/`：准备脚本从 Bundle 还原的只读用途 seed Git 仓库，不要在这里进行优化。
 - `campaign.json`：固定 L20D、初始源码及 Optimizer commit、每 Epoch 的优化调度。
 - `runtime.template.json`：本任务自己的 Runtime 配置模板，不交叉引用其他 example。
-- `runtime.json`、`evaluation-contract.json`：在 Lima 生成的可用配置及封存输入契约。
-- `prepared.json`：文件 SHA-256、固定 commit 和本地校验结果。
 - `initial-evidence/`：初始来源说明，不包含历史优化经验。
+
+工作区保存 `task/` 与 `initial-evidence/` 快照、还原的 `source/`（不要直接在此优化）、
+生成的 `runtime.json` / `evaluation-contract.json`、Campaign 定义，以及记录文件哈希、
+固定 commit 和本地校验结果的 `prepared.json`。
 
 原始资料来自 `GDN_AKA_REPRO_20260907` 中的：
 
 - `gdn_fi_initial_seed/task/`、`gdn_fi_initial_seed/source/`。
 - `atrex-bench/data/aka/gdn_prefill_sm103_m64_20260904/chunk_gated_delta_rule/`。
 
-初始 seed commit：`a39405536f178689d7f60b551c17b2252bcee61d`；其 FlashInfer 上游 commit：
-`2ab910c58fdd2392914ea05e2a8714946ac0eef6`。不包含原实验的优化结果、`solution.py` 或私有
-M64 实现。原 Metadata 与 Roofline 已使用 `NVIDIA L20D`，未将其他 GPU 的数据改名复用。
+当前 seed commit：`60c83174e82e4566e6ee360fd38b85c5bb0794b6`，基于原 seed
+`a39405536f178689d7f60b551c17b2252bcee61d` 与 FlashInfer 上游 commit
+`2ab910c58fdd2392914ea05e2a8714946ac0eef6`。本次 seed 更新仅修改
+`UPSTREAM_PROVENANCE.json`，去掉实现名称提示，Kernel 源码字节保持不变。
+原 Metadata 与 Roofline 已使用 `NVIDIA L20D`，未将其他 GPU 的数据改名复用。
+已有 Campaign 仍使用其冻结的 seed 和任务输入。
 
 ## 在 Lima 准备
 
@@ -83,7 +97,7 @@ M64 实现。原 Metadata 与 Roofline 已使用 `NVIDIA L20D`，未将其他 GP
 limactl shell ubuntu
 cd ~/atrex-runtime
 source ~/.venvs/atrex-runtime/bin/activate
-python data/GDN/prepare.py --backend claude
+python scripts/gdn/prepare.py --backend claude
 ```
 
 脚本使用当前非 root Linux 用户作为 Sandbox Worker，并从该用户 Home 复用 CLI 配置；
@@ -100,24 +114,24 @@ Home 下的 venv 路径。
 ## 后续启动
 
 配置预留 Runtime 地址 `http://127.0.0.1:8766`、Wiki 地址 `http://127.0.0.1:8091`。
-Wiki 是独立服务；本包不会自动启动它。状态、Session 和 Artifact 写入 `data/GDN/state/`。
+Wiki 是独立服务；本包不会自动启动它。状态、Session 和 Artifact 写入 `workspaces/GDN/state/`。
 Agate 使用 `AGATE_AK` / `AGATE_SK`，`AGATE_URL` 可在准备时覆盖服务地址；不将凭据复制进输入包。
 Runtime 服务与 Campaign 进程还需使用一致的 `ATREX_CAPABILITY_SIGNING_KEY` 和
 `ATREX_ADMIN_BEARER_TOKEN`。所选模型 CLI 必须已经安装并配置好认证。
 
 也可以使用 `run.py`：在已加载 Agate 环境变量、具备下述 Sandbox 调度权限的 Linux 进程中，
-分别运行 `python data/GDN/run.py serve` 和
-`python data/GDN/run.py campaign --target-epoch 5`。它自动共用持久化的
+分别运行 `python scripts/gdn/run.py serve` 和
+`python scripts/gdn/run.py campaign --target-epoch 5`。它自动共用持久化的
 `runtime-secrets.json`（权限 0600，Git 忽略），按顺序执行 Bootstrap 和指定 Epoch，
 将结果写入 `bootstrap-result.json` / `epoch-result.json`；Bootstrap 失败就停止，不启动优化。
 恢复时继续使用原配置及 secrets，不要另起一个并行的同 Campaign 调度器。
 
-本次 Lima 试跑使用 `atrex-gdn-runtime` 和 `atrex-gdn-campaign` 两个 systemd 单元，
-日志在 `services/runtime.log` / `services/campaign.log`。查看状态可用：
+如使用 systemd 管理，可将服务单元命名为 `atrex-gdn-runtime` 和 `atrex-gdn-campaign`，
+并将日志重定向到 `workspaces/GDN/services/`。查看状态可用：
 
 ```bash
 systemctl status atrex-gdn-runtime atrex-gdn-campaign --no-pager
-sudo tail -n 60 data/GDN/services/campaign.log
+sudo tail -n 60 workspaces/GDN/services/campaign.log
 ```
 
 以下为后续试跑的 CLI 入口，**本次准备没有执行**。Sandbox 调度须在具备 systemd 系统服务
@@ -125,15 +139,15 @@ sudo tail -n 60 data/GDN/services/campaign.log
 
 ```bash
 # 服务进程；另一个终端执行 Bootstrap / Campaign。
-atrex-kernel-agent-runtime serve --config data/GDN/runtime.json
+atrex-kernel-agent-runtime serve --config workspaces/GDN/runtime.json
 
 # 启动完整 Claude Bootstrap Session，在 seed 上验证/修复，再由 Runtime 终评注册 v0。
 atrex-kernel-agent-runtime bootstrap \
-  --config data/GDN/runtime.json --campaign data/GDN/campaign.json
+  --config workspaces/GDN/runtime.json --campaign workspaces/GDN/campaign.json
 
 # 将返回的 campaign_id 填入下面的位置；运行到 Epoch 5。
 atrex-kernel-agent-runtime run-campaign \
-  --config data/GDN/runtime.json \
+  --config workspaces/GDN/runtime.json \
   --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 5
 ```
 
