@@ -854,7 +854,11 @@ def _parse_remote_payload(
     if not isinstance(raw, dict) or raw.get("schema_version") != 1:
         raise InfrastructureError("Agate ABBA result sentinel is missing")
     if raw.get("error"):
-        raise InfrastructureError(f"Agate ABBA remote driver failed: {raw['error']}")
+        raise InfrastructureError(
+            f"Agate ABBA remote driver failed: {raw['error']}",
+            public_detail=f"Agate ABBA remote driver failed in job {job.get('job_id', 'unknown')}; "
+            "inspect Runtime logs for the driver error (private case details withheld).",
+        )
     rows = raw.get("runs")
     if not isinstance(rows, list) or len(rows) != len(schedule):
         raise InfrastructureError("Agate ABBA remote schedule is incomplete")

@@ -98,6 +98,23 @@ roofline = {'shapes': {shape_id: {
     return repository, commit
 
 
+def test_roofline_source_preflight_does_not_execute_generator(tmp_path: Path, monkeypatch) -> None:
+    repository, commit = _builder_repository(tmp_path)
+    builder = AtrexBenchRooflineBuilder(
+        repository=str(repository), commit=commit, git_executable="/usr/bin/git",
+        python_executable="/not-an-executable", fetch_timeout_seconds=10,
+        execution_timeout_seconds=10, max_archive_bytes=1024 * 1024, max_output_bytes=65536,
+    )
+    original = subprocess.run
+
+    def git_only(command, **kwargs):
+        assert str(command[0]) == "/usr/bin/git", "Preflight must not execute source code"
+        return original(command, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", git_only)
+    builder.validate_source()
+
+
 def test_commit_pinned_atrex_bench_builder_generates_complete_roofline(
     tmp_path: Path,
 ) -> None:

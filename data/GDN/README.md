@@ -45,13 +45,13 @@ No repeated baseline measurement or old trial experience is imported.
 
 | Campaign instance | Per-Epoch topology | Optimizer Attempts | Retain State | Evolutions |
 |---|---|---:|---|---:|
-| `evolve-3` | Active + Challenger, 1 trajectory × 3 Attempts each | 30 | yes | 4 |
-| `ablation-isolated-01/02` | Two independent instances, 1 trajectory × 3 each | 15 each | no | 0 |
-| `ablation-retained-01/02` | Two independent instances, 1 trajectory × 3 each | 15 each | yes | 0 |
-| `ablation-pool-3` | One Active Branch, 2 trajectories × 3 | 30 | no | 0 |
-| `ablation-pool-retained-3` | One Active Branch, 2 trajectories × 3 | 30 | yes | 0 |
+| `evolve-3` | Active + Challenger, 1 trajectory × 3 Attempts each | 600 | yes | 99 |
+| `ablation-isolated-01/02` | Two independent instances, 1 trajectory × 3 each | 300 each | no | 0 |
+| `ablation-retained-01/02` | Two independent instances, 1 trajectory × 3 each | 300 each | yes | 0 |
+| `ablation-pool-3` | One Active Branch, 2 trajectories × 3 | 600 | no | 0 |
+| `ablation-pool-retained-3` | One Active Branch, 2 trajectories × 3 | 600 | yes | 0 |
 
-Seven Campaigns, five Epochs each, 150 Optimizer Attempts excluding Bootstrap/Evolver.
+Seven Campaigns, 100 Epochs each, 3,000 Optimizer Attempts excluding Bootstrap/Evolver.
 The ablation main arm uses two independent copies of the same Agent in Epoch 1; evolution
 starts in Epoch 2. The original `campaign` role retains its Active-only first Epoch.
 No external original-AKA control is launched. Resetting State preserves Kernel progress and
@@ -64,7 +64,9 @@ and per-arm `campaign-result.json` / `campaign.log` (plus control seed definitio
 The summary exposes Campaign/Lineage IDs for inspect. Sessions/Artifacts remain in the shared
 `workspaces/GDN/state/`. Attempt progress streams to each log; arm completion prints a timestamp.
 Failures do not cancel siblings. Rerunning resumes the same identities and reports completed
-results. `--target-epoch` affects only the main arm; controls retain 15 Attempts per trajectory.
+results. `--target-epoch` affects only the main arm; controls retain 300 Attempts per trajectory in new plans.
+Existing workspaces keep their frozen control budgets; to resume an old five-Epoch run without
+extending the main arm, pass `--target-epoch 5` explicitly.
 Changed frozen inputs require a new workspace and creation key.
 
 Up to ten Optimizer workers run concurrently. On memory-limited Lima, finish the old trial
@@ -90,6 +92,15 @@ This version bundles neither KernelWiki nor ncu-report-skill and needs no Skill 
 checkout; the Runtime template's `allowed_submodules` is empty. New workspaces use this
 pin, while existing workspaces keep their frozen Agent revisions. Local uncommitted KDA
 edits are not included in the Bundle.
+
+Evaluator and Roofline pin Atrex Bench `54925ff9223aa54b901219f02fffd51d9af82e3c`
+from the submodule's `yuxiao_dev` branch. Preparation exercises the actual Optimizer archive,
+Evolver fetch/seal, Evaluator fetch/archive and Roofline fetch/archive/entrypoint validation.
+Finding a commit with `git cat-file` is not enough. Both Campaign definitions are checked;
+digests and revisions are recorded under `prepared.json.source_preflight`. A failed check stops
+before publishing Runtime configuration or starting an Agent/GPU job. This is a source-loading
+check, not a GPU-image or model-connectivity test; it does not execute the Roofline generator.
+Updating these input pins does not rewrite an existing workspace's frozen configuration.
 
 Copied from these locations inside `GDN_AKA_REPRO_20260907`:
 
@@ -121,7 +132,7 @@ venv; sandboxed Optimizer, Evolver, and Runtime Tools use the global Python inte
 (resolving the venv symlink to `/usr/bin/python3.x`), not a venv hidden under Home.
 
 The script validates source locks, editable scope, Production Policy, public/private shape
-contracts, and the three pinned repository commits. Remote GPU images and model connectivity
+contracts, and the four real Bundle-loading paths above. Remote GPU images and model connectivity
 are not checked; those require a subsequent live run. Generated files and `source/` are ignored
 by Git and can be reconstructed from the bundle after copying or cloning this repository.
 Once `state/` exists, preparation refuses to overwrite differing run configuration.
@@ -136,7 +147,7 @@ processes need matching `ATREX_CAPABILITY_SIGNING_KEY` and `ATREX_ADMIN_BEARER_T
 The selected model CLI must already be installed and authenticated.
 
 Alternatively, run `python scripts/gdn/run.py serve` and
-`python scripts/gdn/run.py campaign --target-epoch 5` in separate Linux processes with Agate
+`python scripts/gdn/run.py campaign --target-epoch 100` in separate Linux processes with Agate
 environment variables loaded and the Sandbox scheduling privileges described below. They
 automatically share persistent `runtime-secrets.json` (mode 0600, Git-ignored), run Bootstrap
 before the requested Epoch, and save `bootstrap-result.json` / `epoch-result.json`. A failed
@@ -163,18 +174,19 @@ atrex-kernel-agent-runtime serve --config workspaces/GDN/runtime.json
 atrex-kernel-agent-runtime bootstrap \
   --config workspaces/GDN/runtime.json --campaign workspaces/GDN/campaign.json
 
-# Substitute the returned campaign_id. Run through Epoch 5.
+# Substitute the returned campaign_id. Run through Epoch 100.
 atrex-kernel-agent-runtime run-campaign \
   --config workspaces/GDN/runtime.json \
-  --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 5
+  --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 100
 ```
 
-Defaults: five Epochs total, three serial Attempts per branch per Epoch, one Trajectory;
+Defaults: 100 Epochs total, three serial Attempts per branch per Epoch, one Trajectory;
 Active only in Epoch 1, with one Challenger starting in Epoch 2 (three Active Attempts and
-three Challenger Attempts per Epoch). The Epoch target and per-Trajectory Attempt count match
-the single-file production defaults; the existing Active-only first Epoch is unchanged.
-The target is absolute: rerunning after Epoch 5 reports the completed result rather than adding
-five more Epochs. No Evolver is launched solely for an unused Epoch 6.
+three Challenger Attempts per Epoch). The per-Trajectory Attempt count matches single-file
+production; its Epoch target is unchanged. The Active-only first Epoch is unchanged, giving
+597 Optimizer Attempts for a single Campaign.
+The target is absolute: rerunning after Epoch 100 reports the completed result rather than adding
+100 more Epochs. No Evolver is launched solely for an unused Epoch 101.
 The Attempt count is frozen when a Lineage is registered. Existing one-Attempt Lineages are not
 changed by editing this config: use a new Campaign creation key for the new schedule, retaining
 the old history. Do not overwrite Registry rows or treat an old Campaign as a three-Attempt run.

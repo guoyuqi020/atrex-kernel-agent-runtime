@@ -107,7 +107,7 @@
       "lock_clocks": true,
       "evaluator": {
         "repository": "../../third_party/atrex-bench",
-        "commit": "44a4da26994cd01c1354bb47ba8a35083a1d93f6",
+        "commit": "54925ff9223aa54b901219f02fffd51d9af82e3c",
         "git_executable": "/usr/bin/git",
         "fetch_timeout_seconds": 120,
         "max_archive_bytes": 8388608,
@@ -119,7 +119,7 @@
     "max_parallel_branches": 2,
     "roofline_builder": {
       "repository": "../../third_party/atrex-bench",
-      "commit": "44a4da26994cd01c1354bb47ba8a35083a1d93f6",
+      "commit": "54925ff9223aa54b901219f02fffd51d9af82e3c",
       "git_executable": "/usr/bin/git",
       "python_executable": "/usr/bin/python3",
       "fetch_timeout_seconds": 120,

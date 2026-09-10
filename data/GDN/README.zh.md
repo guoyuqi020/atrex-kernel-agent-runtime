@@ -37,17 +37,17 @@ python scripts/gdn/run.py ablation
 不会修改或接管当前试跑。一次完整 Bootstrap 后，六个对照臂共享新实验的冻结 v0、Agent、
 修改边界、评测契约和初始证据；不重复 Baseline 测量，不导入旧试跑经验。
 
-`ablation.json` 与单文件生产使用相同的计划生成器，默认每臂 5 个 Epoch：
+`ablation.json` 与单文件生产使用相同的计划生成器，默认每臂 100 个 Epoch：
 
 | Campaign 实例 | 每 Epoch 的结构 | Optimizer Attempts | 保留 State | Evolution |
 |---|---|---:|---|---:|
-| `evolve-3` | Active + Challenger，各 1 条轨迹 × 3 次 | 30 | 是 | 4 |
-| `ablation-isolated-01/02` | 两个独立实例，各 1 条轨迹 × 3 次 | 各 15 | 否 | 0 |
-| `ablation-retained-01/02` | 两个独立实例，各 1 条轨迹 × 3 次 | 各 15 | 是 | 0 |
-| `ablation-pool-3` | 同一 Active Branch，2 条轨迹 × 3 次 | 30 | 否 | 0 |
-| `ablation-pool-retained-3` | 同一 Active Branch，2 条轨迹 × 3 次 | 30 | 是 | 0 |
+| `evolve-3` | Active + Challenger，各 1 条轨迹 × 3 次 | 600 | 是 | 99 |
+| `ablation-isolated-01/02` | 两个独立实例，各 1 条轨迹 × 3 次 | 各 300 | 否 | 0 |
+| `ablation-retained-01/02` | 两个独立实例，各 1 条轨迹 × 3 次 | 各 300 | 是 | 0 |
+| `ablation-pool-3` | 同一 Active Branch，2 条轨迹 × 3 次 | 600 | 否 | 0 |
+| `ablation-pool-retained-3` | 同一 Active Branch，2 条轨迹 × 3 次 | 600 | 是 | 0 |
 
-共 **7 个 Campaign、150 次 Optimizer Attempt**，不含 Bootstrap 和 Evolver。
+共 **7 个 Campaign、3,000 次 Optimizer Attempt**，不含 Bootstrap 和 Evolver。
 消融主臂首轮使用同一 Agent 的两份独立副本，第二轮起才调用 Evolver；原 `run.py campaign`
 仍保留首轮仅 Active 的策略，二者不是同一个实验。这里不启动外部原版 AKA 对照。
 重置 State 不会删除 Kernel 进展或 Runtime Journal；Pool 在 Epoch 边界共享最佳 Kernel，
@@ -57,7 +57,8 @@ Pool-Retained 还继承该轨迹的终态 State，不做合并。不同臂不共
 同名目录中的 `campaign-result.json` / `campaign.log`；对照臂还保存 seed 定义和结果。
 汇总含各臂 Campaign/Lineage ID，可供 inspect 使用。Session/Artifact 在共享的 `workspaces/GDN/state/`。
 Attempt 进度实时写入各臂日志，臂完成时打印时间戳。失败不取消其他臂；重复运行复用身份并恢复，
-完成后只报告结果。`--target-epoch` 只改变主臂目标，对照臂固定每轨迹 15 次 Attempt。
+完成后只报告结果。`--target-epoch` 只改变主臂目标，新计划的对照臂固定每轨迹 300 次 Attempt。
+已有工作区仍保留冻结的对照臂预算；恢复旧 5 轮实验且不扩展主臂时，显式传入 `--target-epoch 5`。
 修改冻结输入需新 Workspace 和 creation key。
 
 默认最多并行 10 个 Optimizer Worker；Lima 资源有限，建议结束旧试跑后再显式启动。
@@ -81,6 +82,13 @@ Attempt 进度实时写入各臂日志，臂完成时打印时间戳。失败不
 此版本不包含 KernelWiki 和 ncu-report-skill，构建无需初始化这两个 Skill 子模块；
 Runtime 模板的 `allowed_submodules` 为空。新工作区使用此版本，已有工作区仍使用冻结的
 Agent revision。本地未提交的 KDA 修改不会进入 Bundle。
+
+Evaluator 与 Roofline 固定 Atrex Bench `54925ff9223aa54b901219f02fffd51d9af82e3c`，
+来自子模块的 `yuxiao_dev` 分支。准备阶段使用真实加载器验证 Optimizer 导出、Evolver 拉取封存、
+Evaluator 拉取导出，以及 Roofline 拉取导出和入口文件；不再只用 `git cat-file` 判断 commit 存在。
+两个 Campaign 定义都参与校验，版本和 Bundle Digest 记录在 `prepared.json.source_preflight`。
+失败时不发布 Runtime 配置、不启动 Agent/GPU 作业。预检不执行 Roofline 生成器，
+也不代替 GPU 镜像及模型连通性测试；更新输入 pin 不会改写已有工作区的冻结配置。
 
 原始资料来自 `GDN_AKA_REPRO_20260907` 中的：
 
@@ -111,8 +119,8 @@ Runtime 服务和准备脚本使用 Linux venv；Sandbox 中的 Optimizer、Evol
 使用全局 Python（将 venv 的解释器软链接解析为 `/usr/bin/python3.x`），不依赖被隐藏的
 Home 下的 venv 路径。
 
-准备过程会检查源码锁定、可修改范围、Production Policy、公开/私有 Shape 契约及三个固定
-仓库 commit。它不会验证远端 GPU 镜像或模型连通性，这些仍需后续实跑确认。
+准备过程会检查源码锁定、可修改范围、Production Policy、公开/私有 Shape 契约，
+以及上述四种 Bundle 的实际加载路径。它不会验证远端 GPU 镜像或模型连通性，这些仍需后续实跑确认。
 生成文件和 `source/` 不纳入版本控制；复制或 clone 本仓库后可用 Bundle 再生成。
 如果已经产生 `state/`，脚本拒绝覆盖不同的运行配置，避免改变进行中的 Campaign。
 
@@ -126,7 +134,7 @@ Runtime 服务与 Campaign 进程还需使用一致的 `ATREX_CAPABILITY_SIGNING
 
 也可以使用 `run.py`：在已加载 Agate 环境变量、具备下述 Sandbox 调度权限的 Linux 进程中，
 分别运行 `python scripts/gdn/run.py serve` 和
-`python scripts/gdn/run.py campaign --target-epoch 5`。它自动共用持久化的
+`python scripts/gdn/run.py campaign --target-epoch 100`。它自动共用持久化的
 `runtime-secrets.json`（权限 0600，Git 忽略），按顺序执行 Bootstrap 和指定 Epoch，
 将结果写入 `bootstrap-result.json` / `epoch-result.json`；Bootstrap 失败就停止，不启动优化。
 恢复时继续使用原配置及 secrets，不要另起一个并行的同 Campaign 调度器。
@@ -150,10 +158,10 @@ atrex-kernel-agent-runtime serve --config workspaces/GDN/runtime.json
 atrex-kernel-agent-runtime bootstrap \
   --config workspaces/GDN/runtime.json --campaign workspaces/GDN/campaign.json
 
-# 将返回的 campaign_id 填入下面的位置；运行到 Epoch 5。
+# 将返回的 campaign_id 填入下面的位置；运行到 Epoch 100。
 atrex-kernel-agent-runtime run-campaign \
   --config workspaces/GDN/runtime.json \
-  --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 5
+  --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 100
 ```
 
 Bootstrap 让 Claude 先评测原始源码，必要时只修复可修改的文件，记录 Direction/Experiment
@@ -161,11 +169,12 @@ Journal 并提交标准报告，再由 Runtime 独立终评。Campaign key 使�
 `gdn-source-tree-l20d-claude-bootstrap`，与之前的无模型试跑分开；旧 v0 与 Session 记录保留。
 之后再次启动相同 key 时，正常复用新流程产生的 baseline。
 
-默认总共运行 5 个 Epoch，每个分支每 Epoch 串行 3 个 Attempt、1 条 Trajectory；Epoch 1
+默认总共运行 100 个 Epoch，每个分支每 Epoch 串行 3 个 Attempt、1 条 Trajectory；Epoch 1
 只有 Active，Epoch 2 起加入 1 个 Challenger（Active 和 Challenger 每轮各跑 3 个 Attempt）。
-Epoch 总数和每条 Trajectory 的 Attempt 数与单文件生产默认值一致；保留原来的首轮仅 Active 策略。
-目标是绝对轮次：完成 Epoch 5 后重复执行只报告已有结果，不额外增加 5 轮，也不会为不运行的
-Epoch 6 再触发 Evolver。
+每条 Trajectory 的 Attempt 数与单文件生产默认值一致；单文件的 Epoch 目标不变。
+保留原来的首轮仅 Active 策略，单 Campaign 共 597 次 Optimizer Attempt。
+目标是绝对轮次：完成 Epoch 100 后重复执行只报告已有结果，不额外增加 100 轮，也不会为不运行的
+Epoch 101 再触发 Evolver。
 每轮 Attempt 数在 Lineage 注册时冻结；修改本配置不会改变已有的每轮 1 次 Lineage。
 新调度应使用新的 Campaign creation key，保留旧历史，不要直接修改 Registry，或把旧 Campaign
 当成每轮 3 次继续运行。

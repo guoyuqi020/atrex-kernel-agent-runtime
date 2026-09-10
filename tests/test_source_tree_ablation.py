@@ -15,14 +15,19 @@ from atrex_runtime.bootstrap import CampaignSpecV3
 
 
 @pytest.mark.parametrize("relative", [
-    "data/GDN/ablation.json", "examples/source-tree/ablation.example.json",
+    "data/GDN/ablation.json", "data/GDN-full/ablation.json",
+    "examples/source-tree/ablation.example.json",
 ])
-def test_source_tree_arms_match_single_file_exactly(relative: str) -> None:
+def test_source_tree_arms_keep_topology_with_one_hundred_epochs(relative: str) -> None:
     policy = json.loads((REPOSITORY / "scripts/production/policy.json").read_text())
     plan = json.loads((REPOSITORY / relative).read_text())
-    assert plan == build_ablation_plan(policy)
+    assert plan == build_ablation_plan(policy, optimizer_attempt_budget_per_trajectory=300)
+    single_file = build_ablation_plan(policy)
+    assert single_file["optimizer_attempt_budget_per_trajectory"] == 15
+    assert all(arm["target_epoch_number"] == 5 for arm in single_file["arms"])
     assert len(plan["arms"]) == 6
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 120
+    assert all(arm["target_epoch_number"] == 100 for arm in plan["arms"])
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 2400
     campaign = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/ablation-campaign.json")
     for key in ("attempts_per_trajectory", "trajectories_per_branch", "challenger_count",
                 "challenger_start_epoch", "first_epoch_same_agent"):
@@ -33,7 +38,7 @@ def test_source_tree_arms_match_single_file_exactly(relative: str) -> None:
     assert campaign.base_revision == old.base_revision
 
 
-def launch_fixture(tmp_path, monkeypatch, *, fail=None):
+def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs=100):
     module = _module("scripts/source-tree/run.py")
     config = tmp_path / "runtime.json"
     config.write_text("{}")
@@ -41,11 +46,15 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None):
     campaign = json.loads((REPOSITORY / "data/GDN/ablation-campaign.json").read_text())
     campaign_path.write_text(json.dumps(campaign))
     plan_path = tmp_path / "plan.json"
-    plan_path.write_text((REPOSITORY / "data/GDN/ablation.json").read_text())
+    plan_path.write_text(json.dumps(build_ablation_plan(
+        {"schedule": {**campaign, "event_only": True}},
+        optimizer_attempt_budget_per_trajectory=control_epochs * 3,
+    )))
     workspace = tmp_path / "run"
     monkeypatch.setattr(module.sys, "argv", [
         "run.py", "--workspace", str(workspace), "--config", str(config),
-        "--campaign", str(campaign_path), "--plan", str(plan_path), "--target-epoch", "2",
+        "--campaign", str(campaign_path), "--plan", str(plan_path),
+        *([] if target is None else ["--target-epoch", str(target)]),
     ])
     calls = []
     processes = []
@@ -78,12 +87,15 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None):
             assert start_new_session
             self.pid = len(processes) + 1
             self.campaign = command[command.index("--campaign") + 1]
-            target = int(command[-1])
+            requested_target = int(command[-1])
             assert command[1] == "run-campaign"
-            assert target == (2 if self.campaign.endswith("0" * 32) else 5)
+            assert requested_target == (
+                (100 if target is None else target)
+                if self.campaign.endswith("0" * 32) else control_epochs
+            )
             if fail != "result":
                 stdout.write(json.dumps({"campaign_id": self.campaign,
-                                         "target_epoch_number": target}))
+                                         "target_epoch_number": requested_target}))
             stdout.flush()
             stderr.write("attempt finished\n")
             stderr.flush()
@@ -121,6 +133,31 @@ def test_bootstrap_once_shared_seed_parallel_launch_and_resume(tmp_path, monkeyp
     resumed = json.loads((test.workspace / "campaign-results.json").read_text())
     assert resumed == summary
     assert len(test.processes) == 14
+
+
+def test_source_tree_runner_defaults_all_arms_to_one_hundred_epochs(tmp_path, monkeypatch):
+    test = launch_fixture(tmp_path, monkeypatch, target=None)
+    test.module.main()
+    arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
+    assert all(arm["target_epoch_number"] == 100 for arm in arms)
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 3000
+
+
+def test_existing_five_epoch_plan_is_not_rewritten(tmp_path, monkeypatch):
+    test = launch_fixture(tmp_path, monkeypatch, target=5, control_epochs=5)
+    test.module.main()
+    original = (test.workspace / "launch-inputs.json").read_bytes()
+    test.module.main()
+    assert (test.workspace / "launch-inputs.json").read_bytes() == original
+    arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
+    assert all(arm["target_epoch_number"] == 5 for arm in arms)
+
+
+@pytest.mark.parametrize("budget", [None, True, 0, -3, 1.5, "300"])
+def test_ablation_budget_must_be_a_positive_integer(budget):
+    policy = json.loads((REPOSITORY / "scripts/production/policy.json").read_text())
+    with pytest.raises(ValueError, match="positive integer"):
+        build_ablation_plan(policy, optimizer_attempt_budget_per_trajectory=budget)
 
 
 @pytest.mark.parametrize("fail", ["seed", "arm", "result"])
@@ -167,7 +204,7 @@ def test_gdn_ablation_role_uses_separate_definition_and_output(tmp_path, monkeyp
         assert arguments[1] == str(tmp_path / "scripts/source-tree/run.py")
         assert arguments[arguments.index("--campaign") + 1] == str(root / "ablation-campaign.json")
         assert arguments[arguments.index("--workspace") + 1] == str(root / "ablation")
-        assert arguments[-2:] == ["--target-epoch", "5"]
+        assert arguments[-2:] == ["--target-epoch", "100"]
         raise SystemExit(0)
 
     monkeypatch.setattr(module.os, "execv", execute)

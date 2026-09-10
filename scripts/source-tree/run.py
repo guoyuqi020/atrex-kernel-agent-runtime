@@ -134,7 +134,7 @@ def main() -> None:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--campaign", required=True, type=Path)
     parser.add_argument("--plan", required=True, type=Path)
-    parser.add_argument("--target-epoch", type=int, default=5, help="main arm only")
+    parser.add_argument("--target-epoch", type=int, default=100, help="main arm only")
     args = parser.parse_args()
     if args.target_epoch < 1:
         parser.error("--target-epoch must be positive")
@@ -150,7 +150,13 @@ def main() -> None:
         parser.error("production ablation requires first_epoch_same_agent=true; use a new Campaign")
     definition = spec.model_dump(mode="json")
     plan = json.loads(args.plan.read_text())
-    expected = build_ablation_plan({"schedule": {**definition, "event_only": True}})
+    try:
+        expected = build_ablation_plan(
+            {"schedule": {**definition, "event_only": True}},
+            optimizer_attempt_budget_per_trajectory=plan.get("optimizer_attempt_budget_per_trajectory"),
+        )
+    except ValueError as error:
+        parser.error(str(error))
     if plan != expected:
         parser.error("Ablation Plan differs from the shared production topology/budget")
     cli_path = Path(sys.executable).absolute().parent / "atrex-kernel-agent-runtime"

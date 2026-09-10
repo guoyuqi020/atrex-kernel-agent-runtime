@@ -59,6 +59,11 @@ tables and progress messages are operator presentation.
 - Every `/v1/admin/*` route requires `Authorization: Bearer <admin-token>`.
 - Gateway/Wiki: `400` invalid request, `403` invalid/expired/revoked authority, `409` idempotency or
   state conflict, `503` dependency unavailable.
+- Gateway `503` responses include `error="gateway_unavailable"` and an actionable `detail`
+  (at most 8 KiB). Runtime logs retain the chained exception and Attempt/operation/request-digest
+  correlation; `gateway.operation_failed` also records the exception type and message. Public
+  details omit credentials and use a summary for source-tree errors containing private cases.
+  A Runtime `503` does not by itself mean Agate returned HTTP 503, or that the failure is retryable.
 - A Gateway `400` with a recognized `operation` includes `request_schema`: the Agent-facing JSON
   Schema generated from the same Pydantic model that rejected the request. Runtime-owned fields
   and `idempotency_key` are omitted. It also includes compact `issues` with Agent-visible field

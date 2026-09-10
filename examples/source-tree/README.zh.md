@@ -29,7 +29,7 @@ python scripts/source-tree/run.py \
   --config "$ATREX_RUNTIME_CONFIG" \
   --campaign workspaces/gdn-source-tree/campaign.json \
   --plan workspaces/gdn-source-tree/ablation.json \
-  --workspace workspaces/gdn-source-tree/run --target-epoch 5
+  --workspace workspaces/gdn-source-tree/run --target-epoch 100
 ```
 
 默认只用 CuteDSL，但与单文件生产一样有 7 个 Campaign：`evolve-3`、
@@ -37,16 +37,18 @@ python scripts/source-tree/run.py \
 `ablation-pool-retained-3`。生成的 `ablation.json` 及仓库中的 `ablation.example.json`
 与单文件共享计划生成器。各臂复用一次 Bootstrap 的冻结源码树 v0，对照臂不重复评测。
 
-默认每臂 5 个 Epoch、每轨迹每轮 3 次 Attempt。Isolated/Retained 每实例一条轨迹，
-各 15 次；两个 Pool 各两条轨迹，各 30 次。Isolated/Pool 重置自适应 State，
+默认每臂 100 个 Epoch、每轨迹每轮 3 次 Attempt。Isolated/Retained 每实例一条轨迹，
+各 300 次；两个 Pool 各两条轨迹，各 600 次。Isolated/Pool 重置自适应 State，
 Retained/Pool-Retained 保留。Pool 在 Epoch 边界共享最佳 Kernel；Pool-Retained
 还继承获胜轨迹的终态 State，不做合并。不同臂不共享后续历史或可写文件。
 只有主臂进化：首轮用同一 Agent 的两份独立副本，第二轮起 Active + 一个新 Challenger，
-共 30 次 Attempt、4 次 Evolution。全套共 150 次 Optimizer Attempt，不启动外部原版 AKA。
+共 600 次 Attempt、99 次 Evolution。全套共 3,000 次 Optimizer Attempt，不启动外部原版 AKA。
 
 `run/` 保存各臂 seed 身份、日志、结果和 `campaign-results.json` 汇总；真正的 Session/Artifact
 仍在配置的 Runtime storage。一个臂失败不取消其他臂，重复运行恢复相同身份。
-`--target-epoch` 只改主臂目标，对照臂固定每轨迹 15 次；冻结输入不可修改后继续复用。
+`--target-epoch` 只改主臂目标，新对照计划固定每轨迹 300 次；冻结输入不可修改后继续复用。
+已有工作区保留原计划；恢复旧 5 轮实验且不扩展主臂时，显式传入 `--target-epoch 5`。
+单文件模式默认值不变。
 最多并行 10 个 Optimizer，请预留宿主内存。只跑主臂时仍可直接调用 `bootstrap` 和
 `run-campaign` 两条原始 CLI 命令。
 

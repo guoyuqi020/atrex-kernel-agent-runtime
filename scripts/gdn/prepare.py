@@ -16,11 +16,14 @@ from pathlib import Path
 
 from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.bootstrap import CampaignSpecV3
+from atrex_runtime.composition.bootstrap import build_optimizer_base_loader, build_roofline_builder
 from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.domain.models import Dsl
+from atrex_runtime.gateway.abba import CommitPinnedAtrexBenchEvaluator
 from atrex_runtime.gateway.contract import AgateEvaluationContractV1
 from atrex_runtime.gateway.production_policy import ProductionKernelPolicy
 from atrex_runtime.kernel_sources import import_source_tree
+from atrex_runtime.workers.evolver_bundle import GitEvolverBundleResolver
 from atrex_runtime.workers.problem_generalization import validate_public_operator_contract
 
 
@@ -63,6 +66,65 @@ def rebase_repositories(template: dict, inputs: Path, workspace: Path) -> None:
         value = section[key]
         if value and (key != "repository" or value.startswith(("./", "../", "/"))):
             section[key] = "./" + os.path.relpath((inputs / value).resolve(), workspace)
+
+
+def validate_runtime_sources(
+    settings: RuntimeSettings, campaigns: tuple[CampaignSpecV3, ...],
+) -> dict:
+    """Use the actual consumers, not cat-file, without creating Runtime state or running code."""
+    campaign = settings.campaign
+    if campaign is None:
+        raise ValueError("GDN preparation requires Campaign runtime settings")
+    checked: dict = {"optimizers": []}
+    stage = "Optimizer"
+    try:
+        with tempfile.TemporaryDirectory(prefix="atrex-gdn-bundle-check-") as temporary:
+            artifacts = LocalArtifactStore(Path(temporary) / "artifacts")
+            loader = build_optimizer_base_loader(settings, artifacts)
+            if loader is None:
+                raise ValueError("Optimizer base source is required")
+            revisions = {(dsl, spec.base_revision.commit)
+                         for spec in campaigns for dsl in spec.lineages}
+            for dsl, commit in sorted(revisions):
+                stage = f"Optimizer {dsl.value} {commit}"
+                imported = loader.build_candidate(dsl, commit)
+                checked["optimizers"].append({
+                    "dsl": dsl.value, "commit": commit,
+                    "artifact_digest": str(imported.candidate.optimizer_digest),
+                })
+            evolver = campaign.evolver
+            stage = f"Evolver {evolver.commit}"
+            imported_evolver = GitEvolverBundleResolver(
+                artifacts, repository=evolver.repository, commit=evolver.commit,
+                git_executable=evolver.git_executable,
+                fetch_timeout_seconds=evolver.fetch_timeout_seconds,
+                max_archive_bytes=evolver.max_archive_bytes,
+                command_prefix=evolver.command_prefix,
+                max_files=evolver.max_bundle_files, max_bytes=evolver.max_bundle_bytes,
+            ).resolve()
+            checked["evolver"] = {
+                "commit": imported_evolver.commit,
+                "artifact_digest": str(imported_evolver.artifact_digest),
+            }
+            gate = settings.gate_policy or campaign.gate_policy
+            stage = f"Evaluator {gate.evaluator.commit}"
+            evaluator = CommitPinnedAtrexBenchEvaluator(
+                **gate.evaluator.model_dump(exclude={"agate_package_version"})
+            )
+            files = evaluator.files()
+            checked["evaluator"] = {
+                "commit": gate.evaluator.commit,
+                "bundle_digest": evaluator.bundle_digest(), "file_count": len(files),
+            }
+            if campaign.roofline_builder is not None:
+                stage = f"Roofline {campaign.roofline_builder.commit}"
+                roofline = build_roofline_builder(settings)
+                assert roofline is not None
+                roofline.validate_source()
+                checked["roofline"] = {"commit": campaign.roofline_builder.commit}
+    except Exception as error:
+        raise ValueError(f"Runtime source preflight failed ({stage}): {error}") from error
+    return checked
 
 
 def main() -> None:
@@ -171,16 +233,9 @@ def main() -> None:
         "campaign": settings.campaign.resolve_from(workspace),
     })
     assert settings.campaign is not None and settings.kernel_agent.base_source is not None
-    repositories = (
-        (settings.kernel_agent.base_source.repository, campaign.base_revision.commit),
-        (settings.campaign.evolver.repository, settings.campaign.evolver.commit),
-        (
-            settings.campaign.gate_policy.evaluator.repository,
-            settings.campaign.gate_policy.evaluator.commit,
-        ),
+    source_preflight = validate_runtime_sources(
+        settings, (campaign, CampaignSpecV3.from_file(root / "ablation-campaign.json")),
     )
-    for repository, commit in repositories:
-        git("-C", repository, "cat-file", "-e", f"{commit}^{{commit}}")
     provenance = {
         "task_inputs": os.path.relpath(root, workspace),
         "hardware_target": campaign.hardware_target,
@@ -204,6 +259,7 @@ def main() -> None:
         "worker_python": worker_python,
         "prepared_on": "Linux/Lima",
         "gpu_jobs_submitted": 0,
+        "source_preflight": source_preflight,
     }
     files = {
         "runtime.json": json_bytes(template),
@@ -224,6 +280,7 @@ def main() -> None:
     print(f"GPU=L20D DSL=cutedsl backend={settings.campaign.optimizer.agent_backend}")
     print(f"Source: {revision}; {file_count} files; {len(shapes)} private shapes")
     print(f"Source integrity and production policy: passed ({digest})")
+    print("Runtime Bundle preflight: Optimizer, Evolver, Evaluator and Roofline passed")
     print(f"Worker: {worker.pw_name}; sandbox=bwrap+cgroup; Python={worker_python}")
     for executable_name in ("bwrap", "systemd-run", settings.campaign.optimizer.agent_backend):
         print(f"{executable_name}: {shutil.which(executable_name) or 'NOT IN PATH'}")

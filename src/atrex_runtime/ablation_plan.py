@@ -7,14 +7,19 @@ from typing import Any, cast
 ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY = 15
 
 
-def build_ablation_plan(policy: dict[str, Any]) -> dict[str, Any]:
-    """Derive control arms with 15 post-Bootstrap Active Attempts per Trajectory."""
+def build_ablation_plan(
+    policy: dict[str, Any], *,
+    optimizer_attempt_budget_per_trajectory: int = ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY,
+) -> dict[str, Any]:
+    """Derive control arms; single-file production retains its 15-Attempt default."""
     schedule = cast(dict[str, Any], policy["schedule"])
     enabled = bool(schedule.get("event_only", False))
     trajectories = int(schedule["trajectories_per_branch"])
     challengers = int(schedule["challenger_count"])
     default_attempts = int(schedule["attempts_per_trajectory"])
-    attempt_budget = ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY
+    attempt_budget = optimizer_attempt_budget_per_trajectory
+    if type(attempt_budget) is not int or attempt_budget < 1:
+        raise ValueError("optimizer_attempt_budget_per_trajectory must be a positive integer")
     # Pair Isolated and Retained replicas for every configured Active/Challenger Trajectory. The
     # configured Challenger count is used rather than the challenger_start_epoch-gated one
     # so arm identity is stable across Epochs.

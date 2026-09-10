@@ -21,7 +21,7 @@ seed trees. No optimized implementation, winning Kernel, Session history or memo
 Reference, inputs, adapter, shape domains/cases, Metadata, Roofline, Gate policy and Agent
 commits match the cleaned package. Campaign creation keys are distinct from the cleaned package.
 
-Defaults remain **L20D / CuteDSL / Claude**, five Epochs, three Attempts per trajectory,
+Defaults remain **L20D / CuteDSL / Claude**, 100 Epochs, three Attempts per trajectory,
 100M tokens per Optimizer/Bootstrap Session, and the same seven-arm ablation plan.
 “Full” means original input content, not access to hidden cases. Runtime/Core/KDA prompt
 projection is unchanged: provenance metadata such as `range_evidence` and `value_evidence`
@@ -32,6 +32,11 @@ matching GDN. It bundles neither KernelWiki nor ncu-report-skill; no Skill submo
 is needed and `allowed_submodules` is empty. Existing workspaces keep their frozen Agent
 revisions. Local uncommitted KDA edits are not included in the Bundle.
 
+Evaluator and Roofline share GDN's Atrex Bench pin
+`54925ff9223aa54b901219f02fffd51d9af82e3c`. The same preparation preflight exercises all
+four real Bundle loaders and records `prepared.json.source_preflight`; a local commit-object
+existence check alone is not considered sufficient. Existing workspace pins are not overwritten.
+
 In Lima Ubuntu, with the Linux Runtime environment activated:
 
 ```bash
@@ -41,7 +46,7 @@ python scripts/gdn/prepare.py --inputs data/GDN-full --backend claude
 # Later, service process
 python scripts/gdn/run.py serve --workspace workspaces/GDN-full
 # In a separate terminal: Bootstrap plus the single Campaign
-python scripts/gdn/run.py campaign --workspace workspaces/GDN-full --target-epoch 5
+python scripts/gdn/run.py campaign --workspace workspaces/GDN-full --target-epoch 100
 # Alternative experiment: seven-arm ablation
 python scripts/gdn/run.py ablation --workspace workspaces/GDN-full
 ```

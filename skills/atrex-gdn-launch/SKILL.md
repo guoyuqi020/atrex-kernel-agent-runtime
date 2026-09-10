@@ -45,9 +45,9 @@ description: 在 Lima Ubuntu 中准备、启动或恢复本次 GDN 多文件源�
   实际模型名称来自配置/环境，不把 CLI 名称当成模型名称。
 - 7 个 Campaign：`evolve-3`、`ablation-isolated-01/02`、
   `ablation-retained-01/02`、`ablation-pool-3`、`ablation-pool-retained-3`。
-- 默认 5 个 Epoch，每轨迹每轮 3 次 Attempt。主臂及两个 Pool 各 30 次；
-  四个独立对照各 15 次，共 150 次 Optimizer Attempt，不含 Bootstrap/Evolver。
-- 主臂首轮是同一 Agent 的两个独立分支；Epoch 2–5 各运行一次 Evolver，共 4 次。
+- 默认 100 个 Epoch，每轨迹每轮 3 次 Attempt。主臂及两个 Pool 各 600 次；
+  四个独立对照各 300 次，共 3,000 次 Optimizer Attempt，不含 Bootstrap/Evolver。
+- 主臂首轮是同一 Agent 的两个独立分支；Epoch 2–100 各运行一次 Evolver，共 99 次。
   对照臂不进化。Active/Challenger、Trajectory、Direction 都不是独立消融臂。
 - 只做一次完整 Bootstrap，再由 `seed-ablation-arm` 派生六个对照：
   共享冻结 v0、初始 Agent/证据与评测契约，不导入之后的跨臂历史。
@@ -55,8 +55,9 @@ description: 在 Lima Ubuntu 中准备、启动或恢复本次 GDN 多文件源�
   `run.py campaign` 是单 Campaign 入口，也用于恢复旧试跑；用户要求单路线时使用它，
   不强制启动七臂消融。以下数量描述七臂模式，不适用于单 Campaign。
 
-不要把 `--target-epoch 5` 解释为“再追加五轮”。它是绝对目标，且在消融入口中只控制主臂；
-对照臂固定每轨迹 15 次 Attempt。完成后重跑应复用结果，不扩展预算。
+不要把 `--target-epoch 100` 解释为“再追加一百轮”。它是绝对目标，且在消融入口中只控制主臂；
+新计划的对照臂固定每轨迹 300 次 Attempt。已有工作区保留其冻结计划；恢复旧 5 轮实验时，
+显式传入 `--target-epoch 5`，不要用新默认值意外延长旧主臂。完成后重跑应复用结果，不扩展预算。
 
 ## 启动前检查
 

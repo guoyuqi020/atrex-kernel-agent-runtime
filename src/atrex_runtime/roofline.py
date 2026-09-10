@@ -72,6 +72,11 @@ class AtrexBenchRooflineBuilder:
             label="Atrex Bench Roofline",
         )
 
+    def validate_source(self) -> None:
+        """Exercise the real fetch/archive path without running the generator."""
+        with tempfile.TemporaryDirectory(prefix="atrex-roofline-preflight-") as temporary:
+            self._export(Path(temporary))
+
     def build(
         self,
         *,
@@ -91,10 +96,6 @@ class AtrexBenchRooflineBuilder:
             root = Path(temporary)
             export = self._export(root)
             generator = export.joinpath(*_GENERATOR_PATH.parts)
-            if generator.is_symlink() or not generator.is_file():
-                raise ValueError(
-                    f"Atrex Bench commit does not contain {_GENERATOR_PATH.as_posix()}"
-                )
             data_root = root / "input"
             operator_root = data_root / operator
             operator_root.mkdir(parents=True, mode=0o700)
@@ -163,6 +164,11 @@ class AtrexBenchRooflineBuilder:
         )
         export.mkdir(mode=0o700)
         self._importer.extract(archive, export)
+        generator = export.joinpath(*_GENERATOR_PATH.parts)
+        if generator.is_symlink() or not generator.is_file():
+            raise ValueError(
+                f"Atrex Bench commit does not contain {_GENERATOR_PATH.as_posix()}"
+            )
         return export
 
     @staticmethod

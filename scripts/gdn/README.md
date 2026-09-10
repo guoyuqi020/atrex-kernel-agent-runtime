@@ -16,7 +16,7 @@ Run in Lima Ubuntu with the Linux Runtime environment activated:
 python scripts/gdn/prepare.py --backend claude
 python scripts/gdn/run.py serve
 # In a separate terminal with the same environment and required sandbox privileges:
-python scripts/gdn/run.py campaign --target-epoch 5
+python scripts/gdn/run.py campaign --target-epoch 100
 ```
 
 For a separate experiment, pass `--workspace workspaces/GDN-clean` to all commands.

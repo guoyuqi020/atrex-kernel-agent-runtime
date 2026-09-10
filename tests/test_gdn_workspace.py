@@ -53,13 +53,56 @@ def test_gdn_pinned_optimizer_builds_without_skill_submodules(tmp_path, kit):
     assert not (sealed / ".gitmodules").exists()
     for name in ("KernelWiki", "ncu-report-skill"):
         assert not (sealed / "skills" / name).exists()
+    checked = _module("scripts/gdn/prepare.py").validate_runtime_sources(settings, tuple(specs))
+    assert checked["optimizers"][0]["artifact_digest"] == result.candidate.optimizer_digest
+    assert checked["evolver"]["commit"] == settings.campaign.evolver.commit
+    assert checked["evaluator"]["commit"] == settings.campaign.gate_policy.evaluator.commit
+    assert checked["evaluator"]["file_count"] > 0
+    assert checked["roofline"]["commit"] == settings.campaign.roofline_builder.commit
+
+
+@pytest.mark.parametrize("component", ["evolver", "evaluator", "roofline"])
+def test_preflight_rejects_a_commit_that_exists_but_cannot_be_consumed(
+    tmp_path, monkeypatch, component,
+):
+    from atrex_runtime.git_import import SafeGitImporter
+
+    module = _module("scripts/gdn/prepare.py")
+    inputs = REPOSITORY / "data/GDN"
+    settings = RuntimeSettings.from_file(inputs / "runtime.template.json")
+    spec = CampaignSpecV3.from_file(inputs / "campaign.json")
+    if not (Path(settings.kernel_agent.base_source.repository) / ".git").exists():
+        pytest.skip("KDA submodule is not initialized")
+    section = {
+        "evolver": settings.campaign.evolver,
+        "evaluator": settings.campaign.gate_policy.evaluator,
+        "roofline": settings.campaign.roofline_builder,
+    }[component]
+    # The old preflight passes; only the actual fetch-by-SHA consumer reveals the problem.
+    module.git("-C", section.repository, "cat-file", "-e", f"{section.commit}^{{commit}}")
+    original = SafeGitImporter.fetch_commit
+    calls = []
+
+    def fail_fetch(self, repository, remote, commit):
+        calls.append(self._label)
+        expected = {"evolver": "Evolver", "evaluator": "Atrex Bench comparison evaluator",
+                    "roofline": "Atrex Bench Roofline"}[component]
+        if self._label == expected:
+            raise RuntimeError(f"upload-pack: not our ref {commit}")
+        return original(self, repository, remote, commit)
+
+    monkeypatch.setattr(SafeGitImporter, "fetch_commit", fail_fetch)
+    with pytest.raises(ValueError, match=rf"{component.capitalize()} .*not our ref"):
+        module.validate_runtime_sources(settings, (spec,))
+    assert calls
 
 
 @pytest.mark.parametrize(("kit", "custom_workspace"), [
     ("GDN", True), ("GDN-full", True), ("GDN-full", False),
 ])
+@pytest.mark.parametrize("preflight_fails", [False, True])
 def test_prepare_snapshots_inputs_without_writing_to_data(
-    tmp_path, monkeypatch, kit, custom_workspace,
+    tmp_path, monkeypatch, kit, custom_workspace, preflight_fails,
 ):
     module = _module("scripts/gdn/prepare.py")
     inputs = tmp_path / "data" / kit
@@ -82,10 +125,27 @@ def test_prepare_snapshots_inputs_without_writing_to_data(
     monkeypatch.setattr(module.pwd, "getpwnam", lambda _name: SimpleNamespace(
         pw_name="worker", pw_uid=1000, pw_dir="/home/worker",
     ))
-    original_git = module.git
-    monkeypatch.setattr(module, "git", lambda *args: (
-        "" if "cat-file" in args else original_git(*args)
-    ))
+    def preflight(settings, specs):
+        assert {spec.base_revision.commit for spec in specs} == {
+            json.loads((inputs / "campaign.json").read_text())["base_revision"]["commit"]
+        }
+        assert len(specs) == 2
+        assert settings.kernel_agent.base_source.repository == str(
+            tmp_path / "src/kernel-design-agents"
+        )
+        if preflight_fails:
+            raise ValueError("Runtime source preflight failed: fetch-by-SHA unavailable")
+        return {"verified": True}
+
+    monkeypatch.setattr(module, "validate_runtime_sources", preflight)
+    if preflight_fails:
+        with pytest.raises(ValueError, match="fetch-by-SHA unavailable"):
+            module.main()
+        assert not (workspace / "prepared.json").exists()
+        assert not (workspace / "runtime.json").exists()
+        assert not (workspace / "state").exists()
+        assert _files(inputs) == before
+        return
     module.main()
     assert _files(inputs) == before
     settings = RuntimeSettings.from_file(workspace / "runtime.json")
@@ -110,6 +170,7 @@ def test_prepare_snapshots_inputs_without_writing_to_data(
             assert lineage.source_manifest == workspace / "task/source_manifest.json"
     assert (workspace / "prepared.json").is_file()
     provenance = json.loads((workspace / "prepared.json").read_text())
+    assert provenance["source_preflight"] == {"verified": True}
     assert (workspace / provenance["task_inputs"]).resolve() == inputs
     manifest = json.loads((inputs / "task/source_manifest.json").read_text())
     assert provenance["source_commit"] == manifest["source"]["revision"]

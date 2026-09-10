@@ -55,6 +55,10 @@
 - `POST /v1/operations`、`POST /v1/wiki/query` 使用 Attempt 范围 Bearer Capability。
 - 所有 `/v1/admin/*` 使用 `Authorization: Bearer <admin-token>`。
 - Gateway/Wiki：`400` 请求错误，`403` 权限无效/过期/撤销，`409` 幂等或状态冲突，`503` 依赖不可用。
+- Gateway `503` 返回 `error="gateway_unavailable"` 和可操作的 `detail`（最多 8 KiB）。
+  Runtime 日志保留完整异常链和 Attempt/Operation/Request Digest 关联；
+  `gateway.operation_failed` 同时记录异常类型及正文。公开详情隐藏凭据，并对包含私有测试内容的
+  源码树错误返回摘要。Runtime 返回 503 不代表 Agate 原始 HTTP 状态也是 503，也不保证可重试。
 - Gateway `400` 中若包含可识别的 `operation`，响应会携带 `request_schema`：它由拒绝该请求的
   同一个 Pydantic Model 生成，是面向 Agent 的 JSON Schema。Schema 会移除 Runtime 自管字段，
   同时移除 `idempotency_key`；响应还包含精简的 `issues`，给出 Agent 可见字段路径、稳定错误码和

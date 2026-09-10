@@ -111,10 +111,18 @@ class SourceTreeAgateClient:
                 return job
             runs = raw.get("runs", [])
             if raw.get("error") or len(runs) != 1:
-                raise InfrastructureError(f"source-tree evaluator failed: {raw.get('error')}")
+                raise InfrastructureError(
+                    f"source-tree evaluator failed: {raw.get('error')}",
+                    public_detail=f"Source-tree evaluator failed in Agate job {job_id}; "
+                    "inspect Runtime logs for the driver error (private case details withheld).",
+                )
             output = runs[0].get("result")
             if not isinstance(output, dict) or not isinstance(output.get("raw_result"), dict):
-                raise InfrastructureError(f"source-tree evaluator produced no result: {runs[0]}")
+                raise InfrastructureError(
+                    f"source-tree evaluator produced no result: {runs[0]}",
+                    public_detail=f"Source-tree evaluator has no result in Agate job {job_id}; "
+                    "inspect Runtime logs (private case details withheld).",
+                )
             # Logical operation ownership remains in the durable Agate job binding;
             # a Dev tool result never becomes trusted Evaluate evidence by normalization.
             return {**job, "result": output["raw_result"], "source_tree_execution": result}

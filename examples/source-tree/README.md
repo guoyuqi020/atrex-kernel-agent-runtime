@@ -32,7 +32,7 @@ python scripts/source-tree/run.py \
   --config "$ATREX_RUNTIME_CONFIG" \
   --campaign workspaces/gdn-source-tree/campaign.json \
   --plan workspaces/gdn-source-tree/ablation.json \
-  --workspace workspaces/gdn-source-tree/run --target-epoch 5
+  --workspace workspaces/gdn-source-tree/run --target-epoch 100
 ```
 
 Select hardware capable of the original SM103 task; this example does not reinterpret it as an
@@ -45,18 +45,20 @@ Default: CuteDSL only, with the same seven instances as single-file production: 
 `ablation-pool-retained-3`. The generated `ablation.json` and checked-in `ablation.example.json`
 use the shared production plan builder, not a second set of scheduling rules.
 All arms start from one frozen source-tree v0; controls never repeat Bootstrap/evaluation.
-Each runs five Epochs with three serial Attempts per trajectory. Isolated/Retained instances
-have one trajectory (15 Attempts each); both pools have two (30 each). Isolated/Pool reset
+Each runs 100 Epochs with three serial Attempts per trajectory. Isolated/Retained instances
+have one trajectory (300 Attempts each); both pools have two (600 each). Isolated/Pool reset
 adaptive State; Retained/Pool-Retained keep it. Pool trajectories share the winning Kernel
 at Epoch boundaries; Pool-Retained also inherits the winning trajectory's terminal State.
 Only the main arm evolves: two independent same-Agent branches in Epoch 1, then Active plus
-one newly evolved Challenger in Epochs 2–5 (30 Attempts and four Evolutions). Total: 150
+one newly evolved Challenger in Epochs 2–100 (600 Attempts and 99 Evolutions). Total: 3,000
 Optimizer Attempts; no external original-AKA run. Arms have independent later history/state.
 
 The runner saves per-arm seed IDs, logs/results and `campaign-results.json` under `run/`.
 Actual Session/Artifact storage remains in the supplied Runtime. Failures do not cancel
 other arms; rerunning resumes the same identities. Do not change frozen inputs to resume.
-`--target-epoch` changes only the main arm; controls always spend 15 Attempts per trajectory.
+`--target-epoch` changes only the main arm; new control plans spend 300 Attempts per trajectory.
+Existing workspaces retain their frozen plan; explicitly use `--target-epoch 5` to resume an
+old five-Epoch experiment without extending its main arm. Single-file defaults are unchanged.
 This can run ten Optimizers concurrently; provision sufficient host memory. Nothing starts
 during preparation. To run only the main arm, use the raw `bootstrap` and `run-campaign`
 CLI commands instead of this runner.

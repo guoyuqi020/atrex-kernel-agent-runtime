@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 import math
 import os
 import shutil
@@ -24,7 +25,6 @@ from ..domain.errors import (
     DirectionConcurrencyError,
     InfrastructureError,
     InvalidTransitionError,
-    UpstreamGatewayError,
 )
 from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest
 from ..ports import RuntimeEventRecorder
@@ -42,6 +42,7 @@ from .control_models import (
 )
 from .correctness import correctness_summary
 from .diff_policy import RegistryCandidateDiffValidator
+from .failures import infrastructure_detail
 from .journals import RuntimeJournalService
 from .measurement_history import normalized_measurement_points
 from .production_policy import CandidateProductionValidator
@@ -71,6 +72,7 @@ from .protocol import (
 )
 
 _REQUEST_ADAPTER: TypeAdapter[GatewayProxyRequestV2] = TypeAdapter(GatewayProxyRequestV2)
+_LOGGER = logging.getLogger(__name__)
 _CANDIDATE_REQUEST_TYPES = (
     AttemptReportRequestV2,
     EvaluateRequestV2,
@@ -698,10 +700,22 @@ class GatewayProxyService:
                     recovery_generation=authorization.recovery_generation,
                 )
         except Exception as error:
+            # The HTTP boundary logs the complete chain, including these correlation notes.
+            # Never attach the request body or bearer capability.
+            error.add_note(
+                f"Gateway context: attempt_id={request.attempt_id} "
+                f"operation={operation.value} request_digest={request_digest}"
+            )
             self._events.record_runtime_event(
                 "gateway.operation_failed",
                 request.attempt_id,
-                {**event_base, "error_type": type(error).__name__},
+                {
+                    **event_base, "error_type": type(error).__name__,
+                    "detail": (
+                        infrastructure_detail(error) if isinstance(error, InfrastructureError)
+                        else str(error).encode("utf-8")[:8192].decode("utf-8", errors="ignore")
+                    ),
+                },
             )
             raise
 
@@ -1447,14 +1461,13 @@ class GatewayProxyAsgiApp:
             await json_response(send, 403, {"error": "forbidden", "detail": str(error)})
         except InvalidTransitionError as error:
             await json_response(send, 409, {"error": "conflict", "detail": str(error)})
-        except UpstreamGatewayError as error:
+        except InfrastructureError as error:
+            # Includes errors before operation dispatch as well as SDK/driver failures.
+            _LOGGER.exception("Gateway request failed: path=%s", path)
             await json_response(
-                send,
-                503,
-                {"error": "gateway_unavailable", "detail": str(error)},
+                send, 503,
+                {"error": "gateway_unavailable", "detail": infrastructure_detail(error)},
             )
-        except InfrastructureError:
-            await json_response(send, 503, {"error": "gateway_unavailable"})
         else:
             await json_response(send, 200, result.model_dump(mode="json"))
 

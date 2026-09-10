@@ -12,13 +12,18 @@ class GatewayCapabilityPolicyChangedError(InvalidTransitionError):
 class InfrastructureError(RuntimeError):
     """External infrastructure failed without consuming an Agent opportunity."""
 
+    def __init__(self, message: str = "", *, public_detail: str | None = None) -> None:
+        super().__init__(message)
+        # Override only where the diagnostic contains private evaluator payloads.
+        self.public_detail = public_detail
+
 
 class UpstreamGatewayError(InfrastructureError):
-    """An upstream Gateway answered with an error the Agent must see verbatim.
+    """An upstream Gateway answered with an error available for public diagnostics.
 
     Only a response the Gateway actually returned carries a status. Transport
     failures stay a plain InfrastructureError because their text can embed the
-    upstream URL and credentials.
+    upstream URL and credentials. The HTTP boundary filters public diagnostics.
     """
 
     def __init__(self, status: int, message: str) -> None:
