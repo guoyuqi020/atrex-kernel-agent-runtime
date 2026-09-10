@@ -195,7 +195,9 @@ def test_gdn_ablation_role_uses_separate_definition_and_output(tmp_path, monkeyp
     root = tmp_path / "workspaces/GDN"
     root.mkdir(parents=True)
     (root / "runtime.json").write_text("{}")
-    (root / "runtime-secrets.json").write_text("{}")
+    (root / "runtime-secrets.json").write_text(json.dumps({
+        "ATREX_CAPABILITY_SIGNING_KEY": "test-signing", "ATREX_ADMIN_BEARER_TOKEN": "test-admin",
+    }))
     monkeypatch.setattr(module, "__file__", str(tmp_path / "scripts/gdn/run.py"))
     monkeypatch.setattr(module.sys, "platform", "linux")
     monkeypatch.setattr(module.sys, "argv", ["run.py", "ablation"])

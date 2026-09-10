@@ -2,6 +2,11 @@
 
 English | [中文](README.zh.md)
 
+For concurrent GDN/GDN-full runs, follow the [shared-service commands](../../scripts/gdn/README.md).
+Attach two new task workspaces to one prepared service; do not start two Runtime listeners.
+The paths and commands below are for standalone mode. Shared mode stores Session/Artifact/DB
+and secrets under the service workspace, while task inputs and results remain separate.
+
 This self-contained counterpart to [`data/GDN`](../GDN/README.md) retains the original
 optimization hints. This directory holds inputs/templates only; generated files belong
 to `workspaces/GDN-full/` or an explicitly selected workspace.
@@ -23,6 +28,8 @@ commits match the cleaned package. Campaign creation keys are distinct from the 
 
 Defaults remain **L20D / CuteDSL / Claude**, 100 Epochs, three Attempts per trajectory,
 100M tokens per Optimizer/Bootstrap Session, and the same seven-arm ablation plan.
+New deployments use `container` (bwrap, current user, no systemd/per-Session cgroup).
+Outer-container resource limits are required separately; no Docker container is created by the scripts.
 “Full” means original input content, not access to hidden cases. Runtime/Core/KDA prompt
 projection is unchanged: provenance metadata such as `range_evidence` and `value_evidence`
 may still be omitted by the existing Agent formatter.
@@ -53,6 +60,7 @@ python scripts/gdn/run.py ablation --workspace workspaces/GDN-full
 
 Preparation defaults to `workspaces/<input directory name>`; override with `--workspace`.
 Run roles use that workspace's frozen inputs. Campaign and ablation are alternatives, not
-commands to launch together by default. Runtime uses port 8766 and Wiki 8091, like GDN;
-two Runtime services cannot bind the same port. See the [common launch guide](../GDN/README.md)
-for credentials, worker permissions, scheduling and independent Wiki setup.
+commands to launch together by default. Runtime uses port 8766, like GDN;
+two Runtime services cannot bind the same port. Wiki is disabled (`gpu_wiki: null`);
+no Wiki service or corpus is required. See the [common launch guide](../GDN/README.md)
+for credentials, worker permissions and scheduling.

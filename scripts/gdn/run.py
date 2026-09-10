@@ -6,10 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import secrets
 import subprocess
 import sys
 from pathlib import Path
+
+from gdn_workspace import load_service_secrets, resolve_service
 
 
 def main() -> None:
@@ -17,6 +18,7 @@ def main() -> None:
     repository = Path(__file__).resolve().parents[2]
     parser.add_argument("role", choices=("serve", "campaign", "ablation"))
     parser.add_argument("--workspace", type=Path, default=repository / "workspaces/GDN")
+    parser.add_argument("--service-workspace", type=Path, help="verify the saved service binding")
     parser.add_argument("--target-epoch", type=int, default=100)
     args = parser.parse_args()
     if sys.platform != "linux":
@@ -26,25 +28,13 @@ def main() -> None:
     root = args.workspace.resolve()
     if root.is_relative_to(repository / "data") or repository.is_relative_to(root):
         raise SystemExit("--workspace must be separate from data; use workspaces/GDN.")
-    config = root / "runtime.json"
-    if not config.is_file():
-        raise SystemExit(f"Run scripts/gdn/prepare.py --workspace {root} first")
-    # Both process roles share these persistent control-plane keys. Never print them.
-    secret_path = root / "runtime-secrets.json"
-    try:
-        descriptor = os.open(secret_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    except FileExistsError:
-        pass
-    else:
-        with os.fdopen(descriptor, "w") as stream:
-            json.dump(
-                {
-                    "ATREX_CAPABILITY_SIGNING_KEY": secrets.token_urlsafe(48),
-                    "ATREX_ADMIN_BEARER_TOKEN": secrets.token_hex(32),
-                },
-                stream,
-            )
-    os.environ.update(json.loads(secret_path.read_text()))
+    service, config = resolve_service(root, args.service_workspace)
+    if args.role == "serve" and service != root:
+        raise SystemExit(f"Start the shared Runtime once with serve --workspace {service}")
+    if args.role != "serve" and (root / "service.json").is_file():
+        raise SystemExit("Select a task workspace for campaign/ablation, not the service workspace")
+    os.environ.update(load_service_secrets(service))
+    print(f"Runtime config: {config}", flush=True)
     cli = Path(sys.executable).absolute().parent / "atrex-kernel-agent-runtime"
     if args.role == "serve":
         os.execv(cli, [str(cli), "serve", "--config", str(config)])

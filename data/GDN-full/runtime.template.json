@@ -55,13 +55,7 @@
       "allowed_submodules": {}
     }
   },
-  "gpu_wiki": {
-    "base_url": "http://127.0.0.1:8091",
-    "timeout_seconds": 30,
-    "max_proxy_request_bytes": 131072,
-    "max_query_bytes": 65536,
-    "max_response_bytes": 1048576
-  },
+  "gpu_wiki": null,
   "campaign": {
     "attempt_workspaces_root": "state/attempt-workspaces",
     "evolution_workspaces_root": "state/evolution-workspaces",
@@ -230,30 +224,21 @@
       "max_output_manifest_bytes": 16384
     },
     "launcher": {
-      "mode": "sandbox",
+      "mode": "container",
       "env_executable": "/usr/bin/env",
       "backend_credentials": {
         "enabled": true,
         "host_home": null,
         "development_bwrap_executable": "/usr/bin/bwrap"
       },
-      "sandbox": {
+      "container": {
         "bwrap_executable": "/usr/bin/bwrap",
-        "systemd_run_executable": "/usr/bin/systemd-run",
-        "systemd_user": false,
-        "worker_user": "atrex-worker",
         "sandbox_home": "/home/agent",
         "workspace_mount": "/home/agent/workspace",
-        "resolv_conf": "/run/systemd/resolve/resolv.conf",
+        "resolv_conf": "/etc/resolv.conf",
         "read_only_bind_paths": [],
         "hidden_host_paths": [],
-        "reference_projects_root": "../../third_party/reference-projects",
-        "resources": {
-          "memory_max_bytes": 3221225472,
-          "memory_swap_max_bytes": 0,
-          "cpu_quota_percent": 400,
-          "tasks_max": 512
-        }
+        "reference_projects_root": "../../third_party/reference-projects"
       }
     }
   }

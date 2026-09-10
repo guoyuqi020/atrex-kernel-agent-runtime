@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -23,7 +24,11 @@ def _module(relative: str) -> ModuleType:
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    sys.path.insert(0, str((REPOSITORY / relative).parent))
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.pop(0)
     return module
 
 
@@ -81,7 +86,9 @@ def test_gdn_runner_forwards_absolute_epoch_target(
     ])
     # Isolate configuration/secrets and fake all process execution.
     (tmp_path / "runtime.json").write_text("{}")
-    (tmp_path / "runtime-secrets.json").write_text("{}")
+    (tmp_path / "runtime-secrets.json").write_text(json.dumps({
+        "ATREX_CAPABILITY_SIGNING_KEY": "test-signing", "ATREX_ADMIN_BEARER_TOKEN": "test-admin",
+    }))
     calls: list[list[str]] = []
 
     def run(command: list[str], **kwargs: object) -> SimpleNamespace:

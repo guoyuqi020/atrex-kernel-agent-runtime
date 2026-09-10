@@ -14,6 +14,8 @@ import sys
 import tempfile
 from pathlib import Path
 
+from gdn_workspace import binding_for, service_config
+
 from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.bootstrap import CampaignSpecV3
 from atrex_runtime.composition.bootstrap import build_optimizer_base_loader, build_roofline_builder
@@ -37,7 +39,9 @@ def json_bytes(value: object) -> bytes:
 
 def write_inputs(workspace: Path, files: dict[str, bytes]) -> None:
     """Preflight the entire snapshot before writing; never change a registered run's inputs."""
-    if (workspace / "state").exists():
+    if any((workspace / name).exists() for name in (
+        "state", "service-binding.json", "service.json",
+    )):
         for name, content in files.items():
             path = workspace / name
             if not path.is_file() or path.read_bytes() != content:
@@ -56,16 +60,38 @@ def write_inputs(workspace: Path, files: dict[str, bytes]) -> None:
 def rebase_repositories(template: dict, inputs: Path, workspace: Path) -> None:
     """Keep repository references relative even with a custom workspace depth."""
     campaign = template["campaign"]
+    launcher = campaign["launcher"]
     for section, key in (
         (template["kernel_agent"]["base_source"], "repository"),
         (campaign["evolver"], "repository"),
         (campaign["gate_policy"]["evaluator"], "repository"),
         (campaign["roofline_builder"], "repository"),
-        (campaign["launcher"]["sandbox"], "reference_projects_root"),
+        (launcher[launcher["mode"]], "reference_projects_root"),
     ):
         value = section[key]
         if value and (key != "repository" or value.startswith(("./", "../", "/"))):
             section[key] = "./" + os.path.relpath((inputs / value).resolve(), workspace)
+
+
+def worker_for_mode(mode: str, requested: str | None, configured: str | None = None):
+    """Container workers run as the invoking user; only sandbox mode switches users."""
+    if mode == "container":
+        worker = pwd.getpwuid(os.getuid())
+        if requested is not None and requested != worker.pw_name:
+            raise SystemExit(
+                "Container mode uses the current user; --worker-user cannot switch users"
+            )
+        return worker
+    if mode != "sandbox":
+        raise SystemExit(f"Unsupported GDN launcher mode: {mode}")
+    if configured is not None and requested is not None and requested != configured:
+        raise SystemExit("--worker-user differs from the shared service configuration")
+    worker = pwd.getpwnam(
+        configured or requested or os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
+    )
+    if worker.pw_uid == 0:
+        raise SystemExit("Sandbox mode needs an existing non-root --worker-user")
+    return worker
 
 
 def validate_runtime_sources(
@@ -141,37 +167,76 @@ def main() -> None:
         help="run output directory (default: workspaces/<input directory name>)",
     )
     parser.add_argument("--backend", choices=("qodercli", "claude", "codex", "pi"))
-    parser.add_argument("--worker-user", help="existing non-root Linux user; defaults to this user")
+    parser.add_argument("--worker-user", help="sandbox Worker; container must match current user")
+    parser.add_argument("--services-only", action="store_true", help="prepare a shared Runtime")
+    parser.add_argument("--service-workspace", type=Path, help="attach to a prepared service")
+    parser.add_argument("--port", type=int, help="Runtime port; service/standalone preparation")
     args = parser.parse_args()
+    if args.services_only and args.service_workspace:
+        parser.error("--services-only and --service-workspace are mutually exclusive")
+    if args.port is not None and (args.service_workspace or not 1 <= args.port <= 65535):
+        parser.error("--port must be 1..65535 and cannot override an attached service")
     root = args.inputs.resolve()
-    workspace = (args.workspace or repository / "workspaces" / root.name).resolve()
+    workspace = (args.workspace or repository / "workspaces" / (
+        "control-gdn" if args.services_only else root.name
+    )).resolve()
     if workspace.is_relative_to(repository / "data") or root.is_relative_to(workspace):
         raise SystemExit("--workspace must be separate from data; use workspaces/GDN.")
     task = root / "task"
     campaign = CampaignSpecV3.from_file(root / "campaign.json")
     if campaign.hardware_target != "L20D":
         raise SystemExit("This prepared GDN campaign targets L20D.")
-    template = json.loads((root / "runtime.template.json").read_text())
-    worker = pwd.getpwnam(
-        args.worker_user or os.environ.get("SUDO_USER") or pwd.getpwuid(os.getuid()).pw_name
-    )
-    if worker.pw_uid == 0:
-        raise SystemExit("Choose an existing non-root --worker-user.")
-    executable = str(Path(sys.executable).absolute())  # Runtime-side dependencies use the venv.
-    # Worker entrypoints use only the standard library. Resolve the venv symlink
-    # to the global interpreter, since Sandbox masks the host's /home tree.
-    worker_python = str(Path(sys.executable).resolve())
-    for name in ("optimizer", "evolver"):
-        template["campaign"][name]["command_prefix"] = [worker_python]
-        if args.backend:
-            template["campaign"][name]["agent_backend"] = args.backend
-    template["campaign"]["roofline_builder"]["python_executable"] = executable
-    launcher = template["campaign"]["launcher"]
-    launcher["sandbox"]["worker_user"] = worker.pw_name
-    launcher["backend_credentials"]["host_home"] = worker.pw_dir
-    template["agate"]["base_url"] = os.environ.get("AGATE_URL") or template["agate"]["base_url"]
-    rebase_repositories(template, root, workspace)
-    RuntimeSettings.model_validate(template)
+    binding = None
+    if args.service_workspace:
+        if any((workspace / name).exists() for name in (
+            "runtime.json", "state", "runtime-secrets.json",
+        )):
+            raise SystemExit("Cannot attach a standalone workspace; prepare a new task workspace")
+        binding = binding_for(workspace, args.service_workspace.resolve())
+        shared_config = service_config(args.service_workspace.resolve())
+        template = json.loads(shared_config.read_text())
+        settings = RuntimeSettings.from_file(shared_config)
+        assert settings.campaign is not None
+        if args.backend and any(
+            section.agent_backend != args.backend
+            for section in (settings.campaign.optimizer, settings.campaign.evolver)
+        ):
+            raise SystemExit("--backend differs from the shared service configuration")
+        launcher = settings.campaign.launcher
+        worker = worker_for_mode(
+            launcher.mode, args.worker_user,
+            None if launcher.sandbox is None else launcher.sandbox.worker_user,
+        )
+        executable = str(settings.campaign.roofline_builder.python_executable)
+        worker_python = settings.campaign.optimizer.command_prefix[0]
+    else:
+        template, worker, executable, worker_python = configure_runtime(root, workspace, args)
+        settings = RuntimeSettings.model_validate(template)
+        assert settings.campaign is not None
+        settings = settings.model_copy(update={
+            "kernel_agent": settings.kernel_agent.resolve_from(workspace),
+            "campaign": settings.campaign.resolve_from(workspace),
+        })
+    if args.services_only:
+        if any((workspace / name).exists() for name in ("campaign.json", "service-binding.json")):
+            raise SystemExit("Cannot turn a task workspace into a shared service")
+        checked = validate_runtime_sources(
+            settings, (campaign, CampaignSpecV3.from_file(root / "ablation-campaign.json")),
+        )
+        config_bytes = json_bytes(template)
+        write_inputs(workspace, {
+            "runtime.json": config_bytes,
+            "service.json": json_bytes({
+                "kind": "gdn-shared-runtime",
+                "runtime_config_sha256": hashlib.sha256(config_bytes).hexdigest(),
+                "source_preflight": checked,
+            }),
+        })
+        print(f"Shared Runtime workspace: {workspace}")
+        print(f"Runtime endpoint: {settings.campaign.gateway_proxy_url}")
+        print(f"Worker launcher: {settings.campaign.launcher.mode}")
+        print("Prepared only; no task inputs, services, Agent sessions or GPU jobs were created.")
+        return
 
     # This is an offline bundle of one initial commit, not a link to the external repro.
     manifest = json.loads((task / "source_manifest.json").read_text())
@@ -225,13 +290,6 @@ def main() -> None:
         file_count = len(source_contract.validate_tree(artifact.payload_path))
         digest = str(source_contract.seed_digest)
 
-    # Resolve repositories against the generated configuration, not the input directory.
-    settings = RuntimeSettings.model_validate(template)
-    assert settings.campaign is not None
-    settings = settings.model_copy(update={
-        "kernel_agent": settings.kernel_agent.resolve_from(workspace),
-        "campaign": settings.campaign.resolve_from(workspace),
-    })
     assert settings.campaign is not None and settings.kernel_agent.base_source is not None
     source_preflight = validate_runtime_sources(
         settings, (campaign, CampaignSpecV3.from_file(root / "ablation-campaign.json")),
@@ -262,10 +320,13 @@ def main() -> None:
         "source_preflight": source_preflight,
     }
     files = {
-        "runtime.json": json_bytes(template),
         "evaluation-contract.json": json_bytes(contract.model_dump(mode="json")),
         "prepared.json": json_bytes(provenance),
     }
+    if binding is None:
+        files["runtime.json"] = json_bytes(template)
+    else:
+        files["service-binding.json"] = json_bytes(binding)
     for name in ("campaign.json", "ablation-campaign.json", "ablation.json"):
         files[name] = (root / name).read_bytes()
     for directory in ("task", "initial-evidence"):
@@ -277,14 +338,47 @@ def main() -> None:
     write_inputs(workspace, files)
     print(f"Task inputs: {root}")
     print(f"Prepared workspace: {workspace}")
+    if binding is not None:
+        print(f"Shared Runtime config: {shared_config}")
     print(f"GPU=L20D DSL=cutedsl backend={settings.campaign.optimizer.agent_backend}")
     print(f"Source: {revision}; {file_count} files; {len(shapes)} private shapes")
     print(f"Source integrity and production policy: passed ({digest})")
     print("Runtime Bundle preflight: Optimizer, Evolver, Evaluator and Roofline passed")
-    print(f"Worker: {worker.pw_name}; sandbox=bwrap+cgroup; Python={worker_python}")
-    for executable_name in ("bwrap", "systemd-run", settings.campaign.optimizer.agent_backend):
+    mode = settings.campaign.launcher.mode
+    print(f"Worker: {worker.pw_name}; launcher={mode}; Python={worker_python}")
+    executables = ["bwrap", settings.campaign.optimizer.agent_backend]
+    if mode == "sandbox":
+        executables.append("systemd-run")
+    for executable_name in executables:
         print(f"{executable_name}: {shutil.which(executable_name) or 'NOT IN PATH'}")
     print("No services, Agent sessions or GPU jobs were started.")
+
+
+def configure_runtime(root: Path, workspace: Path, args: argparse.Namespace) -> tuple:
+    """Resolve a deployment template once; attached tasks never override it."""
+    template = json.loads((root / "runtime.template.json").read_text())
+    worker = worker_for_mode(template["campaign"]["launcher"]["mode"], args.worker_user)
+    executable = str(Path(sys.executable).absolute())  # Runtime-side dependencies use the venv.
+    # Worker entrypoints use only the standard library. Resolve the venv symlink
+    # to the global interpreter, since Sandbox masks the host's /home tree.
+    worker_python = str(Path(sys.executable).resolve())
+    for name in ("optimizer", "evolver"):
+        template["campaign"][name]["command_prefix"] = [worker_python]
+        if args.backend:
+            template["campaign"][name]["agent_backend"] = args.backend
+    template["campaign"]["roofline_builder"]["python_executable"] = executable
+    launcher = template["campaign"]["launcher"]
+    if launcher["mode"] == "sandbox":
+        launcher["sandbox"]["worker_user"] = worker.pw_name
+    launcher["backend_credentials"]["host_home"] = worker.pw_dir
+    template["agate"]["base_url"] = os.environ.get("AGATE_URL") or template["agate"]["base_url"]
+    if args.port is not None:
+        template["server"]["port"] = args.port
+        template["campaign"]["gateway_proxy_url"] = f"http://127.0.0.1:{args.port}"
+    rebase_repositories(template, root, workspace)
+    RuntimeSettings.model_validate(template)
+
+    return template, worker, executable, worker_python
 
 
 if __name__ == "__main__":

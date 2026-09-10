@@ -2,10 +2,16 @@
 
 English | [中文](README.zh.md)
 
+To run GDN and GDN-full concurrently, use the [shared-service launcher](../../scripts/gdn/README.md).
+Prepare one `--services-only` workspace, attach each task with `--service-workspace`, and start
+Runtime once. The remaining paths/serve commands below describe standalone mode; in shared mode,
+Registry, Sessions, Artifacts and secrets live in the service workspace, not the task workspace.
+
 For the counterpart retaining the original optimization hints, see [GDN-full](../GDN-full/README.md).
 
 GPU target: **L20D**. Operator: `chunk_gated_delta_rule`. This kit creates one **CuteDSL**
-Lineage. Preparation does not start Runtime, Wiki, model sessions, or GPU jobs.
+Lineage. Preparation does not start Runtime, model sessions, or GPU jobs. Wiki is disabled;
+KDA does not use it, so no Wiki service or corpus is required.
 **Both Optimizer and Evolver use the Claude backend, reusing the Lima user's `.claude` configuration.**
 
 `data/GDN/` contains task inputs and configuration templates only. Launch scripts live in
@@ -26,7 +32,7 @@ retried when the quota changes. Single-file configurations remain unchanged.
 
 ## Ablation entrypoint
 
-With this kit prepared and Runtime/Wiki already running, execute in Lima:
+With this kit prepared and Runtime already running, execute in Lima:
 
 ```bash
 cd ~/atrex-runtime
@@ -35,7 +41,7 @@ source env.sh
 python scripts/gdn/run.py ablation
 ```
 
-This starts tasks only, with the same Sandbox scheduling permissions as `campaign`.
+This starts tasks only, as the same container user as `campaign`, without sudo/systemd.
 `ablation-campaign.json` uses a new `gdn-source-tree-l20d-claude-ablation` creation key;
 it neither changes nor takes over the existing trial. After one full Bootstrap, six controls
 reuse the new experiment's exact v0, Agent, edit boundaries, contract and initial evidence.
@@ -125,9 +131,10 @@ source ~/.venvs/atrex-runtime/bin/activate
 python scripts/gdn/prepare.py --backend claude
 ```
 
-Preparation selects the current non-root Linux user as Sandbox Worker and reuses CLI
-configuration from that user's Home. Use `--worker-user` for another existing non-root
-account. bwrap + cgroup isolation remains enabled. Runtime and preparation use the Linux
+New deployments use `container` mode: bwrap isolation as the current container user, with CLI
+configuration from that user's Home. `--worker-user` cannot switch users; non-root is recommended.
+No systemd or per-Session cgroup is required. Outer-container CPU/memory/PID limits must be
+configured separately; directly in Lima, only VM-wide limits apply. Runtime and preparation use the Linux
 venv; sandboxed Optimizer, Evolver, and Runtime Tools use the global Python interpreter
 (resolving the venv symlink to `/usr/bin/python3.x`), not a venv hidden under Home.
 
@@ -139,8 +146,8 @@ Once `state/` exists, preparation refuses to overwrite differing run configurati
 
 ## Later execution
 
-Runtime is configured at `http://127.0.0.1:8766`; the independent Wiki service is expected at
-`http://127.0.0.1:8091`. Wiki is not started automatically. State, sessions, and artifacts live
+Runtime is configured at `http://127.0.0.1:8766`; `gpu_wiki: null` disables Wiki integration.
+No Wiki startup or readiness check is needed. State, sessions, and artifacts live
 under `workspaces/GDN/state/`. Agate uses `AGATE_AK` / `AGATE_SK`; set `AGATE_URL` during preparation
 to override its endpoint. No credentials are copied into the kit. Runtime and Campaign
 processes need matching `ATREX_CAPABILITY_SIGNING_KEY` and `ATREX_ADMIN_BEARER_TOKEN` values.
@@ -148,7 +155,7 @@ The selected model CLI must already be installed and authenticated.
 
 Alternatively, run `python scripts/gdn/run.py serve` and
 `python scripts/gdn/run.py campaign --target-epoch 100` in separate Linux processes with Agate
-environment variables loaded and the Sandbox scheduling privileges described below. They
+environment variables loaded, as the same container user without sudo. They
 automatically share persistent `runtime-secrets.json` (mode 0600, Git-ignored), run Bootstrap
 before the requested Epoch, and save `bootstrap-result.json` / `epoch-result.json`. A failed
 Bootstrap prevents optimization from starting. Resume with the same configuration and secrets;
@@ -163,8 +170,8 @@ sudo tail -n 60 workspaces/GDN/services/campaign.log
 ```
 
 These are the subsequent run entry points, **not commands executed during preparation**.
-Sandbox scheduling requires Linux privileges for system-level systemd services and switching
-to the Worker user, as in the production scripts' root scheduler:
+Container mode requires working bwrap/namespaces but no system-level scheduler permissions.
+Existing sandbox workspaces retain their old systemd/Worker requirements:
 
 ```bash
 # Service process; Bootstrap and Campaign run in another terminal.

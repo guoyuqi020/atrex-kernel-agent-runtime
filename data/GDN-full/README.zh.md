@@ -2,6 +2,10 @@
 
 [English](README.md) | 中文
 
+同时运行 GDN/GDN-full 请使用[共享服务命令](../../scripts/gdn/README.md)，将两个新的任务
+工作区绑定到同一服务，不启动两个 Runtime。下文路径和命令为独立模式；共享模式的
+Session、Artifact、数据库和密钥位于服务工作区，两份任务的输入及结果仍各自保存。
+
 这是 [`data/GDN`](../GDN/README.zh.md) 的独立对照输入包，保留原始优化提示。
 本目录只存输入和模板；实际配置、源码副本、数据库、Session、日志和结果写入
 `workspaces/GDN-full/`，也可显式指定其他工作区。
@@ -22,6 +26,8 @@ Campaign 使用独立 creation key，不复用清理版的实验身份。
 
 默认仍为 **L20D / CuteDSL / Claude**、100 个 Epoch、每条轨迹每轮 3 次 Attempt、
 Optimizer/Bootstrap 每 Session 100M tokens，七臂消融方案不变。
+新配置默认 `container`：bwrap 隔离、当前用户运行，不需要 systemd/每 Session cgroup。
+资源限额由外层容器负责，脚本不会自动创建 Docker 容器。
 “不屏蔽”指输入恢复原始内容，并不开放隐藏测试集，也不改变 Runtime/Core/KDA 的 Prompt
 投影：例如 `range_evidence`、`value_evidence` 等元数据仍可能被已有 Agent 格式化逻辑省略。
 
@@ -51,5 +57,6 @@ python scripts/gdn/run.py ablation --workspace workspaces/GDN-full
 
 准备时默认工作区是 `workspaces/<输入目录名>`，可通过 `--workspace` 覆盖。
 运行入口只使用该工作区的冻结输入。Campaign 和 ablation 是两种选择，不默认同时启动。
-模板与 GDN 一样使用 Runtime 8766、Wiki 8091 端口，两个 Runtime 不能同时占用同一端口。
-凭据、Worker 权限、调度和独立 Wiki 服务说明见[通用启动文档](../GDN/README.zh.md)。
+模板与 GDN 一样使用 Runtime 8766 端口，两个 Runtime 不能同时占用同一端口。
+Wiki 已禁用（`gpu_wiki: null`），无需启动 Wiki 或准备语料。
+凭据、Worker 权限和调度说明见[通用启动文档](../GDN/README.zh.md)。

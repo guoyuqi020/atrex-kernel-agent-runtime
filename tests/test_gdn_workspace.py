@@ -125,6 +125,9 @@ def test_prepare_snapshots_inputs_without_writing_to_data(
     monkeypatch.setattr(module.pwd, "getpwnam", lambda _name: SimpleNamespace(
         pw_name="worker", pw_uid=1000, pw_dir="/home/worker",
     ))
+    monkeypatch.setattr(module.pwd, "getpwuid", lambda _uid: SimpleNamespace(
+        pw_name="worker", pw_uid=1000, pw_dir="/home/worker",
+    ))
     def preflight(settings, specs):
         assert {spec.base_revision.commit for spec in specs} == {
             json.loads((inputs / "campaign.json").read_text())["base_revision"]["commit"]
@@ -149,6 +152,7 @@ def test_prepare_snapshots_inputs_without_writing_to_data(
     module.main()
     assert _files(inputs) == before
     settings = RuntimeSettings.from_file(workspace / "runtime.json")
+    assert settings.gpu_wiki is None
     assert settings.storage.registry_database == workspace / "state/registry.sqlite"
     assert settings.campaign.attempt_workspaces_root == workspace / "state/attempt-workspaces"
     assert settings.kernel_agent.base_source.repository == str(
@@ -158,7 +162,9 @@ def test_prepare_snapshots_inputs_without_writing_to_data(
     assert settings.campaign.gate_policy.evaluator.repository == str(
         tmp_path / "third_party/atrex-bench"
     )
-    assert settings.campaign.launcher.sandbox.reference_projects_root == (
+    assert settings.campaign.launcher.mode == "container"
+    assert settings.campaign.launcher.sandbox is None
+    assert settings.campaign.launcher.container.reference_projects_root == (
         tmp_path / "third_party/reference-projects"
     )
     for name in ("campaign.json", "ablation-campaign.json"):

@@ -2,11 +2,17 @@
 
 [English](README.md) | 中文
 
+同时运行 GDN/GDN-full 请使用[共享服务入口](../../scripts/gdn/README.md)：
+先准备一个 `--services-only` 工作区，再以 `--service-workspace` 分别绑定两份任务，只启动一次
+Runtime。下文路径和 serve 命令描述独立模式；共享模式的 Registry、Session、Artifact 和密钥
+都位于服务工作区，任务目录只保留输入快照、绑定和结果。
+
 保留原始优化提示的独立对照输入包见 [GDN-full](../GDN-full/README.zh.md)。
 
 目标 GPU：**L20D**。算子：`chunk_gated_delta_rule`。仅创建 **CuteDSL** Lineage。
 **Optimizer 和 Evolver 均使用 Claude backend，复用 Lima 用户的 `.claude` 配置。**
-这是供后续试跑使用的独立输入包；准备脚本不启动 Runtime、Wiki、模型或 GPU 作业。
+这是供后续试跑使用的独立输入包；准备脚本不启动 Runtime、模型或 GPU 作业。
+KDA 不再使用 Wiki，本包已禁用 Wiki，不需要启动服务或准备语料。
 
 `data/GDN/` 只存任务输入和配置模板；启动脚本位于 `scripts/gdn/`，默认工作区为
 `workspaces/GDN/`。准备阶段会把任务、Campaign 定义及初始证据复制为工作区快照，
@@ -23,7 +29,7 @@ Campaign 共用 100M。Evolver 仍不限 token，原有超时限制不变。新�
 
 ## 消融实验入口
 
-在已准备本包、Runtime/Wiki 正常运行的 Lima 中执行：
+在已准备本包、Runtime 正常运行的 Lima 中执行：
 
 ```bash
 cd ~/atrex-runtime
@@ -32,7 +38,7 @@ source env.sh
 python scripts/gdn/run.py ablation
 ```
 
-只启动任务，不管理服务；需与原 `campaign` 入口相同的 Sandbox 调度权限。
+只启动任务，不管理服务；以与 `campaign` 相同的容器用户运行，不需要 sudo/systemd。
 使用 `ablation-campaign.json` 的新 key `gdn-source-tree-l20d-claude-ablation`，
 不会修改或接管当前试跑。一次完整 Bootstrap 后，六个对照臂共享新实验的冻结 v0、Agent、
 修改边界、评测契约和初始证据；不重复 Baseline 测量，不导入旧试跑经验。
@@ -113,8 +119,9 @@ source ~/.venvs/atrex-runtime/bin/activate
 python scripts/gdn/prepare.py --backend claude
 ```
 
-脚本使用当前非 root Linux 用户作为 Sandbox Worker，并从该用户 Home 复用 CLI 配置；
-也可通过 `--worker-user` 指定其他已存在的非 root 用户。保留 bwrap + cgroup 隔离。
+新配置默认 `container`：以当前容器用户运行 bwrap，从该用户 Home 复用 CLI 配置；
+建议非 root，`--worker-user` 不能切换到其他用户。不需要 systemd 或每 Session cgroup；
+CPU/内存/PID 限额由外层容器配置，直接运行在 Lima 时只受 VM 总体限制。
 Runtime 服务和准备脚本使用 Linux venv；Sandbox 中的 Optimizer、Evolver 和 Runtime Tools
 使用全局 Python（将 venv 的解释器软链接解析为 `/usr/bin/python3.x`），不依赖被隐藏的
 Home 下的 venv 路径。
@@ -126,13 +133,13 @@ Home 下的 venv 路径。
 
 ## 后续启动
 
-配置预留 Runtime 地址 `http://127.0.0.1:8766`、Wiki 地址 `http://127.0.0.1:8091`。
-Wiki 是独立服务；本包不会自动启动它。状态、Session 和 Artifact 写入 `workspaces/GDN/state/`。
+配置预留 Runtime 地址 `http://127.0.0.1:8766`，通过 `gpu_wiki: null` 禁用 Wiki 集成。
+无需启动或检查 Wiki。状态、Session 和 Artifact 写入 `workspaces/GDN/state/`。
 Agate 使用 `AGATE_AK` / `AGATE_SK`，`AGATE_URL` 可在准备时覆盖服务地址；不将凭据复制进输入包。
 Runtime 服务与 Campaign 进程还需使用一致的 `ATREX_CAPABILITY_SIGNING_KEY` 和
 `ATREX_ADMIN_BEARER_TOKEN`。所选模型 CLI 必须已经安装并配置好认证。
 
-也可以使用 `run.py`：在已加载 Agate 环境变量、具备下述 Sandbox 调度权限的 Linux 进程中，
+也可以使用 `run.py`：在已加载 Agate 环境变量的 Linux 进程中，以同一容器用户、无需 sudo，
 分别运行 `python scripts/gdn/run.py serve` 和
 `python scripts/gdn/run.py campaign --target-epoch 100`。它自动共用持久化的
 `runtime-secrets.json`（权限 0600，Git 忽略），按顺序执行 Bootstrap 和指定 Epoch，
@@ -147,8 +154,8 @@ systemctl status atrex-gdn-runtime atrex-gdn-campaign --no-pager
 sudo tail -n 60 workspaces/GDN/services/campaign.log
 ```
 
-以下为后续试跑的 CLI 入口，**本次准备没有执行**。Sandbox 调度须在具备 systemd 系统服务
-管理及 Worker 切换权限的 Linux 环境中执行（与生产脚本的 root 调度方式一致）：
+以下为后续试跑的 CLI 入口，**本次准备没有执行**。默认 container 模式需要 bwrap/namespace
+可用，不需要 systemd 调度权限；已有 sandbox 工作区仍保留原先的 systemd/Worker 要求：
 
 ```bash
 # 服务进程；另一个终端执行 Bootstrap / Campaign。

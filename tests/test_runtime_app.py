@@ -188,6 +188,19 @@ def test_application_wires_agent_abba_with_optimizer_gate(tmp_path: Path) -> Non
         app.close()
 
 
+def test_disabled_wiki_does_not_construct_a_service_client(tmp_path: Path, monkeypatch) -> None:
+    def unexpected_client(*_args, **_kwargs):
+        pytest.fail("disabled Wiki must not create a transport or contact the service")
+
+    monkeypatch.setattr("atrex_runtime.api.app.HttpxGpuWikiTransport", unexpected_client)
+    settings = _settings(tmp_path).model_copy(update={"gpu_wiki": None})
+    app = build_runtime_application(settings, _environment(), sdk_loader=CapturingSdkLoader())
+    try:
+        assert app._wiki_proxy is None
+    finally:
+        app.close()
+
+
 @pytest.mark.anyio
 async def test_application_owns_wiki_secret_and_routes_worker_proxy(tmp_path: Path) -> None:
     value = _config_value()

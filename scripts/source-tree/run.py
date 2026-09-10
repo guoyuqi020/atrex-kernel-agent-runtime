@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Bootstrap once, then run the production ablation arms against a source-tree task.
 
-Uses an existing Runtime/Wiki deployment; never starts or stops shared services.
+Uses an existing Runtime deployment; never starts or stops shared services.
 """
 
 from __future__ import annotations
