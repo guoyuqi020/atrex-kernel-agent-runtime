@@ -166,6 +166,17 @@ atrex-kernel-agent-runtime list-worker-sessions --config runtime.json --campaign
 
 Claude Session Artifact 在 `provider/claude-session.raw-jsonl` 和 `provider/claude-subagents/` 中保留原生主/子会话。规范化 `events.jsonl` 通过 `message_id`、`source_path` 将每个响应的最新 usage 关联回原始消息及工具调用。使用逐响应统计前应检查 `session.json.response_usage_complete`；缺失或与终态总账无法核对的计数仍标为 partial。不要重复累加 stdout/native 副本，也不要把终态总账加到逐响应用量上。一个响应可能包含多个工具调用：这些计数属于响应，并不是每个工具独立计费的用量。
 
+Core/KDA 同时识别 Claude terminal 的主会话口径和完整会话树口径；两种情况都对所有唯一
+子代理响应计费一次。terminal 只覆盖主会话时，记录 `claude_terminal_usage_excludes_subagents`。
+两种口径都无法对账时，对每个 Token 桶取 native/terminal 已知计数的较大值，明确标为 partial，
+记录 `claude_response_usage_incomplete_or_unreconciled`。这是保守记账值，不是已核实的账单；
+原始 terminal 计数仍保留在 Provider Trace 中。单纯的已知记账异常不再拒绝候选，也不阻止报告
+补交，但报告校验、Gateway 证据、性能门禁、配额、日志捕获完整性和进程/策略检查仍然有效。
+查看 `session.json.accounting_usage`（包含所有补交 Session 的累计值），以及 `worker.exited`
+事件的 `usage_complete` / `usage_warnings`；不要把 partial 计数作为精确用量。
+此行为需要同时更新 Runtime 和冻结的 Core/KDA Bundle；不会自动恢复历史失败 Attempt，
+也不会将任意 `126` 都视为成功。
+
 封存后的 `conversation.jsonl` 是阅读视图：Claude 优先使用原生内容，省去已被完整覆盖的 stdout 消息副本，保留不同的 thinking/text/tool 内容块、未被覆盖的 stdout 内容、诊断、压缩边界和终态结果。重复的初始 Prompt，以及原生队列、标题、文件历史等内部管理事件只从阅读视图中省去。封存前的实时视图仍跟随 stdout。原始 Provider 文件及规范化 usage 索引不变。
 
 该采集能力需要更新后的 Core/Evolver Bundle Commit。现有 Campaign 冻结了 Bundle Revision，单独重启 Runtime 不会自动升级。历史运行如果禁用了原生持久化，无法从 Session 总量还原缺失的逐响应计数。

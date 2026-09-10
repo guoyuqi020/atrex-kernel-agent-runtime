@@ -55,6 +55,13 @@ class ProviderUsageReportV2(BaseModel):
     session_count: NonNegativeInt
     model_request_count: NonNegativeInt
     usage_complete: StrictBool
+    usage_warnings: tuple[
+        Literal[
+            "claude_response_usage_incomplete_or_unreconciled",
+            "claude_terminal_usage_excludes_subagents",
+        ],
+        ...,
+    ] = ()
 
     @model_validator(mode="after")
     def _validate_derived_fields(self) -> ProviderUsageReportV2:
@@ -98,6 +105,7 @@ class ProviderUsageReportV2(BaseModel):
         *,
         expected_unit: UsageUnit,
         expected_budget: float | None,
+        allow_claude_accounting_gap: bool = False,
     ) -> Self:
         """Read one small regular report and verify deployment-owned accounting policy."""
         try:
@@ -113,7 +121,15 @@ class ProviderUsageReportV2(BaseModel):
             raise ValueError("Worker provider usage report names a different accounting unit")
         if report.budget != expected_budget:
             raise ValueError("Worker provider usage report names a different budget")
-        if not report.usage_complete:
+        accounting_gap = (
+            allow_claude_accounting_gap
+            and report.usage_unit == "provider_tokens"
+            and "claude_response_usage_incomplete_or_unreconciled" in report.usage_warnings
+            and report.consumed > 0
+            and report.session_count > 0
+            and report.model_request_count > 0
+        )
+        if not report.usage_complete and not accounting_gap:
             raise ValueError(
                 f"Worker model request completed without provider-reported {expected_unit}"
             )

@@ -213,6 +213,8 @@ class CoreOptimizerSessionDriver:
             attempt_report_digest=report_digest,
             attempt_report_error=report_error,
             kernel_artifact_digest=candidate_digest,
+            usage_complete=result.token_usage.usage_complete,
+            usage_warnings=result.token_usage.usage_warnings,
         )
 
     def _seal_candidate(self, prepared: PreparedAttempt, attempt_id: AttemptId) -> ArtifactDigest:

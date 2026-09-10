@@ -286,7 +286,11 @@ Attempt and workspace, pointing to the existing Journal, draft and Trace. This i
 conversation, not native resume, a new optimization Attempt, or permission to invent measurements.
 An unaccepted local terminal file is moved to a unique scratch backup so it cannot block resubmission.
 All invocations share the original wall-time deadline and token/credit allowance. Nonzero model exits,
-timeouts, exhausted quotas, or incomplete provider capture/usage do not trigger completion.
+timeouts, exhausted quotas, incomplete provider capture, or unavailable usage do not trigger
+completion. A known Claude usage-reconciliation gap with captured, nonzero provider counters
+is an accounting warning, not a failed optimization: report completion and normal candidate
+validation still run. Other process/policy failures (including other causes of exit 126) remain
+blocking.
 `0` disables the extra invocations but still checks acceptance.
 
 The Trace retains the initial capture at its root and later captures under `continuations/001/`,

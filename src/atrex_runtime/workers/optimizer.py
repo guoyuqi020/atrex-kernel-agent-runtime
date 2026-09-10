@@ -94,6 +94,8 @@ class OptimizerSessionResult:
     attempt_report_error: str | None = None
     kernel_artifact_digest: ArtifactDigest | None = None
     runtime_state_digest: ArtifactDigest | None = None
+    usage_complete: bool = True
+    usage_warnings: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if self.token_budget <= 0:
@@ -278,6 +280,8 @@ class SessionOptimizerRunner(OptimizerRunner):
                         "consumed": result.token_usage.consumed,
                     },
                     "session_trace_digest": result.session_trace_digest,
+                    "usage_complete": result.usage_complete,
+                    "usage_warnings": list(result.usage_warnings),
                 },
             )
         finally:

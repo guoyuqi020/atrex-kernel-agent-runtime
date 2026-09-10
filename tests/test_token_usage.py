@@ -128,3 +128,68 @@ def test_report_accepts_qoder_native_credits(tmp_path: Path) -> None:
 
     assert report.to_domain() == TokenUsage(0, 0, 0, 0, credits=13.75)
     assert report.consumed == 13.75
+
+
+@pytest.mark.parametrize("allow", [False, True])
+def test_known_claude_accounting_gap_requires_explicit_backend_permission(
+    tmp_path: Path,
+    allow: bool,
+) -> None:
+    path = tmp_path / "usage.json"
+    _write_report(path)
+    value = json.loads(path.read_text())
+    value.update(
+        usage_complete=False,
+        usage_warnings=["claude_response_usage_incomplete_or_unreconciled"],
+    )
+    path.write_text(json.dumps(value))
+    if not allow:
+        with pytest.raises(ValueError, match="without provider-reported"):
+            ProviderUsageReportV2.from_file(
+                path,
+                expected_unit="provider_tokens",
+                expected_budget=100,
+            )
+        return
+    report = ProviderUsageReportV2.from_file(
+        path,
+        expected_unit="provider_tokens",
+        expected_budget=100,
+        allow_claude_accounting_gap=True,
+    )
+    assert not report.usage_complete
+    assert report.consumed == 105 and report.budget_exhausted
+    assert report.to_domain() == TokenUsage(50, 25, 20, 10)
+
+
+@pytest.mark.parametrize("mutation", ["warning", "empty", "requests", "sessions", "unknown"])
+def test_partial_permission_does_not_accept_unidentified_or_empty_usage(
+    tmp_path: Path,
+    mutation: str,
+) -> None:
+    path = tmp_path / "usage.json"
+    _write_report(path)
+    value = json.loads(path.read_text())
+    value.update(
+        usage_complete=False,
+        usage_warnings=["claude_response_usage_incomplete_or_unreconciled"],
+    )
+    if mutation == "warning":
+        value["usage_warnings"] = []
+    elif mutation == "empty":
+        value.update(consumed=0, budget_exhausted=False)
+        value["token_usage"] = dict.fromkeys(value["token_usage"], 0)
+    elif mutation == "requests":
+        value["model_request_count"] = 0
+    elif mutation == "sessions":
+        value["session_count"] = 0
+    else:
+        value["usage_warnings"] = ["unknown_error"]
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError):
+        ProviderUsageReportV2.from_file(
+            path,
+            expected_unit="provider_tokens",
+            expected_budget=100,
+            allow_claude_accounting_gap=True,
+        )

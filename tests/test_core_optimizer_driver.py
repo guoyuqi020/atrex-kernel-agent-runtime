@@ -408,12 +408,18 @@ print("core-owned optimizer finished")
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("accept_on_segment", [1, 2, None], ids=["accepted", "repair", "exhausted"])
+@pytest.mark.parametrize("bundle", ["atrex-kernel-agent-core", "kernel-design-agents"])
+@pytest.mark.parametrize("provider_case", ["codex", "claude-main", "claude-tree", "claude-stalled"])
 async def test_runtime_executes_current_core_bundle_with_attempt_v9(
-    tmp_path: Path, accept_on_segment: int | None,
+    tmp_path: Path,
+    accept_on_segment: int | None,
+    bundle: str,
+    provider_case: str,
 ) -> None:
     root = tmp_path / "attempt"
     repository = root / "agent/optimizer"
-    source = Path(__file__).resolve().parents[1] / "src/atrex-kernel-agent-core"
+    source = Path(__file__).resolve().parents[1] / "src" / bundle
+    backend = provider_case.split("-")[0]
     shutil.copytree(
         source,
         repository,
@@ -472,8 +478,8 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v9(
 
     provider_bin = tmp_path / "provider-bin"
     provider_bin.mkdir()
-    fake_codex = provider_bin / "codex"
-    fake_codex.write_text(
+    fake_provider = provider_bin / backend
+    fake_provider.write_text(
         """#!/usr/bin/env python3
 import json
 import os
@@ -486,26 +492,53 @@ invocations_path = Path("scratch/fake-provider-invocations.json")
 invocations = json.loads(invocations_path.read_text()) if invocations_path.exists() else []
 ordinal = len(invocations) + 1
 thread_id = f"00000000-0000-0000-0000-{ordinal:012d}"
+provider_case = FAKE_PROVIDER_CASE
+if provider_case != "codex":
+    thread_id = sys.argv[sys.argv.index("--session-id") + 1]
 invocations.append({
     "attempt_id": attempt["attempt_id"], "thread_id": thread_id,
     "prompt": sys.argv[-1],
 })
 invocations_path.write_text(json.dumps(invocations))
-rollout = Path(os.environ["CODEX_HOME"]) / "sessions/2026" / f"rollout-test-{thread_id}.jsonl"
-rollout.parent.mkdir(parents=True)
 usage = {
     "input_tokens": 12,
     "output_tokens": 4,
     "cached_input_tokens": 2,
     "total_tokens": 16,
 }
-rollout.write_text(json.dumps({
-    "type": "event_msg",
-    "payload": {
-        "type": "token_count",
-        "info": {"last_token_usage": usage, "total_token_usage": usage},
-    },
-}) + "\\n")
+if provider_case == "codex":
+    rollout = Path(os.environ["CODEX_HOME"]) / "sessions/2026" / f"rollout-test-{thread_id}.jsonl"
+    rollout.parent.mkdir(parents=True)
+    rollout.write_text(json.dumps({
+        "type": "event_msg",
+        "payload": {
+            "type": "token_count",
+            "info": {"last_token_usage": usage, "total_token_usage": usage},
+        },
+    }) + "\\n")
+else:
+    usage = {
+        "input_tokens": 10, "output_tokens": 4,
+        "cache_read_input_tokens": 2, "cache_creation_input_tokens": 0,
+    }
+    native = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "projects/test" / f"{thread_id}.jsonl"
+    native.parent.mkdir(parents=True, exist_ok=True)
+    main_message = {"type": "assistant", "message": {"id": "main", "usage": usage}}
+    native.write_text(json.dumps(main_message) + "\\n")
+    print(json.dumps(main_message), flush=True)
+    if provider_case in ("claude-main", "claude-tree"):
+        child = native.with_suffix("") / "subagents/child.jsonl"
+        child.parent.mkdir(parents=True)
+        child.write_text(json.dumps({"type": "assistant", "message": {
+            "id": "child", "usage": {
+                "input_tokens": 1, "output_tokens": 6,
+                "cache_read_input_tokens": 0, "cache_creation_input_tokens": 0,
+            },
+        }}) + "\\n")
+    if provider_case == "claude-tree":
+        usage = {**usage, "input_tokens": 11, "output_tokens": 10}
+    elif provider_case == "claude-stalled":
+        usage = {**usage, "input_tokens": 1, "output_tokens": 1, "cache_read_input_tokens": 0}
 report = {
     "schema_version": 12,
     "attempt_id": attempt["attempt_id"],
@@ -601,17 +634,14 @@ else:
 print(json.dumps({"type": "thread.started", "thread_id": thread_id}), flush=True)
 print(json.dumps({
     "type": "result",
-    "usage": {
-        "input_tokens": 12,
-        "output_tokens": 4,
-        "cached_input_tokens": 2,
-        "total_tokens": 16
-    }
+    "usage": usage,
 }), flush=True)
-""".replace("FAKE_ACCEPT_ON_SEGMENT", repr(accept_on_segment)),
+""".replace("FAKE_ACCEPT_ON_SEGMENT", repr(accept_on_segment)).replace(
+            "FAKE_PROVIDER_CASE", repr(provider_case)
+        ),
         encoding="utf-8",
     )
-    fake_codex.chmod(0o700)
+    fake_provider.chmod(0o700)
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     driver = CoreOptimizerSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
@@ -625,7 +655,7 @@ print(json.dumps({
             terminate_grace_seconds=1,
             max_diagnostic_bytes=8192,
             max_session_tokens=1000,
-            agent_backend="codex",
+            agent_backend=backend,
             report_completion_retries=2,
         ),
         artifacts,
@@ -650,15 +680,27 @@ print(json.dumps({
             else:
                 assert request["operation"] == "attempt_report_status"
                 assert set(request) == {
-                    "schema_version", "operation", "attempt_id", "idempotency_key",
+                    "schema_version",
+                    "operation",
+                    "attempt_id",
+                    "idempotency_key",
                 }
-                value = {"status": "missing"} if accepted_report is None else {
-                    "status": "accepted", "report": accepted_report,
-                    "report_artifact_digest": str(digest("accepted-smoke-report")),
+                value = (
+                    {"status": "missing"}
+                    if accepted_report is None
+                    else {
+                        "status": "accepted",
+                        "report": accepted_report,
+                        "report_artifact_digest": str(digest("accepted-smoke-report")),
+                    }
+                )
+            body = json.dumps(
+                {
+                    "operation": request["operation"],
+                    "status": "completed",
+                    "result": value,
                 }
-            body = json.dumps({
-                "operation": request["operation"], "status": "completed", "result": value,
-            }).encode()
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(body)))
@@ -694,7 +736,16 @@ print(json.dumps({
         assert result.attempt_report is not None
         assert result.attempt_report.status == "blocked"
         assert result.attempt_report.model_dump(mode="json") == accepted_report
-    assert result.token_usage == TokenUsage(10 * count, 4 * count, 2 * count, 0)
+    has_child = provider_case in ("claude-main", "claude-tree")
+    assert result.token_usage == TokenUsage(
+        (11 if has_child else 10) * count,
+        (10 if has_child else 4) * count,
+        2 * count,
+        0,
+    )
+    assert result.usage_complete == (provider_case != "claude-stalled")
+    if provider_case == "claude-stalled":
+        assert result.usage_warnings == ("claude_response_usage_incomplete_or_unreconciled",)
     assert result.runtime_state_digest is not None
     invocations = json.loads((root / "scratch/fake-provider-invocations.json").read_text())
     assert len(invocations) == count
@@ -707,23 +758,27 @@ print(json.dumps({
     )
     usage_report = json.loads((root / "scratch/token-usage.json").read_text())
     assert usage_report["session_count"] == count
-    assert usage_report["model_request_count"] == count
-    assert usage_report["consumed"] == 16 * count
-    assert usage_report["usage_complete"] is True
+    assert usage_report["model_request_count"] == (2 if has_child else 1) * count
+    assert usage_report["consumed"] == (23 if has_child else 16) * count
+    assert usage_report["usage_complete"] == (provider_case != "claude-stalled")
     assert result.session_trace_digest is not None
     trace = artifacts.verify(result.session_trace_digest).payload_path
-    assert '"input_tokens": 12' in (trace / "provider/stdout.stream-json").read_text()
+    raw_input = 12 if backend == "codex" else 10
+    assert f'"input_tokens": {raw_input}' in (trace / "provider/stdout.stream-json").read_text()
     metadata = json.loads((trace / "session.json").read_text())
     assert metadata["report_completion"]["retries_used"] == count - 1
     assert metadata["report_completion"]["state"] == (
         "complete" if accept_on_segment is not None else "exhausted"
     )
     assert metadata["exit_status"] == (0 if accept_on_segment is not None else 127)
+    assert metadata["accounting_usage"] == usage_report
     assert len(metadata["segments"]) == count
     assert len({item["session_id"] for item in metadata["segments"]}) == count
     for ordinal in range(1, count):
         segment = trace / f"continuations/{ordinal:03d}"
-        assert '"input_tokens": 12' in (segment / "provider/stdout.stream-json").read_text()
+        assert (
+            f'"input_tokens": {raw_input}' in (segment / "provider/stdout.stream-json").read_text()
+        )
         assert (segment / "events.jsonl").is_file()
         assert (segment / "conversation.jsonl").is_file()
 

@@ -258,7 +258,9 @@ Core/KDA 的每份 `--request` JSON 文件也限制为 1 MiB，按实际文件�
 提示读取已有 Journal、草稿和 Trace。这是新的 Provider 对话，不是原生 resume，也不是新一轮
 优化，不能编造缺失测量。尚未接受的本地终态文件会移到唯一的 scratch 备份，避免阻塞重新提交。
 所有调用共同消耗原有总时间和 Token/Credit 配额；模型非零退出、超时、配额耗尽、
-Provider 捕获或用量不完整时，不触发补交。`0` 关闭追加调用，但仍检查报告是否接受。
+Provider 捕获不完整或用量完全不可用时，不触发补交。已捕获非零 Provider 计数且仅发生已知
+Claude usage 对账异常时，记为 accounting warning，仍执行报告补交和正常候选验收；其他
+进程/策略失败（包括其他原因导致的 `126`）仍然阻断。`0` 关闭追加调用，但仍检查报告是否接受。
 
 初次调用的 Trace 保留在根目录，后续调用分别放在 `continuations/001/`、`002/` 等目录。
 根 `session.json` 的 `segments` 与 `report_completion` 记录分段及补交状态；

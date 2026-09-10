@@ -175,6 +175,19 @@ expose all physical Bootstrap generations, including failed generations.
 
 Claude Session Artifacts include native main/child transcripts under `provider/claude-session.raw-jsonl` and `provider/claude-subagents/`. The normalized `events.jsonl` links each response's latest usage to its `message_id` and `source_path`; use the native message content to associate tool calls. Check `session.json.response_usage_complete` before treating response totals as a complete attribution of the terminal bill. Missing/unreconciled counters remain partial. Never add the stdout and native copies together, or add terminal usage to response usage. A response can contain multiple tool calls: these counters are per-response, not independently billed per-tool costs.
 
+Core/KDA reconcile Claude terminal usage against either the main transcript or the complete
+session tree. Accounting includes every unique child response once in both cases; a main-only
+terminal emits `claude_terminal_usage_excludes_subagents`. If neither scope reconciles, accounting
+uses the larger known native/terminal count per token bucket, explicitly marked partial with
+`claude_response_usage_incomplete_or_unreconciled`. This is a conservative accounting value, not
+a verified bill; raw terminal counters remain in the Provider trace. Known accounting gaps alone
+do not reject a candidate or prevent report completion. Report validation, Gateway evidence,
+performance gates, quotas, capture integrity, and process/policy failures still apply.
+Inspect `session.json.accounting_usage` (cumulative across report-completion segments) and the
+`worker.exited` event's `usage_complete` / `usage_warnings`; do not label partial counters exact.
+Both Runtime and the pinned Core/KDA Bundle must be updated for this behavior. Existing failed
+Attempts are not automatically restored, and a generic exit 126 is never treated as success.
+
 The sealed `conversation.jsonl` is a reading view: Claude native content takes precedence over duplicate stdout messages. Distinct thinking/text/tool blocks remain intact; uncovered stdout content, diagnostics, compaction boundaries, and terminal results remain visible. Duplicate initial prompts and native queue/title/file-history bookkeeping are omitted from this view only. The live view still follows stdout until sealing. Raw Provider files and the normalized usage index are unchanged.
 
 This capture requires updated Core/Evolver Bundle commits. Existing Campaigns pin their Bundle revisions, so restarting Runtime alone does not upgrade them. Historical traces captured with native persistence disabled cannot recover missing response counters from session totals.

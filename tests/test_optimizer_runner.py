@@ -364,8 +364,10 @@ async def test_existing_gateway_outcome_skips_workspace_and_core_process(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("partial_usage", [False, True])
 async def test_core_process_result_uses_only_gateway_authoritative_outcome(
     tmp_path: Path,
+    partial_usage: bool,
 ) -> None:
     candidate = AttemptCandidateResult(digest("candidate"), digest("gateway"), False, None)
     prepared = PreparedAttempt(
@@ -381,7 +383,13 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
     runner = SessionOptimizerRunner(
         FakeWorkspaceAssembler(prepared),
         FakeSessionDriver(
-            _session_result("completed", "untrusted claim", trace_digest, with_report=True),
+            replace(
+                _session_result("completed", "untrusted claim", trace_digest, with_report=True),
+                usage_complete=not partial_usage,
+                usage_warnings=("claude_response_usage_incomplete_or_unreconciled",)
+                if partial_usage
+                else (),
+            ),
             configs=configs,
         ),
         SequencedOutcomes([None]),
@@ -398,6 +406,14 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
     result = await runner.run_attempt(request)
 
     assert result.candidate == candidate
+    exited = next(
+        payload for kind, _aggregate, payload in events.records if kind == "worker.exited"
+    )
+    assert isinstance(exited, dict)
+    assert exited["usage_complete"] is not partial_usage
+    assert exited["usage_warnings"] == (
+        ["claude_response_usage_incomplete_or_unreconciled"] if partial_usage else []
+    )
     assert configs[0].gateway_capability == "attempt-capability"
     assert configs[0].gateway_endpoint == "http://gateway-proxy"
     assert configs[0].wiki_capability == "attempt-capability"

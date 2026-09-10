@@ -87,6 +87,8 @@ class CorePhaseResult:
     @property
     def finish_reason(self) -> str:
         if self.process.returncode == 0:
+            if self.token_usage.budget_exhausted:
+                return "usage-budget-exhausted"
             return "completed"
         if self.process.returncode == 125:
             return "usage-budget-exhausted"
@@ -297,6 +299,7 @@ class CorePhaseRunner:
                 prepared.token_usage_path,
                 expected_unit=usage_unit,
                 expected_budget=expected_budget,
+                allow_claude_accounting_gap=self._policy.agent_backend == "claude",
             )
         except ValueError as error:
             raise InfrastructureError(f"Invalid {label} provider usage report: {error}") from error
