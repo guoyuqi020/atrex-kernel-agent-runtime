@@ -555,7 +555,7 @@ def test_unified_bundle_replaces_packaged_resources_without_resurrecting_files(
     assert not (parent.stat().st_mode & 0o200)
     assert prepared.candidate_root.stat().st_mode & 0o200
     assert (
-        artifacts.verify(revision.optimizer_digest).payload_path / "memory/removed.md"
+        artifacts.verify(revision.optimizer_digest).payload_path / "insights/removed.md"
     ).is_file()
 
 
@@ -1529,10 +1529,10 @@ async def _build_with_contributor(
         / request.parent_revision.id
         / "trajectory-00000002"
     )
-    for directory in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+    for directory in ("prompts", "insights", "skills", "tools"):
         (learned / directory).mkdir(parents=True)
         (learned / directory / "README.md").write_text("index")
-    (learned / "memory/lesson.md").write_text("measured memory before evolution")
+    (learned / "insights/lesson.md").write_text("measured insight before evolution")
     sessions = SubprocessEvolutionSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
         EvolutionProcessConfig(
@@ -1571,7 +1571,7 @@ async def test_contribution_snapshot_preserves_exact_parent_trajectory_resources
     tmp_path: Path,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
-    relative = "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/memory"
+    relative = "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/insights"
     build, _ = await _build_with_contributor(
         artifacts,
         tmp_path,
@@ -1589,8 +1589,8 @@ async def test_contribution_snapshot_preserves_exact_parent_trajectory_resources
         learned.write_text("later attempt replaced the lesson")
     frozen = artifacts.verify(snapshot["snapshot_digest"])
     assert (
-        frozen.payload_path / "memory/lesson.md"
-    ).read_text() == "measured memory before evolution"
+        frozen.payload_path / "insights/lesson.md"
+    ).read_text() == "measured insight before evolution"
     closure = artifacts.expand_reference_closure([build.evolution_trace_digest])
     assert snapshot["snapshot_digest"] in closure
 

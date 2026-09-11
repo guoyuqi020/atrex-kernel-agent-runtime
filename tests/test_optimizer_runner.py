@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from conftest import NOW, digest
 
-from atrex_runtime.domain.errors import InfrastructureError
+from atrex_runtime.domain.errors import IncompleteTerminalReportError, InfrastructureError
 from atrex_runtime.domain.ids import (
     ArtifactDigest,
     AttemptId,
@@ -500,6 +500,64 @@ async def test_missing_gateway_outcome_is_a_consumed_optimizer_failure(tmp_path:
 
     assert result.candidate is None
     assert result.failure_reason == "missing terminal Attempt report"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("finish_reason", ["completed", "report-completion-exhausted"])
+async def test_runtime_retries_a_session_that_exits_without_an_accepted_report(
+    tmp_path: Path,
+    finish_reason: str,
+) -> None:
+    prepared = PreparedAttempt(
+        tmp_path / "run-incomplete",
+        tmp_path / ".runtime/attempt.json",
+        tmp_path / "sessions",
+        "optimizer-run-incomplete",
+    )
+    events = FakeRuntimeEventRecorder([])
+    traces = FakeSessionTraceRecorder([])
+    request = _request()
+    with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
+        runner = SessionOptimizerRunner(
+            FakeWorkspaceAssembler(prepared),
+            FakeSessionDriver(
+                _session_result(
+                    finish_reason,
+                    "provider stopped before terminal handoff",
+                    digest("incomplete-trace"),
+                )
+            ),
+            SequencedOutcomes([None]),
+            FakeFinalizer(
+                AttemptCandidateResult(digest("unused"), digest("unused-result"), True, 1.0),
+                [],
+            ),
+            FakeGatewayAuthorities(),
+            traces,
+            events,
+            _config(tmp_path),
+            worker_sessions=registry,
+        )
+
+        with pytest.raises(IncompleteTerminalReportError, match="before Runtime accepted"):
+            await runner.run_attempt(request)
+        sessions = registry.list_worker_sessions(attempt_id=request.attempt_id)
+
+    assert len(sessions) == 1
+    assert sessions[0].status is WorkerSessionStatus.FAILED
+    assert sessions[0].finish_reason == (
+        "terminal-report-missing" if finish_reason == "completed" else finish_reason
+    )
+    assert traces.runtime_states == [(request.attempt_id, digest("runtime-state"))]
+    assert traces.records[0][2] == (
+        "terminal-report-missing" if finish_reason == "completed" else finish_reason
+    )
+    assert [kind for kind, _aggregate, _payload in events.records] == [
+        "worker.started",
+        "worker.exited",
+        "worker.cleaned",
+        "attempt.report_incomplete",
+    ]
 
 
 @pytest.mark.anyio

@@ -30,8 +30,18 @@ from .manifest import (
 )
 from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 
-REUSABLE_AGENT_DIRECTORIES = ("prompts", "memory", "knowledge", "skills", "tools", "hooks")
-_LEGACY_STATE_DIRECTORIES = frozenset((*REUSABLE_AGENT_DIRECTORIES, "docs"))
+REUSABLE_AGENT_DIRECTORIES = ("prompts", "insights", "skills", "tools")
+OPTIMIZER_READ_ONLY_DIRECTORIES = ("prompts", "insights", "skills")
+OPTIMIZER_WRITABLE_DIRECTORIES = ("tools",)
+_LEGACY_INSIGHT_DIRECTORIES = ("memory", "knowledge", "docs")
+_REMOVED_STATE_DIRECTORIES = ("hooks",)
+_LEGACY_STATE_DIRECTORIES = frozenset(
+    (
+        *REUSABLE_AGENT_DIRECTORIES,
+        *_LEGACY_INSIGHT_DIRECTORIES,
+        *_REMOVED_STATE_DIRECTORIES,
+    )
+)
 REUSABLE_READMES = {
     name: (Path(__file__).parents[1] / "templates/runtime-state" / f"{name}.md").read_text(
         encoding="utf-8"
@@ -40,18 +50,112 @@ REUSABLE_READMES = {
 }
 
 
-def _knowledge_directory(root: Path) -> Path:
-    """Resolve the old State name without changing sealed history or merging conflicts."""
-    current, legacy = root / "knowledge", root / "docs"
-    if legacy.exists() or legacy.is_symlink():
-        _validate_reusable_tree(legacy)
-        if current.exists() or current.is_symlink():
-            raise ValueError(
-                "Runtime State contains both docs/ and knowledge/; "
-                "merge their content into knowledge/ and remove the legacy docs/ directory"
+def _merge_legacy_insight_directories(
+    root: Path,
+    *,
+    include_docs: bool,
+    remove_sources: bool,
+) -> None:
+    """Merge old memory/knowledge State into insights/ without rewriting sealed inputs."""
+    names = _LEGACY_INSIGHT_DIRECTORIES if include_docs else ("memory", "knowledge")
+    sources = [
+        root / name
+        for name in names
+        if (root / name).exists() or (root / name).is_symlink()
+    ]
+    if not sources:
+        return
+    for source in sources:
+        _validate_reusable_tree(source)
+
+    destination = root / "insights"
+    if destination.exists() or destination.is_symlink():
+        _validate_reusable_tree(destination)
+
+    files: dict[Path, Path] = {}
+    directories: set[Path] = set()
+    for source in sources:
+        for entry in source.rglob("*"):
+            relative = entry.relative_to(source)
+            if relative == Path("README.md"):
+                continue
+            if entry.is_dir():
+                directories.add(relative)
+                continue
+            previous = files.get(relative)
+            if previous is not None and previous.read_bytes() != entry.read_bytes():
+                raise ValueError(
+                    "Legacy Runtime State cannot merge memory/ and knowledge/ into insights/: "
+                    f"conflicting file {relative.as_posix()}"
+                )
+            files[relative] = entry
+    conflicting_kinds = set(files) & directories
+    if conflicting_kinds:
+        relative = min(conflicting_kinds)
+        raise ValueError(
+            "Legacy Runtime State cannot merge into insights/: "
+            f"file/directory conflict at {relative.as_posix()}"
+        )
+
+    if destination.exists():
+        for relative, source in files.items():
+            target = destination / relative
+            if (target.exists() or target.is_symlink()) and (
+                not target.is_file() or target.read_bytes() != source.read_bytes()
+            ):
+                raise ValueError(
+                    "Legacy Runtime State cannot merge into insights/: "
+                    f"conflicting file {relative.as_posix()}"
+                )
+        for relative in directories:
+            target = destination / relative
+            if target.exists() and not target.is_dir():
+                raise ValueError(
+                    "Legacy Runtime State cannot merge into insights/: "
+                    f"conflicting directory {relative.as_posix()}"
+                )
+
+    destination.mkdir(mode=0o700, exist_ok=True)
+    for relative in sorted(directories):
+        (destination / relative).mkdir(parents=True, mode=0o700, exist_ok=True)
+    for relative, source in sorted(files.items()):
+        target = destination / relative
+        if not target.exists():
+            target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+            shutil.copy2(source, target)
+
+    readme = destination / "README.md"
+    if readme.exists() and not readme.is_file():
+        raise ValueError("Reusable insights README must be a regular file")
+    base = (
+        readme.read_text(encoding="utf-8")
+        if readme.is_file()
+        else REUSABLE_READMES["insights"]
+    )
+    migrated: list[str] = []
+    for source in sources:
+        old_readme = source / "README.md"
+        if old_readme.is_file():
+            migrated.append(
+                f"\n### Migrated `{source.name}/README.md`\n\n"
+                f"{old_readme.read_text(encoding='utf-8').strip()}\n"
             )
-        return legacy
-    return current
+    if migrated:
+        readme.write_text(
+            base.rstrip()
+            + "\n\n## Migrated legacy indexes\n\n"
+            + "These indexes are retained for context. Consolidate their useful conclusions into "
+            + "scoped Insight entries and remove stale duplication.\n"
+            + "".join(migrated),
+            encoding="utf-8",
+        )
+    elif not readme.exists():
+        readme.write_text(base, encoding="utf-8")
+
+    if remove_sources:
+        for source in sources:
+            shutil.rmtree(source)
+    make_tree_owner_writable(destination)
 
 
 def ensure_reusable_directories(root: Path, *, optimizer_source: Path | None = None) -> None:
@@ -65,10 +169,16 @@ def ensure_reusable_directories(root: Path, *, optimizer_source: Path | None = N
         if seed.exists() or seed.is_symlink():
             _copy_reusable_tree(seed, prompts)
             make_tree_owner_writable(prompts)
-    knowledge = _knowledge_directory(root)
-    if knowledge.name == "docs":
-        knowledge.rename(root / "knowledge")
-        make_tree_owner_writable(root / "knowledge")
+    _merge_legacy_insight_directories(root, include_docs=True, remove_sources=True)
+    # Hooks used to be mutable Agent State. Lifecycle completion is now enforced by
+    # the Runtime protocol, so an old checkpoint's hooks must never be installed or
+    # carried into a new Session.
+    for name in _REMOVED_STATE_DIRECTORIES:
+        removed = root / name
+        if removed.exists() or removed.is_symlink():
+            _validate_reusable_tree(removed)
+            make_tree_owner_writable(removed)
+            shutil.rmtree(removed)
     for name in REUSABLE_AGENT_DIRECTORIES:
         directory = root / name
         if directory.is_symlink():
@@ -82,13 +192,32 @@ def ensure_reusable_directories(root: Path, *, optimizer_source: Path | None = N
             readme.write_text(REUSABLE_READMES[name], encoding="utf-8")
 
 
+def protect_optimizer_agent_state(root: Path) -> None:
+    """Enforce the Optimizer boundary after Runtime finishes workspace assembly.
+
+    Evolver publishes prompts, Insights, and Skills as versioned Agent content. An
+    Optimizer session may consume them but may only adapt reusable executable
+    helpers under tools/. Production launchers additionally overlay these paths
+    with read-only mounts; filesystem modes also protect development launches.
+    """
+    ensure_reusable_directories(root)
+    for name in OPTIMIZER_READ_ONLY_DIRECTORIES:
+        make_tree_read_only(root / name)
+    for name in OPTIMIZER_WRITABLE_DIRECTORIES:
+        make_tree_owner_writable(root / name)
+
+
 def copy_reusable_agent_state(
     source: Path, destination: Path, *, optimizer_source: Path | None = None
 ) -> None:
     """Copy just adaptive State, upgrading older snapshots only in the writable copy."""
-    knowledge = _knowledge_directory(source)
     for name in REUSABLE_AGENT_DIRECTORIES:
-        directory = knowledge if name == "knowledge" else source / name
+        directory = source / name
+        if directory.exists() or directory.is_symlink():
+            _copy_reusable_tree(directory, destination / name)
+            make_tree_owner_writable(destination / name)
+    for name in _LEGACY_INSIGHT_DIRECTORIES:
+        directory = source / name
         if directory.exists() or directory.is_symlink():
             _copy_reusable_tree(directory, destination / name)
             make_tree_owner_writable(destination / name)
@@ -102,7 +231,12 @@ def remove_optimizer_state_seeds(repository: Path) -> None:
     mode = stat.S_IMODE(repository.stat().st_mode)
     try:
         repository.chmod(mode | stat.S_IWUSR)
-        for name in REUSABLE_AGENT_DIRECTORIES:
+        for name in (
+            *REUSABLE_AGENT_DIRECTORIES,
+            "memory",
+            "knowledge",
+            *_REMOVED_STATE_DIRECTORIES,
+        ):
             path = repository / name
             if path.exists() or path.is_symlink():
                 _validate_reusable_tree(path)
@@ -203,16 +337,19 @@ def validate_reusable_agent_state_seed(
     allowed = set(REUSABLE_AGENT_DIRECTORIES) if require_complete else _LEGACY_STATE_DIRECTORIES
     if not present <= allowed:
         raise ValueError(
-            "Candidate runtime-state may contain only "
-            "prompts/, memory/, knowledge/, skills/, tools/, hooks/"
+            "Candidate runtime-state may contain only prompts/, insights/, skills/, tools/"
         )
-    knowledge = _knowledge_directory(state_root)
-    # Older immutable snapshots may lack newly introduced directories or empty ones.
-    # Normalize only materialized copies; new Candidate output must have all six indexes.
+    # Older immutable snapshots may use memory/, knowledge/, or docs/. Normalize only
+    # materialized copies; new Candidate output must have all four indexes.
     files = 0
     total_bytes = 0
-    for name in REUSABLE_AGENT_DIRECTORIES:
-        directory = knowledge if name == "knowledge" else state_root / name
+    names = (
+        REUSABLE_AGENT_DIRECTORIES
+        if require_complete
+        else (*REUSABLE_AGENT_DIRECTORIES, *_LEGACY_INSIGHT_DIRECTORIES)
+    )
+    for name in names:
+        directory = state_root / name
         if require_complete and not (directory / "README.md").is_file():
             raise ValueError(f"Candidate runtime-state {name}/ must retain README.md")
         if not directory.exists():
@@ -288,7 +425,7 @@ class PreparedAttempt:
         )
 
     def seal_runtime_state(self, artifacts: LocalArtifactStore) -> ArtifactDigest:
-        """Seal all six post-Session State directories as one immutable checkpoint."""
+        """Seal all four post-Session State directories as one immutable checkpoint."""
         ensure_reusable_directories(self.root)
         scratch = self.root / "scratch"
         scratch.mkdir(mode=0o700, exist_ok=True)
@@ -308,8 +445,15 @@ def initialize_reusable_agent_state(root: Path, optimizer_source: Path) -> None:
         if directory.exists() or directory.is_symlink():
             _copy_reusable_tree(directory, root / name)
             make_tree_owner_writable(root / name)
+    # Old Core revisions packaged memory/ and knowledge/ as separate seeds. Import
+    # those two directories, but never treat the repository's engineering docs/ as State.
+    for name in ("memory", "knowledge"):
+        directory = optimizer_source / name
+        if directory.exists() or directory.is_symlink():
+            _copy_reusable_tree(directory, root / name)
+            make_tree_owner_writable(root / name)
     # Older Core commits do not contain State seeds. Missing directories/indexes
-    # get the legacy empty defaults, without importing Source's engineering docs/.
+    # get empty defaults, without importing Source's engineering docs/.
     ensure_reusable_directories(root)
 
 
@@ -514,6 +658,7 @@ class LocalAttemptWorkspaceAssembler:
                 attempt.id,
                 prepared.seal_runtime_state(self._artifacts),
             )
+        protect_optimizer_agent_state(root)
         return prepared
 
     def _active_branch_seed(self, epoch: Epoch) -> ArtifactDigest | None:

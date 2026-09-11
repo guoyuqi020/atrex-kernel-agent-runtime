@@ -12,43 +12,32 @@ workspace/
 │   └── evidence/               # read-only authorized history described below
 ├── agent/optimizer/            # read-only implementation/config; initial State copies omitted
 ├── work/kernel/                # writable candidate copied from the incumbent
-├── prompts/                    # writable phase prompts and README.md index
-├── memory/                     # reusable search memories and lessons; README.md index
-├── knowledge/                  # reusable knowledge and reference notes; README.md index
-├── skills/                     # reusable procedures; README.md index
-├── tools/                      # reusable tool scripts; README.md index
-├── hooks/                      # reusable Claude/Codex hooks and config snippets; README.md index
+├── prompts/                    # read-only versioned phase prompts and README.md index
+├── insights/                   # read-only, evidence-derived decision guidance
+├── skills/                     # read-only reusable procedures installed for Claude
+├── tools/                      # writable reusable tool scripts and README.md index
 ├── sessions/                   # session capture owned by the launcher; do not modify
 └── scratch/                    # writable temporary requests, plans, recovery files, and reports
 ```
 
-Use the files already present as your starting point. Save reusable content in the writable
-`prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/` directories, and keep their
-README indexes current. The controller manages persistence and reuse between sessions.
+Use the files already present as your starting point. `prompts/`, `insights/`, and `skills/` belong
+to the versioned Agent Revision: read and use them, but do not modify them during an Optimizer or
+Bootstrap session. Only `tools/` is adaptive here. Save genuinely reusable scripts there and keep
+`tools/README.md` current. Record hypotheses, evidence, and conclusions through the Direction and
+Experiment Journal instead of creating free-form Insights. Evolver curates Journal and Session
+evidence between Agent revisions and owns changes to Prompts, Insights, and Skills.
 Files in `scratch/` are temporary and are not carried into later sessions or retries.
 
-Read the indexes before adding content. Whenever you add, change, rename, or remove a file, update
-that directory's `README.md` so it remains a current index of paths, purposes, and applicability.
-Use `prompts/` for phase prompts and reusable tool instructions. Managed Agent configuration uses
+Read the indexes before using content. Whenever you add, change, rename, or remove a Tool, keep its
+index current with paths, purposes, and applicability.
+Managed Agent configuration uses
 `prompt_root: "workspace"`; its `prompts/...` paths resolve here, not inside `agent/optimizer/`.
-Keep referenced files available. Edits apply to later fresh Sessions, not the already submitted
-current Prompt. Trusted injected context, tool validation, and evaluation rules cannot be changed
-by editing these files. The six initial State directories are omitted from the Source workspace
-copy; the sealed Source Artifact remains complete.
-Use `memory/` for reusable search experiences and decisions, `knowledge/` for sourced knowledge, `skills/` for
-repeatable procedures, and `tools/` for scripts. Tool entries also need invocation, inputs, outputs,
-side effects, dependencies, an example, and limitations in `tools/README.md`.
-Use `hooks/` for reusable Claude/Codex hook scripts and configuration snippets. Its README must identify
-the backend, event, command, dependencies, side effects, activation steps, and verification status.
-Before each Claude/Codex Optimizer or Bootstrap session, Runtime installs `skills/<name>/SKILL.md`
-directories and the selected `hooks/claude.json` or `hooks/codex.json` into a private CLI Home.
-Use native `{"hooks": {event: [matcher groups]}}` command-hook definitions; reference scripts with
-`python3 "$WORKSPACE_ROOT/hooks/example.py"`. Installation does not execute hooks. Edit the reusable
-originals for later sessions, not generated CLI settings; host/global settings must not be changed.
-Other backends preserve these resources without auto-installation. See both README indexes for details.
-Keep content concise and non-duplicative; link Journal and measurement identities instead of copying
-raw traces or one-off outputs. Memory and
-Knowledge are Agent-authored interpretations, not authoritative Journal/measurement replacements.
+Keep every configured Prompt path available. Trusted injected context, tool validation, and
+evaluation rules cannot be changed from this session. Before each Claude Optimizer or Bootstrap
+session, Runtime copies every valid `skills/<name>/SKILL.md` package into that session's private
+Claude Home. Use those Skills when applicable; never edit the generated Claude Home or host/global
+settings. Each Tool's index entry needs invocation, inputs, outputs, side effects, dependencies, an
+example, and limitations. Keep entries concise and non-duplicative.
 Never store credentials. Temporary requests, probes, and outputs belong in `scratch/`.
 
 ## Evidence view

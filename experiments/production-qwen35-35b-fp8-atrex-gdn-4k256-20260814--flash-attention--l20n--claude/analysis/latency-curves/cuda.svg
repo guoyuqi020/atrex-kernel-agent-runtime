@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="860" viewBox="0 0 1500 860">
+<rect width="100%" height="100%" fill="#fff"/>
+<style>text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;fill:#111827}</style>
+<text x="145" y="62" font-size="34" font-weight="700">CUDA — Best-so-far Kernel Latency</text>
+<text x="145" y="102" font-size="20" fill="#4B5563">Bootstrap = 0 · Parallel Attempts at one serial depth count once</text>
+<line x1="145" y1="752.10" x2="1410" y2="752.10" stroke="#E5E7EB"/>
+<text x="129" y="759.10" text-anchor="end" font-size="18" fill="#4B5563">200</text>
+<line x1="145" y1="625.47" x2="1410" y2="625.47" stroke="#E5E7EB"/>
+<text x="129" y="632.47" text-anchor="end" font-size="18" fill="#4B5563">500</text>
+<line x1="145" y1="529.67" x2="1410" y2="529.67" stroke="#E5E7EB"/>
+<text x="129" y="536.67" text-anchor="end" font-size="18" fill="#4B5563">1.0k</text>
+<line x1="145" y1="433.88" x2="1410" y2="433.88" stroke="#E5E7EB"/>
+<text x="129" y="440.88" text-anchor="end" font-size="18" fill="#4B5563">2.0k</text>
+<line x1="145" y1="307.24" x2="1410" y2="307.24" stroke="#E5E7EB"/>
+<text x="129" y="314.24" text-anchor="end" font-size="18" fill="#4B5563">5.0k</text>
+<line x1="145" y1="211.44" x2="1410" y2="211.44" stroke="#E5E7EB"/>
+<text x="129" y="218.44" text-anchor="end" font-size="18" fill="#4B5563">10.0k</text>
+<line x1="145.00" y1="175" x2="145.00" y2="755" stroke="#F3F4F6"/>
+<text x="145.00" y="789" text-anchor="middle" font-size="18" fill="#4B5563">0</text>
+<line x1="398.00" y1="175" x2="398.00" y2="755" stroke="#F3F4F6"/>
+<text x="398.00" y="789" text-anchor="middle" font-size="18" fill="#4B5563">3</text>
+<line x1="651.00" y1="175" x2="651.00" y2="755" stroke="#F3F4F6"/>
+<text x="651.00" y="789" text-anchor="middle" font-size="18" fill="#4B5563">6</text>
+<line x1="904.00" y1="175" x2="904.00" y2="755" stroke="#F3F4F6"/>
+<text x="904.00" y="789" text-anchor="middle" font-size="18" fill="#4B5563">9</text>
+<line x1="1157.00" y1="175" x2="1157.00" y2="755" stroke="#F3F4F6"/>
+<text x="1157.00" y="789" text-anchor="middle" font-size="18" fill="#4B5563">12</text>
+<line x1="1410.00" y1="175" x2="1410.00" y2="755" stroke="#F3F4F6"/>
+<text x="1410.00" y="789" text-anchor="middle" font-size="18" fill="#4B5563">15</text>
+<line x1="145" y1="755" x2="1410" y2="755" stroke="#6B7280" stroke-width="2"/>
+<line x1="145" y1="175" x2="145" y2="755" stroke="#6B7280" stroke-width="2"/>
+<text x="777.50" y="836" text-anchor="middle" font-size="21" font-weight="600">Serial optimization distance from Bootstrap</text>
+<text x="38" y="465.00" text-anchor="middle" font-size="21" font-weight="600" transform="rotate(-90 38 465.00)">Latency (µs) · log scale</text>
+<line x1="970" y1="34" x2="1018" y2="34" stroke="#DC2626" stroke-width="5" stroke-dasharray="2 6"/>
+<text x="1032" y="40" font-size="17" font-weight="600">AKA best of two · 298.4 µs</text>
+<line x1="970" y1="59" x2="1018" y2="59" stroke="#2563EB" stroke-width="5" stroke-dasharray="12 8"/>
+<text x="1032" y="65" font-size="17" font-weight="600">Isolated best of two · 233.8 µs</text>
+<line x1="970" y1="84" x2="1018" y2="84" stroke="#F59E0B" stroke-width="5" stroke-dasharray="4 7"/>
+<text x="1032" y="90" font-size="17" font-weight="600">Pool-3 · 222.6 µs</text>
+<line x1="970" y1="109" x2="1018" y2="109" stroke="#059669" stroke-width="5"/>
+<text x="1032" y="115" font-size="17" font-weight="600">Pool-retained-3 · 242.9 µs</text>
+<line x1="970" y1="134" x2="1018" y2="134" stroke="#0F766E" stroke-width="5" stroke-dasharray="12 5 3 5"/>
+<text x="1032" y="140" font-size="17" font-weight="600">Retained best of two · 252.0 µs</text>
+<line x1="970" y1="159" x2="1018" y2="159" stroke="#C026D3" stroke-width="5" stroke-dasharray="16 7 4 7"/>
+<text x="1032" y="165" font-size="17" font-weight="600">Evolve-3 · 224.5 µs</text>
+<polyline points="145.00,194.32 229.33,194.32 229.33,250.31 313.67,250.31 313.67,399.42 398.00,399.42 398.00,584.74 482.33,584.74 482.33,593.34 566.67,593.34 566.67,670.46 651.00,670.46 651.00,676.22 735.33,676.22 735.33,676.06 819.67,676.06 819.67,695.29 904.00,695.29 904.00,695.29 988.33,695.29 988.33,696.79 1072.67,696.79 1072.67,696.79 1157.00,696.79 1157.00,696.79 1241.33,696.79 1241.33,696.79 1325.67,696.79 1325.67,696.79" fill="none" stroke="#DC2626" stroke-width="4" stroke-linejoin="round" stroke-dasharray="2 6"/>
+<polyline points="145.00,206.33 229.33,206.33 229.33,268.87 313.67,268.87 313.67,578.47 398.00,578.47 398.00,718.77 482.33,718.77 482.33,718.77 566.67,718.77 566.67,718.77 651.00,718.77 651.00,718.77 735.33,718.77 735.33,724.53 819.67,724.53 819.67,724.53 904.00,724.53 904.00,726.50 988.33,726.50 988.33,726.50 1072.67,726.50 1072.67,726.50 1157.00,726.50 1157.00,726.50 1241.33,726.50 1241.33,726.50 1325.67,726.50 1325.67,730.50 1410.00,730.50 1410.00,730.50" fill="none" stroke="#2563EB" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 8"/>
+<polyline points="145.00,206.33 229.33,206.33 229.33,710.46 313.67,710.46 313.67,710.46 398.00,710.46 398.00,727.22 482.33,727.22 482.33,729.52 566.67,729.52 566.67,729.52 651.00,729.52 651.00,729.89 735.33,729.89 735.33,731.22 819.67,731.22 819.67,731.22 904.00,731.22 904.00,731.22 988.33,731.22 988.33,736.47 1072.67,736.47 1072.67,736.47 1157.00,736.47 1157.00,736.58 1241.33,736.58 1241.33,737.33 1325.67,737.33 1325.67,737.33 1410.00,737.33 1410.00,737.33" fill="none" stroke="#F59E0B" stroke-width="4" stroke-linejoin="round" stroke-dasharray="4 7"/>
+<polyline points="145.00,206.33 229.33,206.33 229.33,709.05 313.67,709.05 313.67,709.05 398.00,709.05 398.00,712.23 482.33,712.23 482.33,720.26 566.67,720.26 566.67,721.56 651.00,721.56 651.00,721.56 735.33,721.56 735.33,723.73 819.67,723.73 819.67,723.76 904.00,723.76 904.00,724.36 988.33,724.36 988.33,724.36 1072.67,724.36 1072.67,724.36 1157.00,724.36 1157.00,724.36 1241.33,724.36 1241.33,724.46 1325.67,724.46 1325.67,724.52 1410.00,724.52 1410.00,725.26" fill="none" stroke="#059669" stroke-width="4" stroke-linejoin="round"/>
+<polyline points="145.00,206.33 229.33,206.33 229.33,501.56 313.67,501.56 313.67,501.56 398.00,501.56 398.00,501.56 482.33,501.56 482.33,692.45 566.67,692.45 566.67,692.45 651.00,692.45 651.00,702.59 735.33,702.59 735.33,702.59 819.67,702.59 819.67,710.04 904.00,710.04 904.00,712.06 988.33,712.06 988.33,712.59 1072.67,712.59 1072.67,719.47 1157.00,719.47 1157.00,719.47 1241.33,719.47 1241.33,719.47 1325.67,719.47 1325.67,720.19 1410.00,720.19 1410.00,720.19" fill="none" stroke="#0F766E" stroke-width="4" stroke-linejoin="round" stroke-dasharray="12 5 3 5"/>
+<polyline points="145.00,206.33 229.33,206.33 229.33,708.57 313.67,708.57 313.67,708.57 398.00,708.57 398.00,722.90 482.33,722.90 482.33,726.17 566.67,726.17 566.67,726.17 651.00,726.17 651.00,726.17 735.33,726.17 735.33,726.17 819.67,726.17 819.67,727.36 904.00,727.36 904.00,727.36 988.33,727.36 988.33,730.90 1072.67,730.90 1072.67,730.90 1157.00,730.90 1157.00,732.14 1241.33,732.14 1241.33,732.92 1325.67,732.92 1325.67,732.92 1410.00,732.92 1410.00,736.16" fill="none" stroke="#C026D3" stroke-width="4" stroke-linejoin="round" stroke-dasharray="16 7 4 7"/>
+</svg>

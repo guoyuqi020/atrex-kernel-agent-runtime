@@ -471,6 +471,10 @@ class CleanEnvironmentLauncher:
             str(workspace),
             str(workspace),
         ]
+        for name in ("prompts", "insights", "skills"):
+            source = workspace / name
+            if source.is_dir():
+                bwrap.extend(("--ro-bind", str(source), str(source)))
         for mount in mounts:
             destination = session_home / mount.home_relative
             destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -957,6 +961,16 @@ class BwrapSandboxLauncher:
                 self.settings.workspace_mount.as_posix(),
             )
         )
+        for name in ("prompts", "insights", "skills"):
+            source = workspace / name
+            if source.is_dir():
+                bwrap.extend(
+                    (
+                        "--ro-bind",
+                        str(source),
+                        str(sandbox_workspace / name),
+                    )
+                )
         for mount in credential_mounts:
             destination = session_home / mount.home_relative
             bwrap.extend(("--ro-bind", str(mount.source), str(destination)))

@@ -1,0 +1,4028 @@
+{
+  "cuda": {
+    "AKA best of two": [
+      {
+        "step": 0,
+        "latency_us": 11319.487663728934
+      },
+      {
+        "step": 1,
+        "latency_us": 7548.587877886838
+      },
+      {
+        "step": 2,
+        "latency_us": 2566.2509483771014
+      },
+      {
+        "step": 3,
+        "latency_us": 671.3453330661065
+      },
+      {
+        "step": 4,
+        "latency_us": 630.835289149557
+      },
+      {
+        "step": 5,
+        "latency_us": 361.0551033802931
+      },
+      {
+        "step": 6,
+        "latency_us": 346.3225095565009
+      },
+      {
+        "step": 7,
+        "latency_us": 346.7213511186983
+      },
+      {
+        "step": 8,
+        "latency_us": 301.69219512474984
+      },
+      {
+        "step": 9,
+        "latency_us": 301.69219512474984
+      },
+      {
+        "step": 10,
+        "latency_us": 298.4241639050288
+      },
+      {
+        "step": 11,
+        "latency_us": 298.4241639050288
+      },
+      {
+        "step": 12,
+        "latency_us": 298.4241639050288
+      },
+      {
+        "step": 13,
+        "latency_us": 298.4241639050288
+      },
+      {
+        "step": 14,
+        "latency_us": 298.4241639050288
+      }
+    ],
+    "Isolated best of two": [
+      {
+        "step": 0,
+        "latency_us": 10377.054447472385
+      },
+      {
+        "step": 1,
+        "latency_us": 6600.272824273886
+      },
+      {
+        "step": 2,
+        "latency_us": 702.5048254669189
+      },
+      {
+        "step": 3,
+        "latency_us": 254.55325982553904
+      },
+      {
+        "step": 4,
+        "latency_us": 254.55325982553904
+      },
+      {
+        "step": 5,
+        "latency_us": 254.55325982553904
+      },
+      {
+        "step": 6,
+        "latency_us": 254.55325982553904
+      },
+      {
+        "step": 7,
+        "latency_us": 244.1646213837381
+      },
+      {
+        "step": 8,
+        "latency_us": 244.1646213837381
+      },
+      {
+        "step": 9,
+        "latency_us": 240.69804506630385
+      },
+      {
+        "step": 10,
+        "latency_us": 240.69804506630385
+      },
+      {
+        "step": 11,
+        "latency_us": 240.69804506630385
+      },
+      {
+        "step": 12,
+        "latency_us": 240.69804506630385
+      },
+      {
+        "step": 13,
+        "latency_us": 240.69804506630385
+      },
+      {
+        "step": 14,
+        "latency_us": 233.83776817983502
+      },
+      {
+        "step": 15,
+        "latency_us": 233.83776817983502
+      }
+    ],
+    "Pool-3": [
+      {
+        "step": 0,
+        "latency_us": 10377.054447472385,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 270.33559531376727,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_29c31a10fcd842b4b8772904c46e931f",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_179d8bbdec4b43fdb79953321d3bdc8d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 270.33559531376727
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 270.33559531376727,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_ce5e1c199ea44cc0aa8f17598117bdd5",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_c3255009da034f38b85d748b04fa2228",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 239.4578205950667,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_d5a2a9c43fe3472cb3807af236585f98",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 239.4578205950667
+          },
+          {
+            "attempt_id": "attempt_dd57d055a993403a840e09719797dffb",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 235.49911754464355,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_1533c6beae3443be88f874928c416e5e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_8fbc7e58b0d8408eadd57f30e957c5b6",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 235.49911754464355
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 235.49911754464355,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_b0df3db05af941e1934939e391a6a847",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 236.24567532880008
+          },
+          {
+            "attempt_id": "attempt_29e45d4d8b6b46a8ad3f7918ce8df36b",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 234.87366137283817,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_1827faa4252c41a1806393c451f2156a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_64a93dc3ad204ca4a43d134d8603a134",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 234.87366137283817
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 232.6307025649207,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_3547314eb81b49438197cf1873cbd462",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 232.6307025649207
+          },
+          {
+            "attempt_id": "attempt_b86ebf1b7f3c446ea81d92bcfdf9fdf7",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 232.6307025649207,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_92f6ab97126a49eabeb34b2a8ebc7083",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_c635a0727eaa4afb8f5623e609a559cb",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 232.6307025649207,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_83bd5f21afde4aaf8987f32faf630e15",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_3f6b30b8c35247a287fa9ebbeb068762",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 223.9598142891343,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_65bd3d07f4b348dc855ea43399022c59",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 231.47875979447699
+          },
+          {
+            "attempt_id": "attempt_076dabdb18a04cf49c71e9bf3a5b97d6",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 223.9598142891343
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 223.9598142891343,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_8b3c09c1f0b34f17b18cb01edfdc8437",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_fed9764783324e2da122d47ae0c82588",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 223.76895119280272,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_a89b237722594fac9610d23fafb77791",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_d3b64c0d519243aba694aa505b76b80c",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 223.76895119280272
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 222.5579430832398,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_5cd911937e4f47aa8aac324c426e8a41",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 222.5579430832398
+          },
+          {
+            "attempt_id": "attempt_c1713e00216049818a466994d1105159",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 222.5579430832398,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_51aa15bcbac84ad3918feacefbe4dea9",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_7a924ef9c72c4fea9744a93e18d185d8",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 223.91097340161804
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 222.5579430832398,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_6cf9b291711f43bfac998128ea9349db",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_1bed8bf104cb4968b5d7dcfd3cac5b7f",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 223.7422058512305
+          }
+        ]
+      }
+    ],
+    "Pool-retained-3": [
+      {
+        "step": 0,
+        "latency_us": 10377.054447472385,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 273.0890073322197,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_029dbd1442d24e3c8dd14221c4fafdb5",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 312.2953868484781
+          },
+          {
+            "attempt_id": "attempt_6336c46955df49e38ad44ba893901089",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 273.0890073322197
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 273.0890073322197,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_641bf05ba0cb4f4db077e130ae3b07d6",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_f9a0f3def34a4967924669ff65a628ce",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 266.8879194983087,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_052334b65bc041459c4267c90d2af870",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 266.8879194983087
+          },
+          {
+            "attempt_id": "attempt_8658204258c9452d96002928579f70ec",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 251.82771709071457,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_43c0376168fb4901a1b14134962d950c",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_4f473513cfec40c09586560e0cc03770",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 251.82771709071457
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 249.4698089727395,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_0b8180541eae4b58b7df7ba4b4b53676",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 254.53746152454028
+          },
+          {
+            "attempt_id": "attempt_7dfe184aacbf410b8e014aa8ea6ecea5",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 249.4698089727395
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 249.4698089727395,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_d26ca5fad8ff4d649a1e27205d368f0c",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_965c1a45f1b542878733fc949583d00c",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 245.57645837790454,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_b6cb0174912149e0a1c2069106f12678",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 245.57645837790454
+          },
+          {
+            "attempt_id": "attempt_49524bd11cac4f0f8b68b83bde6e3401",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 245.51855371185343,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_8e6118d7e5f543729a22630a01f91bf6",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_d31b8456bee441518351b2d39509f427",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 245.51855371185343
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 244.46369260949754,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_bbd38c36a82d4e4392426a371d08eff1",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 244.46369260949754
+          },
+          {
+            "attempt_id": "attempt_fc5b650d5ab049b2925df564a03427da",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 244.46369260949754,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_d8f358df79654e0989944e70941d6ab8",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 244.58375359412491
+          },
+          {
+            "attempt_id": "attempt_1f6c40afb00c489889f88784177fb4fe",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 244.46369260949754,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_39668a9420954d6f8a3b99fc3091a8df",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_0946d2fdef3849f1a2f98fdd0794bc09",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 244.81223353858127
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 244.46369260949754,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_06f53cfd99314238b9c9965264342a14",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 244.6227401548429
+          },
+          {
+            "attempt_id": "attempt_dce351de86a94a74ab4b756e320b171d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 244.286525703825,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_37edb19c8c9140f1abcb32084cdf393a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 244.286525703825
+          },
+          {
+            "attempt_id": "attempt_6002daa51a494a9998974616d4de5ed6",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 244.1826353387608,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_5ecc6061b85c4ed097d4590ae4bb7507",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_50139973fceb48aa9c635185579cb1a7",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 244.1826353387608
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 242.879252936312,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_44b01996ea5a433b95e9058979948dc3",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 242.879252936312
+          },
+          {
+            "attempt_id": "attempt_91231393431f4fbe876eb4a95044b94b",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      }
+    ],
+    "Retained best of two": [
+      {
+        "step": 0,
+        "latency_us": 10377.054447472385
+      },
+      {
+        "step": 1,
+        "latency_us": 1225.5434773065758
+      },
+      {
+        "step": 2,
+        "latency_us": 1225.5434773065758
+      },
+      {
+        "step": 3,
+        "latency_us": 1225.5434773065758
+      },
+      {
+        "step": 4,
+        "latency_us": 307.96180890709627
+      },
+      {
+        "step": 5,
+        "latency_us": 307.96180890709627
+      },
+      {
+        "step": 6,
+        "latency_us": 286.1764602235471
+      },
+      {
+        "step": 7,
+        "latency_us": 286.1764602235471
+      },
+      {
+        "step": 8,
+        "latency_us": 271.1468154909279
+      },
+      {
+        "step": 9,
+        "latency_us": 267.21131523569727
+      },
+      {
+        "step": 10,
+        "latency_us": 266.1947331379032
+      },
+      {
+        "step": 11,
+        "latency_us": 253.26064739564828
+      },
+      {
+        "step": 12,
+        "latency_us": 253.26064739564828
+      },
+      {
+        "step": 13,
+        "latency_us": 253.26064739564828
+      },
+      {
+        "step": 14,
+        "latency_us": 251.95503279542766
+      },
+      {
+        "step": 15,
+        "latency_us": 251.95503279542766
+      }
+    ],
+    "Evolve-3": [
+      {
+        "step": 0,
+        "latency_us": 10377.054447472385,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 274.03988852458264,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_18b84c001a9b4b66aec1e6226f89bafd",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 3326.5842988352983
+          },
+          {
+            "attempt_id": "attempt_e1c571b142034cb481287f8dfdcaae40",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 274.03988852458264
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 274.03988852458264,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_5bb2d338c42f460ab98962758d734585",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 1335.7749477315185
+          },
+          {
+            "attempt_id": "attempt_bef850a4509f46b78b38973f22d617a0",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 247.05276671265108,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_04d0964fc83e4d8d879e8e21207ee999",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 765.14822713367
+          },
+          {
+            "attempt_id": "attempt_c06230353153414391017cabbf681935",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 247.05276671265108
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 241.2817976047674,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_ac55473d14d245e9a775668eaf5beb3a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_429782f362e7425cb15611f149e76570",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 241.2817976047674
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 241.2817976047674,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_b79426dfd3c342a89975cb69d67388d0",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_d9fe9351745946aca5b837e37cbc1678",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 241.2817976047674,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_74bdddcf04694fd58a09e1899a330c53",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_459e9ad3c5cc4c788221f3839b91dc78",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 241.2817976047674,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_d241aa3fceae45eb807b0e1df9f40aaa",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_3abcf05bed4f435391756f0559a7ac63",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 239.21727837979205,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_31c9d857d8364bad9f07c1bf19cc3f0d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_710b4bbf0d094f348090346daa8491cb",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 239.21727837979205
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 239.21727837979205,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_5351408c203a4b98a77eebf5cf45c360",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_ceeabc0b78f9490383c00f40813ffb7e",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 233.1666249108968,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_47ad8a68751f4b0a82459f8549c3818e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_8ad2cb90031e4fc5abf4f28f7010ae23",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 233.1666249108968
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 233.1666249108968,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_8598fe3d02d54bcb997662a45ed4cecd",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_97c8bbb6c62144959227c15d79e046da",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 231.07175877959224,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_1c7293a73f5447ef8e234c2444e0756a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 231.07175877959224
+          },
+          {
+            "attempt_id": "attempt_45e2879ed6224d5c8329c2c225ade232",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 229.77227509809018,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_58019fcfd90b48a98259cec3c373480b",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_2a4d5db5a88b467aa5d214730d3d1d3a",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 229.77227509809018
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 229.77227509809018,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_9b25b7204ca4461eadcc9e3f18cd5117",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_6c47c297d4844e5dbcdd9e219bd9878c",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 224.45707453674189,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_3cf8473066d74c2ab1b7f4bc40b6b218",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_4b30b5cdf4ec438eb952852e07d257c9",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 224.45707453674189
+          }
+        ]
+      }
+    ]
+  },
+  "triton": {
+    "AKA best of two": [
+      {
+        "step": 0,
+        "latency_us": 1155.1296219164467
+      },
+      {
+        "step": 1,
+        "latency_us": 337.8857517896902
+      },
+      {
+        "step": 2,
+        "latency_us": 307.98261452647023
+      },
+      {
+        "step": 3,
+        "latency_us": 307.98261452647023
+      },
+      {
+        "step": 4,
+        "latency_us": 301.53703357294717
+      },
+      {
+        "step": 5,
+        "latency_us": 297.5671013087054
+      },
+      {
+        "step": 6,
+        "latency_us": 294.6473399953183
+      },
+      {
+        "step": 7,
+        "latency_us": 293.54116433217297
+      },
+      {
+        "step": 8,
+        "latency_us": 294.1768775743622
+      },
+      {
+        "step": 9,
+        "latency_us": 290.76744429006226
+      },
+      {
+        "step": 10,
+        "latency_us": 290.76744429006226
+      },
+      {
+        "step": 11,
+        "latency_us": 283.5890234988326
+      },
+      {
+        "step": 12,
+        "latency_us": 283.5890234988326
+      },
+      {
+        "step": 13,
+        "latency_us": 283.5890234988326
+      },
+      {
+        "step": 14,
+        "latency_us": 283.5890234988326
+      }
+    ],
+    "Isolated best of two": [
+      {
+        "step": 0,
+        "latency_us": 1108.3866051232328
+      },
+      {
+        "step": 1,
+        "latency_us": 322.81370735189967
+      },
+      {
+        "step": 2,
+        "latency_us": 306.0958392895421
+      },
+      {
+        "step": 3,
+        "latency_us": 284.5642104557185
+      },
+      {
+        "step": 4,
+        "latency_us": 281.1820128967981
+      },
+      {
+        "step": 5,
+        "latency_us": 277.4719804687415
+      },
+      {
+        "step": 6,
+        "latency_us": 277.4719804687415
+      },
+      {
+        "step": 7,
+        "latency_us": 277.4719804687415
+      },
+      {
+        "step": 8,
+        "latency_us": 275.0781323649364
+      },
+      {
+        "step": 9,
+        "latency_us": 271.1438187705263
+      },
+      {
+        "step": 10,
+        "latency_us": 271.1438187705263
+      },
+      {
+        "step": 11,
+        "latency_us": 271.1438187705263
+      },
+      {
+        "step": 12,
+        "latency_us": 271.1438187705263
+      },
+      {
+        "step": 13,
+        "latency_us": 271.1438187705263
+      },
+      {
+        "step": 14,
+        "latency_us": 271.1438187705263
+      },
+      {
+        "step": 15,
+        "latency_us": 270.2683358809396
+      }
+    ],
+    "Pool-3": [
+      {
+        "step": 0,
+        "latency_us": 1108.3866051232328,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 290.88535200101967,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_c40df1bfd8f144e184aca9a02b086c6e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 290.88535200101967
+          },
+          {
+            "attempt_id": "attempt_303167c01bf94a989ccc103f42957f94",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 550.5064348352251
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 287.13921949405295,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_d9af728741784250946aa71fbd7600cb",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 287.13921949405295
+          },
+          {
+            "attempt_id": "attempt_b382ac6a4f9145cebc146ae3f2536781",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 290.96522963825146
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 284.5989573213111,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_04e9db4923d3425fa8c4222bd1be4f85",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 284.5989573213111
+          },
+          {
+            "attempt_id": "attempt_897289d32ea44fa19fcc095d37b86149",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 284.5989573213111,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_547d7b0c41b24830be2008cc0c90a661",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_222611c15a824188b018a7ca9e2afe41",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 283.08114304521,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_0035242cd27d4dde9f4376fe5d7bdf35",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 283.08114304521
+          },
+          {
+            "attempt_id": "attempt_cbf69112929340af9a70112e6c5fd01f",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 283.08114304521,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_74c7dd44419042fc87e7917584394a5d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_bb947567fe0d4400bc4e9bec20e94306",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 283.08114304521,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_743dc91d7a7344cf96d9808a0e936c97",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_dba2f047a5eb4441854e6b61c55fd2dc",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 274.15556998022356,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_51cbef19405a40c59952569765512d86",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 274.15556998022356
+          },
+          {
+            "attempt_id": "attempt_2f4f5743c7f14c7981a06439adcc9435",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 273.9043553736359,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_7bd4b0a33a44430f9a88359bb0c62657",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_642c32420cd247c098093c7c93e6e839",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 273.9043553736359
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 273.9043553736359,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_18372a878f2c44678bbbf33fb78d874c",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_8959dac37ac6430792f15a8b28a32706",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 273.9043553736359,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_87f106dcb41b47529e88358803cf8832",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_c734883d4b70463a9e6cb53e5105a133",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 273.9043553736359,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_c6b57c71a7a64dbe914822cb11791936",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_4c531f982d9e4242bc71ea849cae5f73",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 273.2971416741107,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_7636d180481f4c90862152134a0a4b6b",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_e27102f3de5d40e89908a904eac58e04",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 273.2971416741107
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 273.2971416741107,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_1d6de01bc4334e579b9923e3221b5307",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_516f018611b8436ea4cee3833c94305d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 273.2971416741107,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_d25aee799b8f4ce097c6511def613ecf",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_d27b00a4b7d14d9a93ba0b5f0b051f62",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      }
+    ],
+    "Pool-retained-3": [
+      {
+        "step": 0,
+        "latency_us": 1108.3866051232328,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 282.1269723421921,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_1b41d030c7794601bc23eba3060a0b4e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 282.1269723421921
+          },
+          {
+            "attempt_id": "attempt_267aeb19228a4290b56806517d3a7b3a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 611.0398491309481
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 269.7067050146661,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_2ca3f7b2d9d94800b1e598cbae714587",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 269.7067050146661
+          },
+          {
+            "attempt_id": "attempt_67ab6115ae974557aac5b812b1a9d4dd",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 592.5635297034288
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 266.5966196084207,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_a26eb49db0d2485891cbfa80d453e6bb",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 266.5966196084207
+          },
+          {
+            "attempt_id": "attempt_6d172205e1824d91ae5a2b91e9e894ab",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 577.2480391063806
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 263.6368164756037,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_e2254095a42344989ac2ebcd03a0179b",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_fed8593f57a748c997aadec2eba115c4",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 263.6368164756037
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 260.23398707493453,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_6d1b5a51df3248f3b234dd08ee984c8c",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 260.23398707493453
+          },
+          {
+            "attempt_id": "attempt_6ba949e7046345e599e7d4c78bad3dc3",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": 263.8859792629853
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 260.23398707493453,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_aa0404a8833744fba3888e7c7c84476d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_cfa764e896954a2aa46f59a9d7d8ba7b",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 257.8442376642335,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_222843d5d4204640bcefd4794bc6c568",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_fcf4a126652d484cb77f05c4d3d7b2b4",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 257.8442376642335
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 257.4923149164199,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_6dbb69c1f4854b409da1b6eec306b05d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 257.4923149164199
+          },
+          {
+            "attempt_id": "attempt_ca83b1f887334f1880a5a98d13481c8e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 256.7565602534774,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_7bb4e952005d49aca642806d7c058cda",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 257.4868447814068
+          },
+          {
+            "attempt_id": "attempt_e0d37d97dcb24ad697f1722b70a75cbd",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 256.7565602534774
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 256.7565602534774,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_9e6dea1d85f347508a7e00289e359f5b",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_0b420b45ca514ecda879d92ea3aeee5e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 256.7565602534774,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_ef27cdb19bbe4bfcb7cd2415df4fd867",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_f0fc13080df14a87982e5547f026b901",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 256.7565602534774,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_3ce5ddb5622143ad8b91297a48aa7a1f",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_a50b02a68b9e4eeb95ab5e96b1dbc651",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 256.7565602534774,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_07710c4db0ec48e6961e3ae2410d1ff3",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_c90638a4d2d14d4d9f9bce125a44ac9c",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 253.0360265616781,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_2ef901f7066644b896bcacb430c927bf",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 253.0360265616781
+          },
+          {
+            "attempt_id": "attempt_5065083d96964828921071dc41ec474e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 250.224796106299,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_51b0a8f81da24428b7bedeef182a3b0e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 250.224796106299
+          },
+          {
+            "attempt_id": "attempt_cd712579cbea44e38725c9cbd68140a7",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      }
+    ],
+    "Retained best of two": [
+      {
+        "step": 0,
+        "latency_us": 1108.3866051232328
+      },
+      {
+        "step": 1,
+        "latency_us": 289.9407124510735
+      },
+      {
+        "step": 2,
+        "latency_us": 282.47228249847734
+      },
+      {
+        "step": 3,
+        "latency_us": 282.47228249847734
+      },
+      {
+        "step": 4,
+        "latency_us": 270.50214002212755
+      },
+      {
+        "step": 5,
+        "latency_us": 270.50214002212755
+      },
+      {
+        "step": 6,
+        "latency_us": 270.50214002212755
+      },
+      {
+        "step": 7,
+        "latency_us": 258.95857131848356
+      },
+      {
+        "step": 8,
+        "latency_us": 258.95857131848356
+      },
+      {
+        "step": 9,
+        "latency_us": 258.95857131848356
+      },
+      {
+        "step": 10,
+        "latency_us": 258.95857131848356
+      },
+      {
+        "step": 11,
+        "latency_us": 258.95857131848356
+      },
+      {
+        "step": 12,
+        "latency_us": 252.14398289003552
+      },
+      {
+        "step": 13,
+        "latency_us": 250.1861608782657
+      },
+      {
+        "step": 14,
+        "latency_us": 247.34379054777978
+      },
+      {
+        "step": 15,
+        "latency_us": 247.34379054777978
+      }
+    ],
+    "Evolve-3": [
+      {
+        "step": 0,
+        "latency_us": 1108.3866051232328,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 293.11738351943814,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_7bfa5d1dab8d4be8a164629479c69861",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 293.11738351943814
+          },
+          {
+            "attempt_id": "attempt_0411c548573e4a19b18d4c96f8381740",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 293.904752832148
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 282.3028210918203,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_f22f7302f789462792c28c5d346f0140",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 282.3028210918203
+          },
+          {
+            "attempt_id": "attempt_a10c7ae04d714bffab3fe234c99c4dc8",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 282.9638522859737
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 278.42664757640625,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_5bab63e390764dc1b1a4120a4904bd0f",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_f5ddb31ba2364d1d892baee6eb8f0c94",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 278.42664757640625
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 273.86526525457793,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_9dfaaf7204ca4e31917cfe7bad932f88",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 273.86526525457793
+          },
+          {
+            "attempt_id": "attempt_aa5805abee97418aa2bcbc2741596401",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 276.8449170067935
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 270.16762124240205,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_4646fac0a75a47aa99956b72affb2912",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 270.16762124240205
+          },
+          {
+            "attempt_id": "attempt_7e1dfe2e9a0346cdac20b2df2f35f21b",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 268.8818640915751,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_757cc9a797914f18935131e968f320dd",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 269.5725313047955
+          },
+          {
+            "attempt_id": "attempt_dbfe01de575f44e19003daf6a0a5c738",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 268.8818640915751
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 263.10184332415605,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_71ec50f39f3e4149825d4ebe519d2049",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 263.10184332415605
+          },
+          {
+            "attempt_id": "attempt_1bc7b0b19f34427887b37c113a75b293",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 265.63824675628416
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 263.10184332415605,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_925859421fbf4bcb9f1ad8499ef28b3d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_7abd0971c0a2456babd1327353abb51d",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 265.7343267181062
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 263.10184332415605,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_82ff3a7bd0b84d21a402a5ef377e0fd7",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_11a117637f70498f9f35eb2c9877aea5",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 264.41176055015404
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 262.30067837466606,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_6466d97991504e3ea4dd7144c53b29ce",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_4c551da5e6d640ddbcea25eeb8e9097b",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 262.30067837466606
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 262.22920255984934,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_21e5fd1f574941fc95b2da1722189230",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_4b9d7a6409c24946b3b2a69fe2e14972",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 262.22920255984934
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 262.22920255984934,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_a5b835cbeaa2435a9ad85df392e8e24d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_fb0fb08b60284ee68b14a579f16b585c",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 262.22920255984934,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_263d9095b1f64e80ba938ac451067bea",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_fbcbd5dbc59e433cb19655f7788327d8",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 262.22920255984934,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_56204f937d79482a931d116d370a747d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": 262.47890245957245
+          },
+          {
+            "attempt_id": "attempt_9e4a37a92f6c4f68aa60330c838aa4f0",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 260.7651654900004,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_f89a1204a7e74712a7340b00cb99a601",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 260.7651654900004
+          },
+          {
+            "attempt_id": "attempt_006e26b7f30a47d985614424e6bca612",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      }
+    ]
+  },
+  "cutedsl": {
+    "AKA best of two": [
+      {
+        "step": 0,
+        "latency_us": 1178.948727928301
+      },
+      {
+        "step": 1,
+        "latency_us": 487.59659606920815
+      },
+      {
+        "step": 2,
+        "latency_us": 415.98891272927006
+      },
+      {
+        "step": 3,
+        "latency_us": 281.06741672280236
+      },
+      {
+        "step": 4,
+        "latency_us": 281.7758857427417
+      },
+      {
+        "step": 5,
+        "latency_us": 281.7758857427417
+      },
+      {
+        "step": 6,
+        "latency_us": 279.3730007652797
+      },
+      {
+        "step": 7,
+        "latency_us": 278.3706149737636
+      },
+      {
+        "step": 8,
+        "latency_us": 278.3706149737636
+      },
+      {
+        "step": 9,
+        "latency_us": 278.3706149737636
+      },
+      {
+        "step": 10,
+        "latency_us": 278.3706149737636
+      },
+      {
+        "step": 11,
+        "latency_us": 278.3706149737636
+      },
+      {
+        "step": 12,
+        "latency_us": 278.3706149737636
+      },
+      {
+        "step": 13,
+        "latency_us": 278.3706149737636
+      },
+      {
+        "step": 14,
+        "latency_us": 276.3082470669241
+      }
+    ],
+    "Isolated best of two": [
+      {
+        "step": 0,
+        "latency_us": 1116.2785047504046
+      },
+      {
+        "step": 1,
+        "latency_us": 410.762535209082
+      },
+      {
+        "step": 2,
+        "latency_us": 264.1702750134964
+      },
+      {
+        "step": 3,
+        "latency_us": 264.1702750134964
+      },
+      {
+        "step": 4,
+        "latency_us": 264.1702750134964
+      },
+      {
+        "step": 5,
+        "latency_us": 264.1702750134964
+      },
+      {
+        "step": 6,
+        "latency_us": 264.1702750134964
+      },
+      {
+        "step": 7,
+        "latency_us": 264.1702750134964
+      },
+      {
+        "step": 8,
+        "latency_us": 264.1702750134964
+      },
+      {
+        "step": 9,
+        "latency_us": 262.1719259859799
+      },
+      {
+        "step": 10,
+        "latency_us": 262.1511063079942
+      },
+      {
+        "step": 11,
+        "latency_us": 262.1511063079942
+      },
+      {
+        "step": 12,
+        "latency_us": 262.1511063079942
+      },
+      {
+        "step": 13,
+        "latency_us": 243.52130297140295
+      },
+      {
+        "step": 14,
+        "latency_us": 243.52130297140295
+      },
+      {
+        "step": 15,
+        "latency_us": 243.52130297140295
+      }
+    ],
+    "Pool-3": [
+      {
+        "step": 0,
+        "latency_us": 1116.2785047504046,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 274.6673810489712,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_7f5c57f6927e444ea42987b8919738ef",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 288.10567808441516
+          },
+          {
+            "attempt_id": "attempt_791ea20437f041abaf35a06209bbf64f",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 274.6673810489712
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 274.6673810489712,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_ab7f14eda3bb4a5e93a9c78fe35b8581",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_19e3b103949c4ad2b8f263fb59eb2e8a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 258.8742597289255,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_5e4d863de4d74cc590b03f646c58606d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 277.43229751997524
+          },
+          {
+            "attempt_id": "attempt_18645b8183c24780a7eb40ce24ade806",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 258.8742597289255
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 258.7220024997111,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_6d92dc6cb015457a9306b1b0d5c2fa34",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_82ea79724123421f9347857f7e1ab1cb",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 258.7220024997111
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 255.76285960126467,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_b5d9a0df69494dff9914ef396d1a95e7",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 257.8344668351134
+          },
+          {
+            "attempt_id": "attempt_c12705641d794c22b587819ce30c37ec",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 255.76285960126467
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 251.4545543606486,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_5d2d3a70c57f4cf98300e6f0c137c8fd",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 251.4545543606486
+          },
+          {
+            "attempt_id": "attempt_8150145fb9bb4dec87e986faf7239935",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 251.64103936410262
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 247.1968733438867,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_0b6932e482db4a2c907e97cab7588d04",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 247.1968733438867
+          },
+          {
+            "attempt_id": "attempt_093693b212224d92931a050e4e905144",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 247.1968733438867,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_0efe76a751cb445c862d14a93db2c1ed",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_bd1ed99400f94eb0bbe47dc0236b7536",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 248.03973590737917
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 247.1968733438867,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_bbc5fa1c72424230be79af5cca4c8133",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_d641a614073a4d95b99bf6aeb3bb7618",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 247.253080626797
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 246.60618991371487,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_2735f988d0ce4b0a8c942e8ebfe6b428",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_60f651689acb4bcf8c7dbadc25270308",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 246.60618991371487
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 243.1719030592067,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_cc6a1ddf20084287849b4d4672ca9099",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_5d8d628175964ccda726f2817bc740ee",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 243.1719030592067
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 239.79754508586723,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_0e6243f24cf3426497446b7e9de3ab73",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 239.79754508586723
+          },
+          {
+            "attempt_id": "attempt_33ac23d35f6740f1ae27277b76825461",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 236.11310015952182,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_b9a45f93e9684a5da468bb7858af35e0",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 236.60718981316256
+          },
+          {
+            "attempt_id": "attempt_84248ea8129542dcbf0abedace01ec01",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 236.11310015952182
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 235.59264627332547,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_40eb0ffc93674f8fae266fcf64122500",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_6fb4e62a91e84a40a339c3e39c8b49b8",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 235.59264627332547
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 235.59264627332547,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_df54b9cdb08e4c01a7b422b1a5d94b31",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_2d1fc435d4b34fb6ba52b6ae5aa9ba0f",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      }
+    ],
+    "Pool-retained-3": [
+      {
+        "step": 0,
+        "latency_us": 1116.2785047504046,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 274.10802024430365,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_18294b9e81eb42338b74ab7d002d8956",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 274.10802024430365
+          },
+          {
+            "attempt_id": "attempt_1b0a4800167148208977d1e834d8a111",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 920.4012288757706
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 270.3789346456814,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_8a21bf390c624be3bbc1c2668f479fda",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_2c20dcbd2c7e4f7e89b5f792d94ed152",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 270.3789346456814
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 267.24480052775414,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_2ce481c9e2c94514bd39254482e457f7",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_35e582acaaed4c7f96cd67e1176868ca",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 267.24480052775414
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 239.00550186336366,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_e3c8673dee71489d9faed0aa31407477",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 239.00550186336366
+          },
+          {
+            "attempt_id": "attempt_1dfe502b827b47ecb0c9f899bf1e5f2a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 238.820239416509,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_d0a728936f2641e39de6f3e2b845ff81",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 238.820239416509
+          },
+          {
+            "attempt_id": "attempt_dee2b4aa18fd4397ac337f7127d79dd2",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 266.5702073441312
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 238.820239416509,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_e8b7566db90a423aa740febd280f5364",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_17e0efe4ad21411f8cd889f7092b96c2",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 263.9013849690721
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 238.820239416509,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_7b3eaf3423c54f88a4c2e90d89c8706a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_040a6f27bd3a4b85b1a839dfaadd46a9",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 238.820239416509,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_03cc9acdf266496ca211ca3c7f094bbe",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_0dbac93739004b49a78a7697b880e29a",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 236.94887501055746,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_84474fec1a9244f9be47fefe4728e5c4",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 236.94887501055746
+          },
+          {
+            "attempt_id": "attempt_c2f3192958c74492a4ba3a58d9bbce43",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 237.5564846227853
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 236.94887501055746,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_bd84e4a4d01341a2be8dd56e9d1e6138",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": 237.67550057569787
+          },
+          {
+            "attempt_id": "attempt_1b212518d95a44c696be1c593039b536",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": 237.26449698628838
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 236.94887501055746,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_30b681cec23a47bda605f8e9bf0a1dc3",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_cbb595a12dd64060a57a94bf81ab4ba7",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 234.45497387264928,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_b099e2aaea224991a1cfc0e4a4221b75",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_3cbd9892abb542fbba0c5b6290108fbe",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 234.45497387264928
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 234.45497387264928,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_0ee575d8003546059fc488a03a9e2908",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_e099fc3af14a45c88e1f6aa97d4aae37",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 232.95153018717028,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_841fb1c80c434b1687fc6946bd75cb80",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_554661d796b54c30942a5b32150a66ff",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": true,
+            "latency_us": 232.95153018717028
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 232.95153018717028,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_60a2b1b0b2104a55bd85626f898e0029",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_4caba9e51efc46cba803cb692c3fbe5e",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 2,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      }
+    ],
+    "Retained best of two": [
+      {
+        "step": 0,
+        "latency_us": 1116.2785047504046
+      },
+      {
+        "step": 1,
+        "latency_us": 286.95764265998275
+      },
+      {
+        "step": 2,
+        "latency_us": 286.95764265998275
+      },
+      {
+        "step": 3,
+        "latency_us": 286.95764265998275
+      },
+      {
+        "step": 4,
+        "latency_us": 286.95764265998275
+      },
+      {
+        "step": 5,
+        "latency_us": 261.38831573163174
+      },
+      {
+        "step": 6,
+        "latency_us": 261.38831573163174
+      },
+      {
+        "step": 7,
+        "latency_us": 259.89648702252873
+      },
+      {
+        "step": 8,
+        "latency_us": 257.7744883953755
+      },
+      {
+        "step": 9,
+        "latency_us": 257.7744883953755
+      },
+      {
+        "step": 10,
+        "latency_us": 257.7744883953755
+      },
+      {
+        "step": 11,
+        "latency_us": 257.7744883953755
+      },
+      {
+        "step": 12,
+        "latency_us": 257.7744883953755
+      },
+      {
+        "step": 13,
+        "latency_us": 257.7744883953755
+      },
+      {
+        "step": 14,
+        "latency_us": 257.7744883953755
+      },
+      {
+        "step": 15,
+        "latency_us": 257.7744883953755
+      }
+    ],
+    "Evolve-3": [
+      {
+        "step": 0,
+        "latency_us": 1116.2785047504046,
+        "source": "bootstrap"
+      },
+      {
+        "step": 1,
+        "latency_us": 863.4250263348586,
+        "epoch": 1,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_687a9029ba274302ad5a00b335121d54",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 863.4250263348586
+          },
+          {
+            "attempt_id": "attempt_3c71b5127cc64dfb9f41292296f02725",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 2,
+        "latency_us": 315.5558513885853,
+        "epoch": 1,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_f7dccb46b48347eda22887a62e03610c",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_437446d4c24d4940a505f4a8973c5031",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 315.5558513885853
+          }
+        ]
+      },
+      {
+        "step": 3,
+        "latency_us": 315.5558513885853,
+        "epoch": 1,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_f4575a28e48d4bf4bd8b35b5e61156ae",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 850.9368466013138
+          },
+          {
+            "attempt_id": "attempt_affdf038618642298d7496987c61b51a",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 4,
+        "latency_us": 257.8632886830047,
+        "epoch": 2,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_a23510bec7fc42539602abd91bbf7232",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 257.8632886830047
+          },
+          {
+            "attempt_id": "attempt_a10d7ada441545ceb32a956847de799b",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 258.06600081921556
+          }
+        ]
+      },
+      {
+        "step": 5,
+        "latency_us": 257.8632886830047,
+        "epoch": 2,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_7b93c815bd77490288bba7cd903a8b83",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_329389b490f64a559e7ea46f8b9af747",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 6,
+        "latency_us": 255.99467702798316,
+        "epoch": 2,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_be15d4da2afa44239535820053d81aa0",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 255.99467702798316
+          },
+          {
+            "attempt_id": "attempt_a9c428a77f5f489c9c23f78d32473555",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 7,
+        "latency_us": 255.99467702798316,
+        "epoch": 3,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_cb12dc36b08344cf99e4fe9fe1dfed44",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_f2d4b1006d6145469d9f19f13231876f",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 256.3862734067221
+          }
+        ]
+      },
+      {
+        "step": 8,
+        "latency_us": 254.28432839837583,
+        "epoch": 3,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_600372f2da224154aade1082ef256040",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 255.01337227499664
+          },
+          {
+            "attempt_id": "attempt_71b2b3fc6ea943d3a644d6aed9b9b84d",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 254.28432839837583
+          }
+        ]
+      },
+      {
+        "step": 9,
+        "latency_us": 254.28432839837583,
+        "epoch": 3,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_30e83979e6ce46e0a302aa19a441dbe2",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_29ef027310ea4ceaba7197d9ab575a92",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 10,
+        "latency_us": 252.44041766898138,
+        "epoch": 4,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_37bf517ea79b48c99205ef8d10034355",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_42aba9a06c0e4730bc3cccb5c9f8aed3",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 252.44041766898138
+          }
+        ]
+      },
+      {
+        "step": 11,
+        "latency_us": 249.6074979176538,
+        "epoch": 4,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_20d61d42e5a042f4bce95175b96bbbc1",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 249.6074979176538
+          },
+          {
+            "attempt_id": "attempt_f481f49e647f490593eb2c2265924bd0",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 12,
+        "latency_us": 249.6074979176538,
+        "epoch": 4,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_1fb874b9d8f449a78bbfb93acd29634d",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_abb5e136e54d4f10820171c000532b0b",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 13,
+        "latency_us": 246.5013487087401,
+        "epoch": 5,
+        "iteration": 1,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_7226abb08b904b92b387a748c3dc1707",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_477c5324cace4a04b764d301198f8dba",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": true,
+            "latency_us": 246.5013487087401
+          }
+        ]
+      },
+      {
+        "step": 14,
+        "latency_us": 246.5013487087401,
+        "epoch": 5,
+        "iteration": 2,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_125bd70f6518468f9cccf4208a5b3503",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_81a79e67e4df4867a6f6a7a7a5f761aa",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      },
+      {
+        "step": 15,
+        "latency_us": 246.5013487087401,
+        "epoch": 5,
+        "iteration": 3,
+        "parallel_width": 2,
+        "attempts": [
+          {
+            "attempt_id": "attempt_95a893531afe4734913a158162ccc933",
+            "branch": "active",
+            "challenger_ordinal": 0,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          },
+          {
+            "attempt_id": "attempt_908cbcb47ac844b89852281d37b7840b",
+            "branch": "challenger",
+            "challenger_ordinal": 1,
+            "trajectory": 1,
+            "accepted": false,
+            "latency_us": null
+          }
+        ]
+      }
+    ]
+  }
+}

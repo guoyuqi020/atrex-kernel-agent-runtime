@@ -163,7 +163,7 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     agent = tmp_path / "agent"
     agent.mkdir()
     _write_agent(agent)
-    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+    for name in ("prompts", "insights", "skills", "tools"):
         (agent / name).mkdir()
         (agent / name / "README.md").write_text(f"Initial {name} index")
         (agent / name / "seed.md").write_text(f"Initial {name}")
@@ -206,14 +206,16 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert reference.is_dir()
     assert list(reference.iterdir()) == []
     assert not (os.stat(reference).st_mode & 0o200)
-    (prepared.root / "skills/baseline.md").write_text("reuse this lesson\n")
     (prepared.root / "tools/probe.py").write_text("print('probe')\n")
-    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+    for name in ("prompts", "insights", "skills", "tools"):
         assert (prepared.root / name / "README.md").read_text() == f"Initial {name} index"
         assert not (prepared.root / "agent/optimizer" / name).exists()
         assert (prepared.root / name / "seed.md").read_text() == f"Initial {name}"
-        (prepared.root / name / "entry.txt").write_text(f"bootstrap {name}")
-        (prepared.root / name / "README.md").write_text(f"{name}: entry.txt")
+    for name in ("prompts", "insights", "skills"):
+        assert prepared.root.joinpath(name).stat().st_mode & 0o222 == 0
+    (prepared.root / "tools/entry.txt").write_text("bootstrap tools")
+    (prepared.root / "tools/README.md").write_text("tools: entry.txt")
+    assert not (prepared.root / "hooks").exists()
 
     driver = CoreLineageBootstrapSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
@@ -253,11 +255,13 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert artifacts.verify(result.report_digest).kind is ArtifactKind.ATTEMPT_REPORT
     assert artifacts.verify(result.session_trace_digest).kind is ArtifactKind.SESSION_LOG
     resumed = assembler.prepare(manifest)
-    assert (resumed.root / "skills/baseline.md").read_text() == "reuse this lesson\n"
     assert (resumed.root / "tools/probe.py").read_text() == "print('probe')\n"
-    for name in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
-        assert (resumed.root / name / "entry.txt").read_text() == f"bootstrap {name}"
-        assert (resumed.root / name / "README.md").read_text() == f"{name}: entry.txt"
+    assert (resumed.root / "tools/entry.txt").read_text() == "bootstrap tools"
+    assert (resumed.root / "tools/README.md").read_text() == "tools: entry.txt"
+    for name in ("prompts", "insights", "skills"):
+        assert (resumed.root / name / "seed.md").read_text() == f"Initial {name}"
+        assert (resumed.root / name / "README.md").read_text() == f"Initial {name} index"
+    assert not (resumed.root / "hooks").exists()
 
 
 def test_lineage_bootstrap_rejects_the_legacy_terminal_report() -> None:

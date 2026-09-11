@@ -416,6 +416,8 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
     workspace = root / "attempt-1/run-1"
     (workspace / ".runtime").mkdir(parents=True)
     (workspace / ".runtime/attempt.json").write_text("{}", encoding="utf-8")
+    for name in ("prompts", "insights", "skills", "tools"):
+        (workspace / name).mkdir()
     credentials = tmp_path / "credentials"
     credentials.mkdir()
     settings = BwrapSandboxSettings(
@@ -485,6 +487,18 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
         str(workspace / ".runtime"),
         "/home/agent/workspace/.runtime",
     ) in set(zip(bwrap, bwrap[1:], bwrap[2:], strict=False))
+    mounts = set(zip(bwrap, bwrap[1:], bwrap[2:], strict=False))
+    for name in ("prompts", "insights", "skills"):
+        assert (
+            "--ro-bind",
+            str(workspace / name),
+            f"/home/agent/workspace/{name}",
+        ) in mounts
+    assert (
+        "--ro-bind",
+        str(workspace / "tools"),
+        "/home/agent/workspace/tools",
+    ) not in mounts
     assert not any(value.startswith("HTTPS_PROXY=") for value in bwrap)
     assert bwrap[-1] == "/home/agent/workspace/agent/optimizer/run.py"
 

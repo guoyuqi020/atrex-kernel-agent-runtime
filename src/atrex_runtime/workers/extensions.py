@@ -1,4 +1,4 @@
-"""Project adaptive Skills and Hooks into one Optimizer Session's private Home."""
+"""Project adaptive Skills into one Optimizer Session's private Home."""
 
 from __future__ import annotations
 
@@ -39,13 +39,12 @@ def _json_object(root: Path, path: Path) -> dict[str, Any]:
             raise ValueError("expected a JSON object")
         return value
     except (OSError, ValueError) as error:
-        raise ValueError(f"Invalid Optimizer extension config {path}: {error}") from error
+        raise ValueError(f"Invalid private Provider config {path}: {error}") from error
 
 
 def _write_json(root: Path, path: Path, value: Mapping[str, Any]) -> None:
     _local_path(root, path)
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    # Replacing instead of writing through a file also avoids shared hard-link writes.
     with tempfile.NamedTemporaryFile(
         mode="w", encoding="utf-8", dir=path.parent, delete=False
     ) as stream:
@@ -56,6 +55,29 @@ def _write_json(root: Path, path: Path, value: Mapping[str, Any]) -> None:
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
+
+
+def _disable_provider_hooks(workspace: Path, config_dir: Path, backend: str) -> None:
+    """Remove host/provider Hooks from the Session-local copy.
+
+    Terminal handoff is guarded by the Runtime protocol, not backend-native Hooks.
+    The copied credential/configuration Home is private, so this never mutates host
+    configuration.
+    """
+    if backend == "claude":
+        path = config_dir / "settings.json"
+        if not path.exists():
+            return
+        settings = _json_object(workspace, path)
+        if settings.pop("hooks", None) is not None:
+            _write_json(workspace, path, settings)
+        return
+    path = config_dir / "hooks.json"
+    _local_path(workspace, path)
+    if path.exists() or path.is_symlink():
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"Private Codex hooks path is invalid: {path}")
+        path.unlink()
 
 
 def _install_skills(workspace: Path, destination: Path) -> None:
@@ -86,33 +108,6 @@ def _install_skills(workspace: Path, destination: Path) -> None:
         shutil.copytree(skill, destination / skill.name)
 
 
-def _hook_config(workspace: Path, backend: str) -> dict[str, Any] | None:
-    path = workspace / "hooks" / f"{backend}.json"
-    _local_path(workspace, path)
-    if not path.exists():
-        return None
-    value = _json_object(workspace, path)
-    if set(value) - {"hooks", "description"} or not isinstance(value.get("hooks"), dict):
-        raise ValueError(f'{path}: expected {{"hooks": {{event: [matcher groups]}}}}')
-    for event, groups in value["hooks"].items():
-        if not event or not isinstance(groups, list):
-            raise ValueError(f"{path}: each Hook event must contain a list of matcher groups")
-        for group in groups:
-            if not isinstance(group, dict) or not isinstance(group.get("hooks"), list):
-                raise ValueError(f"{path}: each matcher group needs a hooks list")
-            for handler in group["hooks"]:
-                if (
-                    not isinstance(handler, dict)
-                    or handler.get("type") != "command"
-                    or not isinstance(handler.get("command"), str)
-                    or not handler["command"].strip()
-                ):
-                    raise ValueError(
-                        f"{path}: use command Hooks with type=command and a nonempty command"
-                    )
-    return value
-
-
 def install_optimizer_extensions(
     workspace: Path,
     environment: Mapping[str, str],
@@ -122,8 +117,8 @@ def install_optimizer_extensions(
 ) -> dict[str, str]:
     """Called after credential projection, before either launcher starts any process.
 
-    Only the selected Optimizer backends are installed; an Evolver never activates
-    the Candidate's hooks. Neither installer nor hook commands run in the supervisor.
+    Only the selected Optimizer backends are installed. Installation products live
+    in this Session's private Home and are never persisted as adaptive State.
     """
     if environment.get("ATREX_CORE_PHASE") not in _PHASES:
         return {}
@@ -132,7 +127,7 @@ def install_optimizer_extensions(
     if not home.is_absolute() or home == workspace or not home.is_relative_to(workspace):
         raise ValueError("Optimizer extension installation requires HOME inside its workspace")
     _local_path(workspace, home)
-    # Keep installation products outside the six checkpointed adaptive directories.
+    # Keep installation products outside the four checkpointed adaptive directories.
     if home.relative_to(workspace).parts[0] != "sessions":
         raise ValueError("Optimizer extension HOME must be under workspace/sessions")
     visible_workspace = visible_workspace or workspace
@@ -140,7 +135,6 @@ def install_optimizer_extensions(
     result = {
         "ATREX_WORKSPACE": str(visible_workspace),
         "WORKSPACE_ROOT": str(visible_workspace),
-        "ATREX_OPTIMIZER_CODEX_HOOKS": "0",
     }
     for backend in backends:
         if backend not in {"claude", "codex"}:
@@ -151,18 +145,8 @@ def install_optimizer_extensions(
         result["CLAUDE_CONFIG_DIR" if backend == "claude" else "CODEX_HOME"] = str(
             visible_home / f".{backend}"
         )
+        _disable_provider_hooks(workspace, config_dir, backend)
         _install_skills(
             workspace, home / (".claude/skills" if backend == "claude" else ".agents/skills")
         )
-        hooks = _hook_config(workspace, backend)
-        hooks = hooks or {"hooks": {}}
-        if backend == "claude":
-            path = config_dir / "settings.json"
-            settings = _json_object(workspace, path) if path.exists() else {}
-            # Preserve auth/model settings, replace only this Session's hook definitions.
-            settings["hooks"] = hooks["hooks"]
-            _write_json(workspace, path, settings)
-        else:
-            _write_json(workspace, config_dir / "hooks.json", hooks)
-            result["ATREX_OPTIMIZER_CODEX_HOOKS"] = "1" if any(hooks["hooks"].values()) else "0"
     return result

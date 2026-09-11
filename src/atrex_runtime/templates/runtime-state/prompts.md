@@ -1,10 +1,10 @@
 # Prompts index
 
-Store phase prompts and tool-protocol instructions. Edits affect later fresh sessions, not the
-prompt already sent to the current session. Runtime-injected authority and evaluation rules remain
-controlled by Runtime.
+Store versioned phase prompts and tool-protocol instructions. Optimizer and Bootstrap use this
+directory read-only. Evolver may revise it for later fresh sessions; Runtime-injected authority and
+evaluation rules remain controlled by Runtime.
 
-Whenever you add, change, rename, or remove a prompt, update this README with its path, phase,
+During Evolution, update this README whenever a prompt is added, changed, renamed, or removed, with its path, phase,
 purpose, and dependencies. Preserve paths referenced by the Agent configuration. Never store credentials
 or raw session traces here.
 

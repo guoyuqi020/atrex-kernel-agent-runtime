@@ -55,7 +55,7 @@ def test_builder_seals_complete_repository(tmp_path: Path) -> None:
     assert (stored / "docs/design.md").is_file()
 
 
-@pytest.mark.parametrize("name", ("prompts", "memory", "knowledge", "skills", "tools", "hooks"))
+@pytest.mark.parametrize("name", ("prompts", "insights", "skills", "tools"))
 def test_builder_seals_top_level_adaptive_state_seeds(
     tmp_path: Path,
     name: str,

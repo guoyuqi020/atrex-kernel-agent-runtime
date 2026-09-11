@@ -4,7 +4,7 @@
 
 每次 Evolver 调用准确输出一个统一的 `EvolutionOutput` 提案。所有模式都使用
 `kernel_agent_revision_id`、`changed_paths` 与 `contributing_paths`；`changed_paths` 只包含相对于
-所选 Agent Bundle 根目录的排序路径，包括六个自适应目录的改动。`reuse` 要求空数组，新版本必须有真实改动：
+所选 Agent Bundle 根目录的排序路径，包括四个自适应目录的改动。`reuse` 要求空数组，新版本必须有真实改动：
 
 - `evolved` 创建新 Agent Revision，其 Parent 是本 Epoch 的 Active Revision；
 - `reuse` 原样让一个可见历史 Revision 参赛，不创建 Revision，也不增加版本号；
@@ -12,7 +12,7 @@
 
 报告的 Revision 选择可见 Bundle 和唯一 Parent，具体 State 身份仍由 Runtime 管理。
 `evolve_from_history` 从 `input/agents/agent-vN/` 复制完整 Bundle 到 `candidate/`，然后修改。
-Runtime 校验同 DSL、可见范围、提案资格及整个 Bundle 的准确 Diff。六个自适应目录的修改也计入
+Runtime 校验同 DSL、可见范围、提案资格及整个 Bundle 的准确 Diff。四个自适应目录的修改也计入
 `changed_paths`；复用时 Candidate 必须不变。
 
 每个提案都可以携带有界的 `unimplemented_capabilities`。每一项说明一种 Agent 能力、预期的

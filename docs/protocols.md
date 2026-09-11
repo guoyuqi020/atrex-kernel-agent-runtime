@@ -88,7 +88,7 @@ The local `evolution-report` tool validates drafts and returns `issues`, `reques
 `recovery` on error without publishing. The first valid call atomically publishes
 `scratch/evolution-report.json`; Runtime independently revalidates it after the Session exits.
 
-Every new revision seals the complete Bundle and six-directory State checkpoint, recording
+Every new revision seals the complete Bundle and four-directory State checkpoint, recording
 `optimizer_digest` and `runtime_state_digest`. Each new Trajectory starts from a separate copy;
 Optimizer implementation permissions and State inheritance remain unchanged.
 
@@ -158,31 +158,33 @@ profile evidence, and Direction-bound Findings.
 
 ## Runtime State
 
-Versioned Core Source includes initial `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/` seeds.
+Versioned Core Source includes initial `prompts/`, `insights/`, `skills/`, and `tools/` seeds.
 Runtime copies them when no inherited State exists. Learned State remains a separate Artifact:
 
 ```text
 runtime-state/
   trajectories/<N>/
     prompts/README.md
-    memory/README.md
-    knowledge/README.md
+    insights/README.md
     skills/README.md
     tools/README.md
-    hooks/README.md
 ```
 
-An Optimizer workspace presents one Trajectory's State as writable root `prompts/`, `memory/`, `knowledge/`, `skills/`,
-`tools/`, and `hooks/`. Each README indexes that directory and tracks additions, edits, renames, and removals.
-Runtime seals the terminal contents and restores them for the next serial Attempt. Evolver receives
+An Optimizer workspace presents one Trajectory's `prompts/`, `insights/`, and `skills/` read-only,
+while `tools/` is writable and its README tracks additions, edits, renames, and removals. Runtime
+seals the terminal contents and restores them for the next serial Attempt. Evolver receives
 frozen participant/historical State and writes one flat Candidate seed at
-`candidate/{prompts,memory,knowledge,skills,tools,hooks}/`. A new Agent Revision records both source and State
+`candidate/{prompts,insights,skills,tools}/`. A new Agent Revision records both source and State
 digests as one logical Bundle; each new Trajectory receives an independent copy.
 
-Without inherited State, Runtime copies the six initial directories from the pinned Core Source.
+Without inherited State, Runtime copies the four initial directories from the pinned Core Source.
 An Ablation Lineage with ephemeral Agent State returns to that seed on every Attempt/retry.
-All six directories are sealed together and share the same inheritance and isolation rules.
-Adaptive Knowledge are distinct from implementation documentation inside versioned Source.
+All four directories are sealed together and share the same inheritance and isolation rules;
+Evolver owns versioned changes to Prompts, Insights, and Skills.
+Insights are scoped, evidence-derived interpretations that change later search decisions; Runtime
+Journal remains the factual history, and static reference material belongs in Skill references.
+When an older immutable State is materialized, Runtime merges its `memory/`, `knowledge/`, or legacy
+`docs/` content into `insights/` without rewriting the sealed Artifact and rejects conflicting paths.
 
 ## Evidence visibility
 

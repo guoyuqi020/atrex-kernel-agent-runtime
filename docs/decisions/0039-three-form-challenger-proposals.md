@@ -3,7 +3,7 @@
 ## Decision
 
 Each Evolver invocation emits exactly one uniform `EvolutionOutput` proposal. Every mode uses
-`kernel_agent_revision_id`, `changed_paths`, and `contributing_paths`. The second contains sorted paths relative to the selected visible Bundle, including all six adaptive
+`kernel_agent_revision_id`, `changed_paths`, and `contributing_paths`. The second contains sorted paths relative to the selected visible Bundle, including all four adaptive
 directories. `reuse` requires an empty array; a new revision requires a real change:
 
 - `evolved` creates a new Agent revision whose parent is the Epoch Active revision;

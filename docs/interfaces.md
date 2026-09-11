@@ -297,9 +297,14 @@ The Trace retains the initial capture at its root and later captures under `cont
 `002/`, etc. Root `session.json` indexes `segments` and `report_completion`;
 `conversation.jsonl` combines them with segment identities, and provider usage is cumulative.
 After exhausted retries, the Worker Session ends as `report-completion-exhausted`, with no
-successful candidate. An ordinary Epoch may continue to the next Attempt; Bootstrap fails rather
-than registering a baseline. This mechanism applies to Core/KDA optimization and framework baseline,
-not problem generalization or Evolver. Pinned older Agent commits must be updated to use it.
+successful candidate. Runtime classifies that physical Session as an incomplete handoff and starts
+a fresh recovery Session for the same logical Attempt or Bootstrap run, subject to the normal
+`max_infrastructure_retries` budget. The failed capture and Runtime State checkpoint remain
+auditable; the configured Attempt count is unchanged. Only exhaustion of that outer recovery budget
+surfaces the failure, and the incomplete handoff is never consumed as an ordinary negative
+optimization result. The bounded report-only continuation applies to Core/KDA optimization and
+framework baseline, not problem generalization or Evolver; the outer Runtime classification also
+protects older Agent commits that simply exit successfully without an accepted Report.
 
 ### Terminal handoff and Journal
 
@@ -498,7 +503,7 @@ only for readability.
 
 Evolver has no Runtime Tool or Runtime HTTP capability. Runtime materializes one frozen filesystem
 view keyed by Lineage version. `input/agents/agent-vN/` contains one complete Agent Bundle:
-implementation, configuration, and `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, `hooks/`.
+implementation, configuration, and `prompts/`, `insights/`, `skills/`, `tools/`.
 The writable `candidate/` has the same layout. Existing checkpoints replace packaged defaults;
 there is no second Source/State pair to edit.
 
@@ -510,9 +515,9 @@ locations in the original producing Session, not guaranteed-current resource con
 
 For `evolve_from_history`, copy the selected complete historical Bundle into Candidate before editing.
 Declare that revision as `kernel_agent_revision_id` and report the exact sorted Bundle-relative
-`changed_paths`, including all six adaptive directories. Runtime revalidates the full diff and seals
-the complete Bundle plus a six-directory checkpoint. Optimizer permissions and inheritance rules
-are unchanged: implementation is read-only, the six adaptive directories remain writable.
+`changed_paths`, including all four adaptive directories. Runtime revalidates the full diff and seals
+the complete Bundle plus a four-directory checkpoint. Optimizer permissions and inheritance rules
+are unchanged: implementation is read-only, the four adaptive directories remain writable.
 
 `contributing_paths` records sorted, unique workspace-relative files or directories actually incorporated from
 `input/agents/agent-vN/` or `input/evidence/agent-vN/resources/`, including Parent resources from other

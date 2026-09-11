@@ -37,6 +37,7 @@ from .workspace import (
     ensure_reusable_directories,
     initialize_reusable_agent_state,
     persist_reusable_agent_state,
+    protect_optimizer_agent_state,
     remove_optimizer_state_seeds,
 )
 
@@ -221,6 +222,7 @@ class LineageBootstrapWorkspaceAssembler:
         else:
             initialize_reusable_agent_state(root, root / paths.optimizer)
         remove_optimizer_state_seeds(root / paths.optimizer)
+        protect_optimizer_agent_state(root)
         return PreparedLineageBootstrap(
             root,
             manifest_path,

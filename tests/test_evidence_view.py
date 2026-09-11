@@ -25,6 +25,13 @@ from atrex_runtime.workers.evidence_view import (
 )
 
 
+def test_optimizer_prompt_enforces_evolver_owned_agent_content() -> None:
+    assert "`prompts/`, `insights/`, and `skills/` belong" in EVIDENCE_PROMPT_TEXT
+    assert "Only `tools/` is adaptive here" in EVIDENCE_PROMPT_TEXT
+    assert "Direction and\nExperiment Journal" in EVIDENCE_PROMPT_TEXT
+    assert "Evolver curates" in EVIDENCE_PROMPT_TEXT
+
+
 def _write(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value), encoding="utf-8")
@@ -701,13 +708,16 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert not (control_root / "evidence-instructions.md").exists()
     assert EVOLVER_EVIDENCE_PROMPT_TEXT
     assert (
-        "Each of the six reusable directories has a mandatory `README.md` index"
+        "Each of the four reusable directories has a mandatory `README.md` index"
         in EVOLVER_EVIDENCE_PROMPT_TEXT
     )
     assert "`candidate/` starts as a writable" in EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "{prompts,memory,knowledge,skills,tools,hooks}/" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "{prompts,insights,skills,tools}/" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "candidate/runtime-state/" not in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "revision seed" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "Tool-to-Skill promotion as evidence-driven curation" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "`skills/<skill-name>/SKILL.md`" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "do not turn every one-off probe" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert (
         "Candidate resources seed its next optimization trajectories"
         in EVOLVER_EVIDENCE_PROMPT_TEXT

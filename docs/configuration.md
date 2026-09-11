@@ -211,8 +211,8 @@ publishing independent `agent-v0`/`v0` roots.
 - optional `optimizer_model`.
 
 It creates a separate single-Lineage Campaign; by default no Challenger is generated. When
-`ephemeral_agent_state=true`, every Attempt starts from the pinned Core's initial `memory/`, `knowledge/`,
-`skills/`, `tools/`, and `hooks/`;
+`ephemeral_agent_state=true`, every Attempt starts from the pinned Core's initial `prompts/`,
+`insights/`, `skills/`, and `tools/`;
 false retains the source Bootstrap deposit and later serial State. To compare evolution frequencies,
 use `challenger_count=1`, `challenger_start_epoch=2`, `first_epoch_same_agent=true`, and
 `ephemeral_agent_state=false` with different

@@ -24,6 +24,8 @@ English | [中文](README.zh.md)
   Evaluate/ABBA, Roofline, NCU, and selection.
 - [Protocols](protocols.md): durable identities, Artifacts, Evidence, Session, and visibility rules.
 - [Architecture Decisions](decisions/README.md): rationale that still constrains the implementation.
+- [Runtime TODOs](todo/README.md): evidence-backed follow-up work that is not yet part of the
+  supported contract.
 - [Testing and Production Acceptance](testing-and-acceptance.md): repository checks and deployment
   evidence.
 - [Release Checklist](release-checklist.md) and [Changelog](../CHANGELOG.md).

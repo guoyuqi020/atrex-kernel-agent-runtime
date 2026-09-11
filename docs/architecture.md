@@ -35,7 +35,7 @@ flowchart LR
 | Kernel Trial | One exact measured experimental Kernel; it does not consume a `vN` label. |
 | Kernel Revision | A Lineage-local retained Kernel labeled `vN`. |
 | Agent Revision | A Lineage-local Agent Bundle labeled `agent-vN`. |
-| Runtime State | Adaptive `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/` associated with Agent execution, stored separately from versioned source. |
+| Runtime State | Adaptive `prompts/`, `insights/`, `skills/`, and `tools/` associated with Agent execution, stored separately from versioned source. |
 | Artifact | Immutable content-addressed data in Runtime's local CAS. |
 
 Use these terms consistently. “Lineage” never means a parallel Trajectory, “Attempt” never means a
@@ -88,7 +88,7 @@ outcome, plus the rule applied in the final pairwise selection step; with multip
 rule is not a complete tournament history. Prior
 Agent-creation reports are read-only files under `input/evolution-reports/`; full Evolution traces
 remain private. Detailed Epoch trees remain Runtime-private. Each visible Bundle directly contains its selected adaptive directories. Every
-Optimizer Session seals its terminal `prompts/memory/knowledge/skills/tools/hooks` as an immutable Runtime State Artifact and the
+Optimizer Session seals its terminal `prompts/insights/skills/tools` as an immutable Runtime State Artifact and the
 producing Attempt records its `runtime_state_digest`; the Attempt ID is the producer identity, so
 there is no second checkpoint ID. A later serial Attempt restores that exact State if its local
 cache is missing. Runtime uses the terminal State after the last Attempt of the latest completed
@@ -128,7 +128,7 @@ Campaign Contract.
 `seed-ablation-arm` creates a control Lineage in a separate Campaign from another Lineage's frozen
 Bootstrap baseline. `challenger_count` defaults to 0 but can enable evolution-frequency controls;
 `challenger_start_epoch` defaults to 2. `ephemeral_agent_state` controls
-whether `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/` reset after every Attempt. The arm shares the source evaluation
+whether `prompts/`, `insights/`, `skills/`, and `tools/` reset after every Attempt. The arm shares the source evaluation
 identity needed for comparison but has independent lifecycle and version histories.
 
 With `first_epoch_same_agent=true`, the initial Challenger is a Runtime-created `replica` of
@@ -153,10 +153,11 @@ violations, then seals a complete Agent source Artifact. Git commit and Artifact
 retained: the commit names reviewed source provenance, while the digest names the exact validated
 snapshot.
 
-Optimizer Sessions mount Agent source read-only and writable `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/`. Runtime seals the
-terminal State of every Session. Serial Attempts restore the preceding State. Evolution presents
+Optimizer Sessions mount Agent source, `prompts/`, `insights/`, and `skills/` read-only; only
+`tools/` remains writable reusable state. Runtime seals the terminal State of every Session. Serial
+Attempts restore the preceding State. Evolution presents
 read-only Active/Challenger/historical source and State, plus a writable Candidate
-`candidate/` containing implementation and `{prompts,memory,knowledge,skills,tools,hooks}/`; Runtime validates and seals both as the new Agent
+`candidate/` containing implementation and `{prompts,insights,skills,tools}/`; Runtime validates and seals both as the new Agent
 Bundle. Runtime never pushes evolved content back to the Core repository.
 
 ## Storage and recovery

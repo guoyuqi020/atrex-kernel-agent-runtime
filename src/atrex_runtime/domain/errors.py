@@ -18,6 +18,15 @@ class InfrastructureError(RuntimeError):
         self.public_detail = public_detail
 
 
+class IncompleteTerminalReportError(InfrastructureError):
+    """A Worker exited before Runtime accepted its required terminal report.
+
+    The logical optimization opportunity has not produced a terminal handoff, so
+    controllers may recover it with a fresh physical Session rather than consuming
+    the Attempt as an ordinary negative result.
+    """
+
+
 class UpstreamGatewayError(InfrastructureError):
     """An upstream Gateway answered with an error available for public diagnostics.
 

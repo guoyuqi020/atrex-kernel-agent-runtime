@@ -456,7 +456,8 @@ Bootstrap then:
 
 Every Attempt launches a fresh physical Agent Session and does not inherit Provider conversation
 context. Runtime materializes read-only Agent Source, the current Kernel, public problem, authorized
-Evidence, root-level writable `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `scratch/`. Active and every losing Challenger
+Evidence, root-level read-only `prompts/`, `insights/`, and `skills/`, writable `tools/` and
+`scratch/`. Active and every losing Challenger
 Branch from completed Epochs remain keyed by Branch, and each Epoch summary identifies the selected
 Branch. During the current Epoch, only earlier Attempts from the same Trajectory are exposed;
 concurrent sibling Branches and private evaluation inputs remain invisible.
@@ -685,7 +686,7 @@ A Candidate is one logical Agent Bundle with two separately sealed components:
 | Component | Meaning | Evolver authority |
 | --- | --- | --- |
 | Agent Source | Versioned Prompts, Workflow, configuration, and Agent implementation | Add, modify, refactor, or remove content |
-| Runtime State | `prompts/`, `memory/`, `knowledge/`, `skills/`, `tools/`, and `hooks/` accumulated by Optimizer during execution, each with a maintained README index | Inherit, curate, extend, or remove content to seed the new Revision |
+| Agent resources | Versioned `prompts/`, `insights/`, and `skills/`, plus Optimizer-adaptive `tools/`; each has a README index | Inspect completed evidence, curate all four, and promote mature Tools into Skills for the new Revision |
 
 Evolver may consolidate repeatedly useful behavior into Source, leave capabilities that still need
 validation in adaptive Runtime State, add a Tool or Workflow, or remove redundant instructions to reduce

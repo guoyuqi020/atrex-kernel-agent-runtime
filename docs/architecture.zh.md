@@ -35,7 +35,7 @@ flowchart LR
 | Kernel Trial | 一份精确测量的实验 Kernel，不消耗 `vN`。 |
 | Kernel Revision | Lineage 内被保留并标记为 `vN` 的 Kernel。 |
 | Agent Revision | Lineage 内标记为 `agent-vN` 的 Agent Bundle。 |
-| Runtime State | Agent 执行产生的自适应 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 与 `hooks/`，与版本化源码分开存储。 |
+| Runtime State | Agent 执行产生的自适应 `prompts/`、`insights/`、`skills/` 与 `tools/`，与版本化源码分开存储。 |
 | Artifact | Runtime 本地 CAS 中不可变的内容寻址数据。 |
 
 术语必须保持一致：“Lineage”不表示并行 Trajectory，“Attempt”不表示 Provider 重试；角色相关时
@@ -79,7 +79,7 @@ Runtime 还会冻结版本化 Agent/Kernel Catalog 和全部历史 Kernel Artifa
 Attempt Conversation 与 Attempt Report。每份汇总都记录该版本的分支与胜负，以及最后一次两两选择使用
 的规则；存在多个 Challenger 时，该规则不代表完整淘汰过程。
 此前 Agent 创建时的报告位于只读
-`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，每个可见 Bundle 直接包含所选自适应目录。每个 Optimizer Session 都把终态 `prompts/memory/knowledge/skills/tools/hooks` 封存为不可变
+`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，每个可见 Bundle 直接包含所选自适应目录。每个 Optimizer Session 都把终态 `prompts/insights/skills/tools` 封存为不可变
 Runtime State Artifact，生产它的 Attempt 记录 `runtime_state_digest`；Attempt ID 本身就是生产者
 身份，因此不再引入第二个 Checkpoint ID。后续串行 Attempt 在本地缓存丢失时会从该摘要恢复准确
 State。Runtime 使用最近完成 Epoch 获胜分支中、产出最佳 Kernel 的 Trajectory 在最后一个 Attempt
@@ -116,7 +116,7 @@ Source/State 与生涯汇总，以及更早的 Evolution Report。
 `seed-ablation-arm` 从已有 Lineage 的冻结 Bootstrap Baseline 创建单独 Campaign 中的控制
 Lineage。`challenger_count` 默认 0，也可启用进化频率对照；`challenger_start_epoch` 默认 2。
 `ephemeral_agent_state` 决定每次 Attempt 后是否清空
-`prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 与 `hooks/`。该 Arm 共享可比较的源评测身份，但生命周期和版本历史独立。
+`prompts/`、`insights/`、`skills/` 与 `tools/`。该 Arm 共享可比较的源评测身份，但生命周期和版本历史独立。
 
 启用 `first_epoch_same_agent=true` 后，首轮 Challenger 是 Runtime 创建的 Active 同版本
 `replica`，不属于一次进化。两个分支的 Attempt 和可写 State 独立，Agent Revision 不变。
@@ -137,9 +137,9 @@ Runtime 从已初始化的本地 Checkout 读取完整 Optimizer Commit，不执
 Manifest 或大小违规，随后封存完整 Agent Source Artifact。Git Commit 表示经审查源码来源，
 Artifact Digest 表示实际使用的精确校验 Snapshot，两者都保留。
 
-Optimizer Session 只读挂载 Agent Source，并提供可写 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 和 `hooks/`。Runtime 封存每个 Session
-终态 State，串行 Attempt 恢复前一 State。Evolution 提供只读 Active/Challenger/Historical Source
-与 State，以及可写的完整 `candidate/` Bundle（实现和六个自适应目录）；Runtime 校验并将二者
+Optimizer Session 只读挂载 Agent Source、`prompts/`、`insights/` 和 `skills/`，仅 `tools/` 是可写的
+可复用状态。Runtime 封存每个 Session 终态 State，串行 Attempt 恢复前一 State。Evolution 提供只读 Active/Challenger/Historical Source
+与 State，以及可写的完整 `candidate/` Bundle（实现和四个自适应目录）；Runtime 校验并将二者
 封存为新 Agent Bundle。Runtime 不会把进化结果推回 Core 仓库。
 
 ## 存储与恢复

@@ -13,9 +13,9 @@ do not infer them.
 input/
 ├── agents/agent-vN/
 │   ├── src/ and Agent configuration
-│   └── {prompts,memory,knowledge,skills,tools,hooks}/
+│   └── {prompts,insights,skills,tools}/
 ├── evidence/agent-vN/
-│   ├── resources/trajectories/trajectory-NNNNNNNN/{prompts,memory,knowledge,skills,tools,hooks}/
+│   ├── resources/trajectories/trajectory-NNNNNNNN/{prompts,insights,skills,tools}/
 │   ├── optimization-summary.json
 │   ├── sessions/trajectory-NNNNNNNN/attempt-NNNNNNNN.conversation.jsonl
 │   └── reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json
@@ -130,19 +130,30 @@ defaults. This is also the next Active's starting snapshot. Other visible Bundle
 seeds. Per-Trajectory learned resources remain available under each Evidence entry's `resources/`;
 they are supplementary observations, not extra Candidate copies. Runtime never merges them automatically.
 
-Each of the six reusable directories has a mandatory `README.md` index:
-Prompts contains phase instructions; Memory contains search experiences and decisions;
-Knowledge contains reusable knowledge; Skills contains procedures; Tools contains scripts;
-Hooks contains backend hook scripts and configuration snippets. Keep content concise, reusable, and
-non-duplicative. Update the relevant index after additions, changes, removals, or renames.
-For Hooks document backend, event, command, dependencies, side effects and verification.
-Before the next Claude/Codex Optimizer session, Runtime installs `skills/<name>/SKILL.md` directories
-and native command-hook registrations from `hooks/claude.json` or `hooks/codex.json` into that
-session's private CLI Home. Hook commands can use `python3 "$WORKSPACE_ROOT/hooks/script.py"`.
-It never installs Candidate hooks into this Evolver session or modifies host/global configuration.
-Other backends only preserve these resources. Installation alone does not prove hook execution.
+Each of the four reusable directories has a mandatory `README.md` index. Prompts contains phase
+instructions; Insights contains scoped, evidence-derived conclusions that change later search
+decisions; Skills contains reusable procedures; and Tools contains executable helpers. Optimizer
+and Bootstrap sessions can modify only Tools. This Evolver owns the versioned curation of Prompts,
+Insights, and Skills. Keep all four concise and non-duplicative, and update the relevant index after
+additions, changes, removals, or renames.
 
-These are Agent-authored materials, not authoritative results. You may combine supported content
+Treat Tool-to-Skill promotion as evidence-driven curation. Inspect the Tool source, its actual
+invocations in conversations, the associated Attempt reports, and authoritative outcomes. Promote a
+Tool only when those records show a repeatable procedure worth triggering in future Claude sessions;
+do not turn every one-off probe, task-private script, or failed helper into a Skill. Package a promoted
+procedure as `skills/<skill-name>/SKILL.md`. Its YAML frontmatter must have a non-empty `name` matching
+the directory and a `description` with concrete trigger conditions. Keep the body concise and include
+the procedure, prerequisites, validation criteria, dependencies, and limitations; keep supporting
+scripts and references inside the same Skill package. Remove or reduce a redundant `tools/` copy when
+the Skill becomes the canonical owner, and update both indexes. Before the next Claude Optimizer or
+Bootstrap session, Runtime installs valid Skill packages into that session's private Claude Home; it
+never modifies Evolver or host/global configuration. Other backends may read workspace resources but
+native Skill discovery is not promised.
+
+Insights must not restate Journal facts such as Kernel versions, latency, changes, or outcomes. They
+must cite supporting identities and state scope, decision effect, contrary evidence, and a revisit
+condition. Static reference material belongs in a Skill's references. These are Agent-authored
+materials, not authoritative results. You may combine supported content
 from eligible Agents and their Trajectories, remove redundant content, and incorporate stable behavior
 into prompts or implementation. Credit contributing revisions. Do not draw from an unevaluated
 `current_epoch_challenger`.

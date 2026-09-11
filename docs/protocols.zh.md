@@ -74,7 +74,7 @@ Evolution Report 声明提案模式、所选 `kernel_agent_revision_id`、假设
 本地 `evolution-report` 校验 Draft，错误返回 `issues`、`request_schema`、`recovery`，不发布；
 首次有效调用原子生成 `scratch/evolution-report.json`。Session 结束后 Runtime 再独立校验。
 
-每个新 Revision 封存完整 Bundle 和六目录 State Checkpoint，记录 `optimizer_digest`、
+每个新 Revision 封存完整 Bundle 和四目录 State Checkpoint，记录 `optimizer_digest`、
 `runtime_state_digest`；每个新 Trajectory 使用独立副本。Optimizer 的实现权限和 State 继承规则不变。
 
 `contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许
@@ -132,24 +132,26 @@ Report。
 
 ## Runtime State
 
-版本化 Core Source 包含 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/`、`hooks/` 初始种子，没有继承 State 时由 Runtime 复制。运行中积累的 Adaptive State 仍是独立 Artifact：
+版本化 Core Source 包含 `prompts/`、`insights/`、`skills/`、`tools/` 初始种子，没有继承 State 时由 Runtime 复制。运行中积累的 Adaptive State 仍是独立 Artifact：
 
 ```text
 runtime-state/
   trajectories/<N>/
     prompts/README.md
-    memory/README.md
-    knowledge/README.md
+    insights/README.md
     skills/README.md
     tools/README.md
-    hooks/README.md
 ```
 
-Optimizer Workspace 把一条 Trajectory 的 State 展示为根级可写 `prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/` 和 `hooks/`。
-各目录 README 必须随内容的新增、修改、重命名和删除同步更新。六目录整体封存，遵循相同的继承与隔离
-规则；没有继承 State 时，从固定 Core Source 加载六目录初始内容，重置状态的消融臂每次回到该种子。自适应 Knowledge 与 Source 内的实现文档相互独立。Runtime
+Optimizer Workspace 把一条 Trajectory 的 `prompts/`、`insights/`、`skills/` 展示为只读内容，仅
+`tools/` 可写，其 README 必须随内容的新增、修改、重命名和删除同步更新。四目录整体封存，遵循相同的继承与隔离
+规则；Evolver 负责 Prompts、Insights 与 Skills 的版本化修改。没有继承 State 时，从固定 Core Source
+加载四目录初始内容，重置状态的消融臂每次回到该种子。
+Insights 是带适用范围、由 Evidence 推导且会改变后续搜索决策的解释；Runtime Journal 保存事实历史，
+静态参考资料归入 Skill references。旧不可变 State 在物化时会把 `memory/`、`knowledge/` 或更早的
+`docs/` 内容合并进 `insights/`，不会改写原 Artifact；同名冲突会被拒绝。Runtime
 封存终态内容并为下一个串行 Attempt 恢复。Evolver 获得冻结 Participant/Historical State，并在
-`candidate/{prompts,memory,knowledge,skills,tools,hooks}/` 编写一份扁平 Candidate Seed。新 Agent Revision 同时
+`candidate/{prompts,insights,skills,tools}/` 编写一份扁平 Candidate Seed。新 Agent Revision 同时
 记录 Source 与 State Digest，作为一个逻辑 Bundle；每条新 Trajectory 得到独立副本。
 
 启用 Ephemeral Agent State 的 Ablation Lineage 会让每个 Attempt 从空 Adaptive State 开始。

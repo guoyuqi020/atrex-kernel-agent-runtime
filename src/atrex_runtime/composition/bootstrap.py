@@ -13,7 +13,7 @@ import anyio
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..bootstrap import CampaignBootstrapper, GeneratedLineageBaseline, RooflineMode
 from ..config import RuntimeSettings
-from ..domain.errors import InfrastructureError
+from ..domain.errors import IncompleteTerminalReportError, InfrastructureError
 from ..domain.ids import (
     ArtifactDigest,
     AttemptId,
@@ -493,15 +493,25 @@ class CoreLineageBaselineGenerator:
                 if result.finish_reason.startswith("process-exit-"):
                     terminal_reason = result.finish_reason
                     raise InfrastructureError(f"Core lineage baseline {result.finish_reason}")
+                if result.finish_reason == "report-completion-exhausted":
+                    terminal_reason = result.finish_reason
+                    raise IncompleteTerminalReportError(
+                        "Core lineage baseline exited before Runtime accepted its terminal report"
+                    )
                 if result.finish_reason != "completed":
                     terminal_reason = result.finish_reason
                     raise RuntimeError(f"Core lineage baseline {result.finish_reason}")
                 if result.report_error is not None:
-                    terminal_reason = "invalid-report"
-                    raise ValueError(f"invalid Core lineage baseline report: {result.report_error}")
+                    terminal_reason = "terminal-report-invalid"
+                    raise IncompleteTerminalReportError(
+                        "Core lineage baseline exited before Runtime accepted a valid terminal "
+                        f"report: {result.report_error}"
+                    )
                 if result.report is None or result.report_digest is None:
-                    terminal_reason = "missing-report"
-                    raise ValueError("Core lineage baseline did not publish its terminal report")
+                    terminal_reason = "terminal-report-missing"
+                    raise IncompleteTerminalReportError(
+                        "Core lineage baseline exited before Runtime accepted its terminal report"
+                    )
                 if result.report.status == "blocked":
                     terminal_reason = "blocked"
                     raise RuntimeError(f"Core lineage baseline blocked: {result.report.blocker}")

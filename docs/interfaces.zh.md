@@ -266,9 +266,12 @@ Claude usage 对账异常时，记为 accounting warning，仍执行报告补交
 根 `session.json` 的 `segments` 与 `report_completion` 记录分段及补交状态；
 `conversation.jsonl` 按分段身份合并对话，Provider 用量累计计算。
 补交耗尽时 Worker Session 记录 `report-completion-exhausted`，不会产生成功 Candidate。
-普通 Epoch 可以继续下一个 Attempt，Bootstrap 则失败而非登记 Baseline。
-该机制适用于 Core/KDA 的优化与 Framework Baseline，不用于 Problem Generalization 或 Evolver。
-冻结的旧 Agent Commit 需要升级后才能使用这套机制。
+Runtime 将该物理 Session 归类为未完整交接，并在正常 `max_infrastructure_retries` 预算内，
+为同一个逻辑 Attempt 或 Bootstrap Run 启动新的恢复 Session。失败 Trace 和 Runtime State
+Checkpoint 保持可审计，配置的 Attempt 数不变；只有外层恢复预算也耗尽时才向上抛出失败，
+未完整交接不会被消耗为普通负优化结果。有界 Report-only continuation 适用于 Core/KDA 的优化与
+Framework Baseline，不用于 Problem Generalization 或 Evolver；Runtime 的外层分类也能保护直接成功
+退出但未产生已接受 Report 的旧 Agent Commit。
 
 ### 终态交接与 Journal
 
@@ -438,7 +441,7 @@ ABBA 有自己的候选 Trial，但仍是探索性比较，不能替代提名要
 
 Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份按 Lineage 版本索引的冻结文件
 视图。`input/agents/agent-vN/` 是完整 Agent Bundle，直接包含实现、配置及
-`prompts/`、`memory/`、`knowledge/`、`skills/`、`tools/`、`hooks/`。可写 `candidate/` 使用相同布局。
+`prompts/`、`insights/`、`skills/`、`tools/`。可写 `candidate/` 使用相同布局。
 已有 Checkpoint 替换打包默认内容，无需再分别编辑 Source/State。
 
 `input/evidence/agent-vN/` 保存优化效果汇总和补充的 `resources/trajectories/<N>/` 快照。
@@ -447,8 +450,9 @@ Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份�
 贡献路径属于原始生成 Session，不保证当前资源仍与原始内容一致。
 
 从历史派生时先复制完整历史 Bundle 到 Candidate，再修改；报告所选 `kernel_agent_revision_id`，
-`changed_paths` 为相对于 Bundle 根目录的排序文件 Diff，包括六目录改动。Runtime 独立校验 Diff，
-封存完整 Bundle 和六目录 Checkpoint。Optimizer 的权限与继承规则不变：实现只读，六目录可写。
+`changed_paths` 为相对于 Bundle 根目录的排序文件 Diff，包括四目录改动。Runtime 独立校验 Diff，
+封存完整 Bundle 和四目录 Checkpoint。Optimizer 的权限与继承规则不变：实现、Prompts、Insights、
+Skills 只读，仅 Tools 可写。
 
 `contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许
 `input/agents/agent-vN/` 和 `input/evidence/agent-vN/resources/`，包括 Parent 其他 Trajectory 的资源。

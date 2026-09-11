@@ -89,7 +89,13 @@ To prepare the default Optimizer for a new Campaign:
 
 The importer archives the exact local KDA commit and records its provenance. It performs no fetch and enforces Bundle limits. Importing a historical or custom revision with submodules still requires their exact commits locally and an explicit URL allowlist; missing objects, uninitialized or unapproved submodules, links, and further nested submodules are rejected. Defaults allow 16,384 files and 128 MiB for the Optimizer Bundle. Existing Campaign pins and sealed Skill snapshots are unchanged. Example preparation replaces the template commit with local KDA HEAD; changes must be committed before they can become a new Base Revision.
 
-The six adaptive directories and their inheritance rules are unchanged. Runtime seeds them at the workspace root and removes duplicate defaults from the read-only implementation copy. The default `skills/` contains only its index; Agents may still add reusable procedures. Claude/Codex discover added Skills through their next session's private installation; other backends can read `skills/*/SKILL.md`. Skill documentation is read on demand, not appended to the initial prompt. Removing bundled Skills does not remove Gateway Profile, Check, or Disassemble. Agent engineering documentation is not adaptive State.
+Runtime seeds the four inherited directories at the workspace root and removes duplicate defaults
+from the read-only implementation copy. Optimizer and Bootstrap may modify only `tools/`; Evolver
+curates Prompts, Insights, and Skills between revisions. The default `skills/` contains only its
+index. Claude/Codex discover Evolver-published Skills through their next session's private
+installation; other backends can read `skills/*/SKILL.md`. Skill documentation is read on demand,
+not appended to the initial prompt. Removing bundled Skills does not remove Gateway Profile, Check,
+or Disassemble. Agent engineering documentation is not inherited State.
 
 With development dependencies installed, verify from the Runtime root without a model or GPU call:
 
@@ -268,7 +274,7 @@ atrex-kernel-agent-runtime seed-ablation-arm \
 ```
 
 Runtime creates a separate one-Lineage Campaign from the source Bootstrap baseline with no
-Challenger. Use `ephemeral_agent_state=true` to reset adaptive Prompts/Memory/Knowledge/Skills/Tools/Hooks every Attempt; use false
+Challenger. Use `ephemeral_agent_state=true` to reset adaptive Prompts/Insights/Skills/Tools every Attempt; use false
 to retain serial State and isolate only the absence of Evolver changes.
 
 For an evolving control, set `challenger_count=1`, `challenger_start_epoch=2`,
@@ -289,9 +295,10 @@ atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$L
 Use them only for trusted debugging. Optimizer Runtime Tools and the Evolver's read-only filesystem
 input contract are documented in [Interface Reference](interfaces.md).
 
-Every Optimizer Workspace contains writable `prompts/` (phase instructions), `memory/` (search experiences), `knowledge/` (knowledge),
-`skills/` (procedures), `tools/` (scripts), and `hooks/` (Claude/Codex hook scripts and configuration
-snippets), each with a `README.md` index. With no inherited State,
+Every Optimizer Workspace contains read-only `prompts/` (phase instructions), `insights/` (scoped,
+evidence-derived decision guidance), and `skills/` (procedures), plus writable `tools/` (scripts).
+Evolver owns versioned changes to the first three; Optimizer updates `tools/README.md` when it
+changes Tools. With no inherited State,
 Runtime initializes these from the corresponding directories in the pinned Core Revision, not the
 host's current checkout. Existing checkpoints take precedence. Older Core revisions without seed
 directories receive empty defaults. At Session exit,
@@ -302,43 +309,39 @@ after the last Attempt of the latest completed Epoch winner's best-Kernel Trajec
 Epoch's Active Branch starts from the exact same State; every new
 Agent Revision seals its Source
 and State together as one logical Bundle, and each new trajectory receives an independent State
-copy. Adding, editing, renaming, or deleting content requires updating its directory's README with
-paths, purposes, and applicability; Tools also document invocation, inputs, outputs, dependencies,
-examples, and limitations. All six follow the same inheritance/reset policy. Older snapshots gain
+copy. Evolver updates each changed directory's README with paths, purposes, and applicability;
+Optimizer does the same for Tools, including invocation, inputs, outputs, dependencies, examples,
+and limitations. All four follow the same inheritance/reset policy. Older snapshots gain
 missing directories/indexes only when copied, without changing their stored Artifacts. These notes
 are Agent-authored; the Runtime Journal and Gateway results remain authoritative.
 
-Legacy State `docs/` is materialized as `knowledge/`; sealed historical Artifacts remain unchanged.
-If both names exist in one State, merge the contents explicitly into `knowledge/` before continuing.
-Engineering documentation under the Core repository's `docs/` is unrelated and is not renamed.
+Insights must not restate Kernel versions, latency, changes, outcomes, or other facts available from
+Runtime Journal. Each entry states its evidence identities, scope, decision effect, contrary evidence,
+and revisit condition. Static reference material belongs in a Skill's references. When copied, older
+State `memory/`, `knowledge/`, and legacy `docs/` content is merged into `insights/`; conflicts are
+rejected and sealed historical Artifacts remain unchanged. Engineering documentation under the Core
+repository's `docs/` is unrelated and is never imported as State.
 
-Skills and Hooks follow the same initialization, checkpoint, inheritance and reset policy. Before
-each Claude/Codex Optimizer or Bootstrap session (including a fresh retry), Runtime installs the
-current resources into that session's private Home, under `sessions/`. It does not run installation
-scripts, modify host/global configuration, or install a Candidate's hooks in the Evolver session.
+Skills follow the same initialization, checkpoint, inheritance and reset policy. Before each
+Claude Optimizer or Bootstrap session (including a fresh retry), Runtime installs the current
+Skills into that session's private Home under `sessions/`. It does not run installation scripts or
+modify host/global configuration. Provider-native hooks are removed from the Session-local config:
+terminal handoff is guarded by Runtime's accepted-report protocol instead.
 
 - Skills use `skills/<name>/SKILL.md` with YAML `name` and `description`, plus supporting files.
   They are copied to `$CLAUDE_CONFIG_DIR/skills/` or `$HOME/.agents/skills/`. Loose notes are ignored.
-- Hooks use `hooks/claude.json` or `hooks/codex.json`: a native `{"hooks": {...}}` command-hook object.
-  Claude receives this hook map in its private `settings.json` (other copied settings are retained);
-  Codex receives private `hooks.json`. An absent file produces an empty hook map. Commands may use
-  `python3 "$WORKSPACE_ROOT/hooks/script.py"`; this variable resolves inside the sandbox as well.
-- Codex's noninteractive Core launch passes `--dangerously-bypass-hook-trust` only when attempt
-  hooks are installed. Use a CLI supporting that flag. In an interactive dev-shell, `/hooks` can
-  review/trust hooks in its private Home, or pass that flag for the single Codex invocation.
-- Only original `skills/` and `hooks/` files participate in inheritance; generated installations
-  are discarded with the Session. Update originals and their README indexes for later launches.
-  Qoder/Pi retain the resources but do not auto-install them. Native managed policies and explicit
-  deployment session settings still apply; registration alone is not proof that a hook executed.
+- Generated Skill installations are discarded with the Session. Evolver updates originals and their
+  README indexes for later launches. Qoder/Pi read them from the workspace without auto-installation.
 
-See the native [Codex hook contract](https://learn.chatgpt.com/docs/hooks),
-[Codex Skill layout](https://learn.chatgpt.com/docs/build-skills), and
-[Claude hook contract](https://code.claude.com/docs/en/hooks) for event and Skill semantics.
+After a Provider turn exits, Core asks Runtime whether `attempt-report` has been accepted. A missing
+report triggers a bounded report-only continuation. If those continuations are exhausted, Runtime
+marks the physical Worker Session incomplete and retries the same logical Attempt under the normal
+infrastructure-recovery budget; it does not consume the Attempt as an ordinary negative result.
 
 Before launching a Core phase or its dev-shell, Runtime updates the workspace copy of
 `agent/optimizer/atrex-agent.json` with the effective backend, model, reasoning effort, and session
 settings. `prompt_root: "workspace"` makes existing `prompts/...` paths resolve at workspace root.
-All six initial State directories are omitted from the Source workspace copy, so Optimizer sees
+All four initial State directories are omitted from the Source workspace copy, so Optimizer sees
 only one writable version. Prompt edits affect subsequent fresh Sessions. The config file stays
 read-only to the Agent; this deployment
 projection does not create a new Source Revision or modify its sealed Artifact.

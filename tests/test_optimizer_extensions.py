@@ -1,4 +1,4 @@
-"""Skill/Hook installation is per Session, never a host-global registration."""
+"""Skill installation is per Session and Provider hooks stay disabled."""
 
 from __future__ import annotations
 
@@ -27,24 +27,6 @@ def _workspace(root: Path, phase: str = "optimization_attempt") -> dict[str, str
     )
     (skill / "analyze.py").write_text("print('analysis')\n")
     (root / "skills/README.md").write_text("index")
-    (root / "hooks").mkdir()
-    hook = {
-        "hooks": {
-            "SessionStart": [
-                {
-                    "hooks": [
-                        {
-                            "type": "command",
-                            "command": 'python3 "$WORKSPACE_ROOT/hooks/start.py"',
-                        }
-                    ]
-                }
-            ]
-        }
-    }
-    for backend in ("claude", "codex"):
-        (root / f"hooks/{backend}.json").write_text(json.dumps(hook))
-    (root / "hooks/start.py").write_text("raise RuntimeError('installer must not execute hooks')\n")
     return {"HOME": str(home), "ATREX_CORE_PHASE": phase, "ATREX_AGENT_BACKEND": "claude"}
 
 
@@ -62,7 +44,6 @@ def test_installation_is_private_snapshot_and_keeps_state_separate(
         home = Path(env["HOME"])
         assert result["CLAUDE_CONFIG_DIR"] == str(home / ".claude")
         assert result["CODEX_HOME"] == str(home / ".codex")
-        assert result["ATREX_OPTIMIZER_CODEX_HOOKS"] == "1"
         assert result["ATREX_WORKSPACE"] == str(root)
         for target in (".claude/skills", ".agents/skills"):
             installed = home / target / "profile-analysis/SKILL.md"
@@ -73,7 +54,7 @@ def test_installation_is_private_snapshot_and_keeps_state_separate(
             assert (
                 installed.stat().st_ino != (root / "skills/profile-analysis/SKILL.md").stat().st_ino
             )
-        assert json.loads((home / ".codex/hooks.json").read_text())["hooks"]["SessionStart"]
+        assert not (home / ".codex/hooks.json").exists()
     installed = Path(env_a["HOME"]) / ".claude/skills/profile-analysis/SKILL.md"
     installed.write_text("local install edit")
     assert (second / "skills/profile-analysis/SKILL.md").read_text().startswith("---")
@@ -90,29 +71,22 @@ def test_repeat_install_refreshes_private_skills(tmp_path: Path) -> None:
     assert not (Path(env["HOME"]) / ".claude/skills/profile-analysis").exists()
 
 
-def test_removing_hooks_does_not_leave_stale_registrations(tmp_path: Path) -> None:
-    env = _workspace(tmp_path)
-    install_optimizer_extensions(tmp_path, env, ("claude", "codex"))
-    for backend in ("claude", "codex"):
-        (tmp_path / f"hooks/{backend}.json").unlink()
-    result = install_optimizer_extensions(tmp_path, env, ("claude", "codex"))
-    assert result["ATREX_OPTIMIZER_CODEX_HOOKS"] == "0"
-    home = Path(env["HOME"])
-    assert json.loads((home / ".claude/settings.json").read_text())["hooks"] == {}
-    assert json.loads((home / ".codex/hooks.json").read_text())["hooks"] == {}
-
-
-def test_hook_install_replaces_hardlink_without_editing_external_file(tmp_path: Path) -> None:
+def test_hook_sanitization_replaces_hardlink_without_editing_external_file(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "attempt"
     env = _workspace(root)
     host = tmp_path / "host-settings.json"
-    host.write_text('{"env":{"KEEP":"value"}}')
+    host.write_text('{"env":{"KEEP":"value"},"hooks":{"Stop":[]}}')
     home = Path(env["HOME"])
     (home / ".claude").mkdir()
     os.link(host, home / ".claude/settings.json")
     install_optimizer_extensions(root, env, ("claude",))
-    assert host.read_text() == '{"env":{"KEEP":"value"}}'
+    assert host.read_text() == '{"env":{"KEEP":"value"},"hooks":{"Stop":[]}}'
     assert (home / ".claude/settings.json").stat().st_ino != host.stat().st_ino
+    assert json.loads((home / ".claude/settings.json").read_text()) == {
+        "env": {"KEEP": "value"}
+    }
 
 
 @pytest.mark.parametrize("alias", ["symlink", "hardlink"])
@@ -145,39 +119,14 @@ def test_credential_projection_rejects_shared_config_before_copying(
 
 
 @pytest.mark.parametrize("phase", ["evolution", "problem_generalization", ""])
-def test_other_phases_do_not_install_candidate_hooks(tmp_path: Path, phase: str) -> None:
+def test_other_phases_do_not_install_optimizer_skills(tmp_path: Path, phase: str) -> None:
     env = _workspace(tmp_path, phase)
     assert install_optimizer_extensions(tmp_path, env, ("claude", "codex")) == {}
     assert not (Path(env["HOME"]) / ".claude").exists()
 
 
-def test_only_selected_backend_config_is_parsed(tmp_path: Path) -> None:
-    env = _workspace(tmp_path)
-    (tmp_path / "hooks/codex.json").write_text("invalid")
-    result = install_optimizer_extensions(tmp_path, env, ("claude",))
-    assert "CODEX_HOME" not in result
-    with pytest.raises(ValueError, match=r"Invalid Optimizer extension config.*codex\.json"):
-        install_optimizer_extensions(tmp_path, env, ("codex",))
-
-
 @pytest.mark.parametrize(
-    "value",
-    [
-        [],
-        {"hooks": []},
-        {"hooks": {"Stop": {}}},
-        {"hooks": {"Stop": [{"hooks": [{"type": "command"}]}]}},
-    ],
-)
-def test_bad_hook_config_has_actionable_error(tmp_path: Path, value: object) -> None:
-    env = _workspace(tmp_path)
-    (tmp_path / "hooks/claude.json").write_text(json.dumps(value))
-    with pytest.raises(ValueError, match=r"claude\.json"):
-        install_optimizer_extensions(tmp_path, env, ("claude",))
-
-
-@pytest.mark.parametrize(
-    "relative", ["skills/profile-analysis", "hooks/claude.json", "sessions/core/agent-home/.claude"]
+    "relative", ["skills/profile-analysis", "sessions/core/agent-home/.claude"]
 )
 def test_symlinks_cannot_redirect_installation(tmp_path: Path, relative: str) -> None:
     root = tmp_path / "attempt"
@@ -250,11 +199,7 @@ def test_container_installs_after_credential_copy_and_maps_script_environment(
     argv = launcher.wrap(("/bin/true",), workspace=root, environment=env)
     copied = json.loads((Path(env["HOME"]) / ".claude/settings.json").read_text())
     assert copied["env"] == {"API_BASE": "https://example.invalid"}
-    assert "SessionStart" in copied["hooks"] and "Stop" not in copied["hooks"]
+    assert "hooks" not in copied
     assert (host / ".claude/settings.json").read_text() == settings
     assert "CLAUDE_CONFIG_DIR=/home/agent/workspace/sessions/core/agent-home/.claude" in argv
     assert "ATREX_WORKSPACE=/home/agent/workspace" in argv
-    assert (
-        copied["hooks"]["SessionStart"][0]["hooks"][0]["command"]
-        == 'python3 "$WORKSPACE_ROOT/hooks/start.py"'
-    )

@@ -85,7 +85,11 @@ Manager 管理。
 
 导入器封存准确的本地 KDA Commit 并记录来源，不执行 Fetch，同时检查 Bundle 限额。导入含子模块的历史或自定义版本时，仍须在本地准备准确 Commit 并显式配置 URL 白名单；缺失对象、未初始化或未获准的 Submodule、链接和更深层子模块都会被拒绝。默认 Optimizer Bundle 限额为 16,384 文件、128 MiB。已有 Campaign 固定版本和封存的 Skill 快照不变。Example 准备脚本会用本地 KDA HEAD 替换模板 Commit；修改必须先提交，才能成为新的 Base Revision。
 
-六个可继承目录及其规则不变：Runtime 在工作区根目录播种状态后，移除只读实现副本中的重复默认内容。默认 `skills/` 只有索引，Agent 仍可新增可复用方法。Claude/Codex 在下次 Session 的私有安装中发现新增 Skills；其他 Backend 可以直接读取 `skills/*/SKILL.md`。Skill 文档按需读取，不拼入初始 Prompt。移除内置 Skill 不会移除 Gateway 的 Profile、Check 或 Disassemble 接口。工程文档不属于可继承状态。
+Runtime 在工作区根目录播种四个可继承目录后，移除只读实现副本中的重复默认内容。Optimizer 和
+Bootstrap 只能修改 `tools/`；Evolver 在 Revision 之间维护 Prompts、Insights 与 Skills。默认
+`skills/` 只有索引。Claude/Codex 在下次 Session 的私有安装中发现 Evolver 发布的 Skills；其他
+Backend 可以直接读取 `skills/*/SKILL.md`。Skill 文档按需读取，不拼入初始 Prompt。移除内置 Skill
+不会移除 Gateway 的 Profile、Check 或 Disassemble 接口。工程文档不属于可继承状态。
 
 安装开发依赖后，在 Runtime 根目录验证，无需模型或 GPU 调用：
 
@@ -254,7 +258,7 @@ atrex-kernel-agent-runtime seed-ablation-arm \
 ```
 
 Runtime 从源 Bootstrap Baseline 创建一个独立的单 Lineage Campaign，不创建 Challenger。使用
-`ephemeral_agent_state=true` 可在每次 Attempt 后清空自适应 Prompts/Memory/Knowledge/Skills/Tools/Hooks；设为 false 则保留串行
+`ephemeral_agent_state=true` 可在每次 Attempt 后清空自适应 Prompts/Insights/Skills/Tools；设为 false 则保留串行
 State，只隔离 Evolver 修改缺失的影响。
 
 进化对照臂设置 `challenger_count=1`、`challenger_start_epoch=2`、`first_epoch_same_agent=true`、
@@ -274,8 +278,9 @@ atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$L
 只用于可信调试。Optimizer Runtime Tools 与 Evolver 的只读文件系统输入 Contract 见
 [接口说明](interfaces.zh.md)。
 
-每个 Optimizer Workspace 都包含可写的 `prompts/`（阶段指令）、`memory/`（搜索记忆）、`knowledge/`（知识）、`skills/`（技能流程）
-、`tools/`（工具脚本）和 `hooks/`（Claude/Codex Hook 脚本与配置片段），各自包含 `README.md` 索引。没有继承 State 时，从固定 Core Revision 的对应目录初始化，
+每个 Optimizer Workspace 都包含只读的 `prompts/`（阶段指令）、`insights/`（带适用范围、由 Evidence
+推导的决策指导）和 `skills/`（技能流程），以及可写的 `tools/`（工具脚本）。前三者由 Evolver
+进行版本化修改；Optimizer 修改 Tool 时同步更新 `tools/README.md`。没有继承 State 时，从固定 Core Revision 的对应目录初始化，
 不读取宿主机当前源码目录；已有 Checkpoint 优先。缺少种子目录的旧 Core Revision 使用空目录默认值。Session 退出时，Runtime 会封存其
 准确终态，并把 Artifact Digest 记录到生产它的 Attempt。后续串行 Attempt 从该 State 继续，本地缓存
 丢失后也能准确重建。Framework Bootstrap 初始化 `agent-v0` State。Evolver 从最近完成 Epoch 获胜
@@ -283,34 +288,33 @@ atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$L
 Epoch 的 Active Branch 从完全相同的 State 开始。每个新 Agent
 Revision 都把 Source 与 State 一起封存为
 一个逻辑 Bundle，每条新 Trajectory 获得独立 State 副本。
-新增、修改、重命名或删除内容时，模型必须同步更新对应 README 中的路径、用途和适用范围；工具还需
-说明调用方法、输入输出、依赖、示例和限制。六目录遵循相同的继承与清空策略。旧快照仅在复制时补齐
+Evolver 修改前三类内容时必须同步更新对应 README 中的路径、用途和适用范围；Optimizer 修改工具时还需
+说明调用方法、输入输出、依赖、示例和限制。四目录遵循相同的继承与清空策略。旧快照仅在复制时补齐
 缺失目录和索引，不改写已存储 Artifact。这些笔记由 Agent 编写，不替代权威 Journal 和 Gateway 结果。
 
-旧 State 的 `docs/` 在工作副本中迁移为 `knowledge/`，不改写封存历史。若两者同时存在，需先明确合并到
-`knowledge/` 再继续，避免覆盖。Core 仓库的工程文档目录 `docs/` 不属于 Runtime State，保持原名。
+Insights 不得复述 Runtime Journal 已有的 Kernel 版本、延迟、改动和结果；每条需说明 Evidence ID、
+适用范围、对后续决策的影响、反例和重访条件。静态参考资料放在 Skill references 中。复制旧 State
+时，Runtime 把 `memory/`、`knowledge/` 和更早的 `docs/` 内容合并进 `insights/`；同名冲突会被拒绝，
+封存历史不会被改写。Core 仓库的工程文档目录 `docs/` 不属于 Runtime State，也不会被导入。
 
-Skills/Hooks 遵循相同的初始化、封存、继承与重置规则。每次 Claude/Codex Optimizer 或 Bootstrap
-Session 启动前（包括新的重试），Runtime 将当前资源安装到 `sessions/` 下该 Session 独享的 CLI Home。
-安装不执行脚本、不修改宿主机/全局配置，也不在 Evolver Session 中激活 Candidate 的 Hooks。
+Skills 遵循相同的初始化、封存、继承与重置规则。每次 Claude Optimizer 或 Bootstrap
+Session 启动前（包括新的重试），Runtime 将当前 Skills 安装到 `sessions/` 下该 Session 独享的 CLI Home。
+安装不执行脚本、不修改宿主机/全局配置。Runtime 会从 Session 私有配置中移除 Provider 原生 Hooks；
+终态交接由 Runtime 的 Report 接收协议保护。
 
 - Skill 使用 `skills/<name>/SKILL.md`，带 YAML `name`、`description` 和所需辅助文件；复制到私有
   `$CLAUDE_CONFIG_DIR/skills/` 或 `$HOME/.agents/skills/`。散装笔记不注册为 Skill。
-- Hook 使用 `hooks/claude.json` 或 `hooks/codex.json`，内容为原生 `{"hooks": {...}}` 命令 Hook 对象。
-  Claude 写入私有 `settings.json` 的 hooks 字段，保留其他复制来的设置；Codex 写入私有 `hooks.json`。
-  缺少文件时安装空 Hook Map。脚本命令可写 `python3 "$WORKSPACE_ROOT/hooks/script.py"`，沙箱内路径自动映射。
-- Core 非交互启动 Codex 时，仅在已安装本次 Hook 时增加 `--dangerously-bypass-hook-trust`，不写持久信任。
-  CLI 必须支持此参数。交互 dev-shell 可用 `/hooks` 在私有 Home 中确认信任，或为单次 Codex 命令加该参数。
-- 只有原始 `skills/`、`hooks/` 参与继承，安装产物随 Session 丢弃。需要保留的变更应修改原文件及 README。
-  Qoder/Pi 只保留资源，不自动安装。CLI 的管理策略和部署指定的 Session Settings 仍然生效；注册成功不代表 Hook 已执行。
+- 安装产物随 Session 丢弃。需要保留的变更由 Evolver 修改原文件及 README。Qoder/Pi 从工作区读取
+  Skills，不自动安装。
 
-事件与 Skill 语义见 [Codex Hooks](https://learn.chatgpt.com/docs/hooks)、
-[Codex Skills](https://learn.chatgpt.com/docs/build-skills) 和 [Claude Hooks](https://code.claude.com/docs/en/hooks)。
+Provider Turn 退出后，Core 会向 Runtime 查询 `attempt-report` 是否已被接收；缺失时进入有界的
+Report-only continuation。continuation 用尽后，Runtime 把物理 Worker Session 标为未完整交接，并在
+正常基础设施恢复预算内重试同一个逻辑 Attempt，而不是把它消耗为普通负结果。
 
 启动 Core 阶段或其 dev-shell 前，Runtime 将实际 Backend、Model、推理强度和 Session Settings
 写入工作区副本 `agent/optimizer/atrex-agent.json`，并设置 `prompt_root: "workspace"`，使 `prompts/...`
-相对于工作区根目录解析。Source 工作副本省略六个初始 State 目录，只保留根级可写版本；Prompt 修改
-由后续新 Session 加载。配置文件对 Agent 仍为只读，
+相对于工作区根目录解析。Source 工作副本省略四个初始 State 目录，只保留根级继承版本；其中 Prompt、
+Insights 与 Skills 对 Optimizer 只读，Evolver 的修改由后续新 Session 加载。配置文件对 Agent 仍为只读，
 不会创建新的 Source Revision，也不修改原始封存 Artifact。
 
 ## 12. 恢复与维护

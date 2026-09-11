@@ -272,24 +272,26 @@ def test_optimizer_prompt_layers_are_concise_non_redundant_and_consistent() -> N
     assert "no local knowledge or reference checkout is available" not in prompt
 
 
-def test_execution_prompts_require_depositing_reusable_knowledge() -> None:
-    """The retained ablation arm measures nothing unless the Agent is told to accumulate."""
+def test_execution_prompts_separate_optimizer_journal_from_evolver_curation() -> None:
     prompts = _rendered_prompts()
 
     attempt = " ".join(prompts["optimization_attempt"].split())
-    assert "Deposit what the next Attempt would otherwise re-derive" in attempt
-    assert "This is a required step, not an option" in attempt
-    assert "an empty deposit must be a decision, not an omission" in attempt
+    assert "Preserve reusable execution helpers" in attempt
+    assert "read-only Agent Revision content" in attempt
+    assert "Runtime Direction and Experiment Journal" in attempt
+    assert "Evolver reviews completed Session evidence" in attempt
 
     bootstrap = " ".join(prompts["framework_baseline"].split())
-    assert "before finishing" in bootstrap
+    assert "read-only Agent Revision content" in bootstrap
+    assert "Evolver reviews completed Session evidence" in bootstrap
     for prompt in (attempt, bootstrap):
-        assert "reusable search" in prompt
-        assert "reusable Claude/Codex hook" in prompt
-        for directory in ("prompts", "memory", "knowledge", "skills", "tools", "hooks"):
+        assert "Journal" in prompt
+        assert "attempt-report" in prompt
+        for directory in ("prompts", "insights", "skills", "tools"):
             assert f"`{directory}/`" in prompt
+        assert "`hooks/`" not in prompt
         assert "README.md" in prompt
-        assert "rename" in prompt and "remove" in prompt
+    assert "rename" in attempt and "remove" in attempt
     # Permission-only wording is what made the deposit optional in practice.
     for prompt in (attempt, bootstrap):
         assert "may be saved under" not in prompt

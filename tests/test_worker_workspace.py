@@ -39,6 +39,8 @@ from atrex_runtime.ports import RunAttemptRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
 from atrex_runtime.workers.manifest import AttemptInputManifestV9
 from atrex_runtime.workers.workspace import (
+    OPTIMIZER_READ_ONLY_DIRECTORIES,
+    OPTIMIZER_WRITABLE_DIRECTORIES,
     REUSABLE_AGENT_DIRECTORIES,
     LocalAttemptWorkspaceAssembler,
     copy_reusable_agent_state,
@@ -358,7 +360,6 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     assert store.verify(recorded_input_state).kind is ArtifactKind.KERNEL_AGENT_RUNTIME_STATE
     assert (first.root / "skills/bootstrap.md").read_text() == "baseline lesson\n"
     assert (first.root / "tools/README.md").read_text() == "# Bootstrap tools\n"
-    (first.root / "skills/vector-load.md").write_text("reuse aligned loads\n")
     (first.root / "tools/inspect_kernel.py").write_text("print('inspect')\n")
     (first.root / "tools/README.md").write_text(
         "# Reusable tools\n\n## inspect_kernel.py\n\nRun with Python.\n"
@@ -370,7 +371,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     assert first.root != second.root
     assert first.session_id != second.session_id
     assert first.session_root != second.session_root
-    assert (second.root / "skills/vector-load.md").read_text() == "reuse aligned loads\n"
+    assert (second.root / "skills/bootstrap.md").read_text() == "baseline lesson\n"
     assert (second.root / "tools/inspect_kernel.py").read_text() == "print('inspect')\n"
     assert "inspect_kernel.py" in (second.root / "tools/README.md").read_text()
     child_id = new_kernel_agent_revision_id()
@@ -389,7 +390,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
         revision=child_revision,
         trajectory_ordinal=1,
     )
-    assert (child_state / "skills/vector-load.md").read_text() == "reuse aligned loads\n"
+    assert (child_state / "skills/bootstrap.md").read_text() == "baseline lesson\n"
     assert (child_state / "tools/inspect_kernel.py").is_file()
     assert manifest.attempt_id == request.attempt_id
     assert manifest.context.operator == "vector_add"
@@ -623,7 +624,7 @@ def _single_trajectory_workspace(
     return assembler, request, str(lineage_id), deposit_agent_id
 
 
-@pytest.mark.parametrize("directory", REUSABLE_AGENT_DIRECTORIES)
+@pytest.mark.parametrize("directory", OPTIMIZER_WRITABLE_DIRECTORIES)
 def test_event_only_attempt_never_inherits_agent_state(tmp_path: Path, directory: str) -> None:
     """The ablation arm must start identical every time, including after a physical retry."""
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
@@ -669,7 +670,7 @@ def test_initial_replica_has_independent_persistent_state_and_retry(tmp_path: Pa
             first_epoch_same_agent=True,
         )
         active = assembler.prepare(request)
-        (active.root / "skills/active.md").write_text("active only")
+        (active.root / "tools/active.py").write_text("# active only")
         active.persist_reusable_directories()
         registry.record_attempt_runtime_state(request.attempt_id, active.seal_runtime_state(store))
         attempt = registry.get_attempt(request.attempt_id)
@@ -697,19 +698,19 @@ def test_initial_replica_has_independent_persistent_state_and_retry(tmp_path: Pa
         )
         replica = assembler.prepare(replica_request)
         assert replica.persistent_state_root != active.persistent_state_root
-        assert not (replica.root / "skills/active.md").exists()
-        (replica.root / "skills/replica.md").write_text("replica only")
+        assert not (replica.root / "tools/active.py").exists()
+        (replica.root / "tools/replica.py").write_text("# replica only")
         replica.persist_reusable_directories()
         registry.record_attempt_runtime_state(replica_id, replica.seal_runtime_state(store))
         active_retry = assembler.prepare(request)
         replica_retry = assembler.prepare(replica_request)
-        assert (active_retry.root / "skills/active.md").is_file()
-        assert not (active_retry.root / "skills/replica.md").exists()
-        assert (replica_retry.root / "skills/replica.md").is_file()
-        assert not (replica_retry.root / "skills/active.md").exists()
+        assert (active_retry.root / "tools/active.py").is_file()
+        assert not (active_retry.root / "tools/replica.py").exists()
+        assert (replica_retry.root / "tools/replica.py").is_file()
+        assert not (replica_retry.root / "tools/active.py").exists()
 
 
-@pytest.mark.parametrize("directory", REUSABLE_AGENT_DIRECTORIES)
+@pytest.mark.parametrize("directory", OPTIMIZER_WRITABLE_DIRECTORIES)
 def test_a_normal_retry_does_inherit_agent_state(tmp_path: Path, directory: str) -> None:
     """Pin the inheritance the flag suppresses, so the ablation assertions cannot go vacuous."""
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
@@ -984,7 +985,7 @@ def test_missing_trajectory_scope_restores_previous_attempt_runtime_state(
     registry.close()
 
 
-def test_five_directory_state_survives_serial_attempts_and_isolates_trajectories(
+def test_adaptive_state_survives_serial_attempts_and_isolates_trajectories(
     tmp_path: Path,
 ) -> None:
     with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
@@ -998,8 +999,11 @@ def test_five_directory_state_survives_serial_attempts_and_isolates_trajectories
         first = assembler.prepare(request)
         for name in REUSABLE_AGENT_DIRECTORIES:
             assert (first.root / name / "README.md").is_file()
-            (first.root / name / "reusable.txt").write_text(f"{name} content")
-            (first.root / name / "README.md").write_text(f"{name} current index")
+        for name in OPTIMIZER_READ_ONLY_DIRECTORIES:
+            assert first.root.joinpath(name).stat().st_mode & 0o222 == 0
+            assert first.root.joinpath(name, "README.md").stat().st_mode & 0o222 == 0
+        (first.root / "tools/reusable.txt").write_text("tools content")
+        (first.root / "tools/README.md").write_text("tools current index")
         first.persist_reusable_directories()
         checkpoint = first.seal_runtime_state(artifacts)
         registry.record_attempt_runtime_state(request.attempt_id, checkpoint)
@@ -1037,9 +1041,10 @@ def test_five_directory_state_survives_serial_attempts_and_isolates_trajectories
         second = assembler.prepare(
             replace(request, attempt_id=next_id, attempt_evidence_digest=evidence_digest)
         )
-        for name in REUSABLE_AGENT_DIRECTORIES:
-            assert (second.root / name / "reusable.txt").read_text() == f"{name} content"
-            assert (second.root / name / "README.md").read_text() == f"{name} current index"
+        assert (second.root / "tools/reusable.txt").read_text() == "tools content"
+        assert (second.root / "tools/README.md").read_text() == "tools current index"
+        for name in OPTIMIZER_READ_ONLY_DIRECTORIES:
+            assert second.root.joinpath(name).stat().st_mode & 0o222 == 0
         revision = registry.get_kernel_agent_revision(old.kernel_agent_revision_id)
         sibling, _lock = assembler._persistent_root(
             lineage_id=registry.get_epoch(old.epoch_id).lineage_id,
@@ -1047,13 +1052,11 @@ def test_five_directory_state_survives_serial_attempts_and_isolates_trajectories
             trajectory_ordinal=2,
             previous_runtime_state_digest=checkpoint,
         )
-        for name in REUSABLE_AGENT_DIRECTORIES:
-            (second.root / name / "reusable.txt").unlink()
+        (second.root / "tools/reusable.txt").unlink()
         second.persist_reusable_directories()
-        for name in REUSABLE_AGENT_DIRECTORIES:
-            assert (sibling / name / "reusable.txt").is_file()
-            assert second.persistent_state_root is not None
-            assert not (second.persistent_state_root / name / "reusable.txt").exists()
+        assert (sibling / "tools/reusable.txt").is_file()
+        assert second.persistent_state_root is not None
+        assert not (second.persistent_state_root / "tools/reusable.txt").exists()
 
 
 def test_legacy_state_upgrades_only_the_copy(tmp_path: Path) -> None:
@@ -1093,22 +1096,25 @@ def test_legacy_state_loads_prompts_from_pinned_core_only(tmp_path: Path) -> Non
     assert store.verify(state_digest).digest == state_digest
 
 
-def test_state_without_hooks_gains_only_an_empty_indexed_copy(tmp_path: Path) -> None:
+def test_legacy_hooks_are_accepted_but_dropped_from_writable_state(tmp_path: Path) -> None:
     legacy = tmp_path / "legacy"
-    ensure_reusable_directories(legacy)
-    (legacy / "hooks/README.md").unlink()
-    (legacy / "hooks").rmdir()
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        (legacy / name).mkdir(parents=True)
+        (legacy / name / "README.md").write_text(name)
+    (legacy / "hooks").mkdir()
+    (legacy / "hooks/README.md").write_text("legacy stop hook")
+    (legacy / "hooks/stop_guard.py").write_text("raise SystemExit(0)\n")
     store = LocalArtifactStore(tmp_path / "artifacts")
     digest = store.put_directory(legacy, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE)
     source = store.verify(digest).payload_path
     validate_reusable_agent_state_seed(source)
-    with pytest.raises(ValueError, match=r"hooks/ must retain README\.md"):
+    with pytest.raises(ValueError, match="may contain only"):
         validate_reusable_agent_state_seed(source, require_complete=True)
     copied = tmp_path / "copied"
     copy_reusable_agent_state(source, copied)
     validate_reusable_agent_state_seed(copied, require_complete=True)
-    assert [entry.name for entry in (copied / "hooks").iterdir()] == ["README.md"]
-    assert not (source / "hooks").exists()
+    assert not (copied / "hooks").exists()
+    assert (source / "hooks/stop_guard.py").is_file()
     assert store.verify(digest).digest == digest
 
 
@@ -1123,14 +1129,15 @@ def test_attempt_core_seed_and_retry_precedence(tmp_path: Path, reset: bool) -> 
         for name in REUSABLE_AGENT_DIRECTORIES:
             assert (first.root / name / "seed.md").read_text() == f"Initial {name}"
             assert not (first.root / "agent/optimizer" / name).exists()
-            (first.root / name / "seed.md").unlink()
-            (first.root / name / "README.md").write_text("Pruned seed")
+        (first.root / "tools/seed.md").unlink()
+        (first.root / "tools/README.md").write_text("Pruned seed")
         first.persist_reusable_directories()
         registry.record_attempt_runtime_state(request.attempt_id, first.seal_runtime_state(store))
         retry = assembler.prepare(request)
         for name in REUSABLE_AGENT_DIRECTORIES:
-            assert (retry.root / name / "seed.md").exists() is reset
-            expected = f"Initial {name} index" if reset else "Pruned seed"
+            expected_seed = reset or name != "tools"
+            assert (retry.root / name / "seed.md").exists() is expected_seed
+            expected = f"Initial {name} index" if expected_seed else "Pruned seed"
             assert (retry.root / name / "README.md").read_text() == expected
 
 
@@ -1154,12 +1161,34 @@ def test_core_initial_state_copies_resources_not_engineering_docs(tmp_path: Path
         (root / name / "nested/seed.md").write_text("Learned state")
         assert (source / name / "nested/seed.md").read_text() == f"Initial {name}"
     assert not (root / "docs").exists()
-    assert not (root / "knowledge/design.md").exists()
+    assert not (root / "insights/design.md").exists()
     assert artifacts.verify(digest).digest == digest
 
 
-def test_legacy_docs_migrates_without_rewriting_artifact(tmp_path: Path) -> None:
+def test_old_core_split_cognition_seeds_insights_not_engineering_docs(tmp_path: Path) -> None:
+    core = tmp_path / "core"
+    (core / "memory").mkdir(parents=True)
+    (core / "memory/lesson.md").write_text("Search lesson")
+    (core / "knowledge").mkdir()
+    (core / "knowledge/contract.md").write_text("DSL contract")
+    (core / "docs").mkdir()
+    (core / "docs/design.md").write_text("Engineering only")
+
+    root = tmp_path / "workspace"
+    initialize_reusable_agent_state(root, core)
+
+    assert (root / "insights/lesson.md").read_text() == "Search lesson"
+    assert (root / "insights/contract.md").read_text() == "DSL contract"
+    assert not (root / "insights/design.md").exists()
+    assert not (root / "memory").exists()
+    assert not (root / "knowledge").exists()
+
+
+def test_legacy_split_cognition_migrates_without_rewriting_artifact(tmp_path: Path) -> None:
     legacy = tmp_path / "legacy"
+    (legacy / "memory").mkdir(parents=True)
+    (legacy / "memory/README.md").write_text("Search lesson: lesson.md")
+    (legacy / "memory/lesson.md").write_text("Measured search constraint")
     (legacy / "docs").mkdir(parents=True)
     (legacy / "docs/README.md").write_text("API knowledge: api.md")
     (legacy / "docs/api.md").write_text("Measured API constraints")
@@ -1175,32 +1204,40 @@ def test_legacy_docs_migrates_without_rewriting_artifact(tmp_path: Path) -> None
     copy_reusable_agent_state(source, copied)
     validate_reusable_agent_state_seed(copied, require_complete=True)
     assert not (copied / "docs").exists()
-    assert (copied / "knowledge/README.md").read_text() == "API knowledge: api.md"
-    assert (copied / "knowledge/api.md").read_text() == "Measured API constraints"
-    assert (copied / "knowledge/api.md").stat().st_mode & 0o200
+    assert "Migrated `memory/README.md`" in (copied / "insights/README.md").read_text()
+    assert "Migrated `docs/README.md`" in (copied / "insights/README.md").read_text()
+    assert (copied / "insights/lesson.md").read_text() == "Measured search constraint"
+    assert (copied / "insights/api.md").read_text() == "Measured API constraints"
+    assert (copied / "insights/api.md").stat().st_mode & 0o200
     assert (source / "docs/api.md").is_file()
-    assert not (source / "knowledge").exists()
+    assert (source / "memory/lesson.md").is_file()
     assert store.verify(digest).digest == digest
 
 
-def test_existing_persistent_docs_is_renamed(tmp_path: Path) -> None:
+def test_existing_persistent_split_cognition_is_merged(tmp_path: Path) -> None:
     state = tmp_path / "state"
-    (state / "docs").mkdir(parents=True)
-    (state / "docs/note.md").write_text("Keep across retries")
+    (state / "memory").mkdir(parents=True)
+    (state / "memory/lesson.md").write_text("Keep search lesson across retries")
+    (state / "knowledge").mkdir()
+    (state / "knowledge/reference.md").write_text("Keep reference across retries")
     ensure_reusable_directories(state)
     ensure_reusable_directories(state)
-    assert not (state / "docs").exists()
-    assert (state / "knowledge/note.md").read_text() == "Keep across retries"
+    assert not (state / "memory").exists()
+    assert not (state / "knowledge").exists()
+    assert (state / "insights/lesson.md").read_text() == "Keep search lesson across retries"
+    assert (state / "insights/reference.md").read_text() == "Keep reference across retries"
     validate_reusable_agent_state_seed(state, require_complete=True)
 
 
-def test_knowledge_migration_rejects_conflicting_names(tmp_path: Path) -> None:
-    ensure_reusable_directories(tmp_path)
-    (tmp_path / "docs").mkdir()
-    (tmp_path / "docs/note.md").write_text("Do not discard")
-    with pytest.raises(ValueError, match="both docs/ and knowledge/"):
+def test_insight_migration_rejects_conflicting_names(tmp_path: Path) -> None:
+    (tmp_path / "memory").mkdir()
+    (tmp_path / "memory/note.md").write_text("Search interpretation")
+    (tmp_path / "knowledge").mkdir()
+    (tmp_path / "knowledge/note.md").write_text("Different reference interpretation")
+    with pytest.raises(ValueError, match=r"conflicting file note\.md"):
         ensure_reusable_directories(tmp_path)
-    assert (tmp_path / "docs/note.md").read_text() == "Do not discard"
+    assert (tmp_path / "memory/note.md").read_text() == "Search interpretation"
+    assert (tmp_path / "knowledge/note.md").read_text() == "Different reference interpretation"
 
 
 @pytest.mark.parametrize("name", REUSABLE_AGENT_DIRECTORIES)
@@ -1221,9 +1258,9 @@ def test_reusable_readme_rejects_symlink_or_directory(tmp_path: Path, name: str)
         ensure_reusable_directories(state)
 
 
-@pytest.mark.parametrize("legacy_knowledge", (False, True))
+@pytest.mark.parametrize("legacy_memory", (False, True))
 def test_evolver_snapshot_preserves_all_state_indexes_read_only(
-    tmp_path: Path, legacy_knowledge: bool
+    tmp_path: Path, legacy_memory: bool
 ) -> None:
     workspaces = tmp_path / "attempts"
     source = workspaces / ".reusable/lineage/agent/trajectory-00000001"
@@ -1231,8 +1268,8 @@ def test_evolver_snapshot_preserves_all_state_indexes_read_only(
     for name in REUSABLE_AGENT_DIRECTORIES:
         (source / name / "entry.txt").write_text(name)
         (source / name / "README.md").write_text(f"{name}: entry.txt")
-    if legacy_knowledge:
-        (source / "knowledge").rename(source / "docs")
+    if legacy_memory:
+        (source / "insights").rename(source / "memory")
     target = tmp_path / "evolver-view"
     assert materialize_reusable_agent_state_snapshot(
         workspaces,
@@ -1242,7 +1279,12 @@ def test_evolver_snapshot_preserves_all_state_indexes_read_only(
     for name in REUSABLE_AGENT_DIRECTORIES:
         copied = target / "agent/trajectories/trajectory-00000001" / name
         assert (copied / "entry.txt").read_text() == name
-        assert (copied / "README.md").read_text() == f"{name}: entry.txt"
+        index = (copied / "README.md").read_text()
+        if legacy_memory and name == "insights":
+            assert "Migrated `memory/README.md`" in index
+            assert "insights: entry.txt" in index
+        else:
+            assert index == f"{name}: entry.txt"
         assert not (copied.stat().st_mode & 0o222)
-    assert (source / "docs").exists() is legacy_knowledge
-    assert not (target / "agent/trajectories/trajectory-00000001/docs").exists()
+    assert (source / "memory").exists() is legacy_memory
+    assert not (target / "agent/trajectories/trajectory-00000001/memory").exists()

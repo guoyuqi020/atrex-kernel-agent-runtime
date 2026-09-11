@@ -7,7 +7,11 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Protocol
 
-from ..domain.errors import InfrastructureError, InvalidTransitionError
+from ..domain.errors import (
+    IncompleteTerminalReportError,
+    InfrastructureError,
+    InvalidTransitionError,
+)
 from ..domain.ids import ArtifactDigest, AttemptId, new_worker_session_id
 from ..domain.models import (
     AttemptReportStatus,
@@ -248,15 +252,26 @@ class SessionOptimizerRunner(OptimizerRunner):
         else:
             exit_kind = "exited"
             reason = result.finish_reason or "no-turn-end"
+            incomplete_terminal_report = result.attempt_report is None and reason in {
+                "completed",
+                "report-completion-exhausted",
+            }
+            recorded_reason = (
+                "terminal-report-invalid"
+                if incomplete_terminal_report and result.attempt_report_error is not None
+                else "terminal-report-missing"
+                if incomplete_terminal_report and reason == "completed"
+                else reason
+            )
             if self._worker_sessions is not None:
                 self._worker_sessions.finish_worker_session(
                     worker_session_id,
                     status=(
                         WorkerSessionStatus.COMPLETED
-                        if reason == "completed"
+                        if reason == "completed" and not incomplete_terminal_report
                         else WorkerSessionStatus.FAILED
                     ),
-                    finish_reason=reason,
+                    finish_reason=recorded_reason,
                     trace_digest=result.session_trace_digest,
                     token_budget=result.token_budget,
                     token_usage=result.token_usage,
@@ -266,7 +281,8 @@ class SessionOptimizerRunner(OptimizerRunner):
                 request.attempt_id,
                 {
                     **event_base,
-                    "finish_reason": reason,
+                    "finish_reason": recorded_reason,
+                    "process_finish_reason": reason,
                     "token_budget": result.token_budget,
                     "usage_unit": result.token_usage.usage_unit,
                     "usage_budget": result.token_budget,
@@ -301,7 +317,7 @@ class SessionOptimizerRunner(OptimizerRunner):
             self._session_traces.record_attempt_session_trace(
                 request.attempt_id,
                 result.session_trace_digest,
-                reason,
+                recorded_reason,
                 result.token_budget,
                 result.token_usage,
             )
@@ -312,6 +328,16 @@ class SessionOptimizerRunner(OptimizerRunner):
                 if result.attempt_report_error is not None
                 else "missing terminal Attempt report"
             )
+            if reason in {"completed", "report-completion-exhausted"}:
+                self._events.record_runtime_event(
+                    "attempt.report_incomplete",
+                    request.attempt_id,
+                    {**event_base, "reason": detail},
+                )
+                raise IncompleteTerminalReportError(
+                    "Optimizer exited before Runtime accepted its terminal Attempt report: "
+                    f"{detail}"
+                )
             self._events.record_runtime_event(
                 "attempt.report_rejected",
                 request.attempt_id,

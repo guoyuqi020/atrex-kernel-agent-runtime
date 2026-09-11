@@ -24,6 +24,7 @@
   Roofline、NCU 与选择。
 - [协议](protocols.zh.md)：持久身份、Artifact、Evidence、Session 与可见性规则。
 - [架构决策](decisions/README.zh.md)：仍约束当前实现的设计理由。
+- [Runtime 待办事项](todo/README.zh.md)：已有运行证据支持、但尚未进入当前协议的后续工作。
 - [测试与生产验收](testing-and-acceptance.zh.md)：仓库检查与部署证据。
 - [发布检查清单](release-checklist.zh.md)和[变更日志](../CHANGELOG.zh.md)。
 

@@ -1720,7 +1720,7 @@ class EvolverBundleRunner(EvolverRunner):
         return self._artifacts.put_directory(path, ArtifactKind.SESSION_LOG)
 
     def _seal_runtime_state(self, path: Path) -> ArtifactDigest:
-        # Storage remains split; only the six adaptive directories are checkpoints.
+        # Storage remains split; only the four adaptive directories are checkpoints.
         with tempfile.TemporaryDirectory(prefix="atrex-evolved-state-") as temporary:
             state = Path(temporary) / "state"
             for name in REUSABLE_AGENT_DIRECTORIES:

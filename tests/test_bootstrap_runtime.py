@@ -356,6 +356,50 @@ class ProcessExitThenCommittingSessions(GatewayCommittingSessions):
         return super().run(prepared, config)
 
 
+class ReportCompletionThenCommittingSessions(GatewayCommittingSessions):
+    def run(
+        self,
+        prepared: LineageBootstrapManifestV2,
+        config: LineageBootstrapSessionConfig,
+    ) -> LineageBootstrapSessionResult:
+        if not self.calls:
+            self.calls += 1
+            return LineageBootstrapSessionResult(
+                finish_reason="report-completion-exhausted",
+                final_response="provider stopped without publishing a report",
+                token_usage=TokenUsage(20, 3, 10, 0),
+                token_budget=100,
+                report=None,
+                report_digest=None,
+                report_error=None,
+                session_trace_digest=digest("incomplete-report-trace"),
+                kernel_artifact_digest=None,
+            )
+        return super().run(prepared, config)
+
+
+class InvalidReportThenCommittingSessions(GatewayCommittingSessions):
+    def run(
+        self,
+        prepared: LineageBootstrapManifestV2,
+        config: LineageBootstrapSessionConfig,
+    ) -> LineageBootstrapSessionResult:
+        if not self.calls:
+            self.calls += 1
+            return LineageBootstrapSessionResult(
+                finish_reason="completed",
+                final_response="provider wrote an invalid report",
+                token_usage=TokenUsage(20, 3, 10, 0),
+                token_budget=100,
+                report=None,
+                report_digest=None,
+                report_error="candidate_kernel is missing",
+                session_trace_digest=digest("invalid-report-trace"),
+                kernel_artifact_digest=None,
+            )
+        return super().run(prepared, config)
+
+
 class PersistingGatewayCommittingSessions:
     def __init__(
         self,
@@ -667,6 +711,75 @@ def test_core_lineage_baseline_automatically_retries_process_exit(
     assert [
         event.kind for event in registry.list_runtime_events(after_sequence=0, limit=10)
     ] == [
+        "bootstrap.lineage_baseline_failed",
+        "bootstrap.lineage_baseline_retrying",
+        "bootstrap.lineage_baseline_completed",
+    ]
+    control.close()
+    registry.close()
+
+
+@pytest.mark.parametrize(
+    ("sessions_type", "first_finish_reason"),
+    [
+        (ReportCompletionThenCommittingSessions, "report-completion-exhausted"),
+        (InvalidReportThenCommittingSessions, "terminal-report-invalid"),
+    ],
+)
+def test_core_lineage_baseline_retries_incomplete_terminal_handoff(
+    tmp_path: Path,
+    sessions_type: type[GatewayCommittingSessions],
+    first_finish_reason: str,
+) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"h" * 32,
+        clock=lambda: NOW,
+    )
+    sessions = sessions_type(control)
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    generator = CoreLineageBaselineGenerator(
+        CapturingWorkspaces(tmp_path),  # type: ignore[arg-type]
+        sessions,  # type: ignore[arg-type]
+        control,
+        registry,
+        FakeBootstrapFinalizer(control),
+        artifacts,
+        gateway_endpoint="http://runtime.example.test",
+        operations=frozenset({GatewayOperation.EVALUATE}),
+        max_calls=4,
+        capability_lifetime=timedelta(hours=1),
+        environment=(),
+        wiki_enabled=False,
+        max_infrastructure_retries=1,
+    )
+    values = {
+        "bootstrap_attempt_id": parse_attempt_id("attempt_" + "2" * 32),
+        "campaign_id": parse_campaign_id("campaign_" + "3" * 32),
+        "lineage_id": parse_lineage_id("lineage_" + "4" * 32),
+        "kernel_agent_revision_id": parse_kernel_agent_revision_id("agentrev_" + "5" * 32),
+        "optimizer_digest": digest("optimizer-incomplete-report"),
+        "input_kernel_digest": digest("seed-incomplete-report"),
+        "evaluation_contract_digest": digest("contract-incomplete-report"),
+        "agent_problem_digest": digest("problem-incomplete-report"),
+        "evidence_digest": digest("evidence-incomplete-report"),
+        "dsl": Dsl.CUDA,
+        "operator": "vector_add",
+        "hardware_target": "sm_120",
+    }
+
+    generated = generator.generate(**values)  # type: ignore[arg-type]
+
+    assert generated.kernel_digest == digest("generated-kernel")
+    assert sessions.calls == 2
+    runs = control.list_bootstrap_runs(values["bootstrap_attempt_id"])  # type: ignore[arg-type]
+    assert [run.finish_reason for run in runs] == [
+        first_finish_reason,
+        "completed",
+    ]
+    assert [event.kind for event in registry.list_runtime_events(after_sequence=0, limit=10)] == [
         "bootstrap.lineage_baseline_failed",
         "bootstrap.lineage_baseline_retrying",
         "bootstrap.lineage_baseline_completed",
