@@ -23,7 +23,10 @@ from .abba import (
     build_abba_source_request,
 )
 from .agate import AgateClient, _nested_infrastructure_error
-from .batched_evaluate import EVALUATE_MAX_PARALLEL_BATCHES, sorted_shape_ids
+from .batched_evaluate import (
+    EVALUATE_MAX_PARALLEL_BATCHES,
+    sorted_shape_ids,
+)
 from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContext, AgateEvaluationContextResolver
 from .control_models import GatewayOperation

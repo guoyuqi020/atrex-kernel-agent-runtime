@@ -39,6 +39,7 @@ class _History:
     before: GatewayProxyResponseV2
     after: GatewayProxyResponseV2
     historical_attempt: Attempt
+    initial_adapter_requests: int
     sequence: int = 0
 
     async def journal(self, operation: str, **fields: object) -> GatewayProxyResponseV2:
@@ -133,7 +134,21 @@ async def history(tmp_path: Path, request: pytest.FixtureRequest) -> AsyncIterat
             adapter.result = GatewayAdapterResult(
                 status="completed",
                 result={"correct": True},
-                worker_result={"correct": True, "mode": "full", "input_scope": "contract"},
+                worker_result={
+                    "correct": True,
+                    "mode": "full",
+                    "input_scope": "contract",
+                    "baseline": {
+                        "correct": True,
+                        "latency_us_geomean": 12.0,
+                        "latency_us_by_shape": {"0": 12.0},
+                    },
+                    "candidate": {
+                        "correct": True,
+                        "latency_us_geomean": 10.0,
+                        "latency_us_by_shape": {"0": 10.0},
+                    },
+                },
             )
         before = await service.execute(capability.token, json.dumps(payload).encode())
         payload["idempotency_key"] = "evaluate-historical-after"
@@ -154,7 +169,16 @@ async def history(tmp_path: Path, request: pytest.FixtureRequest) -> AsyncIterat
             ),
         )
         yield _History(
-            registry, control, current, current_capability, service, adapter, before, after, first
+            registry,
+            control,
+            current,
+            current_capability,
+            service,
+            adapter,
+            before,
+            after,
+            first,
+            len(adapter.requests),
         )
     finally:
         control.close()
@@ -187,7 +211,7 @@ async def test_adoption_records_current_reasoning_without_new_measurements(
     assert history.control.list_evaluations(history.historical_attempt.id) == before_evaluations
     assert history.control.list_kernel_trials((history.current.id,)) == ()
     assert history.control.list_evaluations(history.current.id) == ()
-    assert len(history.adapter.requests) == 2
+    assert len(history.adapter.requests) == history.initial_adapter_requests
     assert history.control.record_kernel_trial_annotations(history.current.id, recorded) == ()
     await history.journal(
         "direction_update",
@@ -224,7 +248,7 @@ async def test_ineligible_adoption_is_rejected_before_journal_append(history: _H
 
     assert history.control.list_experiments(history.current.id) == ()
     assert history.control.list_kernel_trials((history.current.id,)) == ()
-    assert len(history.adapter.requests) == 2
+    assert len(history.adapter.requests) == history.initial_adapter_requests
 
 
 @pytest.mark.anyio
@@ -241,7 +265,7 @@ async def test_adoption_rejects_another_running_attempt(history: _History) -> No
         await history.journal("experiment_record", request=history.experiment(direction_id))
 
     assert history.control.list_experiments(history.current.id) == ()
-    assert len(history.adapter.requests) == 2
+    assert len(history.adapter.requests) == history.initial_adapter_requests
 
 
 @pytest.mark.anyio

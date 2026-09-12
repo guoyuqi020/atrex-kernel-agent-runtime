@@ -53,6 +53,43 @@ from atrex_runtime.registry.sqlite import SqliteRegistry
 NOW_DATETIME = datetime(2026, 8, 14, tzinfo=UTC)
 
 
+def test_exact_evaluate_task_reservation_is_durable_and_single_owner(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    attempt = _insert_attempt(registry)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"r" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    control.issue(
+        attempt.id,
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.EVALUATE}),
+            3,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
+    task = digest("exact-evaluate-task")
+    result = digest("agent-visible-result")
+
+    assert control.reserve_evaluate_task(attempt.id, "evaluate-1", task) == (True, None)
+    assert control.reserve_evaluate_task(attempt.id, "evaluate-1", task) == (False, None)
+    assert control.reserve_evaluate_task(attempt.id, "evaluate-2", task) == (False, None)
+    control.complete_evaluate_task(attempt.id, "evaluate-1", task, result)
+    control.close()
+
+    reopened = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"r" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    assert reopened.reserve_evaluate_task(attempt.id, "evaluate-3", task) == (False, result)
+    reopened.close()
+    registry.close()
+
+
 def test_direction_start_is_atomically_single_active(tmp_path: Path) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     attempt = _insert_attempt(registry)
@@ -759,7 +796,7 @@ def test_gateway_schema_v4_migrates_operations_and_legacy_bootstrap_run(
             "SELECT value FROM metadata WHERE key = 'schema_version'"
         ).fetchone()
         columns = {row[1] for row in connection.execute("PRAGMA table_info(gateway_operations)")}
-        assert version == (12,)
+        assert version == (13,)
         assert "kernel_artifact_digest" in columns
         assert "candidate_artifact_digest" not in columns
         assert "gateway_result_digest" in columns

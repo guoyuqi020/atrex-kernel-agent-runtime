@@ -23,10 +23,12 @@ from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..asgi import AsgiReceive, AsgiSend, bearer_token, json_response, read_request_body
 from ..domain.errors import (
     DirectionConcurrencyError,
+    DuplicateGatewayTaskError,
     InfrastructureError,
     InvalidTransitionError,
 )
-from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest
+from ..domain.ids import ArtifactDigest, AttemptId, LineageId, parse_artifact_digest
+from ..domain.models import Dsl
 from ..ports import RuntimeEventRecorder
 from ..serialization import canonical_json_bytes, canonical_json_digest
 from ..workers.attempt_report import AttemptReportV12
@@ -36,6 +38,7 @@ from .control_models import (
     GatewayCapability,
     GatewayEvaluationSource,
     GatewayKernelTrialRecord,
+    GatewayMeasurementPoint,
     GatewayMeasurementRecord,
     GatewayOperation,
     gateway_kernel_trial_id,
@@ -69,6 +72,13 @@ from .protocol import (
     ProfileRequestV2,
     ResultArtifactReadRequestV2,
     gateway_agent_request_schema,
+)
+from .stability import (
+    MEASUREMENT_REPETITIONS,
+    latency_by_shape,
+    measurement_aggregation_summary,
+    median_latency_by_shape,
+    replace_shape_latencies,
 )
 
 _REQUEST_ADAPTER: TypeAdapter[GatewayProxyRequestV2] = TypeAdapter(GatewayProxyRequestV2)
@@ -275,9 +285,7 @@ def _canonical_profile_result(
             normalized["dominant_kernel"] = name
     if weighted_sol_duration > 0:
         normalized["weighted_sol_pct"] = weighted_sol / weighted_sol_duration
-        normalized["dominant_bound"] = (
-            "compute" if weighted_compute > weighted_memory else "memory"
-        )
+        normalized["dominant_bound"] = "compute" if weighted_compute > weighted_memory else "memory"
     normalized["kernels"] = cast(JsonValue, kernels)
     return normalized
 
@@ -292,17 +300,30 @@ def _canonical_agent_result(
         public = {
             key: payload[key]
             for key in (
-                "mode", "input_scope", "schedule", "measurements", "baseline",
-                "candidate", "correct", "speedup", "improvement_pct", "aggregation",
-                "shape_batch_count", "error", "failures",
+                "mode",
+                "input_scope",
+                "schedule",
+                "measurements",
+                "baseline",
+                "candidate",
+                "correct",
+                "speedup",
+                "improvement_pct",
+                "aggregation",
+                "shape_batch_count",
+                "error",
+                "failures",
+                "measurement_aggregation",
             )
             if key in payload
         }
-        public.update({
-            "comparison": request.parameters["comparison"],
-            "baseline_kernel_artifact_digest": request.baseline_candidate_digest,
-            "kernel_artifact_digest": request.candidate_digest,
-        })
+        public.update(
+            {
+                "comparison": request.parameters["comparison"],
+                "baseline_kernel_artifact_digest": request.baseline_candidate_digest,
+                "kernel_artifact_digest": request.candidate_digest,
+            }
+        )
         return cast(JsonValue, public)
     if request.operation is GatewayOperation.EVALUATE and isinstance(payload, dict):
         parameters = EvaluateParametersV2.model_validate(request.parameters)
@@ -335,7 +356,7 @@ def _canonical_agent_result(
             latency = None
         normalized: dict[str, JsonValue] = {
             key: payload[key]
-            for key in ("failures", "error", "production_gate")
+            for key in ("failures", "error", "production_gate", "measurement_aggregation")
             if key in payload
         }
         normalized.update(
@@ -346,9 +367,7 @@ def _canonical_agent_result(
                 "latency_us_arith_mean": (
                     statistics.fmean(shape_latencies) if shape_latencies else None
                 ),
-                "latency_us_by_shape": (
-                    by_shape if isinstance(by_shape, dict) else {}
-                ),
+                "latency_us_by_shape": (by_shape if isinstance(by_shape, dict) else {}),
             }
         )
         if not parameters.is_contract_evaluation:
@@ -395,6 +414,9 @@ class GatewayAdapterRequest:
     baseline_candidate_digest: ArtifactDigest | None = None
     baseline_candidate_path: Path | None = None
     recovery_generation: int = 0
+    # A positive value identifies one of the Proxy-owned executions that form a
+    # single logical measurement. The adapter must not add its own repeat layer.
+    measurement_repetition: int | None = None
 
     @property
     def is_comparison(self) -> bool:
@@ -422,6 +444,257 @@ class GatewayAdapter(Protocol):
     async def execute(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
         """Return a structured result; repeated idempotency keys must be safe."""
         ...
+
+
+def _measurement_views(
+    request: GatewayAdapterRequest,
+    result: GatewayAdapterResult,
+) -> dict[str, dict[str, float]]:
+    """Extract one logical result's per-Kernel, per-Shape latency views."""
+    payload = result.worker_result if result.worker_result is not None else result.result
+    if not isinstance(payload, Mapping):
+        return {}
+    if request.is_comparison:
+        views: dict[str, dict[str, float]] = {}
+        for side in ("baseline", "candidate"):
+            values = latency_by_shape(payload.get(side))
+            if values:
+                views[side] = values
+        return views
+    values = latency_by_shape(payload)
+    return {"candidate": values} if values else {}
+
+
+def _shape_measurement_points(value: object) -> tuple[GatewayMeasurementPoint, ...]:
+    """Convert one stabilized logical Kernel result into persistent Shape rows."""
+    return tuple(
+        GatewayMeasurementPoint(
+            kind=GatewayOperation.EVALUATE,
+            profile_level=None,
+            shape_id=shape_id,
+            kernel_name=None,
+            metrics={"correct": True, "latency_us": latency},
+        )
+        for shape_id, latency in latency_by_shape(value).items()
+    )
+
+
+def _measurement_scope_digest(request: GatewayAdapterRequest) -> ArtifactDigest:
+    """Identify one comparable measurement method and input domain."""
+    parameters = EvaluateParametersV2.model_validate(request.parameters)
+    return canonical_json_digest(
+        {
+            "method": "abba" if request.is_comparison else "evaluate",
+            "parameters": parameters.model_dump(mode="json", exclude_none=True),
+        }
+    )
+
+
+def _evaluate_task_digest(
+    request: GatewayAdapterRequest,
+    lineage_id: LineageId,
+    evaluation_identity: tuple[str, str, Dsl, ArtifactDigest],
+) -> ArtifactDigest:
+    """Identify one exact Agent full-Evaluate or ABBA task across Attempts."""
+    if request.candidate_digest is None:
+        raise InfrastructureError("full Evaluate task requires a sealed candidate")
+    return canonical_json_digest(
+        {
+            "lineage_id": str(lineage_id),
+            "evaluation_identity": [
+                str(value) for value in evaluation_identity
+            ],
+            "operation": "evaluate",
+            "kernel_artifact_digest": str(request.candidate_digest),
+            "baseline_kernel_artifact_digest": (
+                None
+                if request.baseline_candidate_digest is None
+                else str(request.baseline_candidate_digest)
+            ),
+            "measurement_scope_digest": str(_measurement_scope_digest(request)),
+        }
+    )
+
+
+def _with_measurement_scope(
+    points: tuple[GatewayMeasurementPoint, ...],
+    scope_digest: ArtifactDigest,
+) -> tuple[GatewayMeasurementPoint, ...]:
+    """Mark per-Shape Evaluate rows with their exact measurement contract."""
+    return tuple(
+        replace(
+            point,
+            metrics={**point.metrics, "measurement_scope_digest": str(scope_digest)},
+        )
+        if point.kind is GatewayOperation.EVALUATE and point.shape_id is not None
+        else point
+        for point in points
+    )
+
+
+def _measurement_repetition_request(
+    request: GatewayAdapterRequest,
+    *,
+    repetition: int,
+) -> GatewayAdapterRequest:
+    """Create one semantically identical request with a private Agate identity."""
+    identity = hashlib.sha256(
+        json.dumps(
+            {
+                "attempt": request.attempt_id,
+                "generation": request.recovery_generation,
+                "operation_key": request.idempotency_key,
+                "measurement_repetition": repetition,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    return replace(
+        request,
+        idempotency_key=f"measurement-repetition:{identity}",
+        measurement_repetition=repetition,
+    )
+
+
+def _annotate_private_measurements(
+    result: GatewayAdapterResult,
+    *,
+    summary: Mapping[str, JsonValue],
+    repetitions: tuple[GatewayAdapterResult, ...],
+) -> JsonValue:
+    """Retain all three raw responses while exposing only their aggregate."""
+    selected = result.result
+    evidence: dict[str, JsonValue] = {
+        "summary": cast(JsonValue, dict(summary)),
+        "repetitions": [item.result for item in repetitions],
+    }
+    if isinstance(selected, dict):
+        return cast(JsonValue, {**selected, "runtime_measurement_aggregation": evidence})
+    return cast(
+        JsonValue,
+        {"selected_result": selected, "runtime_measurement_aggregation": evidence},
+    )
+
+
+def _patch_unaggregated_result(
+    result: GatewayAdapterResult,
+    summary: Mapping[str, JsonValue],
+    *,
+    repetitions: tuple[GatewayAdapterResult, ...],
+) -> GatewayAdapterResult:
+    """Preserve three verdicts when correctness leaves no latency to aggregate."""
+    payload = result.worker_result if result.worker_result is not None else result.result
+    projected: dict[str, JsonValue] = (
+        cast(dict[str, JsonValue], dict(payload))
+        if isinstance(payload, Mapping)
+        else {"result": payload}
+    )
+    projected["measurement_aggregation"] = cast(JsonValue, dict(summary))
+    return replace(
+        result,
+        result=_annotate_private_measurements(
+            result,
+            summary=summary,
+            repetitions=repetitions,
+        ),
+        worker_result=cast(JsonValue, projected),
+    )
+
+
+def _patch_evaluate_result(
+    result: GatewayAdapterResult,
+    replacements: Mapping[str, float],
+    summary: Mapping[str, JsonValue],
+    *,
+    repetitions: tuple[GatewayAdapterResult, ...],
+) -> GatewayAdapterResult:
+    payload = result.worker_result if result.worker_result is not None else result.result
+    if not isinstance(payload, Mapping):
+        return result
+    projected = replace_shape_latencies(payload, replacements)
+    projected["measurement_aggregation"] = cast(JsonValue, dict(summary))
+    latency = projected.get("latency_us_geomean", projected.get("latency_us"))
+    evaluation = result.evaluation
+    if (
+        evaluation is not None
+        and evaluation.correct
+        and isinstance(latency, (int, float))
+        and not isinstance(latency, bool)
+        and math.isfinite(float(latency))
+        and float(latency) > 0
+    ):
+        evaluation = EvaluationV2(correct=True, latency_us=float(latency))
+    return replace(
+        result,
+        result=_annotate_private_measurements(
+            result,
+            summary=summary,
+            repetitions=repetitions,
+        ),
+        evaluation=evaluation,
+        worker_result=cast(JsonValue, projected),
+    )
+
+
+def _patch_comparison_result(
+    result: GatewayAdapterResult,
+    replacements: Mapping[str, Mapping[str, float]],
+    summary: Mapping[str, JsonValue],
+    *,
+    request: GatewayAdapterRequest,
+    repetitions: tuple[GatewayAdapterResult, ...],
+) -> GatewayAdapterResult:
+    payload = result.worker_result if result.worker_result is not None else result.result
+    if not isinstance(payload, Mapping):
+        return result
+    projected = dict(payload)
+    for side in ("baseline", "candidate"):
+        value = projected.get(side)
+        if isinstance(value, Mapping):
+            projected[side] = replace_shape_latencies(
+                cast(Mapping[str, JsonValue], value), replacements.get(side, {})
+            )
+    baseline = projected.get("baseline")
+    candidate = projected.get("candidate")
+    baseline_latency = baseline.get("latency_us_geomean") if isinstance(baseline, Mapping) else None
+    candidate_latency = (
+        candidate.get("latency_us_geomean") if isinstance(candidate, Mapping) else None
+    )
+    if (
+        isinstance(baseline_latency, (int, float))
+        and not isinstance(baseline_latency, bool)
+        and baseline_latency > 0
+        and isinstance(candidate_latency, (int, float))
+        and not isinstance(candidate_latency, bool)
+        and candidate_latency > 0
+    ):
+        speedup = float(baseline_latency) / float(candidate_latency)
+        projected["speedup"] = speedup
+        projected["improvement_pct"] = (speedup - 1.0) * 100.0
+    repetition_views = [_measurement_views(request, item) for item in repetitions]
+    projected["measurements"] = cast(
+        JsonValue,
+        [
+            {
+                "repetition": ordinal,
+                "baseline": view.get("baseline", {}),
+                "candidate": view.get("candidate", {}),
+            }
+            for ordinal, view in enumerate(repetition_views, start=1)
+        ],
+    )
+    projected["measurement_aggregation"] = cast(JsonValue, dict(summary))
+    return replace(
+        result,
+        result=_annotate_private_measurements(
+            result,
+            summary=summary,
+            repetitions=repetitions,
+        ),
+        worker_result=cast(JsonValue, projected),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -467,6 +740,81 @@ class GatewayProxyService:
         self._max_attempt_report_bytes = max_attempt_report_bytes
         self._clock = clock
         self._journals = RuntimeJournalService(control, artifacts)
+
+    async def _execute_repeated_measurement(
+        self,
+        request: GatewayAdapterRequest,
+    ) -> GatewayAdapterResult:
+        """Execute one full Evaluate task three times and aggregate per-Shape medians."""
+        if request.operation is not GatewayOperation.EVALUATE:
+            return await self._adapter.execute(request)
+        parameters = EvaluateParametersV2.model_validate(request.parameters)
+        if parameters.mode != "full":
+            return await self._adapter.execute(request)
+        repetitions = tuple(
+            [
+                await self._adapter.execute(
+                    _measurement_repetition_request(request, repetition=repetition)
+                )
+                for repetition in range(1, MEASUREMENT_REPETITIONS + 1)
+            ]
+        )
+        selected = repetitions[-1]
+        summary = measurement_aggregation_summary()
+        explicit_failures = tuple(
+            item
+            for item in repetitions
+            if (item.evaluation is not None and item.evaluation.correct is False)
+            or (
+                isinstance(item.worker_result, Mapping)
+                and item.worker_result.get("correct") is False
+            )
+            or (
+                isinstance(item.result, Mapping)
+                and item.result.get("correct", item.result.get("all_pass")) is False
+            )
+        )
+        if explicit_failures:
+            return _patch_unaggregated_result(
+                explicit_failures[0],
+                summary,
+                repetitions=repetitions,
+            )
+        if any(item.status != "completed" for item in repetitions):
+            raise InfrastructureError(
+                "one of three repeated Evaluate measurements did not complete"
+            )
+        expected_sides = ("baseline", "candidate") if request.is_comparison else ("candidate",)
+        views = tuple(_measurement_views(request, item) for item in repetitions)
+        if any(set(view) != set(expected_sides) for view in views):
+            raise InfrastructureError(
+                "three repeated Evaluate measurements did not all return per-Shape latency"
+            )
+        shape_ids = tuple(views[0][expected_sides[0]])
+        if not shape_ids or any(
+            set(view[side]) != set(shape_ids) for view in views for side in expected_sides
+        ):
+            raise InfrastructureError(
+                "three repeated Evaluate measurements have inconsistent Shape coverage"
+            )
+        medians = {
+            side: median_latency_by_shape(tuple(view[side] for view in views))
+            for side in expected_sides
+        }
+        if request.is_comparison:
+            return _patch_comparison_result(
+                selected,
+                medians,
+                summary,
+                request=request,
+                repetitions=repetitions,
+            )
+        return _patch_evaluate_result(
+            selected,
+            medians["candidate"],
+            summary,
+            repetitions=repetitions,
+        )
 
     async def execute(
         self,
@@ -556,7 +904,8 @@ class GatewayProxyService:
                 recovery_generation=authorization.recovery_generation,
             )
             if (
-                self._candidate_diff is not None and isinstance(request, EvaluateRequestV2)
+                self._candidate_diff is not None
+                and isinstance(request, EvaluateRequestV2)
                 and request.comparison is None
             ):
                 self._candidate_diff.validate(request.attempt_id, candidate_digest)
@@ -587,9 +936,31 @@ class GatewayProxyService:
             "kernel_artifact_digest": candidate_digest,
         }
         if adapter_request.is_comparison:
-            event_base.update({
-                "baseline_kernel_artifact_digest": baseline_digest,
-            })
+            event_base.update(
+                {
+                    "baseline_kernel_artifact_digest": baseline_digest,
+                }
+            )
+        evaluate_task_digest: ArtifactDigest | None = None
+        evaluate_task_owned = False
+        if isinstance(request, EvaluateRequestV2) and request.mode == "full":
+            lineage_id, _visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(
+                request.attempt_id
+            )
+            evaluate_task_digest = _evaluate_task_digest(
+                adapter_request,
+                lineage_id,
+                self._control.evaluation_identity(request.attempt_id),
+            )
+            evaluate_task_owned, previous_result = self._control.reserve_evaluate_task(
+                request.attempt_id,
+                request.idempotency_key,
+                evaluate_task_digest,
+            )
+            if not evaluate_task_owned:
+                raise DuplicateGatewayTaskError(
+                    None if previous_result is None else str(previous_result)
+                )
         self._events.record_runtime_event(
             "gateway.operation_submitted",
             request.attempt_id,
@@ -616,12 +987,10 @@ class GatewayProxyService:
                     cast(JsonValue, self._journals.execute(request, authorization)),
                 )
             else:
-                result = await self._adapter.execute(adapter_request)
+                result = await self._execute_repeated_measurement(adapter_request)
             agent_payload = result.result if result.worker_result is None else result.worker_result
             if production_violations:
-                agent_payload = _with_production_gate_advisory(
-                    agent_payload, production_violations
-                )
+                agent_payload = _with_production_gate_advisory(agent_payload, production_violations)
             agent_payload = _canonical_agent_result(
                 adapter_request,
                 result,
@@ -686,20 +1055,55 @@ class GatewayProxyService:
             else:
                 evaluation_record = None
             measurement_records: tuple[GatewayMeasurementRecord, ...] = ()
-            if (
-                candidate_digest is not None and request.operation in {"evaluate", "profile"}
-                and not adapter_request.is_comparison
-            ):
+            if candidate_digest is not None and adapter_request.is_comparison:
+                if baseline_digest is None or not isinstance(agent_payload, dict):
+                    raise InfrastructureError("ABBA aggregate result lost a Kernel side")
+                recorded: list[GatewayMeasurementRecord] = []
+                for side, digest in (
+                    ("baseline", baseline_digest),
+                    ("candidate", candidate_digest),
+                ):
+                    points = _with_measurement_scope(
+                        _shape_measurement_points(agent_payload.get(side)),
+                        _measurement_scope_digest(adapter_request),
+                    )
+                    if not points:
+                        continue
+                    recorded.extend(
+                        self._control.record_measurements(
+                            request.attempt_id,
+                            source_operation=GatewayOperation.EVALUATE,
+                            idempotency_key=f"{request.idempotency_key}:abba:{side}",
+                            kernel_artifact_digest=digest,
+                            gateway_result_digest=result_digest,
+                            points=points,
+                            recovery_generation=authorization.recovery_generation,
+                        )
+                    )
+                measurement_records = tuple(recorded)
+            elif candidate_digest is not None and request.operation in {"evaluate", "profile"}:
+                points = normalized_measurement_points(adapter_request, result)
+                if request.operation == "evaluate":
+                    points = _with_measurement_scope(
+                        points,
+                        _measurement_scope_digest(adapter_request),
+                    )
                 measurement_records = self._control.record_measurements(
                     request.attempt_id,
                     source_operation=operation,
                     idempotency_key=request.idempotency_key,
                     kernel_artifact_digest=candidate_digest,
                     gateway_result_digest=result_digest,
-                    points=normalized_measurement_points(adapter_request, result),
+                    points=points,
                     recovery_generation=authorization.recovery_generation,
                 )
         except Exception as error:
+            if evaluate_task_owned and evaluate_task_digest is not None:
+                self._control.abandon_evaluate_task(
+                    request.attempt_id,
+                    request.idempotency_key,
+                    evaluate_task_digest,
+                )
             # The HTTP boundary logs the complete chain, including these correlation notes.
             # Never attach the request body or bearer capability.
             error.add_note(
@@ -710,82 +1114,109 @@ class GatewayProxyService:
                 "gateway.operation_failed",
                 request.attempt_id,
                 {
-                    **event_base, "error_type": type(error).__name__,
+                    **event_base,
+                    "error_type": type(error).__name__,
                     "detail": (
-                        infrastructure_detail(error) if isinstance(error, InfrastructureError)
+                        infrastructure_detail(error)
+                        if isinstance(error, InfrastructureError)
                         else str(error).encode("utf-8")[:8192].decode("utf-8", errors="ignore")
                     ),
                 },
             )
             raise
 
-        self._events.record_runtime_event(
-            "gateway.operation_completed",
-            request.attempt_id,
-            {
-                **event_base,
-                "status": result.status,
-                "gateway_result_digest": result_digest,
-                "job_id": result.job_id,
-                "correct": (
-                    agent_payload.get("correct") if isinstance(agent_payload, dict) else None
-                ),
-                "latency_us": (
-                    agent_payload.get("latency_us_geomean")
-                    if isinstance(agent_payload, dict)
-                    else None
-                ),
-                "profile_status": (
-                    None
-                    if not isinstance(result.profile_result, dict)
-                    else result.profile_result.get("status")
-                ),
-                "normalized_measurement_count": len(measurement_records),
-            },
-        )
-
-        kernel_trial_id = (
-            None
-            if candidate_digest is None
-            else gateway_kernel_trial_id(
-                request.attempt_id,
-                authorization.recovery_generation,
-                candidate_digest,
-            )
-        )
-        result_artifact_digest = self._store_result_artifact(
-            operation=request.operation,
-            status=result.status,
-            kernel_artifact_digest=(None if candidate_digest is None else str(candidate_digest)),
-            kernel_trial_id=kernel_trial_id,
-            job_id=result.job_id,
-            evaluation=(
-                None
-                if isinstance(request, EvaluateRequestV2) and not request.is_contract_evaluation
-                else result.evaluation
-            ),
-            result=agent_payload,
-        )
-        if replayable:
-            self._control.commit_operation_artifact(
-                request.attempt_id,
-                request.idempotency_key,
-                operation,
-                result_artifact_digest,
-            )
-        response = self._load_response(result_artifact_digest)
-        if evaluation_record is not None:
+        operation_artifact_committed = False
+        try:
             self._events.record_runtime_event(
-                "gateway.evaluation_recorded",
+                "gateway.operation_completed",
                 request.attempt_id,
                 {
                     **event_base,
-                    "evaluation_id": evaluation_record.id,
-                    "evaluation_ordinal": evaluation_record.ordinal,
-                    "source": evaluation_record.source.value,
+                    "status": result.status,
+                    "gateway_result_digest": result_digest,
+                    "job_id": result.job_id,
+                    "correct": (
+                        agent_payload.get("correct") if isinstance(agent_payload, dict) else None
+                    ),
+                    "latency_us": (
+                        agent_payload.get("latency_us_geomean")
+                        if isinstance(agent_payload, dict)
+                        else None
+                    ),
+                    "profile_status": (
+                        None
+                        if not isinstance(result.profile_result, dict)
+                        else result.profile_result.get("status")
+                    ),
+                    "normalized_measurement_count": len(measurement_records),
                 },
             )
-        return response
+
+            kernel_trial_id = (
+                None
+                if candidate_digest is None
+                else gateway_kernel_trial_id(
+                    request.attempt_id,
+                    authorization.recovery_generation,
+                    candidate_digest,
+                )
+            )
+            result_artifact_digest = self._store_result_artifact(
+                operation=request.operation,
+                status=result.status,
+                kernel_artifact_digest=(
+                    None if candidate_digest is None else str(candidate_digest)
+                ),
+                kernel_trial_id=kernel_trial_id,
+                job_id=result.job_id,
+                evaluation=(
+                    None
+                    if isinstance(request, EvaluateRequestV2)
+                    and not request.is_contract_evaluation
+                    else result.evaluation
+                ),
+                result=agent_payload,
+            )
+            if replayable:
+                self._control.commit_operation_artifact(
+                    request.attempt_id,
+                    request.idempotency_key,
+                    operation,
+                    result_artifact_digest,
+                )
+                operation_artifact_committed = True
+            if evaluate_task_owned and evaluate_task_digest is not None:
+                self._control.complete_evaluate_task(
+                    request.attempt_id,
+                    request.idempotency_key,
+                    evaluate_task_digest,
+                    result_artifact_digest,
+                )
+            response = self._load_response(result_artifact_digest)
+            if evaluation_record is not None:
+                self._events.record_runtime_event(
+                    "gateway.evaluation_recorded",
+                    request.attempt_id,
+                    {
+                        **event_base,
+                        "evaluation_id": evaluation_record.id,
+                        "evaluation_ordinal": evaluation_record.ordinal,
+                        "source": evaluation_record.source.value,
+                    },
+                )
+            return response
+        except Exception:
+            if (
+                evaluate_task_owned
+                and evaluate_task_digest is not None
+                and not operation_artifact_committed
+            ):
+                self._control.abandon_evaluate_task(
+                    request.attempt_id,
+                    request.idempotency_key,
+                    evaluate_task_digest,
+                )
+            raise
 
     def _register_attempt_report(
         self,
@@ -813,7 +1244,7 @@ class GatewayProxyService:
                     f"work/kernel tree, sealed as {candidate_digest}. No Agent evaluate covers it; "
                     "custom inputs or correctness_only checks do not qualify; "
                     "record an adopt Experiment referencing a compatible successful historical "
-                    "full-Evaluate Trial, or run {\"operation\": \"evaluate\"}, then submit again. "
+                    'full-Evaluate Trial, or run {"operation": "evaluate"}, then submit again. '
                     "Agent ABBA does not replace full Evaluate; Runtime authoritative ABBA "
                     "runs only after the terminal report is handed off"
                 )
@@ -1293,7 +1724,8 @@ class GatewayProxyService:
         # the bundle would change this address without changing what was measured.
         selected = candidate_path_for_attempt(self._contexts, attempt_id)
         source_contract = (
-            None if self._contexts is None or selected is None
+            None
+            if self._contexts is None or selected is None
             else self._contexts.resolve(attempt_id).kernel_source
         )
         if selected is not None and source_contract is None:
@@ -1465,7 +1897,8 @@ class GatewayProxyAsgiApp:
             # Includes errors before operation dispatch as well as SDK/driver failures.
             _LOGGER.exception("Gateway request failed: path=%s", path)
             await json_response(
-                send, 503,
+                send,
+                503,
                 {"error": "gateway_unavailable", "detail": infrastructure_detail(error)},
             )
         else:
@@ -1479,6 +1912,33 @@ def _invalid_request_response(
     operation_scope: Literal["gateway", "runtime", "journal"] | None = None,
 ) -> dict[str, JsonValue]:
     """Attach the exact Agent-facing schema for the operation that failed validation."""
+    if isinstance(error, DuplicateGatewayTaskError):
+        duplicate_response: dict[str, JsonValue] = {
+            "error": "duplicate_gateway_task",
+            "detail": str(error),
+        }
+        if error.previous_result_artifact_digest is not None:
+            duplicate_response["previous_result_artifact_digest"] = (
+                error.previous_result_artifact_digest
+            )
+            duplicate_response["recovery"] = cast(
+                JsonValue,
+                [
+                    {
+                        "tool": "result-artifact-read",
+                        "request": {
+                            "result_artifact_digest": (
+                                error.previous_result_artifact_digest
+                            )
+                        },
+                        "instruction": (
+                            "Reuse the completed measurement; do not submit this exact "
+                            "Kernel task again"
+                        ),
+                    }
+                ],
+            )
+        return duplicate_response
     response: dict[str, JsonValue] = {
         "error": "invalid_request",
         "detail": str(error),

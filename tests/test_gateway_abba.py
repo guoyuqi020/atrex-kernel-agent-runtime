@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
 from datetime import timedelta
@@ -16,7 +17,11 @@ from test_attempt_report import _value as _report_value
 from test_gateway_proxy import NOW_DATETIME, _request, _service
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
-from atrex_runtime.domain.errors import InfrastructureError, InvalidTransitionError
+from atrex_runtime.domain.errors import (
+    DuplicateGatewayTaskError,
+    InfrastructureError,
+    InvalidTransitionError,
+)
 from atrex_runtime.domain.ids import ArtifactDigest, AttemptId, new_attempt_id
 from atrex_runtime.domain.models import Attempt
 from atrex_runtime.gateway.control_models import GatewayCapabilityPolicy, GatewayOperation
@@ -34,9 +39,7 @@ CANDIDATE_SOURCE = "def kernel(): pass\n"
 
 
 def _bundle(source: str, *, path: str = "kernel.py") -> dict[str, Any]:
-    return {
-        "files": [{"path": path, "content_base64": base64.b64encode(source.encode()).decode()}]
-    }
+    return {"files": [{"path": path, "content_base64": base64.b64encode(source.encode()).decode()}]}
 
 
 def _abba_value(attempt: Attempt | None = None) -> dict[str, Any]:
@@ -65,8 +68,16 @@ def _result(*, repeats: int = 2, input_scope: str = "contract") -> GatewayAdapte
             "input_scope": input_scope,
             "comparison": {"method": "abba", "repeats": repeats},
             "repeats": 99,  # An obsolete upstream field must not become public again.
-            "baseline": {"correct": True, "latency_us_geomean": 20.0},
-            "candidate": {"correct": True, "latency_us_geomean": 10.0},
+            "baseline": {
+                "correct": True,
+                "latency_us_geomean": 20.0,
+                "latency_us_by_shape": {"0": 20.0},
+            },
+            "candidate": {
+                "correct": True,
+                "latency_us_geomean": 10.0,
+                "latency_us_by_shape": {"0": 10.0},
+            },
             "speedup": 2.0,
             "improvement_pct": 50.0,
             "baseline_kernel_artifact_digest": "untrusted-upstream-baseline",
@@ -122,13 +133,14 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
         assert response.operation == "evaluate"
         assert response.status == "completed"
         assert response.evaluation is None
-        assert len(adapter.requests) == 1
+        assert len(adapter.requests) == 3
         forwarded = adapter.requests[0]
         assert forwarded.operation is GatewayOperation.EVALUATE
         assert forwarded.attempt_id == attempt.id
         assert forwarded.recovery_generation == 0
         assert forwarded.parameters == {
-            "comparison": {"method": "abba", "repeats": 2}, **parameters
+            "comparison": {"method": "abba", "repeats": 2},
+            **parameters,
         }
         assert forwarded.baseline_candidate_digest is not None
         assert forwarded.candidate_digest is not None
@@ -154,12 +166,20 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
         assert response.result["correct"] is True
         assert response.result["comparison"] == request["comparison"]
         assert "repeats" not in response.result
-        assert response.result["speedup"] == 2.0
+        assert response.result["speedup"] == pytest.approx(2.0)
         assert response.result["baseline"] == {
-            "correct": True, "latency_us_geomean": 20.0
+            "correct": True,
+            "latency_us_geomean": 20.0,
+            "latency_us_by_shape": {"0": 20.0},
         }
         assert response.result["candidate"] == {
-            "correct": True, "latency_us_geomean": 10.0
+            "correct": True,
+            "latency_us_geomean": 10.0,
+            "latency_us_by_shape": {"0": 10.0},
+        }
+        assert response.result["measurement_aggregation"] == {
+            "repetitions": 3,
+            "method": "per_shape_median",
         }
         assert response.result["baseline_kernel_artifact_digest"] == (
             forwarded.baseline_candidate_digest
@@ -173,27 +193,31 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
         public = artifacts.verify(response.result_artifact_digest)
         assert public.kind is ArtifactKind.RESULT_ARTIFACT
         assert json.loads((public.payload_path / "value.json").read_text()) == {
-            "operation": "evaluate", "status": "completed", "result": response.result
+            "operation": "evaluate",
+            "status": "completed",
+            "result": response.result,
         }
         assert json.loads((public.payload_path / "metadata.json").read_text())["evaluation"] is None
         assert await service.execute(capability.token, payload) == response
-        assert len(adapter.requests) == 1
+        assert len(adapter.requests) == 3
         assert len(policy.calls) == 2
 
         changed = deepcopy(request)
         changed["baseline"] = _bundle("def kernel(): return 'changed baseline'\n")
         with pytest.raises(InvalidTransitionError, match="different request"):
             await service.execute(capability.token, json.dumps(changed).encode())
-        assert len(adapter.requests) == 1
+        assert len(adapter.requests) == 3
         assert control.list_evaluations(attempt.id) == ()
-        assert control.list_measurements((attempt.id,)) == ()
+        assert len(control.list_measurements((attempt.id,))) == 2
         assert await control.get_outcome(attempt.id) is None
         events = [
-            event for event in registry.list_runtime_events(after_sequence=0, limit=100)
+            event
+            for event in registry.list_runtime_events(after_sequence=0, limit=100)
             if event.kind.startswith("gateway.")
         ]
         assert [event.kind for event in events] == [
-            "gateway.operation_submitted", "gateway.operation_completed"
+            "gateway.operation_submitted",
+            "gateway.operation_completed",
         ]
         assert all(
             event.payload["baseline_kernel_artifact_digest"] == forwarded.baseline_candidate_digest
@@ -228,12 +252,14 @@ async def test_abba_result_exposes_both_sources_but_not_unrelated_artifacts(tmp_
         )
         result_read = await service.execute(
             capability.token,
-            json.dumps({
-                "attempt_id": attempt.id,
-                "idempotency_key": "read-abba-result",
-                "operation": "result_artifact_read",
-                "result_artifact_digest": compared.result_artifact_digest,
-            }).encode(),
+            json.dumps(
+                {
+                    "attempt_id": attempt.id,
+                    "idempotency_key": "read-abba-result",
+                    "operation": "result_artifact_read",
+                    "result_artifact_digest": compared.result_artifact_digest,
+                }
+            ).encode(),
             operation_scope="runtime",
         )
         assert isinstance(result_read.result, dict)
@@ -246,19 +272,21 @@ async def test_abba_result_exposes_both_sources_but_not_unrelated_artifacts(tmp_
         ):
             source_read = await service.execute(
                 capability.token,
-                json.dumps({
-                    "attempt_id": attempt.id,
-                    "idempotency_key": f"read-abba-{role}",
-                    "operation": "kernel_artifact_read",
-                    "kernel_artifact_digest": public[digest_field],
-                    "file": "kernel.py",
-                }).encode(),
+                json.dumps(
+                    {
+                        "attempt_id": attempt.id,
+                        "idempotency_key": f"read-abba-{role}",
+                        "operation": "kernel_artifact_read",
+                        "kernel_artifact_digest": public[digest_field],
+                        "file": "kernel.py",
+                    }
+                ).encode(),
                 operation_scope="runtime",
             )
             assert isinstance(source_read.result, dict)
             assert source_read.result["content"] == source
             assert source_read.result["kernel_artifact_digest"] == public[digest_field]
-        assert len(adapter.requests) == 1
+        assert len(adapter.requests) == 3
 
         unrelated = tmp_path / "unrelated-kernel"
         unrelated.mkdir()
@@ -268,16 +296,80 @@ async def test_abba_result_exposes_both_sources_but_not_unrelated_artifacts(tmp_
         with pytest.raises(ValueError, match="outside the visible Lineage history"):
             await service.execute(
                 capability.token,
-                json.dumps({
-                    "attempt_id": attempt.id,
-                    "idempotency_key": "read-unrelated-source",
-                    "operation": "kernel_artifact_read",
-                    "kernel_artifact_digest": unrelated_digest,
-                    "file": "kernel.py",
-                }).encode(),
+                json.dumps(
+                    {
+                        "attempt_id": attempt.id,
+                        "idempotency_key": "read-unrelated-source",
+                        "operation": "kernel_artifact_read",
+                        "kernel_artifact_digest": unrelated_digest,
+                        "file": "kernel.py",
+                    }
+                ).encode(),
                 operation_scope="runtime",
             )
-        assert len(adapter.requests) == 1
+        assert len(adapter.requests) == 3
+    finally:
+        control.close()
+        registry.close()
+
+
+@pytest.mark.anyio
+async def test_abba_aggregates_three_measurements_per_shape(tmp_path: Path) -> None:
+    registry, control, attempt, capability, service, adapter = _service(tmp_path)
+
+    def result(baseline: dict[str, float], candidate: dict[str, float]) -> GatewayAdapterResult:
+        def side(values: dict[str, float]) -> dict[str, Any]:
+            latency = math.exp(sum(math.log(value) for value in values.values()) / len(values))
+            return {
+                "correct": True,
+                "latency_us_geomean": latency,
+                "latency_us_by_shape": values,
+            }
+
+        a = side(baseline)
+        b = side(candidate)
+        return GatewayAdapterResult(
+            "completed",
+            result={"private": True},
+            worker_result={
+                "correct": True,
+                "comparison": {"method": "abba", "repeats": 2},
+                "baseline": a,
+                "candidate": b,
+                "speedup": a["latency_us_geomean"] / b["latency_us_geomean"],
+                "measurements": [],
+            },
+        )
+
+    adapter.queued_results = [
+        result({"0": 10.0, "1": 100.0}, {"0": 8.0, "1": 80.0}),
+        result({"0": 11.0, "1": 140.0}, {"0": 9.0, "1": 120.0}),
+        result({"0": 9.0, "1": 105.0}, {"0": 7.0, "1": 84.0}),
+    ]
+    try:
+        response = await service.execute(
+            capability.token, json.dumps(_abba_value(attempt)).encode()
+        )
+        assert len(adapter.requests) == 3
+        assert [request.measurement_repetition for request in adapter.requests] == [1, 2, 3]
+        assert isinstance(response.result, dict)
+        assert response.result["baseline"]["latency_us_by_shape"] == {
+            "0": 10.0,
+            "1": 105.0,
+        }
+        assert response.result["candidate"]["latency_us_by_shape"] == {
+            "0": 8.0,
+            "1": 84.0,
+        }
+        assert response.result["measurement_aggregation"] == {
+            "repetitions": 3,
+            "method": "per_shape_median",
+        }
+        assert len(response.result["measurements"]) == 3
+        records = control.list_measurements((attempt.id,), limit=50)
+        assert len(records) == 4
+        assert {record.point.shape_id for record in records} == {"0", "1"}
+        assert len({record.kernel_artifact_digest for record in records}) == 2
     finally:
         control.close()
         registry.close()
@@ -305,14 +397,18 @@ async def test_failed_abba_with_a_false_verdict_is_persisted_and_replayed(tmp_pa
         assert response.result["correct"] is False
         assert response.result["comparison"] == {"method": "abba", "repeats": 2}
         assert response.result["error"] == {
-            "category": "abba_execution_failed", "message": "ABBA run failed"
+            "category": "abba_execution_failed",
+            "message": "ABBA run failed",
         }
         assert response.result_artifact_digest is not None
-        assert control.get_operation_artifact(
-            attempt.id, "abba-uploaded-pair", GatewayOperation.EVALUATE
-        ) == response.result_artifact_digest
+        assert (
+            control.get_operation_artifact(
+                attempt.id, "abba-uploaded-pair", GatewayOperation.EVALUATE
+            )
+            == response.result_artifact_digest
+        )
         assert await service.execute(capability.token, payload) == response
-        assert len(adapter.requests) == 1
+        assert len(adapter.requests) == 3
         assert control.list_evaluations(attempt.id) == ()
         assert control.list_measurements((attempt.id,)) == ()
         assert await control.get_outcome(attempt.id) is None
@@ -341,7 +437,7 @@ async def test_abba_production_gate_rejects_either_upload_before_execution(
 
 
 @pytest.mark.anyio
-async def test_abba_forwards_the_current_recovery_generation(tmp_path: Path) -> None:
+async def test_completed_abba_is_not_reexecuted_after_attempt_recovery(tmp_path: Path) -> None:
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
     adapter.result = _result()
     try:
@@ -355,11 +451,9 @@ async def test_abba_forwards_the_current_recovery_generation(tmp_path: Path) -> 
                 frozenset(GatewayOperation), 4, NOW_DATETIME + timedelta(hours=1)
             ),
         )
-        await service.execute(recovered.token, payload)
-        assert [request.recovery_generation for request in adapter.requests] == [0, 1]
-        before, after = adapter.requests
-        assert before.baseline_candidate_digest == after.baseline_candidate_digest
-        assert before.candidate_digest == after.candidate_digest
+        with pytest.raises(DuplicateGatewayTaskError):
+            await service.execute(recovered.token, payload)
+        assert [request.recovery_generation for request in adapter.requests] == [0, 0, 0]
         assert control.list_evaluations(attempt.id) == ()
     finally:
         control.close()
@@ -384,15 +478,21 @@ async def test_abba_rejects_incomplete_or_authoritative_results_without_poisonin
     try:
         adapter.result = invalid_result
         payload = json.dumps(_abba_value(attempt)).encode()
-        with pytest.raises(InfrastructureError, match="terminal exploratory comparison"):
+        with pytest.raises(
+            InfrastructureError,
+            match=r"terminal exploratory comparison|repeated Evaluate measurements",
+        ):
             await service.execute(capability.token, payload)
-        assert control.get_operation_artifact(
-            attempt.id, "abba-uploaded-pair", GatewayOperation.EVALUATE
-        ) is None
+        assert (
+            control.get_operation_artifact(
+                attempt.id, "abba-uploaded-pair", GatewayOperation.EVALUATE
+            )
+            is None
+        )
         adapter.result = _result()
         response = await service.execute(capability.token, payload)
         assert response.status == "completed"
-        assert len(adapter.requests) == 2
+        assert len(adapter.requests) == 6
         assert control.list_evaluations(attempt.id) == ()
     finally:
         control.close()

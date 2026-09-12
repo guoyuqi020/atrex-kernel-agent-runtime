@@ -157,7 +157,8 @@ Kernel Artifact 身份属于 B。保留的 Result Artifact 包含 A 的
 `baseline_kernel_artifact_digest`、`baseline`/`candidate` 正确性及延迟摘要、所有 `measurements`
 及 `schedule`，以及 `mode`、`input_scope`。`speedup` 为 A/B 延迟比，
 `improvement_pct` 为 (A−B)/A × 100，聚合延迟使用几何平均。通过 `kernel-trial-show` 和
-`result-artifact-read` 查询这些证据；探索性 ABBA 不生成普通 Evaluate Record 或归一化测量行。
+`result-artifact-read` 查询这些证据；探索性 ABBA 不生成普通 Evaluate Record。Runtime 会为 A、B
+两侧保留归一化的逐 Shape 聚合结果，并将三次底层返回作为私有 Evidence 保存。
 
 ## 普通 Evaluate 的 Shape 分批
 
@@ -166,9 +167,30 @@ Kernel Artifact 身份属于 B。保留的 Result Artifact 包含 A 的
 Comparator。Agent 仍只发起一个逻辑请求；Runtime 按批裁剪私有 Contract、对应 metadata 和
 Roofline，并在聚合 Artifact 中保留每批的 Job 与结果。
 
-全部 Shapes 必须通过正确性检查；跨 Shape 延迟取几何平均。配置的独立 Evaluate repeats
-仍对各轮聚合延迟取算术平均。各 Repeat 独立运行，16 批限制按每轮计算，不是全局 GPU 并发限制。
-ABBA 的比较配置不会改变普通 Evaluate 的上述默认分批设置。
+全部 Shapes 必须通过正确性检查。Agent 发起完整 Evaluate 时，Runtime 固定执行三次完整的逻辑
+Agate 调用，对每个 Shape 的三个值取中位数，再对这些中位数取几何平均；三次调用内部不会再叠加
+配置的重复层。16 批限制分别作用于每次调用。Bootstrap、Lineage Seed 和可信 Comparator 仍使用
+各自配置的采样策略。ABBA 的比较配置不会改变普通 Evaluate 的上述聚合方式。
+
+## 单次提交与三次测量
+
+在一条 Lineage 内，每个精确的完整普通 Evaluate 或探索性 ABBA 任务只允许 Agent 发起一次。任务
+身份包含精确 Candidate Kernel、ABBA 的 Baseline Kernel、测量方法与参数，以及封存的输入域。
+`correctness_only` Evaluate、Profile、Dev、Check 和 Disassemble 不属于这项规则，因为它们不共享
+同一种逐 Shape 性能聚合语义。
+
+- 第一次被接受的任务会执行三次独立、语义完全相同的逻辑 Agate 调用。
+- Runtime 要求三次 Shape 覆盖一致，逐 Shape 取中位数，再机械计算聚合延迟和 ABBA Speedup。
+  任一次明确的正确性失败都会被保留，不能被另一次成功结果掩盖。
+- Runtime 只返回一个 Agent 可见 Result Artifact，并附带
+  `measurement_aggregation: {"repetitions": 3, "method": "per_shape_median"}`；三次原始返回只作为
+  私有 Evidence 保存。
+- Agent 再次主动提交完全相同的任务时，Runtime 会在调用 Agate 前拒绝，并返回
+  `previous_result_artifact_digest`，引导 Agent 使用 `result-artifact-read` 复用结果；同一次调用的
+  网络重连仍保持幂等，并回放原响应。
+
+该规则避免 Agent 通过重复提交未修改代码消耗评测资源或挑选有利样本。修改 Kernel、Baseline、
+输入域或测量参数后会形成新的任务。
 
 ## Correctness 与 Production Gate
 

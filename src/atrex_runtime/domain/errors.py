@@ -63,3 +63,18 @@ class DirectionConcurrencyError(ValueError):
             "The requested Direction was not started. Continue the current Direction or close it "
             "with complete, abandon, defer, or block before starting another Direction"
         )
+
+
+class DuplicateGatewayTaskError(ValueError):
+    """An exact full-Evaluate task already completed or is currently running."""
+
+    def __init__(self, previous_result_artifact_digest: str | None) -> None:
+        self.previous_result_artifact_digest = previous_result_artifact_digest
+        if previous_result_artifact_digest is None:
+            detail = "the identical Gateway task is already running"
+        else:
+            detail = (
+                "the identical Gateway task already completed; reuse Result Artifact "
+                f"{previous_result_artifact_digest}"
+            )
+        super().__init__(detail)

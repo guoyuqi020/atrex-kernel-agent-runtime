@@ -173,7 +173,8 @@ includes A's `baseline_kernel_artifact_digest`, `baseline` and `candidate` corre
 summaries, all `measurements` and the `schedule`, `mode`, and `input_scope`. `speedup` is
 A/B latency and `improvement_pct` is (A−B)/A × 100; aggregate latency uses a geometric mean.
 Use `kernel-trial-show` and `result-artifact-read` to retrieve this evidence. Exploratory ABBA does
-not create ordinary Evaluate records or normalized measurement rows.
+not create an ordinary Evaluate record. Runtime retains the normalized per-Shape aggregate for both
+A and B and keeps all three underlying responses as private evidence.
 
 ## Ordinary Evaluate Shape batches
 
@@ -183,10 +184,35 @@ requests, Bootstrap stages, Lineage seeding, and the ordinary Evaluate comparato
 one logical request; Runtime partitions the sealed contract, including matching metadata and Roofline,
 and preserves every batch's Job and result in the aggregate Artifact.
 
-All Shapes must pass. Per-Shape latency is combined using the geometric mean; configured independent
-Evaluate repeats still average their round-level latency arithmetically. Repeats run independently,
-so the sixteen-batch cap is per round, not a global GPU concurrency limit. ABBA's comparison settings
-do not change this ordinary-Evaluate default.
+All Shapes must pass. For an Agent full Evaluate, Runtime performs exactly three complete logical
+Agate calls, takes the median of the three values independently for every Shape, and combines those
+medians using the geometric mean. No configured repeat layer is nested inside these calls. The
+sixteen-batch cap applies independently to each call. Bootstrap, Lineage seeding, and trusted
+comparators retain their own configured sampling policies. ABBA's comparison settings do not change
+the ordinary-Evaluate aggregation.
+
+## Single submission and repeated measurement
+
+Runtime accepts each exact full ordinary Evaluate or exploratory ABBA task only once within a
+Lineage. Task identity covers the exact Candidate Kernel, the Baseline Kernel for ABBA, the
+measurement method and parameters, and the sealed input domain. Correctness-only Evaluate, Profile,
+Dev, Check, and Disassemble are outside this rule because they do not share the same per-Shape timing
+contract.
+
+- The first accepted task executes three independent, semantically identical logical Agate calls.
+- Runtime requires matching Shape coverage, takes the median latency per Shape, then mechanically
+  recomputes aggregate latency and ABBA speedup. Any explicit correctness failure is retained rather
+  than being hidden by a successful repetition.
+- Runtime returns one Agent-visible Result Artifact with
+  `measurement_aggregation: {"repetitions": 3, "method": "per_shape_median"}`. The three raw
+  responses remain private evidence.
+- A later Agent invocation of the identical task is rejected before Agate execution. The error names
+  `previous_result_artifact_digest` and directs the Agent to `result-artifact-read`; transport retry
+  of the original invocation remains idempotent and replays the same response.
+
+This rule prevents an Agent from spending evaluator capacity or choosing among repeated samples by
+resubmitting unchanged code. Changing the Kernel, Baseline, input domain, or measurement parameters
+creates a different task.
 
 ## Correctness and Production Gate
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -16,7 +17,11 @@ from pydantic import TypeAdapter, ValidationError
 from test_attempt_report import _value as _report_value
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
-from atrex_runtime.domain.errors import DirectionConcurrencyError, InvalidTransitionError
+from atrex_runtime.domain.errors import (
+    DirectionConcurrencyError,
+    DuplicateGatewayTaskError,
+    InvalidTransitionError,
+)
 from atrex_runtime.domain.ids import new_attempt_id, new_epoch_id
 from atrex_runtime.domain.models import Attempt, AttemptStatus, BranchRole, Dsl, Epoch, EpochStatus
 from atrex_runtime.gateway import (
@@ -53,10 +58,11 @@ _PROTOCOL_ADAPTER: TypeAdapter[GatewayProxyRequestV2] = TypeAdapter(GatewayProxy
 class FakeGatewayAdapter:
     result: GatewayAdapterResult
     requests: list[GatewayAdapterRequest] = field(default_factory=list)
+    queued_results: list[GatewayAdapterResult] = field(default_factory=list)
 
     async def execute(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
         self.requests.append(request)
-        return self.result
+        return self.queued_results.pop(0) if self.queued_results else self.result
 
 
 def _insert_attempt(
@@ -292,7 +298,13 @@ def _service(
     adapter = FakeGatewayAdapter(
         GatewayAdapterResult(
             status="completed",
-            result={"correct": True, "latency_us": 12.0, "backend": "fake"},
+            result={
+                "correct": True,
+                "latency_us": 12.0,
+                "latency_us_geomean": 12.0,
+                "latency_us_by_shape": {"0": 12.0},
+                "backend": "fake",
+            },
             evaluation=EvaluationV2(correct=True, latency_us=12.0),
         )
     )
@@ -418,6 +430,10 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
     assert response.status == "completed"
     assert response.evaluation == EvaluationV2(correct=True, latency_us=12.0)
     assert response.result == {
+        "measurement_aggregation": {
+            "repetitions": 3,
+            "method": "per_shape_median",
+        },
         "correct": True,
         "correctness": {
             "status": "PASS",
@@ -426,12 +442,12 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
             "max_rel_err": None,
         },
         "latency_us_geomean": 12.0,
-        "latency_us_arith_mean": None,
-        "latency_us_by_shape": {},
+        "latency_us_arith_mean": 12.0,
+        "latency_us_by_shape": {"0": 12.0},
     }
     assert response.kernel_artifact_digest is not None
     assert response.kernel_trial_id is not None
-    assert len(adapter.requests) == 1
+    assert len(adapter.requests) == 3
     adapter_request = adapter.requests[0]
     assert adapter_request.candidate_path is not None
     assert (adapter_request.candidate_path / "kernel.py").read_text() == "def kernel(): pass\n"
@@ -445,7 +461,7 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
 
     replay = await service.execute(capability_value.token, _request(attempt))
     assert replay == response
-    assert len(adapter.requests) == 1
+    assert len(adapter.requests) == 3
     gateway_events = [
         event
         for event in registry.list_runtime_events(after_sequence=0, limit=100)
@@ -471,6 +487,78 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
 
 
 @pytest.mark.anyio
+async def test_exact_kernel_task_runs_three_times_then_rejects_a_duplicate(
+    tmp_path: Path,
+) -> None:
+    registry, control, attempt, capability, service, adapter = _service(tmp_path)
+
+    def measured(by_shape: dict[str, float]) -> GatewayAdapterResult:
+        latency = sum(by_shape.values()) / len(by_shape)
+        return GatewayAdapterResult(
+            status="completed",
+            result={
+                "correct": True,
+                "latency_us": latency,
+                "latency_us_by_shape": by_shape,
+            },
+            evaluation=EvaluationV2(correct=True, latency_us=latency),
+        )
+
+    adapter.queued_results = [
+        measured({"0": 10.0, "1": 100.0}),
+        measured({"0": 11.0, "1": 140.0}),
+        measured({"0": 9.0, "1": 105.0}),
+    ]
+
+    response = await service.execute(capability.token, _request(attempt))
+
+    assert len(adapter.requests) == 3
+    assert [request.measurement_repetition for request in adapter.requests] == [1, 2, 3]
+    assert isinstance(response.result, dict)
+    assert response.result["latency_us_by_shape"] == {"0": 10.0, "1": 105.0}
+    assert response.result["measurement_aggregation"] == {
+        "repetitions": 3,
+        "method": "per_shape_median",
+    }
+    measurements = control.list_measurements(
+        (attempt.id,), kernel_artifact_digest=response.kernel_artifact_digest
+    )
+    shape_values = {
+        record.point.shape_id: record.point.metrics["latency_us"]
+        for record in measurements
+        if record.point.shape_id is not None
+    }
+    assert shape_values == {"0": 10.0, "1": 105.0}
+
+    repeated_request = json.loads(_request(attempt))
+    repeated_request["idempotency_key"] = "evaluate-candidate-2"
+    with pytest.raises(DuplicateGatewayTaskError) as duplicate:
+        await service.execute(capability.token, json.dumps(repeated_request).encode())
+    assert duplicate.value.previous_result_artifact_digest == response.result_artifact_digest
+    duplicate_response = _invalid_request_response(
+        json.dumps(repeated_request).encode(), duplicate.value
+    )
+    assert duplicate_response["error"] == "duplicate_gateway_task"
+    assert duplicate_response["previous_result_artifact_digest"] == (
+        response.result_artifact_digest
+    )
+    assert duplicate_response["recovery"] == [
+        {
+            "tool": "result-artifact-read",
+            "request": {
+                "result_artifact_digest": response.result_artifact_digest,
+            },
+            "instruction": (
+                "Reuse the completed measurement; do not submit this exact Kernel task again"
+            ),
+        }
+    ]
+    assert len(adapter.requests) == 3
+    control.close()
+    registry.close()
+
+
+@pytest.mark.anyio
 async def test_proxy_persists_raw_private_result_but_returns_only_worker_projection(
     tmp_path: Path,
 ) -> None:
@@ -482,6 +570,7 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
         worker_result={
             "all_pass": True,
             "latency_us_geomean": 12.0,
+            "latency_us_by_shape": {"0": 12.0},
             "shape_ids_are_opaque": True,
         },
     )
@@ -489,6 +578,10 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
     response = await service.execute(capability_value.token, _request(attempt))
 
     assert response.result == {
+        "measurement_aggregation": {
+            "repetitions": 3,
+            "method": "per_shape_median",
+        },
         "correct": True,
         "correctness": {
             "status": "PASS",
@@ -497,8 +590,8 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
             "max_rel_err": None,
         },
         "latency_us_geomean": 12.0,
-        "latency_us_arith_mean": None,
-        "latency_us_by_shape": {},
+        "latency_us_arith_mean": 12.0,
+        "latency_us_by_shape": {"0": 12.0},
     }
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     result_artifact = artifacts.verify(response.result_artifact_digest)
@@ -541,7 +634,12 @@ async def test_proxy_seals_paired_profile_with_agent_evaluation(tmp_path: Path) 
     registry, control, attempt, capability_value, service, adapter = _service(tmp_path)
     adapter.result = GatewayAdapterResult(
         status="completed",
-        result={"correct": True, "latency_us": 12.0},
+        result={
+            "correct": True,
+            "latency_us": 12.0,
+            "latency_us_geomean": 12.0,
+            "latency_us_by_shape": {"0": 12.0},
+        },
         evaluation=EvaluationV2(correct=True, latency_us=12.0),
         profile_result={
             "status": "succeeded",
@@ -836,7 +934,7 @@ async def test_runtime_queries_use_the_dedicated_http_endpoint(tmp_path: Path) -
     )
 
     assert response.operation == "kernel_trial_show"
-    assert len(adapter.requests) == 1
+    assert len(adapter.requests) == 3
 
     app = GatewayProxyAsgiApp(service, GatewayProxyLimits(64 * 1024, 8, 16 * 1024))
     routed_payload = payload.replace(b"runtime-query-route", b"runtime-query-http")
@@ -1095,7 +1193,7 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
             "result_artifact_digest": profiled.result_artifact_digest,
         },
     ]
-    assert len(adapter.requests) == 2
+    assert len(adapter.requests) == 4
 
     control.close()
     reopened = SqliteGatewayControl(
@@ -1427,7 +1525,7 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
         ),
     )
 
-    assert len(adapter.requests) == 1
+    assert len(adapter.requests) == 3
     trial_id = evaluated.kernel_trial_id
     assert isinstance(trial_id, str)
 
@@ -1461,7 +1559,7 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
         ).encode(),
     )
 
-    assert len(adapter.requests) == 2
+    assert len(adapter.requests) == 4
     assert isinstance(shown.result, dict)
     assert shown.result == {
         "kernel_artifact_digest": evaluated.kernel_artifact_digest,
@@ -1523,9 +1621,13 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
                 "max_abs_err": None,
                 "max_rel_err": None,
             },
-            "latency_us_geomean": 12.0,
-            "latency_us_arith_mean": 12.0,
-            "latency_us_by_shape": {"0": 10.0, "1": 14.0},
+                "latency_us_geomean": pytest.approx(math.sqrt(140.0)),
+                "latency_us_arith_mean": 12.0,
+                "latency_us_by_shape": {"0": 10.0, "1": 14.0},
+                "measurement_aggregation": {
+                    "repetitions": 3,
+                    "method": "per_shape_median",
+                },
         },
     }
 
@@ -1603,7 +1705,9 @@ async def test_attempt_report_api_seals_canonical_contributing_trials(tmp_path: 
             "report": report,
         }
         accepted = await service.execute(
-            capability.token, json.dumps(payload).encode(), operation_scope="runtime",
+            capability.token,
+            json.dumps(payload).encode(),
+            operation_scope="runtime",
         )
         receipt = cast(dict[str, Any], accepted.result)
         assert receipt["status"] == "registered"
@@ -1615,10 +1719,12 @@ async def test_attempt_report_api_seals_canonical_contributing_trials(tmp_path: 
         # Canonical and noncanonical representations name the same report.
         report["contributing_kernel_trial_ids"] = [first, second]
         repeated = await service.execute(
-            capability.token, json.dumps(payload).encode(), operation_scope="runtime",
+            capability.token,
+            json.dumps(payload).encode(),
+            operation_scope="runtime",
         )
         assert repeated == accepted
-        assert len(adapter.requests) == 1
+        assert len(adapter.requests) == 3
     finally:
         control.close()
         registry.close()

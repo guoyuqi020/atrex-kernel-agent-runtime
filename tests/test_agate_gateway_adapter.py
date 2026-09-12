@@ -543,6 +543,34 @@ async def test_custom_eval_uses_effective_inputs_for_every_batch_and_repeat(
 
 
 @pytest.mark.anyio
+async def test_proxy_owned_measurement_repetition_bypasses_adapter_repeats(
+    tmp_path: Path,
+) -> None:
+    client = RepeatedEvalAgateClient(_successful_job())
+    jobs = SqliteAgateJobStore(tmp_path / "agate-jobs.sqlite")
+    adapter = AgateGatewayAdapter(
+        client,
+        CapturingBuilder(),
+        StaticContexts(
+            AgateEvaluationContext("vector_add", "H20", Dsl.TRITON, _contract())
+        ),
+        jobs,
+        wait_timeout_s=30,
+        optimizer_evaluate_repeats=5,
+    )
+    request = replace(
+        _exploratory_request(tmp_path, {}),
+        measurement_repetition=1,
+    )
+    try:
+        mapped = await adapter.execute(request)
+        assert mapped.evaluation is not None and mapped.evaluation.correct
+        assert len(client.submitted) == 2
+    finally:
+        jobs.close()
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("custom", [False, True])
 async def test_correctness_only_runs_once_without_latency_or_auto_profile(
     tmp_path: Path, custom: bool,

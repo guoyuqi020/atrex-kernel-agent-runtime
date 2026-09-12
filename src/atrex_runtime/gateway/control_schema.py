@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-GATEWAY_SCHEMA_VERSION = 12
+GATEWAY_SCHEMA_VERSION = 13
 
 
 def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
@@ -195,8 +195,14 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
         )
+    elif row["value"] == 12:
+        connection.execute(
+            "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
+            (GATEWAY_SCHEMA_VERSION,),
+        )
     elif row["value"] != GATEWAY_SCHEMA_VERSION:
         raise RuntimeError(f"unsupported Gateway schema version: {row['value']}")
+    _migrate_gateway_v13(connection)
 
 
 def _create_gateway_evaluations_table(connection: sqlite3.Connection) -> None:
@@ -304,6 +310,28 @@ def _migrate_gateway_v12(connection: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS runtime_experiments_by_direction
             ON runtime_experiments(attempt_id, direction_id, sequence);
+        """
+    )
+
+
+def _migrate_gateway_v13(connection: sqlite3.Connection) -> None:
+    """Reserve one durable execution for each exact full-Evaluate task."""
+    connection.executescript(
+        """
+        CREATE TABLE IF NOT EXISTS gateway_evaluate_tasks(
+            task_digest TEXT PRIMARY KEY,
+            lineage_id TEXT NOT NULL,
+            attempt_id TEXT NOT NULL,
+            recovery_generation INTEGER NOT NULL CHECK(recovery_generation >= 0),
+            idempotency_key TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('running', 'completed')),
+            result_artifact_digest TEXT,
+            created_at TEXT NOT NULL,
+            completed_at TEXT,
+            FOREIGN KEY(attempt_id) REFERENCES gateway_capabilities(attempt_id)
+        );
+        CREATE INDEX IF NOT EXISTS gateway_evaluate_tasks_by_lineage
+            ON gateway_evaluate_tasks(lineage_id, created_at);
         """
     )
 

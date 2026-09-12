@@ -28,7 +28,11 @@ from ..domain.errors import (
 from ..domain.ids import AttemptId, parse_attempt_id
 from ..roofline import strip_roofline_hardware_suffix
 from ..sqlite_support import configure_durable_sqlite, immediate_transaction
-from .batched_evaluate import ShapeBatch, ShapeBatchedEvaluateExecutor, ShapeBatchOutcome
+from .batched_evaluate import (
+    ShapeBatch,
+    ShapeBatchedEvaluateExecutor,
+    ShapeBatchOutcome,
+)
 from .contract import (
     AgateEvaluationContext,
     AgateEvaluationContextResolver,
@@ -548,7 +552,10 @@ class AgateGatewayAdapter:
                 )
                 if mapped.status == "queued":
                     raise InfrastructureError("Agate correctness evaluation did not complete")
-            elif self._optimizer_evaluate_repeats > 1:
+            elif (
+                request.measurement_repetition is None
+                and self._optimizer_evaluate_repeats > 1
+            ):
                 mapped = await self._submit_repeated_evaluate(request, context)
             else:
                 mapped = await self._submit_batched_evaluate(
@@ -576,6 +583,7 @@ class AgateGatewayAdapter:
             and context.contract.roofline is None
             and self._profile_without_roofline
             and context.kernel_source is None
+            and request.measurement_repetition in {None, 1}
         ):
             return GatewayAdapterResult(
                 mapped.status,
@@ -614,8 +622,14 @@ class AgateGatewayAdapter:
             job_id = existing.job_id
         self._jobs.bind(
             AgateJobBinding(
-                job_id, attempt_id, idempotency_key, kind, operation,
-                evaluation_mode, expected_shape_ids, input_scope,
+                job_id,
+                attempt_id,
+                idempotency_key,
+                kind,
+                operation,
+                evaluation_mode,
+                expected_shape_ids,
+                input_scope,
             )
         )
         return job_id

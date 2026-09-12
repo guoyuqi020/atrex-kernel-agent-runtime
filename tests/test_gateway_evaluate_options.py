@@ -109,8 +109,9 @@ async def test_exploration_is_recorded_but_cannot_authorize_candidate_submission
         response = await service.execute(capability.token, payload)
         replay = await service.execute(capability.token, payload)
         assert replay == response
-        assert len(adapter.requests) == 1
-        assert adapter.requests[0].parameters == parameters
+        expected_adapter_calls = 1 if mode == "correctness_only" else 3
+        assert len(adapter.requests) == expected_adapter_calls
+        assert all(request.parameters == parameters for request in adapter.requests)
         assert response.evaluation is None
         assert control.list_evaluations(attempt.id) == ()
         assert isinstance(response.result, dict)
@@ -128,8 +129,10 @@ async def test_exploration_is_recorded_but_cannot_authorize_candidate_submission
             }
 
         measurements = control.list_measurements((attempt.id,))
-        assert len(measurements) == 1
-        measurement = measurements[0]
+        assert len(measurements) == (1 if mode == "correctness_only" else 2)
+        measurement = next(
+            item for item in measurements if item.point.metrics.get("aggregate") is True
+        )
         point = measurement.point
         assert point.metrics["correct"] is True
         assert point.metrics["mode"] == mode

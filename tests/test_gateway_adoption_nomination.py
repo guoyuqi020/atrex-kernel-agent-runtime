@@ -23,6 +23,7 @@ from test_gateway_journal_adoption import history as history
 from test_gateway_proxy import NOW_DATETIME, _request
 
 from atrex_runtime.artifacts.local import LocalArtifactStore
+from atrex_runtime.domain.errors import DuplicateGatewayTaskError
 from atrex_runtime.domain.ids import new_attempt_id, parse_artifact_digest
 from atrex_runtime.domain.models import Dsl
 from atrex_runtime.gateway.control import BootstrapGatewaySubject, GatewayCapabilityPolicy
@@ -79,7 +80,7 @@ async def test_nomination_requires_persisted_adoption_not_report_claim(history: 
     response = await _submit(history, report)
     assert response.result["status"] == "registered"
     assert history.control.list_evaluations(history.current.id) == ()
-    assert len(history.adapter.requests) == 2
+    assert len(history.adapter.requests) == history.initial_adapter_requests
     assert history.after.kernel_artifact_digest is not None
     resolved = history.control.find_candidate_evaluation(
         history.current.id, parse_artifact_digest(history.after.kernel_artifact_digest),
@@ -100,16 +101,17 @@ async def test_adoption_does_not_cover_changed_candidate(history: _History) -> N
 
 
 @pytest.mark.anyio
-async def test_new_failed_evaluate_cannot_be_hidden_by_adoption(history: _History) -> None:
+async def test_duplicate_evaluate_cannot_override_adopted_authority(history: _History) -> None:
     report = await _adopt(history)
     history.adapter.result = GatewayAdapterResult(
         "completed", {"correct": False}, evaluation=EvaluationV2(correct=False, latency_us=None),
     )
     request = json.loads(_request(history.current))
     request.update(candidate=_candidate(), idempotency_key="fresh-failure")
-    await history.service.execute(history.capability.token, json.dumps(request).encode())
-    with pytest.raises(ValueError, match="incorrect results"):
-        await _submit(history, report)
+    with pytest.raises(DuplicateGatewayTaskError) as duplicate:
+        await history.service.execute(history.capability.token, json.dumps(request).encode())
+    assert duplicate.value.previous_result_artifact_digest == history.after.result_artifact_digest
+    await _submit(history, report)
     assert history.after.kernel_artifact_digest is not None
     resolved = history.control.find_candidate_evaluation(
         history.current.id, parse_artifact_digest(history.after.kernel_artifact_digest),
@@ -117,7 +119,7 @@ async def test_new_failed_evaluate_cannot_be_hidden_by_adoption(history: _Histor
             history.historical_attempt.id
         )[-1].gateway_result_digest,
     )
-    assert resolved is not None and not resolved.correct
+    assert resolved is not None and resolved.correct
 
 
 @pytest.mark.anyio
@@ -143,7 +145,7 @@ async def test_adopted_nomination_reaches_unchanged_authoritative_gate(
     assert outcome.correct
     assert outcome.latency_us == (7.5 if independent else 12.0)
     assert len(client.submitted) == (1 if independent else 0)
-    assert len(history.adapter.requests) == 2  # No new Agent precheck.
+    assert len(history.adapter.requests) == history.initial_adapter_requests
     assert [row.source for row in history.control.list_evaluations(history.current.id)] == (
         [GatewayEvaluationSource.RUNTIME_FINAL] if independent else []
     )
@@ -199,7 +201,7 @@ async def test_zero_experiment_report_is_accepted_without_gpu(
     assert response.result["status"] == "registered"
     assert history.control.list_experiments(history.current.id) == ()
     assert history.control.list_evaluations(history.current.id) == ()
-    assert len(history.adapter.requests) == 2
+    assert len(history.adapter.requests) == history.initial_adapter_requests
 
 
 @pytest.mark.anyio
@@ -247,7 +249,7 @@ async def test_adoption_survives_attempt_recovery_without_copying_measurement(
     assert (await _submit(history, report)).result["status"] == "registered"
     assert history.control.list_evaluations(history.historical_attempt.id) == original
     assert history.control.list_evaluations(history.current.id) == ()
-    assert len(history.adapter.requests) == 2
+    assert len(history.adapter.requests) == history.initial_adapter_requests
 
 
 @pytest.mark.anyio

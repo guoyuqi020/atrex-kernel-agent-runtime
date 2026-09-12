@@ -119,7 +119,7 @@ async def test_closed_direction_accepts_late_profile_evidence(
         assert control.list_direction_events(attempt.id) == prior_events
         assert control.list_experiments(attempt.id)[:1] == prior_experiments
         assert len(control.list_experiments(attempt.id)) == 2
-        assert len(adapter.requests) == 2  # No new Agate measurement for the supplement.
+        assert len(adapter.requests) == 4  # Three Eval repetitions plus one Profile.
 
         snapshot = await journal("journal_snapshot", "snapshot-after")
         directions = {item["direction_id"]: item for item in snapshot["directions"]}

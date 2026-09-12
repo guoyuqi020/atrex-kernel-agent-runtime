@@ -727,6 +727,160 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             raise TypeError("persisted operation result Artifact Digest must be text")
         return parse_artifact_digest(value)
 
+    def reserve_evaluate_task(
+        self,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        task_digest: ArtifactDigest,
+    ) -> tuple[bool, ArtifactDigest | None]:
+        """Reserve one exact full-Evaluate task across the visible Lineage.
+
+        The boolean is true only when this caller owns execution.  A false result
+        carries the completed Result Artifact, or None while another request owns
+        an unfinished execution.
+        """
+        digest = parse_artifact_digest(str(task_digest))
+        generation = self._subject_generation(attempt_id)
+        lineage_id, _visible = self.visible_kernel_trial_attempt_ids(attempt_id)
+        now = self._clock().astimezone(UTC).isoformat()
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM gateway_evaluate_tasks WHERE task_digest = ?",
+                (str(digest),),
+            ).fetchone()
+            if row is None:
+                connection.execute(
+                    """INSERT INTO gateway_evaluate_tasks(
+                           task_digest, lineage_id, attempt_id, recovery_generation,
+                           idempotency_key, status, result_artifact_digest,
+                           created_at, completed_at
+                       ) VALUES (?, ?, ?, ?, ?, 'running', NULL, ?, NULL)""",
+                    (
+                        str(digest),
+                        str(lineage_id),
+                        str(attempt_id),
+                        generation,
+                        idempotency_key,
+                        now,
+                    ),
+                )
+                return True, None
+            if str(row["lineage_id"]) != str(lineage_id):
+                raise InvalidTransitionError("Evaluate task Digest crossed a Lineage boundary")
+            result_value = row["result_artifact_digest"]
+            if row["status"] == "completed":
+                if not isinstance(result_value, str):
+                    raise InfrastructureError("completed Evaluate task has no Result Artifact")
+                return False, parse_artifact_digest(result_value)
+
+            owner_result = connection.execute(
+                """SELECT result_artifact_digest FROM gateway_operations
+                     WHERE attempt_id = ? AND recovery_generation = ?
+                       AND idempotency_key = ? AND operation = 'evaluate'""",
+                (
+                    row["attempt_id"],
+                    row["recovery_generation"],
+                    row["idempotency_key"],
+                ),
+            ).fetchone()
+            if owner_result is not None and isinstance(
+                owner_result["result_artifact_digest"], str
+            ):
+                result = parse_artifact_digest(owner_result["result_artifact_digest"])
+                connection.execute(
+                    """UPDATE gateway_evaluate_tasks
+                          SET status = 'completed', result_artifact_digest = ?, completed_at = ?
+                        WHERE task_digest = ?""",
+                    (str(result), now, str(digest)),
+                )
+                return False, result
+            owner_attempt_id = parse_attempt_id(str(row["attempt_id"]))
+            owner_generation = int(row["recovery_generation"])
+            try:
+                owner_is_running = (
+                    self._registry.get_attempt(owner_attempt_id).status
+                    is AttemptStatus.RUNNING
+                )
+            except KeyError:
+                # Bootstrap Gateway subjects deliberately exist before their
+                # Attempt row. A newer recovery generation is the only safe
+                # signal that such an unfinished reservation is stale.
+                owner_is_running = True
+            if (
+                not owner_is_running
+                or (
+                    owner_attempt_id == attempt_id
+                    and owner_generation < generation
+                )
+            ):
+                connection.execute(
+                    """UPDATE gateway_evaluate_tasks
+                          SET attempt_id = ?, recovery_generation = ?,
+                              idempotency_key = ?, created_at = ?, completed_at = NULL
+                        WHERE task_digest = ? AND status = 'running'""",
+                    (
+                        str(attempt_id),
+                        generation,
+                        idempotency_key,
+                        now,
+                        str(digest),
+                    ),
+                )
+                return True, None
+            return False, None
+
+    def complete_evaluate_task(
+        self,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        task_digest: ArtifactDigest,
+        result_artifact_digest: ArtifactDigest,
+    ) -> None:
+        """Commit the one Agent-visible Result Artifact for a reserved task."""
+        digest = parse_artifact_digest(str(task_digest))
+        result = parse_artifact_digest(str(result_artifact_digest))
+        generation = self._subject_generation(attempt_id)
+        with self._transaction() as connection:
+            row = connection.execute(
+                "SELECT * FROM gateway_evaluate_tasks WHERE task_digest = ?",
+                (str(digest),),
+            ).fetchone()
+            if row is None:
+                raise InvalidTransitionError("Evaluate task was not reserved")
+            owner = (
+                str(row["attempt_id"]),
+                int(row["recovery_generation"]),
+                str(row["idempotency_key"]),
+            )
+            if owner != (str(attempt_id), generation, idempotency_key):
+                raise InvalidTransitionError("Evaluate task is owned by another request")
+            existing = row["result_artifact_digest"]
+            if existing is not None and str(existing) != str(result):
+                raise InvalidTransitionError("Evaluate task already names another Result Artifact")
+            connection.execute(
+                """UPDATE gateway_evaluate_tasks
+                      SET status = 'completed', result_artifact_digest = ?, completed_at = ?
+                    WHERE task_digest = ?""",
+                (str(result), self._clock().astimezone(UTC).isoformat(), str(digest)),
+            )
+
+    def abandon_evaluate_task(
+        self,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        task_digest: ArtifactDigest,
+    ) -> None:
+        """Release a reservation when no durable logical result was produced."""
+        generation = self._subject_generation(attempt_id)
+        with self._transaction() as connection:
+            connection.execute(
+                """DELETE FROM gateway_evaluate_tasks
+                     WHERE task_digest = ? AND attempt_id = ?
+                       AND recovery_generation = ? AND idempotency_key = ?
+                       AND status = 'running'""",
+                (str(task_digest), str(attempt_id), generation, idempotency_key),
+            )
+
     def bind_operation_candidate(
         self,
         attempt_id: AttemptId,
@@ -1788,26 +1942,32 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         """Return bounded normalized rows for one frozen Evidence projection."""
         return self.list_measurements(attempt_ids, limit=limit)
 
-    def _evaluation_identity(self, attempt_id: AttemptId) -> tuple[str, str, Dsl, ArtifactDigest]:
+    def evaluation_identity(self, attempt_id: AttemptId) -> tuple[str, str, Dsl, ArtifactDigest]:
         """Resolve immutable inputs, environment and DSL, including Bootstrap subjects."""
         try:
             attempt = self._registry.get_attempt(attempt_id)
         except KeyError:
             subject = self.get_bootstrap_subject(attempt_id)
             return (
-                subject.operator, subject.hardware_target, subject.dsl,
+                subject.operator,
+                subject.hardware_target,
+                subject.dsl,
                 subject.evaluation_contract_digest,
             )
         epoch = self._registry.get_epoch(attempt.epoch_id)
         lineage = self._registry.get_lineage(epoch.lineage_id)
         campaign = self._registry.get_campaign(lineage.campaign_id)
         return (
-            campaign.operator, campaign.hardware_target, lineage.dsl,
+            campaign.operator,
+            campaign.hardware_target,
+            lineage.dsl,
             campaign.evaluation_contract_digest,
         )
 
     def validate_adoption_trial(
-        self, attempt_id: AttemptId, trial_id: str,
+        self,
+        attempt_id: AttemptId,
+        trial_id: str,
     ) -> GatewayEvaluationRecord:
         """Resolve reusable full-Evaluate evidence without manufacturing a measurement.
 
@@ -1817,19 +1977,23 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         """
         _, visible_attempt_ids = self.visible_kernel_trial_attempt_ids(attempt_id)
         trial = next(
-            (item for item in self.list_kernel_trials(visible_attempt_ids, limit=5_000)
-             if item.id == trial_id),
+            (
+                item
+                for item in self.list_kernel_trials(visible_attempt_ids, limit=5_000)
+                if item.id == trial_id
+            ),
             None,
         )
         if trial is None:
             raise ValueError("Adoption Kernel Trial is outside this Attempt's visible history")
-        if self._evaluation_identity(attempt_id) != self._evaluation_identity(trial.attempt_id):
+        if self.evaluation_identity(attempt_id) != self.evaluation_identity(trial.attempt_id):
             raise ValueError(
                 "Adoption requires matching operator, hardware target, DSL and sealed evaluation "
                 "contract; run an ordinary full evaluate under the current contract instead"
             )
         evaluation = self.find_agent_evaluation(
-            trial.attempt_id, trial.kernel_artifact_digest,
+            trial.attempt_id,
+            trial.kernel_artifact_digest,
             recovery_generation=trial.recovery_generation,
         )
         if evaluation is None or not evaluation.correct:
@@ -1863,7 +2027,9 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         particular, a current failed full Evaluate must not be hidden by an older success.
         """
         latest = self.find_agent_evaluation(
-            attempt_id, kernel_artifact_digest, recovery_generation=recovery_generation,
+            attempt_id,
+            kernel_artifact_digest,
+            recovery_generation=recovery_generation,
         )
         if latest is not None and (
             not latest.correct
@@ -1873,7 +2039,8 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             return latest
         if gateway_result_digest is not None:
             evaluation = self.find_agent_evaluation(
-                attempt_id, kernel_artifact_digest,
+                attempt_id,
+                kernel_artifact_digest,
                 gateway_result_digest=gateway_result_digest,
                 recovery_generation=recovery_generation,
             )
