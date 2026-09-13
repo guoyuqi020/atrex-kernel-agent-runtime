@@ -309,6 +309,17 @@ class AttemptDirectionEventV1(BaseModel):
     stop_conditions: str | None
     analysis: str | None
     supporting_experiment_ids: tuple[str, ...] = Field(max_length=32)
+    relationship: (
+        Literal["retry", "refinement", "reimplementation", "correction", "port", "combination"]
+        | None
+    ) = None
+    derived_from_direction_ids: tuple[
+        Annotated[str, Field(pattern=r"^direction_[0-9a-f]{32}$")], ...
+    ] = Field(default=(), max_length=32)
+    derived_from_experiment_ids: tuple[
+        Annotated[str, Field(pattern=r"^experiment_[0-9a-f]{32}$")], ...
+    ] = Field(default=(), max_length=32)
+    supersedes_direction_id: str | None = Field(default=None, pattern=r"^direction_[0-9a-f]{32}$")
 
     @field_validator("recorded_at")
     @classmethod
@@ -321,6 +332,24 @@ class AttemptDirectionEventV1(BaseModel):
 
     @model_validator(mode="after")
     def _validate_event(self) -> AttemptDirectionEventV1:
+        has_relationship = bool(
+            self.relationship
+            or self.derived_from_direction_ids
+            or self.derived_from_experiment_ids
+            or self.supersedes_direction_id
+        )
+        if has_relationship and self.action != "propose":
+            raise ValueError("Direction genealogy is immutable; propose a new derived Direction")
+        if has_relationship and (
+            self.relationship is None
+            or not (self.derived_from_direction_ids or self.derived_from_experiment_ids)
+        ):
+            raise ValueError("Direction relationship requires a type and parent references")
+        for ids in (self.derived_from_direction_ids, self.derived_from_experiment_ids):
+            if len(ids) != len(set(ids)):
+                raise ValueError("Direction genealogy references must be unique")
+        if self.direction_id in self.derived_from_direction_ids:
+            raise ValueError("Direction genealogy cannot reference itself")
         definition = (
             self.name,
             self.hypothesis,

@@ -261,7 +261,7 @@ helpers are supported for a shared custom input generator and Shapes.
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
 | `result-artifact-read` | Reads a normalized Agent-visible Result Artifact by digest; request JSON omits `operation`. |
 | `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Experiment associations are derived automatically; returns the stable Direction ID. |
-| `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, and current status to that file and returns only status, file, and count. |
+| `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, current status, and any declared ancestry to that file and returns only status, file, and count. |
 | `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction. Its supporting IDs automatically include every visible Experiment bound to it and associations snapshotted internally by status events. |
 | `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, and action. Runtime freezes the Trials' Kernel and Result Artifact identities. Bootstrap alone may use `baseline` with `before=null`. Returns the stable Experiment ID. |
 | `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, hypothesis, change, evidence, analysis, and action from frozen history plus the current live Journal, then returns only status, file, and count. |
@@ -534,6 +534,43 @@ in the Evolution Trace; the field does not change the Bundle base or revision an
 Evolver submits a draft through its local `evolution-report` tool. Invalid submissions return `issues`,
 `request_schema`, and `recovery` without publishing; the first success atomically writes
 `scratch/evolution-report.json`. Runtime independently revalidates the report after Session exit.
+
+## Direction genealogy
+
+`update-direction` proposals optionally declare ancestry in addition to their existing definition:
+
+```json
+{
+  "action": "propose",
+  "name": "combine the two measured changes",
+  "hypothesis": "disjoint mechanisms can be combined",
+  "rationale": "the cited experiments isolated each component",
+  "plan": ["port both changes onto the incumbent", "measure the combined Kernel"],
+  "success_criteria": "correct and faster under the existing Gate",
+  "stop_conditions": "component interaction erases the gain",
+  "relationship": "combination",
+  "derived_from_direction_ids": [
+    "direction_11111111111111111111111111111111",
+    "direction_22222222222222222222222222222222"
+  ],
+  "derived_from_experiment_ids": ["experiment_33333333333333333333333333333333"]
+}
+```
+
+Relationship types are `retry`, `refinement`, `reimplementation`, `correction`, `port`, and
+`combination`. The existing `rationale` explains the connection. Either parent list may be omitted;
+each permits at most 32 unique IDs from the caller's existing visible history. Experiments imply their
+owning Directions as parents. Every relation needs at least one parent; combinations need two distinct
+parents. A correction may set `supersedes_direction_id` to a parent without changing its lifecycle.
+Validation precedes persistence. Lifecycle updates cannot rewrite ancestry; propose a new Direction
+to correct an earlier declaration. Resume an unchanged unfinished hypothesis with its existing ID.
+List/load return declared ancestry; old records remain valid and acquire no fabricated links.
+
+Use `list-directions` and `load-direction` to inspect declared ancestry, and `load-experiment` for
+referenced evidence. There is no separate graph export or generated Evolver genealogy file.
+Relationships remain Agent-authored claims; measurements and Gate rules are unchanged. Simplified
+AKA implements the same validation vocabulary in its Supervisor without introducing Runtime's Pool
+scheduler. Semantic classification and causal Pool-benefit analysis remain separate analytical work.
 
 ## External service contracts
 

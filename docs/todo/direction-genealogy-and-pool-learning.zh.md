@@ -4,8 +4,10 @@
 
 ## 状态
 
-待实现。当前 Direction Journal 仍然是单个 Direction 生命周期的权威记录；本文提出的关系字段尚未成为
-受支持的输入协议。
+主 Runtime 与简化 AKA 已实现：可选的提案谱系、可见引用校验、追加式持久化和 List/load 投影。
+不提供独立关系图导出，也不为 Evolver 生成额外谱系文件。
+具体字段及命令见[接口说明](../interfaces.zh.md#direction-谱系)。测量、可见性和 Gate 策略保持不变。
+自动语义分类与 Pool 收益的因果归因仍属于后续分析工作；当前记录的是 Agent 声明及其来源，不推断因果。
 
 ## 背景与问题
 
@@ -26,6 +28,8 @@ Attempt 的价值；从兄弟 Trajectory 恢复修改，才是 Pool 特有的跨
 完整 Conversation 就能区分两者。
 
 ## 实验观察
+
+本次审计早于谱系字段的实现。下文“当前”“未来”等表述针对归档实验及其暴露的缺口，不代表今日接口仍未实现。
 
 以下观察来自 FlashAttention 的 Pool-3 运行记录。每个 DSL 的 Pool 由两条并行 Trajectory 组成；每条
 Trajectory 在一个 Epoch 内串行执行三个 Attempt，然后 Runtime 选择本轮最好的正确 Kernel，作为下一
@@ -179,9 +183,9 @@ Best-of-Two。实证最强的是同一 Direction 的实现竞赛和跨分支组�
 防止事后修改局部 Gate。Triton 的反例表明，三个 Attempt 一次广播也可能过早淘汰需要更长探索周期的
 Direction。
 
-## 建议的数据模型
+## 已实现的数据模型
 
-在不改变 Direction 稳定身份和生命周期的前提下，为其增加可选、受校验的关系：
+创建新 Direction 时可声明受校验的关系，不改变父方向的稳定身份和生命周期；声明成功后谱系不可改写：
 
 ```json
 {
@@ -193,7 +197,7 @@ Direction。
 }
 ```
 
-第一版关系类型建议包括：
+支持的关系类型包括：
 
 - `retry`：因执行或基础设施失败而重新尝试相同假设；
 - `refinement`：保留主要机制，同时缩小或改进假设；
@@ -211,12 +215,12 @@ Direction。
 - 被引用的 Direction 和 Experiment 必须按照现有 Evidence Policy 对当前 Lineage 可见。
 - 关系记录保持只追加；纠错通过新增事件完成，不能改写历史证据。
 - Optimizer Prompt 应说明何时复用 Direction ID，何时创建派生 Direction。
-- Evolver Evidence 可以汇总关系图，但必须保留到原始 Report、Experiment 和 Result Artifact 的引用。
-- Inspect 和导出接口应能直接展示关系图，不要求解析 Conversation。
+- List/load 返回关系声明，通过 Experiment ID 继续查询其测量证据。
+- Evolver 使用现有 Report，不额外生成谱系文件。
 
 ## 可支持的 Pool 分析
 
-关系图应允许分别统计：
+后续分析可以将关系声明与现有 Attempt 来源信息、测量数据关联，研究以下问题。Journal 工具本身不生成这些指标：
 
 - 兄弟 Trajectory 之间的 Direction 多样性；
 - 同一个 Direction 的独立实现；
@@ -231,10 +235,10 @@ Direction。
 
 - Direction 可以声明零个或多个经过校验的父 Direction 与 Experiment。
 - Registry 无需读取 Conversation，即可还原重试、细化、重新实现、纠错、移植和组合边。
-- Inspect 可以展示一个 Epoch 或完整 Lineage 的 Direction 关系图。
-- 系统能够区分跨 Trajectory 移植和同一 Trajectory 内的继续探索。
+- List/load 保留父 Direction 与 Experiment 的声明引用。
+- 跨 Trajectory 和串行探索的归因需结合原有 Attempt 来源信息分析。
 - 缺少关系字段的现有 Direction 记录仍然有效，无需为历史数据编造关系。
-- 测试覆盖不可见引用、禁止的环、重复边、失败后重试、兄弟分支移植和多父节点组合。
+- 测试覆盖不可见引用、禁止的环、重复引用、失败后重试和多父节点组合。
 
 ## 非目标
 

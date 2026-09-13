@@ -96,6 +96,19 @@ over duplicate stdout and omit internal queue/title/file-history bookkeeping and
 estimates. Distinct content blocks, uncovered stdout, errors, compaction boundaries, and terminal
 results remain visible.
 
+## Direction ancestry
+
+Resume the same unfinished hypothesis with `update-direction` and its existing Direction ID.
+When you revisit, reinterpret, port, or combine earlier work as a new hypothesis, use `action="propose"`
+with optional `relationship`: `retry`, `refinement`, `reimplementation`, `correction`, `port`, or
+`combination`. Cite visible `derived_from_direction_ids` and/or `derived_from_experiment_ids` and
+explain the connection in the proposal's `rationale`. Use list/load tools to obtain real IDs first.
+Each list allows at most 32 unique IDs. A combination needs two distinct parent Directions, either
+directly or through their Experiments. A correction may also specify `supersedes_direction_id` naming
+one of those parents; this records a revised interpretation without changing the parent's status.
+Ancestry is fixed when the proposal is recorded. To correct it, propose a new derived Direction;
+do not rewrite history. These links describe your interpretation, not proof of a performance gain.
+
 ## Trust and measurement reuse
 
 Treat normalized Gateway operation status, correctness, latency, per-Shape latency, profiler

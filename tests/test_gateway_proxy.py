@@ -1053,6 +1053,109 @@ async def test_runtime_journal_history_reads_terminal_report_artifacts(
 
 
 @pytest.mark.anyio
+async def test_direction_genealogy_is_durable_scoped_and_queryable(tmp_path: Path) -> None:
+    registry, control, attempt, capability, service, _adapter = _service(tmp_path)
+
+    async def update(key: str, **fields: object) -> Any:
+        return await service.execute(
+            capability.token,
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "idempotency_key": key,
+                    "operation": "direction_update",
+                    "request": fields,
+                }
+            ).encode(),
+            operation_scope="journal",
+        )
+
+    proposal = dict(
+        action="propose",
+        name="vectorization",
+        hypothesis="reduce transactions",
+        rationale="measured bottleneck",
+        plan=["implement and measure"],
+        success_criteria="correct and faster",
+        stop_conditions="no improvement",
+    )
+    try:
+        parent = cast(dict[str, Any], (await update("parent", **proposal)).result)["direction_id"]
+        child_request = {
+            **proposal,
+            "relationship": "retry",
+            "derived_from_direction_ids": [parent],
+        }
+        child = await update("child", **child_request)
+        replay = await update("child", **child_request)
+        assert replay.result == child.result
+        assert len(control.list_direction_events(attempt.id)) == 2
+        with pytest.raises(ValueError, match="not visible"):
+            await update(
+                "invisible",
+                **{
+                    **proposal,
+                    "relationship": "port",
+                    "derived_from_direction_ids": ["direction_" + "f" * 32],
+                },
+            )
+        assert len(control.list_direction_events(attempt.id)) == 2
+        child_id = cast(dict[str, Any], child.result)["direction_id"]
+        # A lifecycle event may not rewrite its proposal's parentage.
+        with pytest.raises(ValueError):
+            await update(
+                "rewrite",
+                action="start",
+                direction_id=child_id,
+                analysis="rewrite",
+                relationship="correction",
+                derived_from_direction_ids=[parent],
+            )
+        for operation, fields in (
+            ("direction_load", {"direction_id": child_id}),
+            ("directions_list", {}),
+        ):
+            response = await service.execute(
+                capability.token,
+                json.dumps(
+                    {
+                        "schema_version": 2,
+                        "attempt_id": attempt.id,
+                        "idempotency_key": operation,
+                        "operation": operation,
+                        **fields,
+                    }
+                ).encode(),
+                operation_scope="journal",
+            )
+            result = cast(dict[str, Any], response.result)
+            loaded = (
+                result
+                if operation == "direction_load"
+                else next(item for item in result["directions"] if item["direction_id"] == child_id)
+            )
+            assert loaded["relationship"] == "retry"
+            assert loaded["derived_from_direction_ids"] == [parent]
+        registry.record_infrastructure_failure(attempt.id, "simulated restart")
+        registry.retry_attempt(attempt.id)
+        capability = control.issue(
+            attempt.id,
+            GatewayCapabilityPolicy(
+                frozenset(GatewayOperation),
+                4,
+                NOW_DATETIME + timedelta(hours=1),
+            ),
+        )
+        replay_after_recovery = await update("child", **child_request)
+        assert replay_after_recovery.result == child.result
+        assert len(control.list_direction_events(attempt.id)) == 2
+    finally:
+        control.close()
+        registry.close()
+
+
+@pytest.mark.anyio
 async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     tmp_path: Path,
 ) -> None:

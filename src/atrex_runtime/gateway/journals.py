@@ -10,6 +10,7 @@ from typing import cast
 from uuid import uuid4
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
+from ..direction_genealogy import RELATIONSHIP_FIELDS, relationship_fields, validate_relationship
 from ..domain.errors import DirectionConcurrencyError, InfrastructureError
 from ..domain.ids import AttemptId, parse_artifact_digest
 from ..workers.attempt_report import (
@@ -97,6 +98,11 @@ class RuntimeJournalService:
         events = self._current_direction_events(report.attempt_id)
         experiments = self._current_experiments(report.attempt_id)
         if not events and not experiments:
+            if any(event.relationship for event in report.direction_events):
+                raise ValueError(
+                    "Record derived Directions with update-direction before submitting the report; "
+                    "genealogy references must be validated by Runtime"
+                )
             # Older report-only clients have no live Journal, but cannot invent the
             # new adoption action to claim Runtime has registered a reuse decision.
             if any(experiment.action == "adopt" for experiment in report.experiments):
@@ -134,6 +140,7 @@ class RuntimeJournalService:
                             "direction_id": direction["direction_id"],
                             "name": direction["name"],
                             "status": direction["status"],
+                            **relationship_fields(direction),
                         }
                         for direction in directions.values()
                     ]
@@ -381,6 +388,7 @@ class RuntimeJournalService:
                     "status": _DIRECTION_STATUSES[action],
                     "analysis": None,
                     "supporting_experiment_ids": [],
+                    **relationship_fields(event),
                 }
                 continue
             if existing is None:
@@ -409,10 +417,10 @@ class RuntimeJournalService:
         value = dict(request.request)
         action = value.get("action")
         if action == "propose":
-            if set(value) != _DIRECTION_PROPOSAL_FIELDS:
+            if set(value) - RELATIONSHIP_FIELDS != _DIRECTION_PROPOSAL_FIELDS:
                 raise ValueError(
-                    "Direction proposal fields must be exactly "
-                    f"{sorted(_DIRECTION_PROPOSAL_FIELDS)}"
+                    f"Direction proposal requires {sorted(_DIRECTION_PROPOSAL_FIELDS)}; "
+                    f"optional genealogy fields are {sorted(RELATIONSHIP_FIELDS)}"
                 )
             for field in (
                 "name",
@@ -424,15 +432,32 @@ class RuntimeJournalService:
                 _text(value.get(field), f"Direction {field}")
             _text_array(value.get("plan"), "Direction plan", required=True)
             direction_id = f"direction_{uuid4().hex}"
+            ancestry: dict[str, object] = {}
+            if set(value) & RELATIONSHIP_FIELDS:
+                ancestry = validate_relationship(
+                    direction_id,
+                    value,
+                    self._direction_views(request.attempt_id),
+                    {
+                        str(item["experiment_id"]): item
+                        for item in self._visible_experiments(request.attempt_id)
+                    },
+                )
             event: dict[str, object] = {
                 "direction_event_id": f"directionevent_{uuid4().hex}",
                 "direction_id": direction_id,
                 "recorded_at": datetime.now(UTC).isoformat(),
                 **value,
+                **ancestry,
                 "analysis": None,
                 "supporting_experiment_ids": [],
             }
         else:
+            if set(value) & RELATIONSHIP_FIELDS:
+                raise ValueError(
+                    "Direction genealogy is immutable; propose a new derived Direction "
+                    "instead of changing ancestry in a lifecycle update"
+                )
             if set(value) != _DIRECTION_UPDATE_FIELDS:
                 raise ValueError(
                     f"Direction update fields must be exactly {sorted(_DIRECTION_UPDATE_FIELDS)}"

@@ -236,7 +236,7 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
 | `result-artifact-read` | 按 Result Artifact Digest 读取规范化的 Agent 可见结果；请求 JSON 不写 `operation`。 |
 | `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；Experiment 关联自动派生，返回稳定 Direction ID。 |
-| `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称和当前状态原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
+| `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称、当前状态和已声明的谱系关系原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction；支持 ID 自动包含所有绑定它的可见 Experiment，以及状态事件在内部形成的关联快照。 |
 | `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis` 与 Action；Runtime 冻结所选 Result 与对应 Kernel 的身份。只有 Bootstrap 可用 `baseline` 与 `before=null`。返回稳定 Experiment ID。 |
 | `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis 和 Action 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
@@ -465,6 +465,40 @@ Skills 只读，仅 Tools 可写。
 
 Evolver 通过本地 `evolution-report` 提交 Draft；错误返回 `issues`、`request_schema` 和 `recovery`，
 不发布。首次成功原子生成 `scratch/evolution-report.json`，Session 退出后 Runtime 再独立校验。
+
+## Direction 谱系
+
+`update-direction` 的 `propose` 在原有定义之外，可以附加关系声明：
+
+```json
+{
+  "action": "propose",
+  "name": "组合两项已测量修改",
+  "hypothesis": "两个作用区域不同的机制可以组合",
+  "rationale": "引用的实验分别隔离了两个机制",
+  "plan": ["将两项修改移植到当前 Kernel", "测量组合结果"],
+  "success_criteria": "保持正确，且通过现有性能 Gate",
+  "stop_conditions": "机制相互干扰，抵消收益",
+  "relationship": "combination",
+  "derived_from_direction_ids": [
+    "direction_11111111111111111111111111111111",
+    "direction_22222222222222222222222222222222"
+  ],
+  "derived_from_experiment_ids": ["experiment_33333333333333333333333333333333"]
+}
+```
+
+关系类型为 `retry`（重试）、`refinement`（细化）、`reimplementation`（重新实现）、
+`correction`（纠错）、`port`（移植）、`combination`（组合）。原有 `rationale` 解释关系。
+两个来源列表可各自省略，每个最多 32 个不重复的可见 ID；Experiment 所属 Direction 也视为父方向。
+每项关系至少一个父方向，组合至少两个不同父方向。纠错可指定 `supersedes_direction_id`，但只能指向
+其父方向，且不会改变父方向生命周期。全部校验成功后才写入；生命周期更新不能改写谱系，纠正声明需
+创建新的派生 Direction。继续相同的未完成假设应复用已有 ID。List/load 返回已声明关系；旧记录不补造关系。
+
+通过 `list-directions` 和 `load-direction` 查看已声明关系，通过 `load-experiment` 读取引用的实验。
+不提供独立关系图导出，也不为 Evolver 生成额外谱系文件。关系仍然是 Agent 的分析声明；测量和 Gate
+规则不变。简化 AKA 的 Supervisor 实现相同的关系校验，但不引入主 Runtime 的 Pool 调度。
+语义分类和 Pool 收益的因果归因仍是独立的分析工作。
 
 ## 外部服务 Contract
 
