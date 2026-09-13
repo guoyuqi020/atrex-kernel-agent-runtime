@@ -44,7 +44,6 @@ def _value(attempt_id: str) -> dict[str, object]:
                 {
                     "operation": "profile",
                     "kernel_artifact_digest": "sha256:" + "d" * 64,
-                    "kernel_trial_id": "gtrial_" + "e" * 32,
                     "result_artifact_digest": "sha256:" + "f" * 64,
                 }
             ],
@@ -79,12 +78,10 @@ def _value(attempt_id: str) -> dict[str, object]:
                 "change": "vectorized loads",
                 "before": {
                     "kernel_artifact_digest": "sha256:" + "a" * 64,
-                    "kernel_trial_id": "gtrial_" + "b" * 32,
                     "result_artifact_digests": ["sha256:" + "c" * 64],
                 },
                 "after": {
                     "kernel_artifact_digest": "sha256:" + "d" * 64,
-                    "kernel_trial_id": "gtrial_" + "e" * 32,
                     "result_artifact_digests": [
                         "sha256:" + "f" * 64,
                         "sha256:" + "1" * 64,
@@ -161,9 +158,7 @@ def test_attempt_report_accepts_more_than_256_kib_with_1_mib_limit(tmp_path: Pat
     path.write_text(json.dumps(value), encoding="utf-8")
     assert 262_144 < path.stat().st_size < 1_048_576
 
-    report = AttemptReportV12.from_file(
-        path, expected_attempt_id=attempt_id, max_bytes=1_048_576
-    )
+    report = AttemptReportV12.from_file(path, expected_attempt_id=attempt_id, max_bytes=1_048_576)
 
     assert report.analysis == value["analysis"]
     # An explicitly configured smaller cap remains valid and enforced.
@@ -172,9 +167,7 @@ def test_attempt_report_accepts_more_than_256_kib_with_1_mib_limit(tmp_path: Pat
 
 
 @pytest.mark.parametrize("extra_byte", [False, True])
-def test_attempt_report_enforces_exact_1_mib_boundary(
-    tmp_path: Path, extra_byte: bool
-) -> None:
+def test_attempt_report_enforces_exact_1_mib_boundary(tmp_path: Path, extra_byte: bool) -> None:
     attempt_id = new_attempt_id()
     value = _value(attempt_id)
     path = tmp_path / "report.json"
@@ -494,29 +487,31 @@ def test_attempt_report_rejects_legacy_experiment_decision_field(tmp_path: Path)
 def _load(tmp_path: Path, value: dict[str, object], attempt_id: str) -> AttemptReportV12:
     path = tmp_path / "report.json"
     path.write_text(json.dumps(value), encoding="utf-8")
-    return AttemptReportV12.from_file(path, expected_attempt_id=attempt_id, max_bytes=8192)
+    return AttemptReportV12.from_file(path, expected_attempt_id=attempt_id, max_bytes=16384)
 
 
 def test_sealed_report_without_contributing_trials_defaults_to_none(tmp_path: Path) -> None:
     """Reports sealed before the field existed are still re-parsed by the Bootstrap path."""
     attempt_id = new_attempt_id()
     value = _value(attempt_id)
-    assert "contributing_kernel_trial_ids" not in value
+    assert "contributing_result_artifact_digests" not in value
 
-    assert _load(tmp_path, value, attempt_id).contributing_kernel_trial_ids == ()
+    assert _load(tmp_path, value, attempt_id).contributing_result_artifact_digests == ()
 
 
 @pytest.mark.parametrize("suffixes", ["", "ab", "ba", "baba", "a" * 64])
 def test_attempt_report_normalizes_contributing_trials(tmp_path: Path, suffixes: str) -> None:
     attempt_id = new_attempt_id()
-    trials = ["gtrial_" + suffix * 32 for suffix in suffixes]
-    value = {**_value(attempt_id), "contributing_kernel_trial_ids": trials}
+    trials = ["sha256:" + suffix * 64 for suffix in suffixes]
+    value = {**_value(attempt_id), "contributing_result_artifact_digests": trials}
 
     report = _load(tmp_path, value, attempt_id)
 
-    assert report.contributing_kernel_trial_ids == tuple(sorted(set(trials)))
-    assert report.model_dump(mode="json")["contributing_kernel_trial_ids"] == sorted(set(trials))
-    assert value["contributing_kernel_trial_ids"] == trials
+    assert report.contributing_result_artifact_digests == tuple(sorted(set(trials)))
+    assert report.model_dump(mode="json")["contributing_result_artifact_digests"] == sorted(
+        set(trials)
+    )
+    assert value["contributing_result_artifact_digests"] == trials
 
 
 @pytest.mark.parametrize(
@@ -524,15 +519,15 @@ def test_attempt_report_normalizes_contributing_trials(tmp_path: Path, suffixes:
     [
         (["kerneltrial_" + "a" * 32], "String should match pattern"),
         (["not-a-trial", "not-a-trial"], "String should match pattern"),
-        (["gtrial_" + "a" * 32] * 65, "at most 64"),
-        ([f"gtrial_{index:032x}" for index in range(65)], "at most 64"),
+        (["sha256:" + "a" * 64] * 65, "at most 64"),
+        ([f"sha256:{index:064x}" for index in range(65)], "at most 64"),
     ],
 )
 def test_attempt_report_rejects_invalid_contributing_trials(
     tmp_path: Path, trials: list[str], message: str
 ) -> None:
     attempt_id = new_attempt_id()
-    value = {**_value(attempt_id), "contributing_kernel_trial_ids": trials}
+    value = {**_value(attempt_id), "contributing_result_artifact_digests": trials}
 
     with pytest.raises(ValueError, match=message):
         _load(tmp_path, value, attempt_id)

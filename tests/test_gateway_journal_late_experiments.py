@@ -19,53 +19,70 @@ from atrex_runtime.workers.attempt_report import AttemptReportV12
 @pytest.mark.anyio
 @pytest.mark.parametrize(
     ("close_action", "closed_status"),
-    [("complete", "completed"), ("abandon", "abandoned"),
-     ("block", "blocked"), ("defer", "deferred")],
+    [
+        ("complete", "completed"),
+        ("abandon", "abandoned"),
+        ("block", "blocked"),
+        ("defer", "deferred"),
+    ],
 )
 @pytest.mark.parametrize("other_in_progress", [False, True])
 async def test_closed_direction_accepts_late_profile_evidence(
-    tmp_path: Path, close_action: str, closed_status: str, other_in_progress: bool,
+    tmp_path: Path,
+    close_action: str,
+    closed_status: str,
+    other_in_progress: bool,
 ) -> None:
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
 
     async def journal(operation: str, key: str, **fields: object) -> dict[str, Any]:
         response = await service.execute(
             capability.token,
-            json.dumps({
-                "schema_version": 2,
-                "attempt_id": attempt.id,
-                "idempotency_key": key,
-                "operation": operation,
-                **fields,
-            }).encode(),
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "idempotency_key": key,
+                    "operation": operation,
+                    **fields,
+                }
+            ).encode(),
             operation_scope="journal",
         )
         return cast(dict[str, Any], response.result)
 
     async def propose(key: str) -> str:
-        response = await journal("direction_update", key, request={
-            "action": "propose",
-            "name": key,
-            "hypothesis": "vector loads reduce memory traffic",
-            "rationale": "profile indicates excess transactions",
-            "plan": ["measure the candidate"],
-            "success_criteria": "correct and faster",
-            "stop_conditions": "the hypothesis is resolved",
-        })
+        response = await journal(
+            "direction_update",
+            key,
+            request={
+                "action": "propose",
+                "name": key,
+                "hypothesis": "vector loads reduce memory traffic",
+                "rationale": "profile indicates excess transactions",
+                "plan": ["measure the candidate"],
+                "success_criteria": "correct and faster",
+                "stop_conditions": "the hypothesis is resolved",
+            },
+        )
         return str(response["direction_id"])
 
     async def update(direction_id: str, action: str) -> None:
-        await journal("direction_update", f"{direction_id}-{action}", request={
-            "direction_id": direction_id,
-            "action": action,
-            "analysis": f"{action} the research direction",
-        })
+        await journal(
+            "direction_update",
+            f"{direction_id}-{action}",
+            request={
+                "direction_id": direction_id,
+                "action": action,
+                "analysis": f"{action} the research direction",
+            },
+        )
 
     try:
         direction_id = await propose("late-evidence-direction")
         await update(direction_id, "start")
         evaluated = await service.execute(capability.token, _request(attempt))
-        subject = {"kernel_trial_id": evaluated.kernel_trial_id}
+        subject = {"result_artifact_digest": evaluated.result_artifact_digest}
         experiment = {
             "direction_id": direction_id,
             "name": "candidate evaluation",
@@ -100,7 +117,6 @@ async def test_closed_direction_accepts_late_profile_evidence(
         binding = {
             "operation": "profile",
             "kernel_artifact_digest": profiled.kernel_artifact_digest,
-            "kernel_trial_id": profiled.kernel_trial_id,
             "result_artifact_digest": profiled.result_artifact_digest,
         }
         assert any(
@@ -108,14 +124,21 @@ async def test_closed_direction_accepts_late_profile_evidence(
             for item in snapshot["citable_profile_results"]
         )
         control.record_kernel_trial_annotations(
-            attempt.id, prior_experiments, profile_supporting_results=(binding,),
+            attempt.id,
+            prior_experiments,
+            profile_supporting_results=(binding,),
         )
 
         late_request = {**experiment, "name": "late profile diagnosis"}
         late = await journal("experiment_record", "late-experiment", request=late_request)
-        assert await journal(
-            "experiment_record", "late-experiment", request=late_request,
-        ) == late
+        assert (
+            await journal(
+                "experiment_record",
+                "late-experiment",
+                request=late_request,
+            )
+            == late
+        )
         assert control.list_direction_events(attempt.id) == prior_events
         assert control.list_experiments(attempt.id)[:1] == prior_experiments
         assert len(control.list_experiments(attempt.id)) == 2
@@ -125,7 +148,8 @@ async def test_closed_direction_accepts_late_profile_evidence(
         directions = {item["direction_id"]: item for item in snapshot["directions"]}
         assert directions[direction_id]["status"] == closed_status
         assert directions[direction_id]["supporting_experiment_ids"] == [
-            recorded["experiment_id"], late["experiment_id"],
+            recorded["experiment_id"],
+            late["experiment_id"],
         ]
         assert directions[second]["status"] == ("in_progress" if other_in_progress else "proposed")
         assert {key: value for key, value in binding.items() if key != "operation"} in (
@@ -133,17 +157,24 @@ async def test_closed_direction_accepts_late_profile_evidence(
         )
 
         # Closure never bypasses visibility or Trial identity validation.
-        for ordinal, invalid in enumerate((
-            {**late_request, "direction_id": "direction_" + "f" * 32},
-            {**late_request, "after": {"kernel_trial_id": "gtrial_" + "f" * 32}},
-        )):
-            with pytest.raises(ValueError, match="outside visible history"):
+        for ordinal, invalid in enumerate(
+            (
+                {**late_request, "direction_id": "direction_" + "f" * 32},
+                {**late_request, "after": {"result_artifact_digest": "sha256:" + "f" * 64}},
+            )
+        ):
+            with pytest.raises(ValueError, match="visible history"):
                 await journal("experiment_record", f"invalid-late-{ordinal}", request=invalid)
         if not other_in_progress:
             with pytest.raises(ValueError, match="current status is proposed"):
-                await journal("experiment_record", "proposed-experiment", request={
-                    **late_request, "direction_id": second,
-                })
+                await journal(
+                    "experiment_record",
+                    "proposed-experiment",
+                    request={
+                        **late_request,
+                        "direction_id": second,
+                    },
+                )
         else:
             await update(second, "defer")
         assert len(control.list_experiments(attempt.id)) == 2
@@ -153,7 +184,7 @@ async def test_closed_direction_accepts_late_profile_evidence(
         report.update(
             experiments=snapshot["experiments"],
             direction_events=snapshot["direction_events"],
-            contributing_kernel_trial_ids=[evaluated.kernel_trial_id],
+            contributing_result_artifact_digests=[evaluated.result_artifact_digest],
         )
         cast(dict[str, Any], report["profile_evidence"])["supporting_results"] = [binding]
         cast(list[dict[str, Any]], report["findings"])[0]["supporting_experiment_ids"] = [

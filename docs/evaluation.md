@@ -61,7 +61,7 @@ the request's idempotency key.
 {"operation": "evaluate", "mode": "correctness_only", "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
 ```
 
-Custom-input, custom-Shape, and correctness-only results retain Kernel Trial and Result Artifact
+Custom-input, custom-Shape, and correctness-only results retain Kernel and Result Artifact
 identities, and record the effective `mode` and `input_scope` (`custom` when either component is
 overridden, otherwise `contract`). Correctness-only results contain no performance measurements.
 These calls cannot replace the full trusted-contract evaluation required for `candidate_ready`,
@@ -168,11 +168,11 @@ promotes an Agent, and cannot replace the successful full trusted-contract Evalu
 
 The response retains `operation: "evaluate"`; `result.comparison` records `method: "abba"` and
 the actual `repeats` count. There is no standalone ABBA operation or top-level repeat parameter.
-The response's Kernel Trial and Kernel Artifact identities describe B. The retained Result Artifact
+The response's Kernel Artifact identifies B; its Result Artifact identifies this comparison. The retained Result Artifact
 includes A's `baseline_kernel_artifact_digest`, `baseline` and `candidate` correctness/latency
 summaries, all `measurements` and the `schedule`, `mode`, and `input_scope`. `speedup` is
 A/B latency and `improvement_pct` is (A−B)/A × 100; aggregate latency uses a geometric mean.
-Use `kernel-trial-show` and `result-artifact-read` to retrieve this evidence. Exploratory ABBA does
+Use `result-artifact-read` to retrieve this evidence. Exploratory ABBA does
 not create an ordinary Evaluate record. Runtime retains the normalized per-Shape aggregate for both
 A and B and keeps all three underlying responses as private evidence.
 

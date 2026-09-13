@@ -48,10 +48,15 @@ class Case:
     service: GatewayProxyService
 
     def request(self, operation: str, key: str, **fields: Any) -> bytes:
-        return json.dumps({
-            "schema_version": 2, "attempt_id": self.attempt.id,
-            "operation": operation, "idempotency_key": key, **fields,
-        }).encode()
+        return json.dumps(
+            {
+                "schema_version": 2,
+                "attempt_id": self.attempt.id,
+                "operation": operation,
+                "idempotency_key": key,
+                **fields,
+            }
+        ).encode()
 
     def report(self) -> dict[str, Any]:
         value = report_value(self.attempt.id)
@@ -60,7 +65,8 @@ class Case:
 
     def submission(self, key: str = "report", report: dict[str, Any] | None = None) -> bytes:
         return self.request(
-            "attempt_report", key,
+            "attempt_report",
+            key,
             report=self.report() if report is None else report,
             candidate=json.loads(_request(self.attempt))["candidate"],
         )
@@ -71,17 +77,28 @@ def case(tmp_path: Path) -> Iterator[Case]:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     attempt = _insert_attempt(registry, attempts_per_trajectory=2)
     control = SqliteGatewayControl(
-        tmp_path / "gateway.sqlite", registry,
-        signing_key=b"r" * 32, clock=lambda: NOW_DATETIME,
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"r" * 32,
+        clock=lambda: NOW_DATETIME,
     )
     # The report operations must be implicit and remain usable after this one call is spent.
-    capability = control.issue(attempt.id, GatewayCapabilityPolicy(
-        frozenset({GatewayOperation.EVALUATE}), 1, NOW_DATETIME + timedelta(hours=1),
-    ))
+    capability = control.issue(
+        attempt.id,
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.EVALUATE}),
+            1,
+            NOW_DATETIME + timedelta(hours=1),
+        ),
+    )
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     adapter = FakeGatewayAdapter(GatewayAdapterResult("completed", {"unexpected": "GPU"}))
     service = GatewayProxyService(
-        control, artifacts, adapter, GatewayProxyLimits(64 * 1024, 8, 16 * 1024), registry,
+        control,
+        artifacts,
+        adapter,
+        GatewayProxyLimits(64 * 1024, 8, 16 * 1024),
+        registry,
     )
     try:
         yield Case(registry, control, attempt, capability, artifacts, adapter, service)
@@ -92,10 +109,13 @@ def case(tmp_path: Path) -> Iterator[Case]:
 
 @pytest.mark.anyio
 async def test_report_status_refreshes_missing_to_accepted_without_quota_or_gpu(
-    case: Case, tmp_path: Path,
+    case: Case,
+    tmp_path: Path,
 ) -> None:
     case.control.authorize(
-        case.capability, GatewayOperation.EVALUATE, idempotency_key="spent-budget",
+        case.capability,
+        GatewayOperation.EVALUATE,
+        idempotency_key="spent-budget",
         request_digest=str(canonical_json_digest({"budget": "spent"})),
     )
     # Neither a local report nor an unreferenced sealed report proves server acceptance.
@@ -104,37 +124,58 @@ async def test_report_status_refreshes_missing_to_accepted_without_quota_or_gpu(
     query = case.request("attempt_report_status", "fixed-status-query")
     for _ in range(3):
         missing = await case.service.execute(
-            case.capability.token, query, operation_scope="runtime",
+            case.capability.token,
+            query,
+            operation_scope="runtime",
         )
         assert missing.result == {"status": "missing"}
-    assert case.control.get_operation_artifact(
-        case.attempt.id, "fixed-status-query", GatewayOperation.ATTEMPT_REPORT_STATUS,
-    ) is None
+    assert (
+        case.control.get_operation_artifact(
+            case.attempt.id,
+            "fixed-status-query",
+            GatewayOperation.ATTEMPT_REPORT_STATUS,
+        )
+        is None
+    )
 
     registered = await case.service.execute(
-        case.capability.token, case.submission(), operation_scope="runtime",
+        case.capability.token,
+        case.submission(),
+        operation_scope="runtime",
     )
     expected = AttemptReportV12.model_validate(case.report()).model_dump(mode="json")
     assert isinstance(registered.result, dict)
     digest = registered.result["report_artifact_digest"]
     for _ in range(3):
         accepted = await case.service.execute(
-            case.capability.token, query, operation_scope="runtime",
+            case.capability.token,
+            query,
+            operation_scope="runtime",
         )
         assert accepted.result == {
-            "status": "accepted", "report": expected, "report_artifact_digest": digest,
+            "status": "accepted",
+            "report": expected,
+            "report_artifact_digest": digest,
         }
         assert accepted.evaluation is None and accepted.kernel_artifact_digest is None
     assert accepted.result_artifact_digest != missing.result_artifact_digest
     assert case.adapter.requests == []
-    assert len(case.control.list_operation_artifacts(
-        (case.attempt.id,), GatewayOperation.ATTEMPT_REPORT, recovery_generation=0,
-    )) == 1
+    assert (
+        len(
+            case.control.list_operation_artifacts(
+                (case.attempt.id,),
+                GatewayOperation.ATTEMPT_REPORT,
+                recovery_generation=0,
+            )
+        )
+        == 1
+    )
 
 
 @pytest.mark.anyio
 async def test_only_committed_acceptance_counts_and_interrupted_submission_replays(
-    case: Case, monkeypatch: pytest.MonkeyPatch,
+    case: Case,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     original = case.control.commit_operation_artifact
 
@@ -162,16 +203,21 @@ async def test_status_is_bound_to_attempt_and_current_authorized_generation(case
     other = replace(case.attempt, id=new_attempt_id(), ordinal=2)
     case.registry.insert_attempt(other)
     policy = GatewayCapabilityPolicy(
-        frozenset({GatewayOperation.EVALUATE}), 1, NOW_DATETIME + timedelta(hours=1),
+        frozenset({GatewayOperation.EVALUATE}),
+        1,
+        NOW_DATETIME + timedelta(hours=1),
     )
     other_capability = case.control.issue(other.id, policy)
     other_query = json.loads(query)
     other_query["attempt_id"] = other.id
     with pytest.raises(PermissionError, match="invalid Gateway capability"):
         await case.service.execute(case.capability.token, json.dumps(other_query).encode())
-    assert (await case.service.execute(
-        other_capability.token, json.dumps(other_query).encode(),
-    )).result == {"status": "missing"}
+    assert (
+        await case.service.execute(
+            other_capability.token,
+            json.dumps(other_query).encode(),
+        )
+    ).result == {"status": "missing"}
 
     case.registry.record_infrastructure_failure(case.attempt.id, "session interrupted")
     case.registry.retry_attempt(case.attempt.id)
@@ -180,12 +226,23 @@ async def test_status_is_bound_to_attempt_and_current_authorized_generation(case
     current = case.control.issue(case.attempt.id, policy)
     assert current.recovery_generation == 1
     assert (await case.service.execute(current.token, query)).result == {"status": "missing"}
-    assert len(case.control.list_operation_artifacts(
-        (case.attempt.id,), GatewayOperation.ATTEMPT_REPORT,
-    )) == 1
-    assert case.control.list_operation_artifacts(
-        (case.attempt.id,), GatewayOperation.ATTEMPT_REPORT, recovery_generation=1,
-    ) == ()
+    assert (
+        len(
+            case.control.list_operation_artifacts(
+                (case.attempt.id,),
+                GatewayOperation.ATTEMPT_REPORT,
+            )
+        )
+        == 1
+    )
+    assert (
+        case.control.list_operation_artifacts(
+            (case.attempt.id,),
+            GatewayOperation.ATTEMPT_REPORT,
+            recovery_generation=1,
+        )
+        == ()
+    )
     await case.service.execute(current.token, case.submission())
     accepted = await case.service.execute(current.token, query)
     assert isinstance(accepted.result, dict) and accepted.result["status"] == "accepted"
@@ -195,7 +252,8 @@ async def test_status_is_bound_to_attempt_and_current_authorized_generation(case
 @pytest.mark.anyio
 @pytest.mark.parametrize("oversized", [False, True])
 async def test_report_limit_counts_canonical_utf8_and_rejects_before_acceptance(
-    case: Case, oversized: bool,
+    case: Case,
+    oversized: bool,
 ) -> None:
     report = case.report()
     report["analysis"] = "实测诊断结论" * 100
@@ -203,8 +261,12 @@ async def test_report_limit_counts_canonical_utf8_and_rejects_before_acceptance(
     actual = len(canonical_json_bytes(expected))
     limit = actual - int(oversized)
     service = GatewayProxyService(
-        case.control, case.artifacts, case.adapter, GatewayProxyLimits(64 * 1024, 8, 16 * 1024),
-        case.registry, max_attempt_report_bytes=limit,
+        case.control,
+        case.artifacts,
+        case.adapter,
+        GatewayProxyLimits(64 * 1024, 8, 16 * 1024),
+        case.registry,
+        max_attempt_report_bytes=limit,
     )
     if oversized:
         with pytest.raises(ValueError, match=f"actual_bytes={actual}, max_bytes={limit}"):
@@ -213,7 +275,8 @@ async def test_report_limit_counts_canonical_utf8_and_rejects_before_acceptance(
         registered = await service.execute(case.capability.token, case.submission(report=report))
         assert isinstance(registered.result, dict) and registered.result["status"] == "registered"
     status = await service.execute(
-        case.capability.token, case.request("attempt_report_status", "status"),
+        case.capability.token,
+        case.request("attempt_report_status", "status"),
     )
     assert isinstance(status.result, dict)
     assert status.result["status"] == ("missing" if oversized else "accepted")
@@ -224,8 +287,11 @@ async def test_report_limit_counts_canonical_utf8_and_rejects_before_acceptance(
 def test_report_byte_limit_must_be_a_positive_integer(case: Case, limit: Any) -> None:
     with pytest.raises(ValueError, match="positive integer"):
         GatewayProxyService(
-            case.control, case.artifacts, case.adapter,
-            GatewayProxyLimits(64 * 1024, 8, 16 * 1024), case.registry,
+            case.control,
+            case.artifacts,
+            case.adapter,
+            GatewayProxyLimits(64 * 1024, 8, 16 * 1024),
+            case.registry,
             max_attempt_report_bytes=limit,
         )
 
@@ -233,7 +299,8 @@ def test_report_byte_limit_must_be_a_positive_integer(case: Case, limit: Any) ->
 @pytest.mark.anyio
 @pytest.mark.parametrize("invalid", ["kind", "attempt", "model", "status", "digest"])
 async def test_report_status_fails_closed_on_invalid_committed_artifacts(
-    case: Case, invalid: str,
+    case: Case,
+    invalid: str,
 ) -> None:
     report = case.report()
     kind = ArtifactKind.ATTEMPT_REPORT
@@ -245,23 +312,39 @@ async def test_report_status_fails_closed_on_invalid_committed_artifacts(
         report.pop("analysis")
     digest = case.artifacts.put_json(cast(JsonValue, report), kind)
     receipt = case.service._store_result_artifact(
-        operation="attempt_report", status="completed", kernel_artifact_digest=None,
-        kernel_trial_id=None, job_id=None, evaluation=None,
+        operation="attempt_report",
+        status="completed",
+        kernel_artifact_digest=None,
+        authorization=case.control.authorize(
+            case.capability,
+            GatewayOperation.ATTEMPT_REPORT,
+            idempotency_key="bad-receipt",
+            request_digest=str(canonical_json_digest({"invalid": invalid})),
+        ),
+        job_id=None,
+        evaluation=None,
         result={
-            "status": "registered", "report_status": "pivot" if invalid == "status" else "blocked",
+            "status": "registered",
+            "report_status": "pivot" if invalid == "status" else "blocked",
             "report_artifact_digest": "invalid" if invalid == "digest" else str(digest),
         },
     )
     case.control.authorize(
-        case.capability, GatewayOperation.ATTEMPT_REPORT, idempotency_key="bad-receipt",
+        case.capability,
+        GatewayOperation.ATTEMPT_REPORT,
+        idempotency_key="bad-receipt",
         request_digest=str(canonical_json_digest({"invalid": invalid})),
     )
     case.control.commit_operation_artifact(
-        case.attempt.id, "bad-receipt", GatewayOperation.ATTEMPT_REPORT, receipt,
+        case.attempt.id,
+        "bad-receipt",
+        GatewayOperation.ATTEMPT_REPORT,
+        receipt,
     )
     with pytest.raises(InfrastructureError, match="Accepted Attempt report Artifact is invalid"):
         await case.service.execute(
-            case.capability.token, case.request("attempt_report_status", "status"),
+            case.capability.token,
+            case.request("attempt_report_status", "status"),
         )
     assert case.adapter.requests == []
 
@@ -290,10 +373,16 @@ async def test_status_uses_runtime_query_endpoint_and_discovery_has_no_agent_fie
         sent.append(message)
 
     app = GatewayProxyAsgiApp(case.service, GatewayProxyLimits(64 * 1024, 8, 16 * 1024))
-    await app({
-        "type": "http", "method": "POST", "path": "/v1/runtime/queries",
-        "headers": [(b"authorization", f"Bearer {case.capability.token}".encode())],
-    }, receive, send)
+    await app(
+        {
+            "type": "http",
+            "method": "POST",
+            "path": "/v1/runtime/queries",
+            "headers": [(b"authorization", f"Bearer {case.capability.token}".encode())],
+        },
+        receive,
+        send,
+    )
     assert sent[0]["status"] == 200
     response = json.loads(sent[1]["body"])
     assert response["operation"] == "attempt_report_status"
@@ -304,27 +393,45 @@ async def test_status_uses_runtime_query_endpoint_and_discovery_has_no_agent_fie
 @pytest.mark.anyio
 @pytest.mark.parametrize("completed,has_report_digest", [(False, True), (True, False)])
 async def test_status_ignores_failed_and_historical_unsealed_receipts(
-    case: Case, completed: bool, has_report_digest: bool,
+    case: Case,
+    completed: bool,
+    has_report_digest: bool,
 ) -> None:
     result: dict[str, JsonValue] = {"status": "registered", "report_status": "blocked"}
     if has_report_digest:
         result["report_artifact_digest"] = case.artifacts.put_json(
-            cast(JsonValue, case.report()), ArtifactKind.ATTEMPT_REPORT,
+            cast(JsonValue, case.report()),
+            ArtifactKind.ATTEMPT_REPORT,
         )
     receipt = case.service._store_result_artifact(
-        operation="attempt_report", status="completed" if completed else "failed",
-        kernel_artifact_digest=None, kernel_trial_id=None, job_id=None, evaluation=None,
+        operation="attempt_report",
+        status="completed" if completed else "failed",
+        kernel_artifact_digest=None,
+        authorization=case.control.authorize(
+            case.capability,
+            GatewayOperation.ATTEMPT_REPORT,
+            idempotency_key="old-receipt",
+            request_digest=str(canonical_json_digest({"historical": True})),
+        ),
+        job_id=None,
+        evaluation=None,
         result=result,
     )
     case.control.authorize(
-        case.capability, GatewayOperation.ATTEMPT_REPORT, idempotency_key="old-receipt",
+        case.capability,
+        GatewayOperation.ATTEMPT_REPORT,
+        idempotency_key="old-receipt",
         request_digest=str(canonical_json_digest({"historical": True})),
     )
     case.control.commit_operation_artifact(
-        case.attempt.id, "old-receipt", GatewayOperation.ATTEMPT_REPORT, receipt,
+        case.attempt.id,
+        "old-receipt",
+        GatewayOperation.ATTEMPT_REPORT,
+        receipt,
     )
     response = await case.service.execute(
-        case.capability.token, case.request("attempt_report_status", "status"),
+        case.capability.token,
+        case.request("attempt_report_status", "status"),
     )
     assert response.result == {"status": "missing"}
     assert case.adapter.requests == []

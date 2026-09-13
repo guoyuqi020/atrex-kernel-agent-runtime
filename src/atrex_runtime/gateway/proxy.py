@@ -24,6 +24,7 @@ from ..asgi import AsgiReceive, AsgiSend, bearer_token, json_response, read_requ
 from ..domain.errors import (
     DirectionConcurrencyError,
     DuplicateGatewayTaskError,
+    GatewayOperationsInProgressError,
     InfrastructureError,
     InvalidTransitionError,
 )
@@ -35,13 +36,13 @@ from ..workers.attempt_report import AttemptReportV12
 from .contract import AgateEvaluationContextResolver, candidate_path_for_attempt
 from .control import SqliteGatewayControl
 from .control_models import (
+    GatewayAuthorization,
     GatewayCapability,
     GatewayEvaluationSource,
     GatewayKernelTrialRecord,
     GatewayMeasurementPoint,
     GatewayMeasurementRecord,
     GatewayOperation,
-    gateway_kernel_trial_id,
 )
 from .correctness import correctness_summary
 from .diff_policy import RegistryCandidateDiffValidator
@@ -67,7 +68,6 @@ from .protocol import (
     GatewayProxyRequestV2,
     GatewayProxyResponseV2,
     KernelArtifactReadRequestV2,
-    KernelTrialShowRequestV2,
     PollRequestV2,
     ProfileRequestV2,
     ResultArtifactReadRequestV2,
@@ -501,9 +501,7 @@ def _evaluate_task_digest(
     return canonical_json_digest(
         {
             "lineage_id": str(lineage_id),
-            "evaluation_identity": [
-                str(value) for value in evaluation_identity
-            ],
+            "evaluation_identity": [str(value) for value in evaluation_identity],
             "operation": "evaluate",
             "kernel_artifact_digest": str(request.candidate_digest),
             "baseline_kernel_artifact_digest": (
@@ -868,6 +866,16 @@ class GatewayProxyService:
             idempotency_key=request.idempotency_key,
             request_digest=str(request_digest),
         )
+        with self._control.operation_execution(authorization):
+            return await self._execute_authorized(request, request_digest, authorization)
+
+    async def _execute_authorized(
+        self,
+        request: GatewayProxyRequestV2,
+        request_digest: ArtifactDigest,
+        authorization: GatewayAuthorization,
+    ) -> GatewayProxyResponseV2:
+        operation = authorization.operation
         replayable = operation not in _OBSERVATIONAL_OPERATIONS
         existing_response = (
             self._control.get_operation_artifact(
@@ -971,8 +979,6 @@ class GatewayProxyService:
                 result = self._register_attempt_report(request, candidate_digest)
             elif isinstance(request, AttemptReportStatusRequestV2):
                 result = self._attempt_report_status(request, authorization.recovery_generation)
-            elif isinstance(request, KernelTrialShowRequestV2):
-                result = self._show_kernel_trial(request)
             elif isinstance(request, KernelArtifactReadRequestV2):
                 result = self._read_kernel_artifact(request)
             elif isinstance(request, ResultArtifactReadRequestV2):
@@ -1152,27 +1158,17 @@ class GatewayProxyService:
                 },
             )
 
-            kernel_trial_id = (
-                None
-                if candidate_digest is None
-                else gateway_kernel_trial_id(
-                    request.attempt_id,
-                    authorization.recovery_generation,
-                    candidate_digest,
-                )
-            )
             result_artifact_digest = self._store_result_artifact(
                 operation=request.operation,
                 status=result.status,
                 kernel_artifact_digest=(
                     None if candidate_digest is None else str(candidate_digest)
                 ),
-                kernel_trial_id=kernel_trial_id,
+                authorization=authorization,
                 job_id=result.job_id,
                 evaluation=(
                     None
-                    if isinstance(request, EvaluateRequestV2)
-                    and not request.is_contract_evaluation
+                    if isinstance(request, EvaluateRequestV2) and not request.is_contract_evaluation
                     else result.evaluation
                 ),
                 result=agent_payload,
@@ -1327,35 +1323,6 @@ class GatewayProxyService:
             )
         return GatewayAdapterResult("completed", {"status": "missing"})
 
-    def _show_kernel_trial(self, request: KernelTrialShowRequestV2) -> GatewayAdapterResult:
-        trial = self._visible_kernel_trial(request.attempt_id, request.kernel_trial_id)
-        return GatewayAdapterResult(
-            "completed",
-            cast(
-                JsonValue,
-                {
-                    "kernel_artifact_digest": trial.kernel_artifact_digest,
-                    "result_artifacts": self._trial_result_artifacts(trial),
-                },
-            ),
-        )
-
-    def _visible_kernel_trial(
-        self, attempt_id: AttemptId, kernel_trial_id: str
-    ) -> GatewayKernelTrialRecord:
-        _, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(attempt_id)
-        trial = next(
-            (
-                value
-                for value in self._control.list_kernel_trials(visible_attempt_ids, limit=5_000)
-                if value.id == kernel_trial_id
-            ),
-            None,
-        )
-        if trial is None:
-            raise ValueError("Kernel Trial is outside the visible Lineage history")
-        return trial
-
     def _trial_result_artifacts(self, trial: GatewayKernelTrialRecord) -> list[JsonValue]:
         """Return a compact index; callers expand selected results explicitly."""
         values: list[JsonValue] = []
@@ -1375,6 +1342,7 @@ class GatewayProxyService:
             values.append(
                 {
                     "result_artifact_digest": str(digest),
+                    "kernel_artifact_digest": str(trial.kernel_artifact_digest),
                     "operation": operation,
                     "status": status,
                 }
@@ -1402,7 +1370,9 @@ class GatewayProxyService:
             {
                 "lineage_id": lineage_id,
                 "through_attempt_id": request.attempt_id,
-                "kernel_trial_ids": [trial.id for trial in matching],
+                "result_artifacts": [
+                    item for trial in matching for item in self._trial_result_artifacts(trial)
+                ],
             }
         )
         return GatewayAdapterResult("completed", cast(JsonValue, response))
@@ -1443,6 +1413,15 @@ class GatewayProxyService:
         if not matching:
             raise ValueError("Result Artifact is outside the visible Lineage history")
         response = self._result_artifact_payload(digest)
+        kernels = {str(trial.kernel_artifact_digest) for trial, _ in matching}
+        if len(kernels) != 1:
+            raise InfrastructureError("Result Artifact has ambiguous Kernel ownership")
+        response.update(
+            {
+                "kernel_artifact_digest": next(iter(kernels)),
+                "result_artifact_digest": str(digest),
+            }
+        )
         return GatewayAdapterResult("completed", cast(JsonValue, response))
 
     def _read_journal_history(
@@ -1628,7 +1607,7 @@ class GatewayProxyService:
         operation: str,
         status: str,
         kernel_artifact_digest: str | None,
-        kernel_trial_id: str | None,
+        authorization: GatewayAuthorization,
         job_id: str | None,
         evaluation: EvaluationV2 | None,
         result: JsonValue,
@@ -1646,7 +1625,11 @@ class GatewayProxyService:
                     {
                         "schema_version": GATEWAY_PROXY_PROTOCOL_VERSION,
                         "kernel_artifact_digest": kernel_artifact_digest,
-                        "kernel_trial_id": kernel_trial_id,
+                        # Keep identical measurements in different executions distinct.
+                        # These ownership fields affect the digest, not the Agent view.
+                        "attempt_id": str(authorization.attempt_id),
+                        "recovery_generation": authorization.recovery_generation,
+                        "idempotency_key": authorization.idempotency_key,
                         "job_id": job_id,
                         "evaluation": (
                             None if evaluation is None else evaluation.model_dump(mode="json")
@@ -1698,6 +1681,8 @@ class GatewayProxyService:
         else:
             raise InfrastructureError("cached Gateway operation has the wrong Artifact kind")
         try:
+            for key in ("kernel_trial_id", "attempt_id", "recovery_generation", "idempotency_key"):
+                response_value.pop(key, None)
             return GatewayProxyResponseV2.model_validate(response_value)
         except ValueError as error:
             raise InfrastructureError("cached Gateway operation response is invalid") from error
@@ -1891,6 +1876,27 @@ class GatewayProxyAsgiApp:
             )
         except PermissionError as error:
             await json_response(send, 403, {"error": "forbidden", "detail": str(error)})
+        except GatewayOperationsInProgressError as error:
+            await json_response(
+                send,
+                409,
+                {
+                    "error": "gateway_calls_in_progress",
+                    "detail": str(error),
+                    "operation": error.operation,
+                    "pending_operations": list(error.pending_operations),
+                    "recovery": [
+                        {
+                            "instruction": (
+                                "Wait for the already-started local tool commands using the "
+                                "backend's task wait/output tool; read their terminal results. "
+                                "Then retry the rejected submission. Do not start new "
+                                "measurements or exit expecting an automatic wake-up."
+                            )
+                        }
+                    ],
+                },
+            )
         except InvalidTransitionError as error:
             await json_response(send, 409, {"error": "conflict", "detail": str(error)})
         except InfrastructureError as error:
@@ -1927,9 +1933,7 @@ def _invalid_request_response(
                     {
                         "tool": "result-artifact-read",
                         "request": {
-                            "result_artifact_digest": (
-                                error.previous_result_artifact_digest
-                            )
+                            "result_artifact_digest": (error.previous_result_artifact_digest)
                         },
                         "instruction": (
                             "Reuse the completed measurement; do not submit this exact "

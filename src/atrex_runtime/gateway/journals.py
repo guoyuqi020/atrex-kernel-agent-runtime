@@ -17,6 +17,7 @@ from ..workers.attempt_report import (
     AttemptExperimentV8,
     AttemptReportV12,
 )
+from .artifact_subjects import resolve_artifact_subject
 from .control import SqliteGatewayControl
 from .control_models import GatewayAuthorization, GatewayKernelTrialRecord, GatewayOperation
 from .protocol import (
@@ -189,9 +190,10 @@ class RuntimeJournalService:
 
     def _citable_profile_results(self, attempt_id: AttemptId) -> list[JsonValue]:
         """Project durable visible Profile observations, independently of Experiments."""
-        bindings: dict[tuple[str, str, str], None] = {}
+        bindings: dict[tuple[str, str], None] = {}
         for trial in self.control.list_kernel_trials(
-            self._visible_attempt_ids(attempt_id), limit=5_000,
+            self._visible_attempt_ids(attempt_id),
+            limit=5_000,
         ):
             for observation in trial.observations:
                 if (
@@ -202,7 +204,6 @@ class RuntimeJournalService:
                 bindings[
                     (
                         str(trial.kernel_artifact_digest),
-                        trial.id,
                         str(observation.result_artifact_digest),
                     )
                 ] = None
@@ -211,11 +212,10 @@ class RuntimeJournalService:
                 JsonValue,
                 {
                     "kernel_artifact_digest": kernel,
-                    "kernel_trial_id": trial_id,
                     "result_artifact_digest": result,
                 },
             )
-            for kernel, trial_id, result in bindings
+            for kernel, result in bindings
         ]
 
     def _is_bootstrap(self, attempt_id: AttemptId) -> bool:
@@ -257,10 +257,7 @@ class RuntimeJournalService:
     def _current_experiments(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
         values = self.control.list_experiments(attempt_id)
         trials = self._visible_trials(attempt_id) if self._needs_legacy_mapping(values) else {}
-        return tuple(
-            self._normalized_experiment(item, trials)
-            for item in values
-        )
+        return tuple(self._normalized_experiment(item, trials) for item in values)
 
     def _visible_trials(self, attempt_id: AttemptId) -> dict[str, GatewayKernelTrialRecord]:
         return {
@@ -303,9 +300,7 @@ class RuntimeJournalService:
                 continue
             trial = trials.get(str(side.get("kernel_trial_id")))
             if trial is None:
-                raise InfrastructureError(
-                    "Historical Experiment references a missing Kernel Trial"
-                )
+                raise InfrastructureError("Historical Experiment references a missing Kernel Trial")
             result_artifacts: list[str] = []
             for raw_result in raw_results:
                 mapping = next(
@@ -357,11 +352,7 @@ class RuntimeJournalService:
             live = self.control.list_experiments(visible_attempt_id)
             source = list(live) if live else reports.get(visible_attempt_id, [])
             raw_values.extend(source)
-        trials = (
-            self._visible_trials(attempt_id)
-            if self._needs_legacy_mapping(raw_values)
-            else {}
-        )
+        trials = self._visible_trials(attempt_id) if self._needs_legacy_mapping(raw_values) else {}
         values = [self._normalized_experiment(item, trials) for item in raw_values]
         if len(values) > 4_096:
             raise ValueError("Visible Experiment history exceeds its entry limit")
@@ -520,7 +511,11 @@ class RuntimeJournalService:
         if direction is None:
             raise ValueError("Experiment Direction is outside visible history")
         if direction["status"] not in {
-            "in_progress", "completed", "abandoned", "blocked", "deferred",
+            "in_progress",
+            "completed",
+            "abandoned",
+            "blocked",
+            "deferred",
         }:
             raise ValueError(
                 "Experiment Direction must be in progress or closed; "
@@ -587,32 +582,26 @@ class RuntimeJournalService:
         *,
         allow_historical_after: bool = False,
     ) -> dict[str, JsonValue] | None:
-        """Resolve one Agent-supplied Trial ID into an immutable evidence snapshot."""
+        """Bind one exact Result Artifact to its immutable Kernel and observation."""
         if value is None:
             return None
-        if not isinstance(value, Mapping) or set(value) != {"kernel_trial_id"}:
+        if not isinstance(value, Mapping) or set(value) != {"result_artifact_digest"}:
             raise ValueError(
-                f"Experiment {side_name} fields must be exactly ['kernel_trial_id']; "
-                "Runtime resolves the Kernel and Result Artifacts"
+                f"Experiment {side_name} fields must be exactly ['result_artifact_digest']; "
+                "Runtime resolves the corresponding Kernel Artifact"
             )
-        trial_id = value.get("kernel_trial_id")
-        if not isinstance(trial_id, str):
-            raise ValueError(f"Experiment {side_name} kernel_trial_id must be text")
-        trial = trials.get(trial_id)
-        if trial is None:
-            raise ValueError(f"Experiment {side_name} Kernel Trial is outside visible history")
+        trial = resolve_artifact_subject(
+            trials.values(),
+            value,
+            attempt_id=attempt_id,
+            require_current=side_name == "after" and not allow_historical_after,
+        )
         if side_name == "after" and trial.attempt_id != attempt_id and not allow_historical_after:
             raise ValueError(
                 "Experiment after Kernel Trial must belong to this logical Attempt; "
                 "use action=adopt to adopt eligible historical Trial evidence"
             )
-        result_artifacts = list(
-            dict.fromkeys(
-                str(observation.result_artifact_digest)
-                for observation in trial.observations
-                if observation.result_artifact_digest is not None
-            )
-        )
+        result_artifacts = [str(value["result_artifact_digest"])]
         if not result_artifacts:
             raise ValueError(
                 f"Experiment {side_name} Kernel Trial has no recorded Result Artifacts"
@@ -621,7 +610,6 @@ class RuntimeJournalService:
             dict[str, JsonValue],
             {
                 "kernel_artifact_digest": str(trial.kernel_artifact_digest),
-                "kernel_trial_id": trial.id,
                 "result_artifact_digests": result_artifacts,
             },
         )
@@ -642,10 +630,12 @@ class RuntimeJournalService:
                 continue
             if not isinstance(side, Mapping):
                 raise ValueError(f"Experiment {side_name} evidence is invalid")
-            trial_id = side.get("kernel_trial_id")
-            trial = trials.get(str(trial_id))
-            if trial is None:
-                raise ValueError(f"Experiment {side_name} Kernel Trial is outside visible history")
+            trial = resolve_artifact_subject(
+                trials.values(),
+                side,
+                attempt_id=attempt_id,
+                require_current=side_name == "after" and experiment.get("action") != "adopt",
+            )
             if (
                 side_name == "after"
                 and trial.attempt_id != attempt_id
@@ -676,7 +666,11 @@ class RuntimeJournalService:
                         "in visible history"
                     )
             if side_name == "after" and experiment.get("action") == "adopt":
-                self.control.validate_adoption_trial(attempt_id, trial.id)
+                self.control.validate_adoption_trial(
+                    attempt_id,
+                    trial.id,
+                    result_artifact_digests=tuple(str(x) for x in result_values),
+                )
 
 
 __all__ = ["RuntimeJournalService"]

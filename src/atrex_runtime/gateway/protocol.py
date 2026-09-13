@@ -154,9 +154,7 @@ class EvaluateParametersV2(BaseModel):
 
     @property
     def is_contract_evaluation(self) -> bool:
-        return (
-            self.mode == "full" and self.input_scope == "contract" and self.comparison is None
-        )
+        return self.mode == "full" and self.input_scope == "contract" and self.comparison is None
 
 
 class EvaluateRequestV2(_CandidateRequestV2, EvaluateParametersV2):
@@ -321,13 +319,6 @@ class AttemptReportStatusRequestV2(_GatewayRequestV2):
     operation: Literal["attempt_report_status"]
 
 
-class KernelTrialShowRequestV2(_GatewayRequestV2):
-    """Read one visible Kernel Trial's Kernel and Result Artifact index."""
-
-    operation: Literal["kernel_trial_show"]
-    kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
-
-
 class KernelArtifactReadRequestV2(_GatewayRequestV2):
     """Read the file index or one source file from a visible Kernel Artifact."""
 
@@ -430,7 +421,6 @@ type GatewayProxyRequestV2 = Annotated[
     | ConfigRequestV2
     | AttemptReportRequestV2
     | AttemptReportStatusRequestV2
-    | KernelTrialShowRequestV2
     | KernelArtifactReadRequestV2
     | ResultArtifactReadRequestV2
     | DirectionHistoryRequestV2
@@ -453,7 +443,6 @@ _RUNTIME_QUERY_OPERATION_NAMES = frozenset(
     {
         "attempt_report",
         "attempt_report_status",
-        "kernel_trial_show",
         "kernel_artifact_read",
         "result_artifact_read",
         "direction_history",
@@ -485,7 +474,6 @@ _GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
     "config": ConfigRequestV2,
     "attempt_report": AttemptReportRequestV2,
     "attempt_report_status": AttemptReportStatusRequestV2,
-    "kernel_trial_show": KernelTrialShowRequestV2,
     "kernel_artifact_read": KernelArtifactReadRequestV2,
     "result_artifact_read": ResultArtifactReadRequestV2,
     "direction_history": DirectionHistoryRequestV2,
@@ -587,19 +575,26 @@ def _agent_operation_schema(
             {"not": {"required": ["shapes", "shapes_path"]}},
         ]
         properties["candidate_path"] = {
-            "type": "string", "minLength": 1,
+            "type": "string",
+            "minLength": 1,
             "description": "Workspace Kernel file or directory; defaults to current Kernel.",
         }
         comparison = schema["$defs"]["EvaluateComparisonV2"]
         comparison["properties"]["baseline_path"] = {
-            "type": "string", "minLength": 1,
+            "type": "string",
+            "minLength": 1,
             "description": "Workspace-relative Kernel file or directory for comparison baseline A.",
         }
         comparison["required"].append("baseline_path")
-        schema["allOf"].append({
-            "if": {"properties": {"comparison": {"type": "object"}}, "required": ["comparison"]},
-            "then": {"properties": {"mode": {"const": "full"}}},
-        })
+        schema["allOf"].append(
+            {
+                "if": {
+                    "properties": {"comparison": {"type": "object"}},
+                    "required": ["comparison"],
+                },
+                "then": {"properties": {"mode": {"const": "full"}}},
+            }
+        )
     # Keep definitions reachable from Agent fields (such as recursive JsonValue), not
     # the hidden Candidate bundle and Runtime-owned request fields.
     definitions = schema.pop("$defs", {})
@@ -665,7 +660,6 @@ class GatewayProxyResponseV2(BaseModel):
         "config",
         "attempt_report",
         "attempt_report_status",
-        "kernel_trial_show",
         "kernel_artifact_read",
         "result_artifact_read",
         "direction_history",
@@ -680,7 +674,6 @@ class GatewayProxyResponseV2(BaseModel):
     ]
     status: Literal["completed", "queued", "failed", "cancelled"]
     kernel_artifact_digest: str | None = None
-    kernel_trial_id: str | None = Field(default=None, pattern=r"^gtrial_[0-9a-f]{32}$")
     result_artifact_digest: str
     job_id: str | None = None
     evaluation: EvaluationV2 | None = None

@@ -52,7 +52,7 @@ Workspace 目录下且为普通文件，绝对路径、路径穿越、符号链�
 {"operation": "evaluate", "mode": "correctness_only", "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
 ```
 
-自定义输入、自定义 Shape 或仅正确性评测的结果仍有 Kernel Trial 与 Result Artifact 身份，
+自定义输入、自定义 Shape 或仅正确性评测的结果仍有 Kernel Artifact 与 Result Artifact 身份，
 并记录实际 `mode` 和 `input_scope`（任一组件被覆盖时为 `custom`，否则为 `contract`）。
 仅正确性结果不包含性能测量。这些调用不能替代 `candidate_ready`、Kernel Retention 或 Agent
 Promotion 所要求的可信 Contract 完整评测。需要完整评测时应省略输入覆盖，并设置
@@ -152,12 +152,11 @@ Contract，不会将其暴露给 Agent。
 Promotion 比较仍独立执行。
 
 响应保留 `operation: "evaluate"`；`result.comparison` 记录 `method: "abba"` 及实际 `repeats`
-次数。不提供独立 ABBA Operation，也不接受顶层重复次数参数。响应中的 Kernel Trial 和
+次数。不提供独立 ABBA Operation，也不接受顶层重复次数参数。Result Artifact 标识本次比较；响应中的
 Kernel Artifact 身份属于 B。保留的 Result Artifact 包含 A 的
 `baseline_kernel_artifact_digest`、`baseline`/`candidate` 正确性及延迟摘要、所有 `measurements`
 及 `schedule`，以及 `mode`、`input_scope`。`speedup` 为 A/B 延迟比，
-`improvement_pct` 为 (A−B)/A × 100，聚合延迟使用几何平均。通过 `kernel-trial-show` 和
-`result-artifact-read` 查询这些证据；探索性 ABBA 不生成普通 Evaluate Record。Runtime 会为 A、B
+`improvement_pct` 为 (A−B)/A × 100，聚合延迟使用几何平均。通过 `result-artifact-read` 查询这些证据；探索性 ABBA 不生成普通 Evaluate Record。Runtime 会为 A、B
 两侧保留归一化的逐 Shape 聚合结果，并将三次底层返回作为私有 Evidence 保存。
 
 ## 普通 Evaluate 的 Shape 分批

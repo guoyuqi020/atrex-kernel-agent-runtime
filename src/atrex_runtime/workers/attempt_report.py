@@ -17,8 +17,14 @@ class AttemptExperimentSubjectV1(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     kernel_artifact_digest: ArtifactDigest
-    kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
     result_artifact_digests: tuple[ArtifactDigest, ...] = Field(min_length=1, max_length=4_096)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_historical_identity(cls, value: object) -> object:
+        if isinstance(value, dict):
+            return {key: item for key, item in value.items() if key != "kernel_trial_id"}
+        return value
 
     @field_validator("kernel_artifact_digest", mode="before")
     @classmethod
@@ -95,9 +101,7 @@ class AttemptExperimentV8(BaseModel):
         if (self.before is None) != (self.after is None):
             raise ValueError("Experiment before and after must both be present or both be null")
         if self.action in {"keep_after", "restore_before", "adopt"} and self.before is None:
-            raise ValueError(
-                f"Experiment {self.action} requires before and after evidence"
-            )
+            raise ValueError(f"Experiment {self.action} requires before and after evidence")
         return self
 
 
@@ -180,8 +184,14 @@ class AttemptProfileEvidenceReferenceV1(BaseModel):
 
     operation: Literal["profile"]
     kernel_artifact_digest: ArtifactDigest
-    kernel_trial_id: str = Field(pattern=r"^gtrial_[0-9a-f]{32}$")
     result_artifact_digest: ArtifactDigest
+
+    @model_validator(mode="before")
+    @classmethod
+    def _read_historical_identity(cls, value: object) -> object:
+        if isinstance(value, dict):
+            return {key: item for key, item in value.items() if key != "kernel_trial_id"}
+        return value
 
     @field_validator("kernel_artifact_digest", "result_artifact_digest", mode="before")
     @classmethod
@@ -363,8 +373,8 @@ class AttemptReportV12(BaseModel):
     findings: tuple[AttemptFindingV1, ...]
     # Defaulted because sealed historical reports predating this field are re-parsed
     # strictly by composition/bootstrap.py.
-    contributing_kernel_trial_ids: tuple[
-        Annotated[str, Field(pattern=r"^gtrial_[0-9a-f]{32}$")], ...
+    contributing_result_artifact_digests: tuple[
+        Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")], ...
     ] = Field(default=(), max_length=64)
     blocker: str | None
     experiments: tuple[AttemptExperimentV8, ...]
@@ -384,9 +394,11 @@ class AttemptReportV12(BaseModel):
             raise ValueError("Attempt report blocker cannot be blank")
         return value
 
-    @field_validator("contributing_kernel_trial_ids")
+    @field_validator("contributing_result_artifact_digests")
     @classmethod
-    def _normalize_contributing_kernel_trial_ids(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+    def _normalize_contributing_result_artifact_digests(
+        cls, value: tuple[str, ...]
+    ) -> tuple[str, ...]:
         # Field validation checks every supplied ID and the raw length first.
         # These references form a set; ordering and duplicates carry no meaning.
         return tuple(sorted(set(value)))
@@ -396,6 +408,9 @@ class AttemptReportV12(BaseModel):
     def _parse_attempt_identifier(cls, value: object) -> object:
         if isinstance(value, dict) and isinstance(value.get("attempt_id"), str):
             value = {**value, "attempt_id": parse_attempt_id(value["attempt_id"])}
+            # Old sealed reports remain readable. Their Trial-only attribution is
+            # retained in the original Artifact, not invented as a Result reference.
+            value.pop("contributing_kernel_trial_ids", None)
         return value
 
     @model_validator(mode="after")

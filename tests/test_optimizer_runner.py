@@ -223,7 +223,6 @@ def _session_result(
                     {
                         "operation": "profile",
                         "kernel_artifact_digest": digest("candidate-experiment"),
-                        "kernel_trial_id": "gtrial_" + "b" * 32,
                         "result_artifact_digest": digest("gateway-experiment"),
                     }
                 ],
@@ -252,12 +251,10 @@ def _session_result(
                     change="vectorized loads",
                     before={
                         "kernel_artifact_digest": digest("before-experiment"),
-                        "kernel_trial_id": "gtrial_" + "a" * 32,
                         "result_artifact_digests": [digest("before-gateway")],
                     },
                     after={
                         "kernel_artifact_digest": digest("candidate-experiment"),
-                        "kernel_trial_id": "gtrial_" + "b" * 32,
                         "result_artifact_digests": [digest("gateway-experiment")],
                     },
                     evidence="SOL memory traffic",
@@ -425,7 +422,6 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
         {
             "operation": "profile",
             "kernel_artifact_digest": digest("candidate-experiment"),
-            "kernel_trial_id": "gtrial_" + "b" * 32,
             "result_artifact_digest": digest("gateway-experiment"),
         },
     )

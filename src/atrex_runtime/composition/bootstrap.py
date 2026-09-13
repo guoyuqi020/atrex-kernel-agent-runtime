@@ -782,7 +782,7 @@ class CoreLineageBaselineGenerator:
             for subject in (experiment.before, experiment.after):
                 if subject is not None and subject.kernel_artifact_digest == candidate_digest:
                     referenced_bindings.update(
-                        (subject.kernel_trial_id, result)
+                        (str(subject.kernel_artifact_digest), result)
                         for result in subject.result_artifact_digests
                     )
         trials = {
@@ -799,7 +799,8 @@ class CoreLineageBaselineGenerator:
                 observation.operation is GatewayOperation.EVALUATE
                 and observation.gateway_result_digest == gateway_result
                 and observation.result_artifact_digest is not None
-                and (trial_id, observation.result_artifact_digest) in referenced_bindings
+                and (str(candidate_digest), observation.result_artifact_digest)
+                in referenced_bindings
                 for observation in trial.observations
             )
 

@@ -180,8 +180,8 @@ def test_attempt_input_runtime_state_is_recorded_once(tmp_path: Path) -> None:
         ("health", {}, False),
         ("config", {}, False),
         (
-            "kernel_trial_show",
-            {"kernel_trial_id": "gtrial_0123456789abcdef0123456789abcdef"},
+            "result_artifact_read",
+            {"result_artifact_digest": "sha256:" + "a" * 64},
             False,
         ),
         (
@@ -241,8 +241,8 @@ def test_agent_request_schema_is_projected_from_live_gateway_model() -> None:
     assert "idempotency_key" not in properties
     assert schema["additionalProperties"] is False
 
-    runtime_document = gateway_agent_request_schema("kernel_trial_show")
-    runtime_schema = cast(dict[str, Any], runtime_document["operations"])["kernel_trial_show"]
+    runtime_document = gateway_agent_request_schema("result_artifact_read")
+    runtime_schema = cast(dict[str, Any], runtime_document["operations"])["result_artifact_read"]
     assert runtime_document["request_contract"] == "runtime-query"
     assert runtime_document["runtime_owned_fields"] == [
         "attempt_id",
@@ -446,7 +446,7 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
         "latency_us_by_shape": {"0": 12.0},
     }
     assert response.kernel_artifact_digest is not None
-    assert response.kernel_trial_id is not None
+    assert response.kernel_artifact_digest is not None
     assert len(adapter.requests) == 3
     adapter_request = adapter.requests[0]
     assert adapter_request.candidate_path is not None
@@ -624,7 +624,11 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
     )
     assert "secret_size" not in json.dumps(reread.result)
     assert "gateway_result_digest" not in json.dumps(reread.result)
-    assert reread.result == canonical
+    assert reread.result == {
+        **canonical,
+        "kernel_artifact_digest": response.kernel_artifact_digest,
+        "result_artifact_digest": response.result_artifact_digest,
+    }
     control.close()
     registry.close()
 
@@ -910,14 +914,14 @@ async def test_asgi_endpoint_requires_bearer_and_returns_canonical_json(tmp_path
 async def test_runtime_queries_use_the_dedicated_http_endpoint(tmp_path: Path) -> None:
     registry, control, attempt, capability_value, service, adapter = _service(tmp_path)
     evaluated = await service.execute(capability_value.token, _request(attempt))
-    assert evaluated.kernel_trial_id is not None
+    assert evaluated.kernel_artifact_digest is not None
     payload = json.dumps(
         {
             "schema_version": 2,
             "attempt_id": attempt.id,
             "idempotency_key": "runtime-query-route",
-            "operation": "kernel_trial_show",
-            "kernel_trial_id": evaluated.kernel_trial_id,
+            "operation": "result_artifact_read",
+            "result_artifact_digest": evaluated.result_artifact_digest,
         }
     ).encode()
 
@@ -933,7 +937,7 @@ async def test_runtime_queries_use_the_dedicated_http_endpoint(tmp_path: Path) -
         operation_scope="runtime",
     )
 
-    assert response.operation == "kernel_trial_show"
+    assert response.operation == "result_artifact_read"
     assert len(adapter.requests) == 3
 
     app = GatewayProxyAsgiApp(service, GatewayProxyLimits(64 * 1024, 8, 16 * 1024))
@@ -957,7 +961,7 @@ async def test_runtime_queries_use_the_dedicated_http_endpoint(tmp_path: Path) -
         send,
     )
     assert sent[0]["status"] == 200
-    assert json.loads(cast(bytes, sent[1]["body"]))["operation"] == "kernel_trial_show"
+    assert json.loads(cast(bytes, sent[1]["body"]))["operation"] == "result_artifact_read"
     control.close()
     registry.close()
 
@@ -1097,7 +1101,7 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
         },
     )
     evaluated = await service.execute(capability.token, _request(attempt))
-    assert evaluated.kernel_trial_id is not None
+    assert evaluated.kernel_artifact_digest is not None
     assert evaluated.kernel_artifact_digest is not None
     assert evaluated.result_artifact_digest is not None
     adapter.result = GatewayAdapterResult(
@@ -1114,16 +1118,12 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
         }
     )
     profiled = await service.execute(capability.token, json.dumps(profile_request).encode())
-    assert profiled.kernel_trial_id == evaluated.kernel_trial_id
+    assert profiled.kernel_artifact_digest == evaluated.kernel_artifact_digest
     assert profiled.result_artifact_digest is not None
-    subject = {"kernel_trial_id": evaluated.kernel_trial_id}
+    subject = {"result_artifact_digest": evaluated.result_artifact_digest}
     resolved_subject = {
         "kernel_artifact_digest": evaluated.kernel_artifact_digest,
-        "kernel_trial_id": evaluated.kernel_trial_id,
-        "result_artifact_digests": [
-            evaluated.result_artifact_digest,
-            profiled.result_artifact_digest,
-        ],
+        "result_artifact_digests": [evaluated.result_artifact_digest],
     }
     recorded = await journal(
         "experiment_record",
@@ -1189,7 +1189,6 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     assert cast(dict[str, Any], snapshot.result)["citable_profile_results"] == [
         {
             "kernel_artifact_digest": evaluated.kernel_artifact_digest,
-            "kernel_trial_id": evaluated.kernel_trial_id,
             "result_artifact_digest": profiled.result_artifact_digest,
         },
     ]
@@ -1376,7 +1375,7 @@ async def test_runtime_journal_survives_attempt_recovery_generation(
         ),
     )
     assert recovered_capability.recovery_generation == 1
-    subject = {"kernel_trial_id": evaluated.kernel_trial_id}
+    subject = {"result_artifact_digest": evaluated.result_artifact_digest}
     recorded = await journal(
         recovered_capability.token,
         "experiment_record",
@@ -1400,7 +1399,7 @@ async def test_runtime_journal_survives_attempt_recovery_generation(
     trial = next(
         trial
         for trial in control.list_kernel_trials((attempt.id,))
-        if trial.id == evaluated.kernel_trial_id
+        if trial.kernel_artifact_digest == evaluated.kernel_artifact_digest
     )
     assert trial.recovery_generation == 0
     assert trial.annotations[0].experiment["name"] == "preserve recovered evidence"
@@ -1510,12 +1509,10 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
                 "sequence": 1,
                 "before": {
                     "kernel_artifact_digest": evaluated.kernel_artifact_digest,
-                    "kernel_trial_id": evaluated.kernel_trial_id,
                     "result_artifact_digests": [evaluated.result_artifact_digest],
                 },
                 "after": {
                     "kernel_artifact_digest": evaluated.kernel_artifact_digest,
-                    "kernel_trial_id": evaluated.kernel_trial_id,
                     "result_artifact_digests": [evaluated.result_artifact_digest],
                 },
                 "action": "restore_before",
@@ -1526,7 +1523,7 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
     )
 
     assert len(adapter.requests) == 3
-    trial_id = evaluated.kernel_trial_id
+    trial_id = evaluated.result_artifact_digest
     assert isinstance(trial_id, str)
 
     adapter.result = GatewayAdapterResult(
@@ -1543,7 +1540,7 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
         }
     )
     profiled = await service.execute(capability.token, json.dumps(profile_request).encode())
-    assert profiled.kernel_trial_id == trial_id
+    assert profiled.kernel_artifact_digest == evaluated.kernel_artifact_digest
     assert profiled.result_artifact_digest != evaluated.result_artifact_digest
 
     shown = await service.execute(
@@ -1553,29 +1550,18 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
                 "schema_version": 2,
                 "attempt_id": attempt.id,
                 "idempotency_key": "kernel-trial-show-1",
-                "operation": "kernel_trial_show",
-                "kernel_trial_id": trial_id,
+                "operation": "result_artifact_read",
+                "result_artifact_digest": trial_id,
             }
         ).encode(),
     )
 
     assert len(adapter.requests) == 4
     assert isinstance(shown.result, dict)
-    assert shown.result == {
-        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
-        "result_artifacts": [
-            {
-                "result_artifact_digest": evaluated.result_artifact_digest,
-                "operation": "evaluate",
-                "status": "completed",
-            },
-            {
-                "result_artifact_digest": profiled.result_artifact_digest,
-                "operation": "profile",
-                "status": "completed",
-            },
-        ],
-    }
+    assert shown.result["kernel_artifact_digest"] == evaluated.kernel_artifact_digest
+    assert shown.result["result_artifact_digest"] == evaluated.result_artifact_digest
+    assert shown.result["operation"] == "evaluate"
+    assert "kernel_trial_id" not in shown.result
 
     source = await service.execute(
         capability.token,
@@ -1595,7 +1581,10 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
     assert source.result["encoding"] == "utf-8"
     assert source.result["content"] == "def kernel(): pass\n"
     assert source.result["kernel_artifact_digest"] == evaluated.kernel_artifact_digest
-    assert source.result["kernel_trial_ids"] == [trial_id]
+    assert {item["result_artifact_digest"] for item in source.result["result_artifacts"]} == {
+        evaluated.result_artifact_digest,
+        profiled.result_artifact_digest,
+    }
 
     result_artifact = await service.execute(
         capability.token,
@@ -1611,6 +1600,8 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
     )
 
     assert result_artifact.result == {
+        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+        "result_artifact_digest": evaluated.result_artifact_digest,
         "operation": "evaluate",
         "status": "completed",
         "result": {
@@ -1621,13 +1612,13 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
                 "max_abs_err": None,
                 "max_rel_err": None,
             },
-                "latency_us_geomean": pytest.approx(math.sqrt(140.0)),
-                "latency_us_arith_mean": 12.0,
-                "latency_us_by_shape": {"0": 10.0, "1": 14.0},
-                "measurement_aggregation": {
-                    "repetitions": 3,
-                    "method": "per_shape_median",
-                },
+            "latency_us_geomean": pytest.approx(math.sqrt(140.0)),
+            "latency_us_arith_mean": 12.0,
+            "latency_us_by_shape": {"0": 10.0, "1": 14.0},
+            "measurement_aggregation": {
+                "repetitions": 3,
+                "method": "per_shape_median",
+            },
         },
     }
 
@@ -1695,9 +1686,9 @@ async def test_attempt_report_api_seals_canonical_contributing_trials(tmp_path: 
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
     try:
         await service.execute(capability.token, _request(attempt))
-        first, second = "gtrial_" + "a" * 32, "gtrial_" + "b" * 32
+        first, second = "sha256:" + "a" * 64, "sha256:" + "b" * 64
         report = _report_value(attempt.id)
-        report["contributing_kernel_trial_ids"] = [second, first, second]
+        report["contributing_result_artifact_digests"] = [second, first, second]
         payload = {
             **json.loads(_request(attempt)),
             "operation": "attempt_report",
@@ -1714,10 +1705,10 @@ async def test_attempt_report_api_seals_canonical_contributing_trials(tmp_path: 
         artifacts = LocalArtifactStore(tmp_path / "artifacts")
         sealed = artifacts.verify(receipt["report_artifact_digest"])
         stored = json.loads((sealed.payload_path / "value.json").read_text())
-        assert stored["contributing_kernel_trial_ids"] == [first, second]
+        assert stored["contributing_result_artifact_digests"] == [first, second]
 
         # Canonical and noncanonical representations name the same report.
-        report["contributing_kernel_trial_ids"] = [first, second]
+        report["contributing_result_artifact_digests"] = [first, second]
         repeated = await service.execute(
             capability.token,
             json.dumps(payload).encode(),

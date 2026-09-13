@@ -114,16 +114,16 @@ Shapes 继续复用私有 Contract，Reference 和可信评测策略保持不变
 `mode: "full"`，`input_py` 和 `shapes` 仍可选。Runtime 校验并封存两侧源码，在每个 Shape
 Batch 的同一 Allocation 内交错观测；`comparison.repeats: 2` 生成
 A、B、B、A，更长 Schedule 还须满足 Allocation 预算。ABBA 始终仅用于探索，不能满足
-`candidate_ready` 或触发 Retention/Promotion。响应返回 B 的 `kernel_trial_id`、
+`candidate_ready` 或触发 Retention/Promotion。响应返回 B 的
 `kernel_artifact_digest` 与一个 `result_artifact_digest`，并保留 `operation: "evaluate"`。
 `result.comparison` 记录 `method: "abba"` 及 `repeats`；嵌套结果还包含
 `baseline_kernel_artifact_digest`、`baseline`/`candidate` 摘要、`schedule`、所有 `measurements`，
 以及 A/B `speedup` 和 `improvement_pct`。结果通过 Trial/Result Artifact 查询读取，不进入普通
 Evaluate 历史路由。详见[评测说明](evaluation.zh.md#探索性-abba)。
 
-对于 `dev`、`disassemble` 和 `env`，Core 直接返回 Agent-safe
-`result` Object。`profile` 还会在展平后的安全 Job
-Result 旁返回 Kernel Artifact、Kernel Trial 和 Result Artifact 身份。其嵌套 `result` 仅用数字型
+对于 `env`，Core 直接返回安全的服务结果。Kernel 操作统一返回
+`kernel_artifact_digest` 和 `result_artifact_digest`；`dev` 与 `profile` 在展平的安全 Job
+Result 旁保留这两个身份。Profile 的嵌套 `result` 仅用数字型
 不透明 `shape_id` 标识 Shape，把 Kernel Duration 和常见资源字段规范化，并保留安全的 Profiler
 Counters；同时增加 `kernel_count`、`total_duration_us`、逐 Kernel `duration_share_pct`、
 `dominant_kernel`、按耗时加权的 `weighted_sol_pct` 和 `dominant_bound`。具体 Shape 输入和维度
@@ -134,10 +134,16 @@ Counters；同时增加 `kernel_count`、`total_duration_us`、逐 Kernel `durat
 不是正确性 Gate；transport completed 也必须检查诊断 `passed`。NVIDIA 工具依赖、参数、导出
 及限制见[源码树诊断说明](source-trees.zh.md#profilecheck-与-disassemble)。
 
-`kernel_trial_show` 按 Gateway 响应或已保留 Experiment 记录返回的已知 `kernel_trial_id`
-获取一条实验 Candidate。它返回 Kernel Artifact Digest，以及由 Result Artifact Digest、Operation 和
-Status 组成的精简索引；仅对需要分析的条目调用 `result_artifact_read` 展开内容。
-`kernel_artifact_read` 接收 Trial 的 `kernel_artifact_digest`（请求字段
+Agent 用 Result Artifact Digest 引用一次具体观测，不再需要 Trial ID。
+`result_artifact_read` 返回 `kernel_artifact_digest`、`result_artifact_digest`、`operation`、
+`status` 和 `result`。同一个 Kernel 可以有多个不同的 Result；同一调用的重放保持 Result 身份不变，
+不同调用则保留独立的 Attempt／Generation 归属。
+移除 Agent 侧 `kernel-trial-show`。Runtime 和 Core/KDA Bundle 需要同步更新；旧调用方应将
+Trial 引用改为 Result Artifact Digest。内部 Trial 分组及管理员历史接口保持不变。
+例如 Experiment 使用 `"before": {"result_artifact_digest":"sha256:<before-result>"}` 和
+`"after": {"result_artifact_digest":"sha256:<after-result>"}`。Runtime 只冻结选中的观测，
+不会把该 Kernel 的所有历史测量都并入这条证据。
+`kernel_artifact_read` 接收返回的 `kernel_artifact_digest`（请求字段
 名为 `kernel_artifact_digest`）、必填的 `scratch/` 下目标 `file`，以及可选的 Artifact 内源路径
 `artifact_file`（默认取目标文件名）。Core 工具原子写入准确字节，stdout 只返回状态、路径、字节数
 和 SHA-256。`result_artifact_read` 接收 Observation 的 `result_artifact_digest`，读取规范化的
@@ -227,13 +233,12 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | 命令 | Agent 提供的请求 |
 | --- | --- |
 | `gateway-execute` | GPU/Agate Operation 与参数；Candidate 操作默认上传当前 Working Kernel。Evaluate 可通过 `candidate_path` 选择 B，通过 `comparison.baseline_path` 选择比较基线 A。 |
-| `kernel-trial-show` | 按 Trial ID 查询 Kernel Artifact Digest 和精简 Result Artifact 索引；请求 JSON 不写 `operation`。 |
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
 | `result-artifact-read` | 按 Result Artifact Digest 读取规范化的 Agent 可见结果；请求 JSON 不写 `operation`。 |
 | `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；Experiment 关联自动派生，返回稳定 Direction ID。 |
 | `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称和当前状态原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction；支持 ID 自动包含所有绑定它的可见 Experiment，以及状态事件在内部形成的关联快照。 |
-| `record-experiment` | 记录 `direction_id`、前后 Kernel Trial ID、`evidence`、`analysis` 与 Action；Runtime 冻结 Trial 对应的 Kernel 和 Result Artifact 身份。只有 Bootstrap 可用 `baseline` 与 `before=null`。返回稳定 Experiment ID。 |
+| `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis` 与 Action；Runtime 冻结所选 Result 与对应 Kernel 的身份。只有 Bootstrap 可用 `baseline` 与 `before=null`。返回稳定 Experiment ID。 |
 | `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis 和 Action 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
@@ -275,6 +280,14 @@ Framework Baseline，不用于 Problem Generalization 或 Evolver；Runtime 的�
 
 ### 终态交接与 Journal
 
+同一 Attempt、同一 recovery generation 仍有执行中的 Gateway 调用时，所有 `attempt-report`
+状态（包括 `blocked` 和 `pivot`）均返回 HTTP 409、`error: gateway_calls_in_progress` 及
+`pending_operations`，不发布 Report；Bootstrap 和普通优化均适用。应等待已经启动的本地工具
+命令结束并读取结果，再提交报告；不得重复测量，也不能结束无头 Session 后期待后台任务唤醒。
+检查与调用准入通过 Gateway Control SQLite 原子协调，跨 Runtime 进程生效。调用直到结果完成
+落账才解除阻塞，成功、失败和取消均会清理运行标记；Journal/历史读取及报告状态查询不阻塞交接。
+Runtime 进程崩溃时保守保留当前代的标记，由正常 Attempt recovery 切换代次后隔离。
+
 `candidate_ready` 要求匹配的非空 Runtime 自管 Direction/Experiment Journal 及有实验支持的 Findings。
 若未能开展实验，`blocked` 和 `pivot` 允许 Journal 与 Findings 为空；报告需如实说明原因，不应虚构实验。
 已有 in_progress Direction 仍须先 block 或 defer。第一次成功调用 `attempt-report` 会发布不可覆盖的终态
@@ -300,7 +313,7 @@ Bootstrap Session 开始时没有更早 Journal；成功后，
 其终态 Journal、Kernel Trial 与 Result Artifact 会成为该 Lineage 后续普通 Attempt 的根历史。
 
 采纳可见历史中的原样 Kernel 时，使用 `record-experiment` 的 `action="adopt"`，before/after 都填写
-真实 Kernel Trial ID。区别于其他动作，`adopt` 允许历史 after：Runtime 要求该精确 Kernel 有成功的
+真实 Result Artifact Digest。区别于其他动作，`adopt` 允许历史 after：Runtime 要求该精确 Kernel 有成功的
 普通完整 Evaluate、已提交且匹配的 Result Artifact，以及一致的算子、硬件、DSL 和封存评测 Contract。
 现有历史可见边界保持不变，包括显式继承的 Bootstrap 历史。自定义输入、仅正确性检查、Profile 和探索性
 ABBA 不符合采纳资格。Experiment 记录当前采纳决策，保留原始 Trial/测量身份，不新增测量或修改历史
@@ -321,17 +334,17 @@ Branch、Epoch、Attempt、选中状态或当前/历史来源。
 `profile_evidence` 必须为 `null`，或包含 `tool_used`、`profiler`、`profile_level`、
 `bottleneck_type`、`evidence_summary`、`evidence_chain` 和非空 `supporting_results` 的精确
 Object。每项 Supporting Result 绑定 `operation`（仅允许 `profile`）、
-`kernel_artifact_digest`、`kernel_trial_id` 与 `result_artifact_digest`。Core/KDA 根据 Runtime
-投影的 `citable_profile_results` 检查引用；Runtime 再独立核验三个身份与 Operation 是否匹配
+`kernel_artifact_digest` 与 `result_artifact_digest`。Core/KDA 根据 Runtime
+投影的 `citable_profile_results` 检查引用；Runtime 再独立核验两个 Artifact 身份与 Operation 是否匹配
 持久化、当前可见的 Gateway Observation。不要求先被 Experiment 引用：历史 Profile，以及在
 Experiment 快照之后取得的 Profile，都无需补录 Journal 或重新打开 Direction 即可引用。
 原有历史可见性边界保持不变。尚无 Result Artifact 的进行中操作，以及非 Profile 操作，不能引用。
 没有已记录的 Profile 证据时必须为 `null`。
 每个 Finding 必须包含非空且唯一的 `supporting_experiment_ids`；每个 ID 都必须属于同一份随 Report
 附加的 Experiment Journal。这样 Finding 可通过 Experiment 中实际存在的 before/after Subject 追溯到准确
-Kernel Artifact、Trial 和 Result Artifact，而无需在 Finding 中重复这些身份。
-`contributing_kernel_trial_ids` 是必填数组，列出本次 Attempt 取用过其代码或思路的历史
-Kernel Trial；没有取用时为空。Core/KDA 和 Runtime 接受任意顺序及重复 ID，在提交或封存 Report 前
+Kernel Artifact 和 Result Artifact，而无需在 Finding 中重复这些身份。
+`contributing_result_artifact_digests` 是必填数组，列出本次 Attempt 取用过其代码或思路的历史
+Result Artifact；没有取用时为空。Core/KDA 和 Runtime 接受任意顺序及重复 ID，在提交或封存 Report 前
 自动排序、去重；仍逐项校验 ID 格式，并在去重前限制输入最多 64 项。两侧都不去解析它是否在可见历史内 ——
 因为该字段是 Agent 的解读而非测量事实；Experiment Subject 身份则必须通过 Runtime 自管 Trial 的核验。Runtime 会把它带入
 派生的 Final Report，供后续 Attempt 与 Evolver 阅读。
@@ -407,16 +420,6 @@ ABBA 有自己的候选 Trial，但仍是探索性比较，不能替代提名要
 
 以下输入是 `--request` 指向文件中的 JSON；Digest 和 ID 仅为便于阅读而缩写。
 
-`kernel-trial-show` 只返回 Kernel 身份和精简 Result Artifact 索引：
-
-```json
-{"kernel_trial_id":"gtrial_<id>"}
-```
-
-```json
-{"kernel_artifact_digest":"sha256:<kernel>","result_artifacts":[{"result_artifact_digest":"sha256:<evaluate-result>","operation":"evaluate","status":"completed"},{"result_artifact_digest":"sha256:<profile-result>","operation":"profile","status":"completed"}]}
-```
-
 `kernel-artifact-read` 把一个 Artifact 文件复制进 `scratch/`，不会打印源码：
 
 ```json
@@ -434,7 +437,7 @@ ABBA 有自己的候选 Trial，但仍是探索性比较，不能替代提名要
 ```
 
 ```json
-{"operation":"evaluate","status":"completed","result":{"correct":true,"correctness":{"status":"PASS","rel_err":null,"max_abs_err":0.0009765625,"max_rel_err":0.0078125},"latency_us_geomean":12.288,"latency_us_arith_mean":12.400,"latency_us_by_shape":{"0":12.288}}}
+{"kernel_artifact_digest":"sha256:<kernel>","result_artifact_digest":"sha256:<result>","operation":"evaluate","status":"completed","result":{"correct":true,"correctness":{"status":"PASS","rel_err":null,"max_abs_err":0.0009765625,"max_rel_err":0.0078125},"latency_us_geomean":12.288,"latency_us_arith_mean":12.400,"latency_us_by_shape":{"0":12.288}}}
 ```
 
 ## Evolver 文件系统接口

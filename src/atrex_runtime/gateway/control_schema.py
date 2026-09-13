@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-GATEWAY_SCHEMA_VERSION = 13
+GATEWAY_SCHEMA_VERSION = 14
 
 
 def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
@@ -195,7 +195,7 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
         )
-    elif row["value"] == 12:
+    elif row["value"] in (12, 13):
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -203,6 +203,22 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
     elif row["value"] != GATEWAY_SCHEMA_VERSION:
         raise RuntimeError(f"unsupported Gateway schema version: {row['value']}")
     _migrate_gateway_v13(connection)
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS gateway_active_calls(
+            call_id TEXT PRIMARY KEY,
+            attempt_id TEXT NOT NULL,
+            recovery_generation INTEGER NOT NULL,
+            idempotency_key TEXT NOT NULL,
+            operation TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            FOREIGN KEY(attempt_id, recovery_generation, idempotency_key)
+                REFERENCES gateway_operations(attempt_id, recovery_generation, idempotency_key)
+        )"""
+    )
+    connection.execute(
+        """CREATE INDEX IF NOT EXISTS gateway_active_calls_subject
+           ON gateway_active_calls(attempt_id, recovery_generation, operation)"""
+    )
 
 
 def _create_gateway_evaluations_table(connection: sqlite3.Connection) -> None:

@@ -125,7 +125,10 @@ async def test_exploration_is_recorded_but_cannot_authorize_candidate_submission
             assert response.result["latency_us_arith_mean"] is None
             assert response.result["latency_us_by_shape"] == {}
             assert response.result["correctness"] == {
-                "status": "PASS", "rel_err": None, "max_abs_err": 0.001, "max_rel_err": None
+                "status": "PASS",
+                "rel_err": None,
+                "max_abs_err": 0.001,
+                "max_rel_err": None,
             }
 
         measurements = control.list_measurements((attempt.id,))
@@ -147,17 +150,23 @@ async def test_exploration_is_recorded_but_cannot_authorize_candidate_submission
         assert recorded == {"mode": "full", **parameters, "input_scope": scope}
         trials = control.list_kernel_trials((attempt.id,))
         assert len(trials) == 1
-        assert str(trials[0].id) == response.kernel_trial_id
+        assert trials[0].kernel_artifact_digest == response.kernel_artifact_digest
+        assert any(
+            o.result_artifact_digest == response.result_artifact_digest
+            for o in trials[0].observations
+        )
 
         read = await service.execute(
             capability.token,
-            json.dumps({
-                "schema_version": 2,
-                "attempt_id": attempt.id,
-                "idempotency_key": "read-exploratory-result",
-                "operation": "result_artifact_read",
-                "result_artifact_digest": response.result_artifact_digest,
-            }).encode(),
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "idempotency_key": "read-exploratory-result",
+                    "operation": "result_artifact_read",
+                    "result_artifact_digest": response.result_artifact_digest,
+                }
+            ).encode(),
             operation_scope="runtime",
         )
         assert isinstance(read.result, dict)
@@ -214,9 +223,7 @@ async def test_default_evaluate_preserves_existing_request_identity(tmp_path: Pa
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("status", ["completed", "queued"])
-async def test_correctness_only_incomplete_result_is_retryable(
-    tmp_path: Path, status: Any
-) -> None:
+async def test_correctness_only_incomplete_result_is_retryable(tmp_path: Path, status: Any) -> None:
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
     adapter.result = replace(adapter.result, status=status, result={}, evaluation=None)
     try:

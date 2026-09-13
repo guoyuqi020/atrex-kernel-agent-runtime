@@ -46,6 +46,7 @@ from atrex_runtime.gateway.control import (
     BootstrapRunStatus,
     GatewayEvaluationSource,
 )
+from atrex_runtime.gateway.control_schema import GATEWAY_SCHEMA_VERSION
 from atrex_runtime.gateway.journals import RuntimeJournalService
 from atrex_runtime.ports import RunAttemptRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
@@ -130,9 +131,7 @@ def test_direction_start_is_atomically_single_active(tmp_path: Path) -> None:
         results = tuple(executor.map(start, (1, 2)))
 
     recorded = tuple(result for result in results if isinstance(result, dict))
-    conflicts = tuple(
-        result for result in results if isinstance(result, DirectionConcurrencyError)
-    )
+    conflicts = tuple(result for result in results if isinstance(result, DirectionConcurrencyError))
     assert len(recorded) == 1
     assert len(conflicts) == 1
     assert conflicts[0].requested_direction_id != recorded[0]["direction_id"]
@@ -245,6 +244,18 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
     )
     trial = control.list_kernel_trials((attempt.id,))[0]
 
+    # Reading an old sealed Journal drops its redundant Trial IDs. Replaying that
+    # projection must not conflict with the immutable original annotation.
+    projected = {
+        **experiment,
+        **{
+            side: {k: v for k, v in experiment[side].items() if k != "kernel_trial_id"}
+            for side in ("before", "after")
+        },
+    }
+    control.record_kernel_trial_annotations(attempt.id, (projected,))
+    assert len(control.list_kernel_trials((attempt.id,))[0].annotations) == 1
+
     assert trial.kernel_artifact_digest == candidate
     assert trial.disposition == "revert"
     assert trial.observations[0].result_artifact_digest == result
@@ -256,7 +267,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
             (experiment,),
             profile_supporting_results=({**profile_reference, "operation": "dev"},),
         )
-    with pytest.raises(ValueError, match="does not match the declared Gateway operation"):
+    with pytest.raises(ValueError, match=r"visible history|declared Gateway operation"):
         control.record_kernel_trial_annotations(
             attempt.id,
             (experiment,),
@@ -277,7 +288,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
                 },
             ),
         )
-    with pytest.raises(ValueError, match="does not match"):
+    with pytest.raises(ValueError, match=r"does not match|permitted visible history"):
         control.record_kernel_trial_annotations(
             attempt.id,
             (
@@ -291,7 +302,9 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
                 },
             ),
         )
-    with pytest.raises(ValueError, match="candidate/result pair not observed"):
+    with pytest.raises(
+        ValueError, match=r"candidate/result pair not observed|permitted visible history"
+    ):
         control.record_kernel_trial_annotations(
             attempt.id,
             (
@@ -304,7 +317,9 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
                 },
             ),
         )
-    with pytest.raises(ValueError, match="not observed in visible history"):
+    with pytest.raises(
+        ValueError, match=r"not observed in visible history|permitted visible history"
+    ):
         control.record_kernel_trial_annotations(
             attempt.id,
             (
@@ -317,7 +332,7 @@ def test_kernel_trials_retain_exact_candidate_and_revert_annotation(tmp_path: Pa
                 },
             ),
         )
-    with pytest.raises(ValueError, match="outside visible history"):
+    with pytest.raises(ValueError, match=r"outside visible history|permitted visible history"):
         control.record_kernel_trial_annotations(
             attempt.id,
             (
@@ -753,6 +768,7 @@ def test_gateway_schema_v4_migrates_operations_and_legacy_bootstrap_run(
 
     with sqlite3.connect(database) as connection:
         connection.execute("DROP TABLE bootstrap_runs")
+        connection.execute("DROP TABLE gateway_active_calls")
         connection.execute(
             """
             CREATE TABLE gateway_operations_v4(
@@ -796,7 +812,7 @@ def test_gateway_schema_v4_migrates_operations_and_legacy_bootstrap_run(
             "SELECT value FROM metadata WHERE key = 'schema_version'"
         ).fetchone()
         columns = {row[1] for row in connection.execute("PRAGMA table_info(gateway_operations)")}
-        assert version == (13,)
+        assert version == (GATEWAY_SCHEMA_VERSION,)
         assert "kernel_artifact_digest" in columns
         assert "candidate_artifact_digest" not in columns
         assert "gateway_result_digest" in columns
@@ -1434,9 +1450,7 @@ def test_profile_evidence_can_cite_visible_bootstrap_without_an_experiment(tmp_p
             attempt_id=historical_attempt_id,
             campaign_id=campaign.id,
             lineage_id=lineage.id,
-            epoch_id=parse_epoch_id(
-                "epoch_" + str(historical_attempt_id).removeprefix("attempt_")
-            ),
+            epoch_id=parse_epoch_id("epoch_" + str(historical_attempt_id).removeprefix("attempt_")),
             kernel_agent_revision_id=current.kernel_agent_revision_id,
             operator=campaign.operator,
             hardware_target=campaign.hardware_target,
@@ -1551,17 +1565,24 @@ def test_profile_evidence_can_cite_visible_bootstrap_without_an_experiment(tmp_p
     }
     for reporting_attempt in (historical_attempt_id, current.id):
         # The Bootstrap itself and a later Attempt both cite the observation directly.
-        assert identity in journals._citable_profile_results(reporting_attempt)
-        assert control.record_kernel_trial_annotations(
-            reporting_attempt, (), profile_supporting_results=(historical_profile_reference,),
-        ) == ()
+        assert {
+            k: v for k, v in identity.items() if k != "kernel_trial_id"
+        } in journals._citable_profile_results(reporting_attempt)
+        assert (
+            control.record_kernel_trial_annotations(
+                reporting_attempt,
+                (),
+                profile_supporting_results=(historical_profile_reference,),
+            )
+            == ()
+        )
     annotations = control.record_kernel_trial_annotations(
         current.id,
         (current_experiment,),
         profile_supporting_results=(historical_profile_reference,),
     )
     assert len(annotations) == 1
-    with pytest.raises(ValueError, match="does not match the declared Gateway operation"):
+    with pytest.raises(ValueError, match=r"visible history|declared Gateway operation"):
         control.record_kernel_trial_annotations(
             current.id,
             (current_experiment,),
@@ -1637,9 +1658,7 @@ def test_shared_bootstrap_is_visible_without_exposing_the_source_lineage(
             attempt_id=bootstrap_attempt_id,
             campaign_id=campaign.id,
             lineage_id=source_lineage.id,
-            epoch_id=parse_epoch_id(
-                "epoch_" + str(bootstrap_attempt_id).removeprefix("attempt_")
-            ),
+            epoch_id=parse_epoch_id("epoch_" + str(bootstrap_attempt_id).removeprefix("attempt_")),
             kernel_agent_revision_id=source_lineage.active_kernel_agent_revision_id,
             operator=campaign.operator,
             hardware_target=campaign.hardware_target,

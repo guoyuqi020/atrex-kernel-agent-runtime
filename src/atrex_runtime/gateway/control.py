@@ -8,14 +8,16 @@ import json
 import os
 import sqlite3
 import threading
-from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import AbstractContextManager, contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 from ..domain.errors import (
     DirectionConcurrencyError,
     GatewayCapabilityPolicyChangedError,
+    GatewayOperationsInProgressError,
     InfrastructureError,
     InvalidTransitionError,
 )
@@ -39,6 +41,7 @@ from ..ports import (
 )
 from ..registry.base import Registry
 from ..sqlite_support import configure_durable_sqlite, immediate_transaction
+from .artifact_subjects import artifact_experiment_view, resolve_artifact_subject
 from .control_models import (
     BootstrapGatewaySubject as BootstrapGatewaySubject,
 )
@@ -103,11 +106,10 @@ def _validate_profile_supporting_results(
     expected_fields = {
         "operation",
         "kernel_artifact_digest",
-        "kernel_trial_id",
         "result_artifact_digest",
     }
     for reference in supporting_results:
-        if set(reference) != expected_fields:
+        if set(reference) - {"kernel_trial_id"} != expected_fields:
             raise ValueError("Profile supporting result fields are invalid")
         operation_value = reference.get("operation")
         if not isinstance(operation_value, str):
@@ -120,17 +122,12 @@ def _validate_profile_supporting_results(
             raise ValueError("Profile supporting result operation must be profile")
         has_profile = True
         kernel_value = reference.get("kernel_artifact_digest")
-        trial_id = reference.get("kernel_trial_id")
         result_value = reference.get("result_artifact_digest")
         if not isinstance(kernel_value, str) or not isinstance(result_value, str):
             raise ValueError("Profile supporting result requires Artifact Digests")
-        if not isinstance(trial_id, str):
-            raise ValueError("Profile supporting result requires a Kernel Trial ID")
         kernel = parse_artifact_digest(kernel_value)
         result = parse_artifact_digest(result_value)
-        trial = visible_trials.get(trial_id)
-        if trial is None:
-            raise ValueError("Profile supporting Kernel Trial is outside visible history")
+        trial = resolve_artifact_subject(visible_trials.values(), reference)
         if trial.kernel_artifact_digest != kernel:
             raise ValueError("Profile supporting Kernel Trial does not match its Kernel")
         if not any(
@@ -705,6 +702,56 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             generation,
         )
 
+    @contextmanager
+    def operation_execution(self, authorization: GatewayAuthorization) -> Iterator[None]:
+        """Atomically exclude terminal handoff from executing Gateway calls.
+
+        Track execution, not unfilled authorization rows: validation failures, cancelled
+        requests and exceptions must not permanently block a report. Separate call IDs
+        keep simultaneous HTTP reconnects from releasing each other's reservation.
+        A crashed process fails closed until the Attempt rotates recovery generation.
+        """
+        operation = authorization.operation
+        is_report = operation is GatewayOperation.ATTEMPT_REPORT
+        if operation in _IMPLICIT_RUNTIME_OPERATIONS and not is_report:
+            yield
+            return
+        call_id = uuid4().hex
+        with self._transaction() as connection:
+            generation = self._subject_generation(authorization.attempt_id)
+            if authorization.recovery_generation != generation:
+                raise InvalidTransitionError("Gateway execution belongs to a stale generation")
+            rows = connection.execute(
+                """SELECT DISTINCT operation FROM gateway_active_calls
+                   WHERE attempt_id = ? AND recovery_generation = ?
+                     AND (? OR operation = 'attempt_report')
+                   ORDER BY operation""",
+                (authorization.attempt_id, generation, is_report),
+            ).fetchall()
+            if rows:
+                raise GatewayOperationsInProgressError(
+                    operation.value, tuple(str(row["operation"]) for row in rows)
+                )
+            connection.execute(
+                """INSERT INTO gateway_active_calls(
+                       call_id, attempt_id, recovery_generation, idempotency_key,
+                       operation, started_at
+                   ) VALUES (?, ?, ?, ?, ?, ?)""",
+                (
+                    call_id,
+                    authorization.attempt_id,
+                    generation,
+                    authorization.idempotency_key,
+                    operation.value,
+                    self._clock().isoformat(),
+                ),
+            )
+        try:
+            yield
+        finally:
+            with self._transaction() as connection:
+                connection.execute("DELETE FROM gateway_active_calls WHERE call_id = ?", (call_id,))
+
     def get_operation_artifact(
         self,
         attempt_id: AttemptId,
@@ -783,9 +830,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     row["idempotency_key"],
                 ),
             ).fetchone()
-            if owner_result is not None and isinstance(
-                owner_result["result_artifact_digest"], str
-            ):
+            if owner_result is not None and isinstance(owner_result["result_artifact_digest"], str):
                 result = parse_artifact_digest(owner_result["result_artifact_digest"])
                 connection.execute(
                     """UPDATE gateway_evaluate_tasks
@@ -798,20 +843,15 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             owner_generation = int(row["recovery_generation"])
             try:
                 owner_is_running = (
-                    self._registry.get_attempt(owner_attempt_id).status
-                    is AttemptStatus.RUNNING
+                    self._registry.get_attempt(owner_attempt_id).status is AttemptStatus.RUNNING
                 )
             except KeyError:
                 # Bootstrap Gateway subjects deliberately exist before their
                 # Attempt row. A newer recovery generation is the only safe
                 # signal that such an unfinished reservation is stale.
                 owner_is_running = True
-            if (
-                not owner_is_running
-                or (
-                    owner_attempt_id == attempt_id
-                    and owner_generation < generation
-                )
+            if not owner_is_running or (
+                owner_attempt_id == attempt_id and owner_generation < generation
             ):
                 connection.execute(
                     """UPDATE gateway_evaluate_tasks
@@ -1233,20 +1273,15 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     if not isinstance(before, Mapping):
                         raise ValueError("Kernel Trial annotation before evidence is invalid")
                     before_digest_value = before.get("kernel_artifact_digest")
-                    before_trial_id = before.get("kernel_trial_id")
                     before_result_artifact_values = before.get("result_artifact_digests")
                     if not isinstance(before_digest_value, str):
                         raise ValueError(
                             "Kernel Trial annotation before requires a candidate Artifact Digest"
                         )
                     before_candidate = parse_artifact_digest(before_digest_value)
-                    if not isinstance(before_trial_id, str):
-                        raise ValueError("Kernel Trial annotation before requires a Trial ID")
-                    before_trial = visible_trials.get(before_trial_id)
-                    if before_trial is None:
-                        raise ValueError(
-                            "Kernel Trial annotation before Trial is outside visible history"
-                        )
+                    before_trial = resolve_artifact_subject(
+                        visible_trials.values(), before, attempt_id=attempt_id
+                    )
                     if before_trial.kernel_artifact_digest != before_candidate:
                         raise ValueError(
                             "Kernel Trial annotation before Trial does not match its candidate"
@@ -1275,14 +1310,16 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                                 "not observed in visible history"
                             )
                 digest_value = after.get("kernel_artifact_digest")
-                trial_id = after.get("kernel_trial_id")
                 result_artifact_values = after.get("result_artifact_digests")
                 if not isinstance(digest_value, str):
                     raise ValueError("Kernel Trial annotation requires a candidate Artifact Digest")
                 candidate = parse_artifact_digest(digest_value)
-                if not isinstance(trial_id, str):
-                    raise ValueError("Kernel Trial annotation requires a Trial ID")
-                after_trial = visible_trials.get(trial_id)
+                after_trial = resolve_artifact_subject(
+                    visible_trials.values(),
+                    after,
+                    attempt_id=attempt_id,
+                    require_current=action != "adopt",
+                )
                 if after_trial is None or (
                     after_trial.attempt_id != attempt_id and action != "adopt"
                 ):
@@ -1321,7 +1358,9 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 if action == "adopt":
                     # Adoption records current reasoning, not a new measurement or a
                     # disposition change to the Trial that supplied historical evidence.
-                    self.validate_adoption_trial(attempt_id, trial_id)
+                    self.validate_adoption_trial(
+                        attempt_id, after_trial.id, result_artifact_digests=result_artifacts
+                    )
                     continue
                 disposition = disposition_by_action[action]
                 payload = json.dumps(
@@ -1352,11 +1391,12 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         for column in (
                             "kernel_artifact_digest",
                             "decision",
-                            "experiment_json",
                             "recorded_at",
                         )
                     )
-                    != values
+                    != (str(candidate), disposition, recorded_at)
+                    or artifact_experiment_view(json.loads(existing["experiment_json"]))
+                    != artifact_experiment_view(experiment)
                 ):
                     raise InvalidTransitionError(
                         "Kernel Trial annotation sequence resolved to different evidence"
@@ -1968,6 +2008,8 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         self,
         attempt_id: AttemptId,
         trial_id: str,
+        *,
+        result_artifact_digests: Sequence[str] | None = None,
     ) -> GatewayEvaluationRecord:
         """Resolve reusable full-Evaluate evidence without manufacturing a measurement.
 
@@ -2006,6 +2048,10 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             and observation.idempotency_key == evaluation.idempotency_key
             and observation.gateway_result_digest == evaluation.gateway_result_digest
             and observation.result_artifact_digest is not None
+            and (
+                result_artifact_digests is None
+                or str(observation.result_artifact_digest) in result_artifact_digests
+            )
             for observation in trial.observations
         ):
             raise ValueError(
@@ -2052,10 +2098,17 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 continue
             if after.get("kernel_artifact_digest") != kernel_artifact_digest:
                 continue
-            trial_id = after.get("kernel_trial_id")
-            if not isinstance(trial_id, str):
-                raise InfrastructureError("Persisted adoption has no source Kernel Trial")
-            adopted = self.validate_adoption_trial(attempt_id, trial_id)
+            _, visible_attempts = self.visible_kernel_trial_attempt_ids(attempt_id)
+            trial = resolve_artifact_subject(
+                self.list_kernel_trials(visible_attempts, limit=5_000),
+                after,
+                attempt_id=attempt_id,
+            )
+            adopted = self.validate_adoption_trial(
+                attempt_id,
+                trial.id,
+                result_artifact_digests=tuple(str(x) for x in after["result_artifact_digests"]),
+            )
             if (
                 gateway_result_digest is None
                 or adopted.gateway_result_digest == gateway_result_digest

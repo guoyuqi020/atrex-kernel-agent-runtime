@@ -35,39 +35,52 @@ async def test_profile_without_experiment_can_be_handed_off(tmp_path: Path) -> N
         profiled = await service.execute(capability.token, json.dumps(payload).encode())
         identity = {
             "kernel_artifact_digest": profiled.kernel_artifact_digest,
-            "kernel_trial_id": profiled.kernel_trial_id,
             "result_artifact_digest": profiled.result_artifact_digest,
         }
         reference = {"operation": "profile", **identity}
 
         # A pending Profile has a Kernel binding but no committed Result Artifact.
         control.authorize(
-            capability, GatewayOperation.PROFILE,
-            idempotency_key="pending-profile", request_digest=str(digest("pending-request")),
+            capability,
+            GatewayOperation.PROFILE,
+            idempotency_key="pending-profile",
+            request_digest=str(digest("pending-request")),
         )
         control.bind_operation_candidate(
-            attempt.id, "pending-profile", GatewayOperation.PROFILE, digest("pending-kernel"),
+            attempt.id,
+            "pending-profile",
+            GatewayOperation.PROFILE,
+            digest("pending-kernel"),
         )
         snapshot = await service.execute(
             capability.token,
-            json.dumps({
-                "schema_version": 2, "attempt_id": attempt.id,
-                "operation": "journal_snapshot", "idempotency_key": "snapshot",
-            }).encode(),
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "operation": "journal_snapshot",
+                    "idempotency_key": "snapshot",
+                }
+            ).encode(),
             operation_scope="journal",
         )
         view = cast(dict[str, Any], snapshot.result)
         assert view["citable_profile_results"] == [identity]
         assert view["experiments"] == view["direction_events"] == []
 
-        assert control.record_kernel_trial_annotations(
-            attempt.id, (), profile_supporting_results=(reference,),
-        ) == ()
+        assert (
+            control.record_kernel_trial_annotations(
+                attempt.id,
+                (),
+                profile_supporting_results=(reference,),
+            )
+            == ()
+        )
         # Exact identities, operation kind and uniqueness are still mandatory.
         for invalid, message in (
             ({**reference, "kernel_artifact_digest": str(digest("wrong-kernel"))}, "Kernel"),
-            ({**reference, "kernel_trial_id": "gtrial_" + "f" * 32}, "outside visible history"),
-            ({**reference, "result_artifact_digest": str(digest("unrecorded"))}, "operation"),
+            ({**reference, "kernel_trial_id": "gtrial_" + "f" * 32}, "visible history"),
+            ({**reference, "result_artifact_digest": str(digest("unrecorded"))}, "visible history"),
             (
                 {**reference, "result_artifact_digest": evaluated.result_artifact_digest},
                 "operation",
@@ -76,24 +89,35 @@ async def test_profile_without_experiment_can_be_handed_off(tmp_path: Path) -> N
         ):
             with pytest.raises(ValueError, match=message):
                 control.record_kernel_trial_annotations(
-                    attempt.id, (), profile_supporting_results=(invalid,),
+                    attempt.id,
+                    (),
+                    profile_supporting_results=(invalid,),
                 )
         with pytest.raises(ValueError, match="must be unique"):
             control.record_kernel_trial_annotations(
-                attempt.id, (), profile_supporting_results=(reference, reference),
+                attempt.id,
+                (),
+                profile_supporting_results=(reference, reference),
             )
 
         # A diagnostic-only blocked handoff needs no invented optimization Experiment.
         report = _report_value(attempt.id)
         report.update(
-            status="blocked", final_candidate=None, blocker="no viable optimization found",
-            experiments=[], direction_events=[], findings=[], contributing_kernel_trial_ids=[],
+            status="blocked",
+            final_candidate=None,
+            blocker="no viable optimization found",
+            experiments=[],
+            direction_events=[],
+            findings=[],
+            contributing_result_artifact_digests=[],
         )
         cast(dict[str, Any], report["profile_evidence"])["supporting_results"] = [reference]
         payload = json.loads(_request(attempt))
         payload.update(operation="attempt_report", idempotency_key="report", report=report)
         accepted = await service.execute(
-            capability.token, json.dumps(payload).encode(), operation_scope="runtime",
+            capability.token,
+            json.dumps(payload).encode(),
+            operation_scope="runtime",
         )
         receipt = cast(dict[str, Any], accepted.result)
         assert receipt["status"] == "registered"
@@ -117,39 +141,61 @@ async def test_other_lineage_profile_is_neither_projected_nor_citable(tmp_path: 
         foreign_capability = control.issue(
             foreign.id,
             GatewayCapabilityPolicy(
-                frozenset({GatewayOperation.PROFILE}), 1, NOW_DATETIME + timedelta(hours=1),
+                frozenset({GatewayOperation.PROFILE}),
+                1,
+                NOW_DATETIME + timedelta(hours=1),
             ),
         )
         candidate, result = digest("foreign-kernel"), digest("foreign-profile")
         control.authorize(
-            foreign_capability, GatewayOperation.PROFILE,
-            idempotency_key="foreign-profile", request_digest=str(digest("foreign-request")),
+            foreign_capability,
+            GatewayOperation.PROFILE,
+            idempotency_key="foreign-profile",
+            request_digest=str(digest("foreign-request")),
         )
         control.bind_operation_candidate(
-            foreign.id, "foreign-profile", GatewayOperation.PROFILE, candidate,
+            foreign.id,
+            "foreign-profile",
+            GatewayOperation.PROFILE,
+            candidate,
         )
         control.commit_operation_artifact(
-            foreign.id, "foreign-profile", GatewayOperation.PROFILE, result,
+            foreign.id,
+            "foreign-profile",
+            GatewayOperation.PROFILE,
+            result,
         )
         reference = {
-            "operation": "profile", "kernel_artifact_digest": str(candidate),
-            "kernel_trial_id": control.list_kernel_trials((foreign.id,))[0].id,
+            "operation": "profile",
+            "kernel_artifact_digest": str(candidate),
             "result_artifact_digest": str(result),
         }
-        assert control.record_kernel_trial_annotations(
-            foreign.id, (), profile_supporting_results=(reference,),
-        ) == ()
+        assert (
+            control.record_kernel_trial_annotations(
+                foreign.id,
+                (),
+                profile_supporting_results=(reference,),
+            )
+            == ()
+        )
         snapshot = await service.execute(
             capability.token,
-            json.dumps({
-                "schema_version": 2, "attempt_id": current.id,
-                "operation": "journal_snapshot", "idempotency_key": "snapshot",
-            }).encode(), operation_scope="journal",
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": current.id,
+                    "operation": "journal_snapshot",
+                    "idempotency_key": "snapshot",
+                }
+            ).encode(),
+            operation_scope="journal",
         )
         assert cast(dict[str, Any], snapshot.result)["citable_profile_results"] == []
-        with pytest.raises(ValueError, match="outside visible history"):
+        with pytest.raises(ValueError, match="visible history"):
             control.record_kernel_trial_annotations(
-                current.id, (), profile_supporting_results=(reference,),
+                current.id,
+                (),
+                profile_supporting_results=(reference,),
             )
         assert adapter.requests == []
     finally:

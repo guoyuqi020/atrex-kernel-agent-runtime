@@ -218,7 +218,7 @@ microseconds. Career wins plus losses equal completed-Epoch participation.
 
 `reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json` is the Optimizer's own account of one
 Attempt: `hypothesis`, `diagnosis`, `approach`, `experiments`, `findings`, `knowledge_used`,
-`evidence_summary`, `contributing_kernel_trial_ids` naming the historical Kernel Trials it drew from,
+`evidence_summary`, `contributing_result_artifact_digests` naming the historical results it drew from,
 `parent_kernel`, `candidate_kernel` including `comparison_with_parent`,
 `production_gate`, and a closing `analysis`. It is an untrusted interpretation like a conversation:
 use it to explain what the Agent believed and attempted, then verify against the measured Gateway

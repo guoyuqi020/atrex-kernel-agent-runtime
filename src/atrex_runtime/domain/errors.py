@@ -9,6 +9,29 @@ class GatewayCapabilityPolicyChangedError(InvalidTransitionError):
     """A restarted Attempt needs a new capability recovery generation."""
 
 
+class GatewayOperationsInProgressError(InvalidTransitionError):
+    """Terminal handoff and active Gateway calls cannot overlap."""
+
+    def __init__(self, operation: str, pending_operations: tuple[str, ...]) -> None:
+        self.operation = operation
+        self.pending_operations = pending_operations
+        if operation == "attempt_report":
+            detail = (
+                "Attempt report was not accepted because Gateway calls are still running: "
+                f"{', '.join(pending_operations)}. Wait for the existing local tool commands "
+                "to finish and read their results before submitting attempt-report again. "
+                "Do not launch replacement measurements or end the Session expecting a wake-up. "
+                "Waiting for an existing background shell task is allowed; this is not "
+                "polling or resubmitting an Agate job"
+            )
+        else:
+            detail = (
+                "Gateway call was not started because a terminal Attempt report is being "
+                "submitted. Wait for that report submission to finish"
+            )
+        super().__init__(detail)
+
+
 class InfrastructureError(RuntimeError):
     """External infrastructure failed without consuming an Agent opportunity."""
 

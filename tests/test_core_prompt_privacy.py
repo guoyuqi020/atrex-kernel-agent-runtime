@@ -146,7 +146,6 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
 
     for command in (
         "gateway-execute",
-        "kernel-trial-show",
         "kernel-artifact-read",
         "result-artifact-read",
         "update-direction",
@@ -164,7 +163,6 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
     assert "lineage-bootstrap-report" not in baseline_prompt
     for command in (
         "gateway-execute",
-        "kernel-trial-show",
         "kernel-artifact-read",
         "result-artifact-read",
         "update-direction",
@@ -178,7 +176,7 @@ def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() ->
         expected = f"python3 agent/optimizer/src/runtime_tools.py {command} --request"
         assert expected in baseline_prompt
     assert "kernel-trials --request" not in baseline_prompt
-    assert "kernel-trial-show --request" in baseline_prompt
+    assert "kernel-trial-show --request" not in baseline_prompt
     assert "kernel-artifact-read --request" in baseline_prompt
     assert "result-artifact-read --request" in baseline_prompt
     assert '"kernel_artifact_digest":"sha256:<digest>"' in baseline_prompt

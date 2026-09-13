@@ -88,8 +88,8 @@ class _History:
             "name": "historical candidate adoption",
             "hypothesis": "the historical candidate supplies the planned improvement",
             "change": "adopt the exact existing kernel; no new measurement was performed",
-            "before": {"kernel_trial_id": self.before.kernel_trial_id},
-            "after": {"kernel_trial_id": self.after.kernel_trial_id},
+            "before": {"result_artifact_digest": self.before.result_artifact_digest},
+            "after": {"result_artifact_digest": self.after.result_artifact_digest},
             "evidence": "the existing ordinary full-contract evaluation",
             "analysis": "reuse the matching measured evidence",
             "action": action,
@@ -193,9 +193,7 @@ async def test_adoption_records_current_reasoning_without_new_measurements(
     before_evaluations = history.control.list_evaluations(history.historical_attempt.id)
     direction_id = await history.start()
 
-    response = await history.journal(
-        "experiment_record", request=history.experiment(direction_id)
-    )
+    response = await history.journal("experiment_record", request=history.experiment(direction_id))
 
     assert cast(dict[str, Any], response.result)["status"] == "recorded"
     recorded = history.control.list_experiments(history.current.id)
@@ -204,7 +202,6 @@ async def test_adoption_records_current_reasoning_without_new_measurements(
     after = cast(dict[str, object], recorded[0]["after"])
     assert after == {
         "kernel_artifact_digest": history.after.kernel_artifact_digest,
-        "kernel_trial_id": history.after.kernel_trial_id,
         "result_artifact_digests": [history.after.result_artifact_digest],
     }
     assert history.control.list_kernel_trials((history.historical_attempt.id,)) == before_trials
@@ -228,7 +225,7 @@ async def test_adoption_records_current_reasoning_without_new_measurements(
 async def test_other_actions_still_reject_historical_after(history: _History, action: str) -> None:
     direction_id = await history.start()
 
-    with pytest.raises(ValueError, match="after Kernel Trial must belong to this logical Attempt"):
+    with pytest.raises(ValueError, match="outside the permitted visible history"):
         await history.journal(
             "experiment_record", request=history.experiment(direction_id, action=action)
         )
@@ -256,12 +253,19 @@ async def test_ineligible_adoption_is_rejected_before_journal_append(history: _H
 async def test_adoption_rejects_another_running_attempt(history: _History) -> None:
     _, visible = history.control.visible_kernel_trial_attempt_ids(history.current.id)
     assert history.historical_attempt.id not in visible
-    assert history.after.kernel_trial_id is not None
+    assert history.after.kernel_artifact_digest is not None
     with pytest.raises(ValueError, match="outside this Attempt's visible history"):
-        history.control.validate_adoption_trial(history.current.id, history.after.kernel_trial_id)
+        history.control.validate_adoption_trial(
+            history.current.id,
+            next(
+                t.id
+                for t in history.control.list_kernel_trials((history.historical_attempt.id,))
+                if t.kernel_artifact_digest == history.after.kernel_artifact_digest
+            ),
+        )
     direction_id = await history.start()
 
-    with pytest.raises(ValueError, match="Kernel Trial is outside visible history"):
+    with pytest.raises(ValueError, match="outside the permitted visible history"):
         await history.journal("experiment_record", request=history.experiment(direction_id))
 
     assert history.control.list_experiments(history.current.id) == ()
@@ -276,8 +280,8 @@ async def test_adoption_rejects_another_running_attempt(history: _History) -> No
         ("after", "kernel_artifact_digest"),
         ("before", "result_artifact_digests"),
         ("after", "result_artifact_digests"),
-        ("before", "kernel_trial_id"),
-        ("after", "kernel_trial_id"),
+        ("before", "result_artifact_digest"),
+        ("after", "result_artifact_digest"),
     ],
 )
 async def test_adoption_annotation_still_validates_all_evidence(
@@ -291,7 +295,7 @@ async def test_adoption_annotation_still_validates_all_evidence(
         [str(digest("unobserved-result"))]
         if field == "result_artifact_digests"
         else "gtrial_" + "0" * 32
-        if field == "kernel_trial_id"
+        if field == "result_artifact_digest"
         else str(digest("wrong-kernel"))
     )
     experiment[side_name] = subject
