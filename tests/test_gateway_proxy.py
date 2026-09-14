@@ -1251,6 +1251,8 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
             "action": "complete",
             "direction_id": direction_id,
             "analysis": "the measured experiment completed",
+            "hypothesis_status": "supported",
+            "supporting_experiment_ids": [experiment_id],
         },
     )
 
@@ -1269,7 +1271,12 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     snapshot = await journal("journal_snapshot", "journal-snapshot-1")
 
     assert cast(dict[str, Any], directions.result)["directions"] == [
-        {"direction_id": direction_id, "name": "vectorize loads", "status": "completed"}
+        {
+            "direction_id": direction_id,
+            "name": "vectorize loads",
+            "status": "completed",
+            "hypothesis_status": "supported",
+        }
     ]
     assert cast(dict[str, Any], loaded_direction.result)["supporting_experiment_ids"] == [
         experiment_id
@@ -1315,6 +1322,16 @@ async def test_runtime_rejects_concurrent_in_progress_directions(tmp_path: Path)
     registry, control, attempt, capability, service, _adapter = _service(tmp_path)
 
     async def update(idempotency_key: str, request: dict[str, object]) -> Any:
+        if request["action"] != "start" and request["action"] != "propose":
+            request = {
+                "hypothesis_status": "unresolved",
+                "supporting_experiment_ids": [
+                    item["experiment_id"]
+                    for item in control.list_experiments(attempt.id)
+                    if item["direction_id"] == request["direction_id"]
+                ],
+                **request,
+            }
         return await service.execute(
             capability.token,
             json.dumps(
@@ -1360,6 +1377,30 @@ async def test_runtime_rejects_concurrent_in_progress_directions(tmp_path: Path)
     assert raised.value.in_progress_direction_ids == (first,)
     assert len(control.list_direction_events(attempt.id)) == 3
 
+    diagnostic = await service.execute(capability.token, _request(attempt))
+    await service.execute(
+        capability.token,
+        json.dumps(
+            {
+                "schema_version": 2,
+                "attempt_id": attempt.id,
+                "idempotency_key": "record-first-investigation",
+                "operation": "experiment_record",
+                "request": {
+                    "direction_id": first,
+                    "name": "first investigation paused",
+                    "hypothesis": "first mechanism can improve latency",
+                    "change": "None; no candidate was measured",
+                    "before": {"result_artifact_digest": diagnostic.result_artifact_digest},
+                    "after": None,
+                    "evidence": "Investigation ended before any measurement",
+                    "analysis": "Preserve this work before switching directions",
+                    "action": "abandon_direction",
+                },
+            }
+        ).encode(),
+        operation_scope="journal",
+    )
     await update(
         "direction-defer-first",
         {"action": "defer", "direction_id": first, "analysis": "pause first"},

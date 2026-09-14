@@ -223,6 +223,12 @@ Attempt: `hypothesis`, `diagnosis`, `approach`, `experiments`, `findings`, `know
 `production_gate`, and a closing `analysis`. It is an untrusted interpretation like a conversation:
 use it to explain what the Agent believed and attempted, then verify against the measured Gateway
 results in the optimization summary.
+Reports also retain `direction_events`, including the selected `supporting_experiment_ids` and
+Agent-declared `hypothesis_status` (`unresolved`, `supported`, `refuted`). These are not Runtime
+certifications of scientific conclusions. Lifecycle closure, including abandonment, does not imply
+falsification. Missing historical judgments mean unresolved. When producing memory, Skills, or
+workflow changes, preserve uncertainty and the exact scope of selected Experiments: do not promote
+untested interpretations from unrelated measurements into established constraints.
 
 ## Conversation JSONL
 

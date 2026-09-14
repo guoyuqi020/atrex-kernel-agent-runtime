@@ -260,10 +260,10 @@ helpers are supported for a shared custom input generator and Shapes.
 | `gateway-execute` | One GPU/Agate operation and its parameters; Candidate operations upload the working Kernel by default. Evaluate can select Candidate B with `candidate_path` and comparison baseline A with `comparison.baseline_path`. |
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
 | `result-artifact-read` | Reads a normalized Agent-visible Result Artifact by digest; request JSON omits `operation`. |
-| `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Experiment associations are derived automatically; returns the stable Direction ID. |
-| `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, current status, and any declared ancestry to that file and returns only status, file, and count. |
-| `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction. Its supporting IDs automatically include every visible Experiment bound to it and associations snapshotted internally by status events. |
-| `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, and action. Runtime freezes the Trials' Kernel and Result Artifact identities. Bootstrap alone may use `baseline` with `before=null`. Returns the stable Experiment ID. |
+| `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Closures explicitly select supporting Experiments and declare hypothesis_status; returns the stable Direction ID. |
+| `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, lifecycle status, hypothesis_status, and any declared ancestry to that file and returns only status, file, and count. |
+| `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction, including hypothesis_status, all associated_experiment_ids and the latest explicitly selected supporting_experiment_ids. |
+| `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, and action. Runtime freezes the Trials' Kernel and Result Artifact identities. Every Experiment needs at least one Kernel-bound Gateway Result. `abandon_direction` may be one-sided; Bootstrap `baseline` requires only `after`. Returns the stable Experiment ID. |
 | `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, hypothesis, change, evidence, analysis, and action from frozen history plus the current live Journal, then returns only status, file, and count. |
 | `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
 | `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
@@ -325,20 +325,37 @@ a fail-closed reservation scoped to its recovery generation; normal Attempt reco
 
 `candidate_ready` requires non-empty matching Runtime-owned Direction and Experiment journals and
 evidence-backed Findings. `blocked` and `pivot` may have empty journals and Findings when no
-Experiment was possible; give the genuine reason in the report rather than fabricate an Experiment.
-Any in-progress Direction must still be blocked or deferred first. The first successful `attempt-report`
+Direction needs closing; give the genuine reason in the report rather than fabricate evidence.
+Any in-progress Direction must still be closed with an associated Experiment first.
+The first successful `attempt-report`
 call publishes a write-once terminal Report. Validation or tool errors publish nothing, so the Agent
 may correct the request using `issues`, `request_schema`, and `recovery` and retry; a successful call
 must not be repeated.
 Every Experiment names a visible Direction that is in progress or closed (`completed`, `abandoned`,
 `blocked`, or `deferred`). Late Experiment submissions can attach existing evidence after closure;
 they append to the current Attempt's Journal without reopening the Direction, changing its status,
-or rewriting prior events. Its loaded supporting Experiment IDs update automatically. A merely
+or rewriting prior events. Its associated Experiment IDs update; selected closure support does not. A merely
 `proposed` Direction still must be started first. Trial visibility, ownership, and evidence validation
 remain unchanged; this is not permission to resume research without `start`.
 Before terminal handoff, no Direction may
-remain in progress, including a started Direction with no Experiment. Such a Direction can be
-deferred or blocked; completed and abandoned Directions require supporting Experiments. One Attempt may start and advance at
+remain in progress. `complete`, `abandon`, `block`, and `defer` each require at least one Experiment
+explicitly selected in `supporting_experiment_ids` (1–32 unique IDs), all visible and belonging to
+that Direction. `propose` and `start` do not select support. Every closure also requires
+`hypothesis_status=unresolved|supported|refuted`, independently of lifecycle. For supported/refuted,
+each selected Experiment must bind a completed Gateway Result in its `after`; Runtime validates
+bindings, not causal relevance or scientific truth. Untested interpretations remain unresolved.
+
+Every new Experiment must bind at least one real Kernel-bound Gateway Result. `abandon_direction`
+permits before-only or after-only evidence, never both-null. `keep_after`, `restore_before`, and
+`adopt` require both sides; Bootstrap `baseline` requires null before and non-null after.
+Check/Profile and failed diagnostic Results may document a blocker without a performance claim.
+Health/Env and unbound Dev results do not qualify. A transport error without a Result Artifact is
+not citable: if no real evidence exists, closure remains blocked and normal session recovery handles
+the failure; never fabricate an Experiment to finish. Blocked Bootstrap reports may omit baseline
+when all Experiments are diagnostic `abandon_direction` records; candidate_ready still needs baseline.
+Read-only replay of Runtime-owned historical records still accepts old unmeasured `block`/`defer`
+events without altering them; that compatibility context is not available to Agent requests.
+One Attempt may start and advance at
 most three distinct Directions, including inherited and newly proposed Directions. Proposals do not
 consume this limit, and the report does not limit how many Directions remain `proposed` or
 `deferred`. Only one Direction may be `in_progress` at a time. Starting another is rejected
@@ -380,8 +397,32 @@ boundary. Agent-facing Direction results intentionally hide Branch, Epoch, Attem
 current/history provenance.
 `load-direction` derives the reverse Experiment association from each visible Experiment's
 `direction_id`; recording an Experiment therefore updates the loaded Direction view immediately.
-`update-direction` snapshots those derived IDs into internal status events; the Agent does not
-provide them. Loaded live and snapshotted associations are merged into one de-duplicated list.
+`associated_experiment_ids` is this complete association list. `supporting_experiment_ids` is only
+the latest explicit closure selection; late records do not rewrite it. `list-directions` and
+`load-direction` expose `hypothesis_status`. Restarting resets the current assessment to unresolved;
+immutable prior events remain in history. Old closures lacking an explicit assessment read as
+unresolved, with their old automatic IDs treated only as associations. Old unmeasured Experiment
+records remain readable, but cannot support new closures. Reports and downstream memory preserve
+the explicit assessment and support IDs, which remain Agent interpretations.
+
+For example, after recording a diagnostic Experiment, close without falsely refuting the hypothesis:
+
+```json
+{"action":"defer","direction_id":"direction_<id>","analysis":"Diagnostic check completed, but performance hypothesis remains untested","hypothesis_status":"unresolved","supporting_experiment_ids":["experiment_<id>"]}
+```
+
+A one-sided diagnostic Experiment (replace placeholders with real IDs):
+
+```json
+{"direction_id":"direction_<id>","name":"Compilation check","hypothesis":"The proposed implementation compiles","change":"Attempted implementation","before":null,"after":{"result_artifact_digest":"sha256:<check-result>"},"evidence":"The check returned a compiler diagnostic","analysis":"Compilation is blocked; no performance conclusion","action":"abandon_direction"}
+```
+
+Tool validation errors include `issues` (field, code, message), `request_schema`, and `recovery`.
+Both-null subjects point to `before` with a message naming both sides. Unknown/cross-Direction
+support, duplicate IDs, missing closure fields, and incomplete Gateway evidence are rejected before
+journal append. Repair the request using real recorded IDs and retry; an HTTP 400 or validation
+failure is not an Experiment and must not be cited as one.
+
 `profile_evidence` is either `null` or an exact object containing `tool_used`, `profiler`,
 `profile_level`, `bottleneck_type`, `evidence_summary`, `evidence_chain`, and a non-empty
 `supporting_results` array. Each supporting result binds `operation` (`profile` only),

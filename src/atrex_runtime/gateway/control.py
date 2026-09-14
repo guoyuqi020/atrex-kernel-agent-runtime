@@ -1257,19 +1257,17 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 if action != "adopt" and action not in disposition_by_action:
                     raise ValueError("Kernel Trial annotation action is invalid")
                 if after is None:
-                    if action == "adopt":
-                        raise ValueError("Kernel Trial adoption requires before and after evidence")
-                    if before is not None:
-                        raise ValueError(
-                            "Kernel Trial annotation before and after must both be present or null"
-                        )
+                    if action != "abandon_direction" or not isinstance(before, Mapping):
+                        raise ValueError("Kernel Trial annotation requires Gateway Result evidence")
+                    # A before-only investigation records no candidate disposition.
+                    resolve_artifact_subject(visible_trials.values(), before, attempt_id=attempt_id)
                     continue
                 if not isinstance(after, Mapping):
                     raise ValueError("Kernel Trial annotation after evidence is invalid")
                 if action == "baseline":
                     if before is not None:
                         raise ValueError("Kernel Trial baseline annotation requires before=null")
-                else:
+                elif before is not None or action != "abandon_direction":
                     if not isinstance(before, Mapping):
                         raise ValueError("Kernel Trial annotation before evidence is invalid")
                     before_digest_value = before.get("kernel_artifact_digest")
@@ -1385,19 +1383,16 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                            ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
                         (attempt_id, annotation_generation, sequence, *values),
                     )
-                elif (
-                    tuple(
-                        existing[column]
-                        for column in (
-                            "kernel_artifact_digest",
-                            "decision",
-                            "recorded_at",
-                        )
+                elif tuple(
+                    existing[column]
+                    for column in (
+                        "kernel_artifact_digest",
+                        "decision",
+                        "recorded_at",
                     )
-                    != (str(candidate), disposition, recorded_at)
-                    or artifact_experiment_view(json.loads(existing["experiment_json"]))
-                    != artifact_experiment_view(experiment)
-                ):
+                ) != (str(candidate), disposition, recorded_at) or artifact_experiment_view(
+                    json.loads(existing["experiment_json"])
+                ) != artifact_experiment_view(experiment):
                     raise InvalidTransitionError(
                         "Kernel Trial annotation sequence resolved to different evidence"
                     )

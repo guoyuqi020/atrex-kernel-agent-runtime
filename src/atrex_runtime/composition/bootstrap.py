@@ -741,7 +741,8 @@ class CoreLineageBaselineGenerator:
             if report_artifact.kind is not ArtifactKind.ATTEMPT_REPORT:
                 raise ValueError("Bootstrap recovery report Artifact has the wrong kind")
             report = AttemptReportV12.model_validate_json(
-                report_artifact.payload_path.joinpath("value.json").read_bytes()
+                report_artifact.payload_path.joinpath("value.json").read_bytes(),
+                context={"trusted_direction_history": True, "trusted_experiment_history": True},
             )
             if report.attempt_id != attempt_id:
                 raise ValueError("Bootstrap recovery report belongs to another Attempt")

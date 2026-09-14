@@ -235,10 +235,10 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `gateway-execute` | GPU/Agate Operation 与参数；Candidate 操作默认上传当前 Working Kernel。Evaluate 可通过 `candidate_path` 选择 B，通过 `comparison.baseline_path` 选择比较基线 A。 |
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
 | `result-artifact-read` | 按 Result Artifact Digest 读取规范化的 Agent 可见结果；请求 JSON 不写 `operation`。 |
-| `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；Experiment 关联自动派生，返回稳定 Direction ID。 |
-| `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称、当前状态和已声明的谱系关系原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
-| `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction；支持 ID 自动包含所有绑定它的可见 Experiment，以及状态事件在内部形成的关联快照。 |
-| `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis` 与 Action；Runtime 冻结所选 Result 与对应 Kernel 的身份。只有 Bootstrap 可用 `baseline` 与 `before=null`。返回稳定 Experiment ID。 |
+| `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；关闭时显式选择支持 Experiment 并声明 hypothesis_status，返回稳定 Direction ID。 |
+| `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称、生命周期状态、hypothesis_status 和已声明的谱系关系原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
+| `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction，包括 hypothesis_status、全部 associated_experiment_ids 以及最近一次关闭时显式选中的 supporting_experiment_ids。 |
+| `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis` 与 Action；Runtime 冻结所选 Result 与对应 Kernel 的身份。每条 Experiment 至少绑定一个 Kernel 对应的 Gateway Result；abandon_direction 可单边，Bootstrap baseline 只需 after。返回稳定 Experiment ID。 |
 | `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis 和 Action 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
@@ -289,16 +289,31 @@ Framework Baseline，不用于 Problem Generalization 或 Evolver；Runtime 的�
 Runtime 进程崩溃时保守保留当前代的标记，由正常 Attempt recovery 切换代次后隔离。
 
 `candidate_ready` 要求匹配的非空 Runtime 自管 Direction/Experiment Journal 及有实验支持的 Findings。
-若未能开展实验，`blocked` 和 `pivot` 允许 Journal 与 Findings 为空；报告需如实说明原因，不应虚构实验。
-已有 in_progress Direction 仍须先 block 或 defer。第一次成功调用 `attempt-report` 会发布不可覆盖的终态
+若没有需要关闭的 Direction，`blocked` 和 `pivot` 允许 Journal 与 Findings 为空；报告需如实说明原因，
+不应虚构证据。已有 in_progress Direction 仍须先关联 Experiment 再关闭。
+第一次成功调用 `attempt-report` 会发布不可覆盖的终态
 Report；校验或工具错误不会发布 Report，因此 Agent 可以依据 `issues`、`request_schema` 和 `recovery`
 修正后重试，但成功后不得再次调用。每个 Experiment 必须绑定可见的 `in_progress` Direction，
 或已关闭的 Direction（`completed`、`abandoned`、`blocked`、`deferred`）。允许关闭后补交已有证据：
 Experiment 追加到当前 Attempt 的 Journal，不重新打开 Direction、不改变其状态、不改写历史事件；
-加载 Direction 时，其支持 Experiment ID 会自动包含补录条目。仅处于 `proposed` 的 Direction 仍须先
+加载 Direction 时，associated Experiment ID 会包含补录条目，但不会改写关闭时选定的 supporting ID。仅处于 `proposed` 的 Direction 仍须先
 start。Trial 可见性、归属和证据校验不变；补录不代表可以不经 start 就恢复研究。
-终态交接前，任何 Direction 都不能保持 in_progress，未产生
-Experiment 的已启动 Direction 也必须 defer 或 block；complete 和 abandon 仍要求存在支持 Experiment。
+终态交接前，任何 Direction 都不能保持 in_progress。`complete`、`abandon`、`block`、`defer` 均要求
+通过 `supporting_experiment_ids` 显式选择 1–32 条无重复、当前可见且属于该 Direction 的 Experiment；
+`propose`、`start` 不选择关闭证据。关闭还必须声明独立于生命周期的
+`hypothesis_status=unresolved|supported|refuted`。supported/refuted 要求每条选中 Experiment 的 after
+绑定已完成的 Gateway Result；Runtime 校验归属和结果绑定，不认证因果相关性或科学结论。
+未测量的推断保持 unresolved，放弃投入不等于证伪。
+
+每条新 Experiment 至少绑定一个真实、与 Kernel 绑定的 Gateway Result。
+`abandon_direction` 允许 before 或 after 单边非空，禁止两边均 null；
+`keep_after`、`restore_before`、`adopt` 要求两边都有；Bootstrap baseline 要求 before=null、after 非空。
+Check/Profile 或失败的诊断 Result 可以证明调查或阻塞，但不代表性能结论；Health/Env、没有 Kernel
+绑定的 Dev 不算证据。只有传输报错、没有 Result Artifact 时不能引用：没有真实证据就不能关闭
+Direction，交由正常 Session 失败/恢复流程处理，禁止为结束而伪造 Experiment。
+仅含 abandon_direction 诊断的 blocked Bootstrap Report 可不含 baseline；candidate_ready 仍须 baseline。
+Runtime 自管历史记录的只读回放仍可读取旧的无 Experiment `block/defer` 事件，不修改原记录；
+Agent 请求不能启用此历史读取兼容上下文。
 每个 Attempt 最多可以启动并推进三个不同 Direction，包括继承和本 Attempt 新增的 Direction。仅 propose
 不占推进名额，Report 也不限制保持 proposed/deferred 的 Direction 数量。同一时间只能有一个 Direction
 处于 `in_progress`；启动第二个 Direction 会被 Runtime 原子拒绝，并返回
@@ -329,8 +344,29 @@ Attempt-scoped Runtime Journal Endpoint，不访问 Agate、不消耗 Gateway �
 Direction 历史遵循相同的已完成全路径/运行中同 Trajectory 可见边界；Agent-facing 结果不暴露
 Branch、Epoch、Attempt、选中状态或当前/历史来源。
 `load-direction` 会根据每个可见 Experiment 的 `direction_id` 反向派生关联；因此记录 Experiment 后，
-对应 Direction 的读取视图立即更新。`update-direction` 会在内部状态事件中快照这些派生 ID，Agent
-无需填写；实时关联与快照关联会合并到同一个去重列表中。
+对应 Direction 的 `associated_experiment_ids` 立即更新。`supporting_experiment_ids` 仅保留最近一次
+关闭时显式选中的证据，补录不会自动改变结论。list/load-direction 都展示 hypothesis_status；
+重新 start 会将当前判断重置为 unresolved，旧事件保持不可变。未声明判断的旧关闭记录按 unresolved
+读取，原先自动汇总的 ID 只算 associated，不算显式支持。旧的无结果 Experiment 保留读取，但不能
+用于新的关闭。Report 与后续记忆保留判断及选中 ID；它们仍是 Agent 解释而非 Runtime 认证。
+
+例如，诊断实验完成后，可以延期而不宣称假设被证伪：
+
+```json
+{"action":"defer","direction_id":"direction_<id>","analysis":"诊断已完成，但性能假设尚未测量","hypothesis_status":"unresolved","supporting_experiment_ids":["experiment_<id>"]}
+```
+
+单边诊断 Experiment 示例（占位符须替换为真实 ID）：
+
+```json
+{"direction_id":"direction_<id>","name":"编译检查","hypothesis":"候选实现能够编译","change":"实现候选方案","before":null,"after":{"result_artifact_digest":"sha256:<check-result>"},"evidence":"Check 返回编译诊断","analysis":"编译阻塞，无法得出性能结论","action":"abandon_direction"}
+```
+
+工具校验错误返回 `issues`（字段、错误码、原因）、`request_schema` 与 `recovery`。
+双 null 错误定位 before，消息同时说明两边约束。未知或跨 Direction 的支持 ID、重复 ID、遗漏关闭
+字段、缺少已完成 Gateway 证据均在 Journal 追加前拒绝。用真实记录修正后可重试；HTTP 400 或
+参数校验失败本身不是 Experiment，也不能作为 Result 引用。
+
 `profile_evidence` 必须为 `null`，或包含 `tool_used`、`profiler`、`profile_level`、
 `bottleneck_type`、`evidence_summary`、`evidence_chain` 和非空 `supporting_results` 的精确
 Object。每项 Supporting Result 绑定 `operation`（仅允许 `profile`）、

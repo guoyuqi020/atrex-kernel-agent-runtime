@@ -277,6 +277,21 @@ async def test_empty_report_cannot_omit_an_actual_in_progress_direction(
     )
     with pytest.raises(ValueError, match="Runtime-owned Direction in progress"):
         await _submit(history, report, key="omitted-direction")
+    close_action = "block" if status == "blocked" else "defer"
+    with pytest.raises(ValueError, match="requires at least one associated Experiment"):
+        await history.journal(
+            "direction_update",
+            request={"action": close_action, "direction_id": direction, "analysis": "Blocked"},
+        )
+    await history.journal(
+        "experiment_record",
+        request={
+            **history.experiment(direction, action="abandon_direction"),
+            "before": {"result_artifact_digest": history.before.result_artifact_digest},
+            "after": None,
+            "evidence": "The planned check could not be run; no measurement was obtained.",
+        },
+    )
     await history.journal(
         "direction_update",
         request={
@@ -286,6 +301,7 @@ async def test_empty_report_cannot_omit_an_actual_in_progress_direction(
         },
     )
     report["direction_events"] = list(history.control.list_direction_events(history.current.id))
+    report["experiments"] = list(history.control.list_experiments(history.current.id))
     assert (await _submit(history, report)).result["status"] == "registered"
 
 
@@ -344,6 +360,17 @@ async def test_empty_report_cannot_hide_inherited_in_progress_direction(history:
     with pytest.raises(ValueError, match="Runtime-owned Direction in progress"):
         await _submit(history, report, key="hide-inherited-direction")
     await history.journal(
+        "experiment_record",
+        request={
+            **history.experiment(
+                prior["direction_events"][0]["direction_id"], action="abandon_direction"
+            ),
+            "before": {"result_artifact_digest": history.before.result_artifact_digest},
+            "after": None,
+            "evidence": "The inherited investigation remains blocked; no measurement was made.",
+        },
+    )
+    await history.journal(
         "direction_update",
         request={
             "action": "block",
@@ -352,4 +379,5 @@ async def test_empty_report_cannot_hide_inherited_in_progress_direction(history:
         },
     )
     report["direction_events"] = list(history.control.list_direction_events(history.current.id))
+    report["experiments"] = list(history.control.list_experiments(history.current.id))
     assert (await _submit(history, report)).result["status"] == "registered"

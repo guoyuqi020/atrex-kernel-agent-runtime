@@ -328,6 +328,7 @@ class CoreLineageBootstrapSessionDriver:
                 has_identity_bearing_experiment = any(
                     subject is not None
                     for experiment in report.experiments
+                    if experiment.action != "abandon_direction"
                     for subject in (experiment.before, experiment.after)
                 )
                 if (
@@ -337,7 +338,8 @@ class CoreLineageBootstrapSessionDriver:
                 ):
                     raise ValueError(
                         "Bootstrap blocked report may omit baseline only when no Experiment has "
-                        "identity-bearing Gateway evidence"
+                        "non-diagnostic candidate evidence; "
+                        "abandon_direction diagnostics are allowed"
                     )
             except ValueError as error:
                 report_error = str(error)

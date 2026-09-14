@@ -311,7 +311,7 @@ def test_attempt_report_rejects_more_than_three_advanced_directions(tmp_path: Pa
                     "success_criteria": None,
                     "stop_conditions": None,
                     "analysis": "defer further work",
-                    "supporting_experiment_ids": [],
+                    "supporting_experiment_ids": [f"experiment_{event_base:032x}"],
                 },
             ]
         )
@@ -455,7 +455,7 @@ def test_attempt_report_requires_complete_before_after_comparison(tmp_path: Path
     path = tmp_path / "report.json"
     path.write_text(json.dumps(value), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="both be present or both be null"):
+    with pytest.raises(ValueError, match="requires before and after evidence"):
         AttemptReportV12.from_file(path, expected_attempt_id=attempt_id, max_bytes=8192)
 
 

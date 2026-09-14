@@ -44,6 +44,25 @@ class _History:
 
     async def journal(self, operation: str, **fields: object) -> GatewayProxyResponseV2:
         self.sequence += 1
+        request = fields.get("request")
+        if isinstance(request, dict) and request.get("action") in {
+            "complete",
+            "abandon",
+            "block",
+            "defer",
+        }:
+            # Existing scenario fixtures explicitly choose their currently linked evidence.
+            _, visible = self.control.visible_kernel_trial_attempt_ids(self.current.id)
+            fields["request"] = {
+                "hypothesis_status": "unresolved",
+                "supporting_experiment_ids": [
+                    item["experiment_id"]
+                    for attempt_id in visible
+                    for item in self.control.list_experiments(attempt_id)
+                    if item["direction_id"] == request["direction_id"]
+                ],
+                **request,
+            }
         return await self.service.execute(
             self.capability.token,
             json.dumps(

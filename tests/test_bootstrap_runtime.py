@@ -129,9 +129,7 @@ def _bootstrap_report(
                 None if blocked else {"change_summary": "implemented the first DSL kernel"}
             ),
             "evidence_summary": {
-                "correctness": (
-                    "Gateway unavailable" if blocked else "all Gateway cases passed"
-                ),
+                "correctness": ("Gateway unavailable" if blocked else "all Gateway cases passed"),
                 "performance": "no authoritative latency" if blocked else "positive latency",
             },
             "profile_evidence": None,
@@ -191,9 +189,14 @@ def _bootstrap_report(
                     "success_criteria": None,
                     "stop_conditions": None,
                     "analysis": "blocked by Gateway" if blocked else "evaluation passed",
-                    "supporting_experiment_ids": [] if blocked else [experiment_id],
+                    "supporting_experiment_ids": [experiment_id],
                 },
             ],
+            **(
+                {"experiments": [], "direction_events": [], "findings": []}
+                if subject is None
+                else {}
+            ),
         }
     )
 
@@ -708,9 +711,7 @@ def test_core_lineage_baseline_automatically_retries_process_exit(
     )
     assert [session.status.value for session in worker_sessions] == ["failed", "completed"]
     assert [session.recovery_generation for session in worker_sessions] == [0, 1]
-    assert [
-        event.kind for event in registry.list_runtime_events(after_sequence=0, limit=10)
-    ] == [
+    assert [event.kind for event in registry.list_runtime_events(after_sequence=0, limit=10)] == [
         "bootstrap.lineage_baseline_failed",
         "bootstrap.lineage_baseline_retrying",
         "bootstrap.lineage_baseline_completed",

@@ -305,7 +305,10 @@ def test_optimizer_prompt_limits_advancement_not_open_direction_count() -> None:
     assert "do not interleave their research, tools, edits, or measurements" in normalized
     assert "Before starting another, close the current one" in normalized
     assert "None may remain `in_progress` at handoff" in normalized
-    assert "Without an Experiment use `defer` or `block`" in normalized
+    assert "All four closing actions require at least one Experiment associated" in normalized
+    assert "`propose` and `start` do not" in normalized
+    assert "actual investigation or blocker" in normalized
+    assert "Without an Experiment use `defer` or `block`" not in normalized
     assert "Leave at most three visible Directions" not in prompt
 
 

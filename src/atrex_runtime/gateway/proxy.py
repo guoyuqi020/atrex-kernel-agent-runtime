@@ -1302,7 +1302,8 @@ class GatewayProxyService:
                 if artifact.kind is not ArtifactKind.ATTEMPT_REPORT:
                     raise ValueError("report Artifact has the wrong kind")
                 report = AttemptReportV12.model_validate_json(
-                    (artifact.payload_path / "value.json").read_bytes()
+                    (artifact.payload_path / "value.json").read_bytes(),
+                    context={"trusted_direction_history": True, "trusted_experiment_history": True},
                 )
                 if report.attempt_id != request.attempt_id:
                     raise ValueError("report Artifact belongs to a different Attempt")

@@ -75,6 +75,18 @@ async def test_closed_direction_accepts_late_profile_evidence(
                 "direction_id": direction_id,
                 "action": action,
                 "analysis": f"{action} the research direction",
+                **(
+                    {
+                        "hypothesis_status": "unresolved",
+                        "supporting_experiment_ids": [
+                            item["experiment_id"]
+                            for item in control.list_experiments(attempt.id)
+                            if item["direction_id"] == direction_id
+                        ],
+                    }
+                    if action != "start"
+                    else {}
+                ),
             },
         )
 
@@ -149,6 +161,9 @@ async def test_closed_direction_accepts_late_profile_evidence(
         assert directions[direction_id]["status"] == closed_status
         assert directions[direction_id]["supporting_experiment_ids"] == [
             recorded["experiment_id"],
+        ]
+        assert directions[direction_id]["associated_experiment_ids"] == [
+            recorded["experiment_id"],
             late["experiment_id"],
         ]
         assert directions[second]["status"] == ("in_progress" if other_in_progress else "proposed")
@@ -176,8 +191,21 @@ async def test_closed_direction_accepts_late_profile_evidence(
                     },
                 )
         else:
+            await journal(
+                "experiment_record",
+                "pause-second-direction",
+                request={
+                    **experiment,
+                    "direction_id": second,
+                    "name": "second direction investigation paused",
+                    "before": subject,
+                    "after": None,
+                    "action": "abandon_direction",
+                    "evidence": "No measurement was made for this direction before the pause.",
+                },
+            )
             await update(second, "defer")
-        assert len(control.list_experiments(attempt.id)) == 2
+        assert len(control.list_experiments(attempt.id)) == (3 if other_in_progress else 2)
 
         snapshot = await journal("journal_snapshot", "terminal-snapshot")
         report = _report_value(attempt.id)

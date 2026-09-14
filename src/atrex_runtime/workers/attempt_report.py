@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest, parse_attempt_id
 
@@ -91,16 +91,27 @@ class AttemptExperimentV8(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _validate_comparison(self) -> AttemptExperimentV8:
+    def _validate_comparison(self, info: ValidationInfo) -> AttemptExperimentV8:
         if self.action == "baseline":
             if self.before is not None or self.after is None:
                 raise ValueError(
                     "Experiment baseline requires before=null and complete after evidence"
                 )
             return self
-        if (self.before is None) != (self.after is None):
-            raise ValueError("Experiment before and after must both be present or both be null")
-        if self.action in {"keep_after", "restore_before", "adopt"} and self.before is None:
+        if self.before is None and self.after is None:
+            if (
+                self.action == "abandon_direction"
+                and isinstance(info.context, dict)
+                and info.context.get("trusted_experiment_history") is True
+            ):
+                return self
+            raise ValueError(
+                "Experiment requires at least one Gateway Result: before and after cannot both "
+                "be null; cite a real Kernel-bound Result Artifact, not a fabricated measurement"
+            )
+        if self.action in {"keep_after", "restore_before", "adopt"} and (
+            self.before is None or self.after is None
+        ):
             raise ValueError(f"Experiment {self.action} requires before and after evidence")
         return self
 
@@ -309,6 +320,8 @@ class AttemptDirectionEventV1(BaseModel):
     stop_conditions: str | None
     analysis: str | None
     supporting_experiment_ids: tuple[str, ...] = Field(max_length=32)
+    # None identifies legacy events whose support IDs were automatically aggregated.
+    hypothesis_status: Literal["unresolved", "supported", "refuted"] | None = None
     relationship: (
         Literal["retry", "refinement", "reimplementation", "correction", "port", "combination"]
         | None
@@ -331,7 +344,7 @@ class AttemptDirectionEventV1(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _validate_event(self) -> AttemptDirectionEventV1:
+    def _validate_event(self, info: ValidationInfo) -> AttemptDirectionEventV1:
         has_relationship = bool(
             self.relationship
             or self.derived_from_direction_ids
@@ -357,6 +370,8 @@ class AttemptDirectionEventV1(BaseModel):
             self.success_criteria,
             self.stop_conditions,
         )
+        if self.action in {"propose", "start"} and self.hypothesis_status is not None:
+            raise ValueError("Only a Direction closure may declare hypothesis_status")
         if self.action == "propose":
             if any(value is None or not value.strip() for value in definition):
                 raise ValueError("Direction proposal requires complete non-blank definition")
@@ -369,8 +384,19 @@ class AttemptDirectionEventV1(BaseModel):
                 raise ValueError("Direction update cannot redefine its proposal")
             if self.analysis is None or not self.analysis.strip():
                 raise ValueError("Direction update requires analysis")
-            if self.action in {"complete", "abandon"} and not self.supporting_experiment_ids:
-                raise ValueError(f"Direction {self.action} requires supporting Experiments")
+            if (
+                self.action in {"complete", "abandon", "block", "defer"}
+                and not self.supporting_experiment_ids
+            ):
+                # Old Runtime-owned journals permitted unmeasured block/defer. Read
+                # those unchanged, but never enable this context on an Agent request.
+                historical_closure = (
+                    self.action in {"block", "defer"}
+                    and isinstance(info.context, dict)
+                    and info.context.get("trusted_direction_history") is True
+                )
+                if not historical_closure:
+                    raise ValueError(f"Direction {self.action} requires supporting Experiments")
         if len(set(self.supporting_experiment_ids)) != len(self.supporting_experiment_ids):
             raise ValueError("Direction supporting Experiment IDs must be unique")
         for experiment_id in self.supporting_experiment_ids:

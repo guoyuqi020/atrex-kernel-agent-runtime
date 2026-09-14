@@ -137,8 +137,20 @@ tool commands using the backend's task wait/output tool if they moved to the bac
 this is allowed and is not polling or resubmitting an Agate job. Do not end this headless
 Session expecting a background task to wake it later, and do not submit replacement measurements.
 Once the calls finish, reconcile their evidence and submit the Report again.
-If no Experiment was possible, `blocked` or `pivot` may contain empty experiments and findings;
-give the genuine reason in the report and block or defer any in-progress Direction first. Do not
-invent an Experiment to satisfy a count. `candidate_ready` still requires journaled evidence.
+`complete`, `abandon`, `block`, and `defer` all require an Experiment associated with that Direction.
+Explicitly select the relevant `supporting_experiment_ids` at closure and declare
+`hypothesis_status`: `unresolved`, `supported`, or `refuted`. Lifecycle is not a hypothesis verdict.
+Unmeasured reasoning remains unresolved; supported/refuted needs a completed Gateway Result bound
+to every selected Experiment's after. Runtime verifies bindings, not the relevance or truth of
+interpretations. Unrelated measured changes cannot substantiate an incidental claim in analysis.
+`associated_experiment_ids` lists all linked Experiments, while `supporting_experiment_ids` preserves
+only the latest explicit closure selection. Missing historical judgments mean unresolved.
+If no measurement was possible, first record the actual investigation or blocker with
+`action="abandon_direction"` and at least one real Kernel-bound Gateway Result in `before` or
+`after`, then close with `hypothesis_status=unresolved`. Both sides may not be null. Check/Profile
+can provide diagnostic evidence without a performance claim. Health/Env or unbound Dev results do
+not qualify. With no Result available, closure is blocked; never fabricate evidence to finish.
+`blocked` or `pivot` may contain empty experiments and findings if no Direction needs closing;
+give the genuine reason in the report. `candidate_ready` still requires journaled evidence.
 Private evaluator inputs remain hidden; opaque Shape identifiers and measurements must not be used
 to reconstruct them.

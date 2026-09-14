@@ -9,7 +9,11 @@ from pydantic import ValidationError
 from test_attempt_report import _value
 
 from atrex_runtime.domain.ids import new_attempt_id
-from atrex_runtime.workers.attempt_report import AttemptExperimentV8, AttemptReportV12
+from atrex_runtime.workers.attempt_report import (
+    AttemptDirectionEventV1,
+    AttemptExperimentV8,
+    AttemptReportV12,
+)
 
 
 def _report(status: str) -> dict[str, Any]:
@@ -46,8 +50,8 @@ def test_candidate_ready_still_requires_each_journal_collection(field: str) -> N
 
 
 @pytest.mark.parametrize("status", ["blocked", "pivot"])
-@pytest.mark.parametrize("action", ["propose", "block", "defer"])
-def test_empty_experiment_report_accepts_non_active_directions(status: str, action: str) -> None:
+@pytest.mark.parametrize("action", ["propose", "complete", "abandon", "block", "defer"])
+def test_empty_experiment_report_only_accepts_proposals(status: str, action: str) -> None:
     value = _report(status)
     original = _value(value["attempt_id"])
     events = original["direction_events"]
@@ -58,8 +62,31 @@ def test_empty_experiment_report_accepts_non_active_directions(status: str, acti
         closing["action"] = action
         closing["analysis"] = "No experiment was performed; retain this direction for later."
         value["direction_events"].append(closing)
+        with pytest.raises(ValidationError, match=f"Direction {action} requires supporting"):
+            AttemptReportV12.model_validate(value)
+        return
 
     assert AttemptReportV12.model_validate(value).experiments == ()
+
+
+@pytest.mark.parametrize("action", ["complete", "abandon", "block", "defer"])
+def test_history_context_only_preserves_old_block_and_defer(action: str) -> None:
+    event = dict(_value(new_attempt_id())["direction_events"][1], action=action)
+    assert event["supporting_experiment_ids"] == []
+    with pytest.raises(ValidationError, match="requires supporting Experiments"):
+        AttemptDirectionEventV1.model_validate(event)
+    if action in {"block", "defer"}:
+        assert AttemptDirectionEventV1.model_validate(
+            event, context={"trusted_direction_history": True}
+        ).supporting_experiment_ids == ()
+    else:
+        with pytest.raises(ValidationError, match="requires supporting Experiments"):
+            AttemptDirectionEventV1.model_validate(
+                event, context={"trusted_direction_history": True}
+            )
+    # The Agent cannot enable the internal read context through request fields.
+    with pytest.raises(ValidationError):
+        AttemptDirectionEventV1.model_validate({**event, "trusted_direction_history": True})
 
 
 @pytest.mark.parametrize("status", ["blocked", "pivot"])
