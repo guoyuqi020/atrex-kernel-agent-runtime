@@ -181,6 +181,14 @@ class Registry(Protocol):
         self, revision_id: KernelRevisionId
     ) -> list[KernelMeasurement]: ...
 
+    def get_authoritative_abba_batch(
+        self, task_digest: ArtifactDigest
+    ) -> ArtifactDigest | None: ...
+
+    def record_authoritative_abba_batch(
+        self, task_digest: ArtifactDigest, result_digest: ArtifactDigest
+    ) -> ArtifactDigest: ...
+
     def insert_lineage(self, lineage: Lineage) -> None: ...
 
     def get_lineage(self, lineage_id: LineageId) -> Lineage: ...
@@ -209,7 +217,26 @@ class Registry(Protocol):
         challenger: EpochChallenger,
     ) -> None: ...
 
+    def close_challenger_pool(
+        self,
+        epoch_id: EpochId,
+        attached_count: int,
+        evolution_trace_digest: ArtifactDigest,
+    ) -> None: ...
+
     def list_epoch_challengers(self, epoch_id: EpochId) -> list[EpochChallenger]: ...
+
+    def record_epoch_suggested_directions(
+        self,
+        epoch_id: EpochId,
+        evolution_key: str,
+        evolution_trace_digest: ArtifactDigest,
+        directions: tuple[dict[str, object], ...],
+    ) -> tuple[dict[str, object], ...]: ...
+
+    def list_epoch_suggested_directions(
+        self, epoch_id: EpochId
+    ) -> tuple[dict[str, object], ...]: ...
 
     def transition_epoch(
         self, epoch_id: EpochId, expected: EpochStatus, next_status: EpochStatus

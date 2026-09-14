@@ -311,7 +311,7 @@ class AttemptDirectionEventV1(BaseModel):
     direction_event_id: str = Field(pattern=r"^directionevent_[0-9a-f]{32}$")
     direction_id: str = Field(pattern=r"^direction_[0-9a-f]{32}$")
     recorded_at: str = Field(min_length=1)
-    action: Literal["propose", "start", "complete", "abandon", "block", "defer"]
+    action: Literal["propose", "suggest", "start", "complete", "abandon", "block", "defer"]
     name: str | None
     hypothesis: str | None
     rationale: str | None
@@ -323,7 +323,10 @@ class AttemptDirectionEventV1(BaseModel):
     # None identifies legacy events whose support IDs were automatically aggregated.
     hypothesis_status: Literal["unresolved", "supported", "refuted"] | None = None
     relationship: (
-        Literal["retry", "refinement", "reimplementation", "correction", "port", "combination"]
+        Literal[
+            "retry", "refinement", "reimplementation", "correction", "port", "combination",
+            "adoption",
+        ]
         | None
     ) = None
     derived_from_direction_ids: tuple[
@@ -351,7 +354,7 @@ class AttemptDirectionEventV1(BaseModel):
             or self.derived_from_experiment_ids
             or self.supersedes_direction_id
         )
-        if has_relationship and self.action != "propose":
+        if has_relationship and self.action not in {"propose", "suggest"}:
             raise ValueError("Direction genealogy is immutable; propose a new derived Direction")
         if has_relationship and (
             self.relationship is None
@@ -370,9 +373,9 @@ class AttemptDirectionEventV1(BaseModel):
             self.success_criteria,
             self.stop_conditions,
         )
-        if self.action in {"propose", "start"} and self.hypothesis_status is not None:
+        if self.action in {"propose", "suggest", "start"} and self.hypothesis_status is not None:
             raise ValueError("Only a Direction closure may declare hypothesis_status")
-        if self.action == "propose":
+        if self.action in {"propose", "suggest"}:
             if any(value is None or not value.strip() for value in definition):
                 raise ValueError("Direction proposal requires complete non-blank definition")
             if not self.plan or any(not value.strip() for value in self.plan):

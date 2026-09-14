@@ -5,6 +5,7 @@ import pytest
 from atrex_runtime.direction_genealogy import (
     RELATIONSHIPS,
     relationship_fields,
+    suggestion_availability,
     validate_relationship,
 )
 
@@ -15,7 +16,7 @@ X = "experiment_" + "1" * 32
 Y = "experiment_" + "2" * 32
 
 
-@pytest.mark.parametrize("kind", RELATIONSHIPS)
+@pytest.mark.parametrize("kind", [kind for kind in RELATIONSHIPS if kind != "adoption"])
 def test_validates_all_relationships_with_direction_and_experiment_parents(kind: str) -> None:
     value = validate_relationship(
         C,
@@ -104,3 +105,67 @@ def test_supersedes_does_not_modify_parent_or_fabricate_legacy_links() -> None:
     assert parent == {"status": "abandoned"}
     assert validate_relationship(B, {}, {A: parent}, {}) == {}
     assert relationship_fields({"relationship": None, "derived_from_direction_ids": []}) == {}
+
+
+def test_adoption_uses_only_a_suggested_parent() -> None:
+    suggested = {"status": "suggested"}
+    value = validate_relationship(
+        C,
+        {"relationship": "adoption", "derived_from_direction_ids": [A]},
+        {A: suggested},
+        {},
+    )
+    assert value["derived_from_direction_ids"] == [A]
+    assert suggested == {"status": "suggested"}
+    with pytest.raises(ValueError, match="unexpired suggested parent"):
+        validate_relationship(
+            C,
+            {"relationship": "adoption", "derived_from_direction_ids": [B]},
+            {B: {"status": "completed"}},
+            {},
+        )
+    with pytest.raises(ValueError, match="one suggested parent"):
+        validate_relationship(
+            C,
+            {
+                "relationship": "adoption",
+                "derived_from_direction_ids": [A],
+                "derived_from_experiment_ids": [X],
+            },
+            {A: suggested},
+            {X: {"direction_id": A}},
+        )
+
+
+@pytest.mark.parametrize("status", ["expired", "adopted"])
+def test_expired_suggestion_can_be_refined_but_not_adopted(status: str) -> None:
+    with pytest.raises(ValueError, match="unexpired suggested parent"):
+        validate_relationship(
+            C,
+            {"relationship": "adoption", "derived_from_direction_ids": [A]},
+            {A: {"status": status}},
+            {},
+        )
+    assert validate_relationship(
+        C,
+        {"relationship": "refinement", "derived_from_direction_ids": [A]},
+        {A: {"status": status}},
+        {},
+    )["derived_from_direction_ids"] == [A]
+
+
+@pytest.mark.parametrize(
+    ("current", "origin", "ttl", "expected"),
+    [
+        (1, 0, 1, "suggested"),  # Bootstrap is offered during Epoch 1.
+        (2, 0, 1, "expired"),
+        (2, 2, 1, "suggested"),  # Evolver's new suggestion lasts this Epoch.
+        (3, 2, 1, "expired"),
+        (2, 1, 2, "suggested"),
+        (3, 1, 2, "expired"),
+    ],
+)
+def test_suggestion_availability_by_epoch(
+    current: int, origin: int, ttl: int, expected: str
+) -> None:
+    assert suggestion_availability(current, origin, ttl) == expected

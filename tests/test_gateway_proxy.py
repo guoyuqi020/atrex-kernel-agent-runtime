@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,6 +21,8 @@ from atrex_runtime.domain.errors import (
     DirectionConcurrencyError,
     DuplicateGatewayTaskError,
     InvalidTransitionError,
+    OptimizerSuggestionForbiddenError,
+    SuggestedDirectionTransitionError,
 )
 from atrex_runtime.domain.ids import new_attempt_id, new_epoch_id
 from atrex_runtime.domain.models import Attempt, AttemptStatus, BranchRole, Dsl, Epoch, EpochStatus
@@ -1455,6 +1457,83 @@ def test_direction_concurrency_error_is_machine_readable_and_actionable() -> Non
     assert "request_schema" in response
 
 
+@pytest.mark.parametrize("field_path", ["request.action", "report.direction_events.action"])
+def test_optimizer_suggestion_error_identifies_action_and_recovery(field_path: str) -> None:
+    payload = json.dumps(
+        {
+            "schema_version": 2,
+            "attempt_id": "attempt_" + "c" * 32,
+            "idempotency_key": "optimizer-suggest",
+            "operation": "direction_update",
+            "request": {"action": "suggest"},
+        }
+    ).encode()
+
+    response = _invalid_request_response(
+        payload,
+        OptimizerSuggestionForbiddenError(field_path),
+        operation_scope="journal",
+    )
+
+    assert response["issues"] == [
+        {
+            "path": field_path,
+            "code": "forbidden_action",
+            "message": response["detail"],
+        }
+    ]
+    recovery = cast(list[dict[str, Any]], response["recovery"])
+    assert "action=propose" in recovery[0]["instruction"]
+    assert "relationship=adoption" in recovery[1]["instruction"]
+    assert "derived_from_direction_ids" in recovery[1]["instruction"]
+
+
+@pytest.mark.parametrize(
+    ("action", "status", "code"),
+    [
+        ("start", "suggested", "suggested_direction_not_startable"),
+        ("complete", "suggested", "suggested_direction_immutable"),
+        ("start", "expired", "expired_direction_not_startable"),
+        ("complete", "adopted", "adopted_direction_immutable"),
+    ],
+)
+def test_suggested_direction_transition_error_has_actionable_recovery(
+    action: str, status: str, code: str
+) -> None:
+    direction_id = "direction_" + "a" * 32
+    payload = json.dumps(
+        {
+            "schema_version": 2,
+            "attempt_id": "attempt_" + "c" * 32,
+            "idempotency_key": "start-suggested",
+            "operation": "direction_update",
+            "request": {"action": action, "direction_id": direction_id, "analysis": "Try it"},
+        }
+    ).encode()
+
+    response = _invalid_request_response(
+        payload,
+        SuggestedDirectionTransitionError(direction_id, action, status=status),
+        operation_scope="journal",
+    )
+
+    assert response["issues"] == [
+        {"path": "request.direction_id", "code": code, "message": response["detail"]}
+    ]
+    recovery = cast(list[dict[str, Any]], response["recovery"])
+    assert recovery[0] == {
+        "tool": "load-direction",
+        "request": {"direction_id": direction_id},
+    }
+    assert "action=propose" in recovery[1]["instruction"]
+    if status == "suggested":
+        assert "relationship=adoption" in recovery[1]["instruction"]
+    else:
+        assert "no longer eligible for adoption" in recovery[1]["instruction"]
+    assert "relationship=refinement" in recovery[1]["instruction"]
+    assert "Start the new Direction ID" in recovery[2]["instruction"]
+
+
 @pytest.mark.anyio
 async def test_runtime_journal_survives_attempt_recovery_generation(
     tmp_path: Path,
@@ -1871,7 +1950,7 @@ def _direction_event(
     action: str,
     recorded_at: str,
 ) -> dict[str, object]:
-    proposal = action == "propose"
+    proposal = action in {"propose", "suggest"}
     return {
         "direction_event_id": f"directionevent_{event_id * 32}"[:47],
         "direction_id": f"direction_{direction_id * 32}"[:42],
@@ -1901,7 +1980,7 @@ def test_an_inherited_direction_replays_in_recorded_order(tmp_path: Path) -> Non
 
     class _Control:
         # The visibility query lists the advancing Attempt before the proposing one.
-        def visible_kernel_trial_attempt_ids(
+        def visible_journal_attempt_ids(
             self,
             _attempt_id: object,
         ) -> tuple[object, tuple[Any, ...]]:
@@ -1916,6 +1995,9 @@ def test_an_inherited_direction_replays_in_recorded_order(tmp_path: Path) -> Non
         def list_experiments(self, _attempt_id: Any) -> tuple[dict[str, object], ...]:
             return ()
 
+        def visible_suggested_directions(self, _attempt_id: Any) -> tuple[dict[str, object], ...]:
+            return ()
+
     service = RuntimeJournalService(
         cast(Any, _Control()),
         LocalArtifactStore(tmp_path),
@@ -1926,3 +2008,108 @@ def test_an_inherited_direction_replays_in_recorded_order(tmp_path: Path) -> Non
 
     views = service._direction_views(advancing)
     assert [view["status"] for view in views.values()] == ["deferred"]
+
+
+@pytest.mark.parametrize("source", ["bootstrap", "evolver"])
+@pytest.mark.parametrize("adopted", [False, True])
+def test_expired_suggestions_remain_readable_and_show_adoption(
+    tmp_path: Path, source: str, adopted: bool
+) -> None:
+    attempt_id = new_attempt_id()
+    suggestion_id = "direction_" + "a" * 32
+    suggestion_event = {
+        **_direction_event("a", "a", "suggest", "2026-08-28T03:23:41+00:00"),
+        "direction_id": suggestion_id,
+    }
+    child_event = {
+        **_direction_event("c", "c", "propose", "2026-08-28T04:23:41+00:00"),
+        "relationship": "adoption",
+        "derived_from_direction_ids": [suggestion_id],
+    }
+    events = ([suggestion_event] if source == "bootstrap" else []) + (
+        [child_event] if adopted else []
+    )
+
+    class _Control:
+        def visible_journal_attempt_ids(
+            self, _attempt_id: object
+        ) -> tuple[object, tuple[object, ...]]:
+            return None, (attempt_id,)
+
+        def visible_attempt_report_artifacts(self, _attempt_id: object) -> tuple[object, ...]:
+            return ()
+
+        def list_direction_events(self, _attempt_id: object) -> tuple[dict[str, object], ...]:
+            return tuple(events)
+
+        def list_experiments(self, _attempt_id: object) -> tuple[dict[str, object], ...]:
+            return ()
+
+        def visible_suggested_directions(
+            self, _attempt_id: object
+        ) -> tuple[dict[str, object], ...]:
+            return (
+                ()
+                if source == "bootstrap"
+                else (
+                    {
+                        "direction_id": suggestion_id,
+                        "name": "vectorize loads",
+                        "hypothesis": "one transaction replaces two",
+                        "rationale": "profile shows excess transactions",
+                        "plan": ["replace scalar loads"],
+                        "success_criteria": "latency improves",
+                        "stop_conditions": "alignment cannot be preserved",
+                        "status": "expired",
+                    },
+                )
+            )
+
+        def suggestion_status(self, _attempt_id: object, *, created_epoch_number: int) -> str:
+            assert created_epoch_number == 0
+            return "expired"
+
+    service = RuntimeJournalService(cast(Any, _Control()), LocalArtifactStore(tmp_path))
+    views = service._direction_views(attempt_id)
+    assert views[suggestion_id]["status"] == ("adopted" if adopted else "expired")
+    if adopted:
+        assert views[str(child_event["direction_id"])]["status"] == "proposed"
+
+
+def test_prior_failed_attempt_journal_is_visible_without_expanding_measurement_scope(
+    tmp_path: Path,
+) -> None:
+    registry, control, first, _capability, _service_instance, _adapter = _service(tmp_path)
+    try:
+        first_epoch = registry.get_epoch(first.epoch_id)
+        registry._connection.execute(
+            "UPDATE attempts SET status = 'infrastructure_failed' WHERE id = ?", (first.id,)
+        )
+        registry._connection.execute(
+            "UPDATE epochs SET status = 'completed', winner_kernel_agent_revision_id = ? "
+            "WHERE id = ?",
+            (first_epoch.active_kernel_agent_revision_id, first_epoch.id),
+        )
+        registry._connection.execute(
+            "UPDATE lineages SET status = 'ready', next_epoch_number = 2 WHERE id = ?",
+            (first_epoch.lineage_id,),
+        )
+        second_epoch = replace(
+            first_epoch,
+            id=new_epoch_id(),
+            number=2,
+            status=EpochStatus.RUNNING,
+            winner_kernel_agent_revision_id=None,
+        )
+        registry.insert_epoch(second_epoch)
+        second = replace(first, id=new_attempt_id(), epoch_id=second_epoch.id)
+        registry.insert_attempt(second)
+
+        _, measurement_attempt_ids = control.visible_kernel_trial_attempt_ids(second.id)
+        _, journal_attempt_ids = control.visible_journal_attempt_ids(second.id)
+
+        assert first.id not in measurement_attempt_ids
+        assert first.id in journal_attempt_ids
+    finally:
+        control.close()
+        registry.close()

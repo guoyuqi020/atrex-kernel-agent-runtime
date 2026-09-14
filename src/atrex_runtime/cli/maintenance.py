@@ -37,6 +37,7 @@ def gc_artifacts(
             settings.storage.gateway_database,
             registry,
             signing_key=signing_key,
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
         try:
             result = ArtifactGarbageCollector(

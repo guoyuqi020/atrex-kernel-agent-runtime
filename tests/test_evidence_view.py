@@ -17,8 +17,10 @@ from atrex_runtime.workers.evidence_view import (
     EVIDENCE_PROMPT_TEXT,
     EVOLVER_EVIDENCE_PROMPT_TEXT,
     EvidenceViewManifestV1,
+    _latest_evolver_epoch_facts,
     _materialize_evolver_agent_reports,
     _materialize_evolver_agent_sessions,
+    _materialize_evolver_journal,
     assemble_evolver_evidence_view,
     assemble_optimizer_evidence_view,
     evolver_agent_optimization_summary,
@@ -591,6 +593,7 @@ def test_optimizer_view_projects_every_completed_branch_by_epoch(tmp_path: Path)
         attempt_ordinal=3,
         artifacts=store,
     )
+    assert not (destination / "direction-proposals.json").exists()
 
     assert EvidenceViewManifestV1.from_file(control_root / "evidence-manifest.json") == manifest
     assert manifest.prompt_fragment_sha256 == EVIDENCE_PROMPT_SHA256
@@ -606,8 +609,8 @@ def test_optimizer_view_projects_every_completed_branch_by_epoch(tmp_path: Path)
     assert "`kernel-trial-show`" not in EVIDENCE_PROMPT_TEXT
     assert "`kernel-artifact-read`" not in EVIDENCE_PROMPT_TEXT
     assert "`result-artifact-read`" not in EVIDENCE_PROMPT_TEXT
-    assert "`list-directions`" not in EVIDENCE_PROMPT_TEXT
-    assert "`load-direction`" not in EVIDENCE_PROMPT_TEXT
+    assert "`list-directions`" in EVIDENCE_PROMPT_TEXT
+    assert "`load-direction`" in EVIDENCE_PROMPT_TEXT
     assert "`measurements-query`" not in EVIDENCE_PROMPT_TEXT
     assert '"operation":"kernel_trials"' not in EVIDENCE_PROMPT_TEXT
     assert "Kernel, Trial, Result, Direction, and Experiment" in EVIDENCE_PROMPT_TEXT
@@ -741,6 +744,13 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert manifest.visibility.current_trajectory_ordinal is None
     assert not (destination / "epochs").exists()
     assert not (destination / "bootstrap").exists()
+    facts = json.loads((destination / "latest-epoch-facts.json").read_text())
+    assert facts["epoch_number"] == 1
+    assert facts["selection_reason"] == "authoritative_comparison"
+    assert [item["branch"] for item in facts["attempts"]] == ["active", "challenger"]
+    assert facts["attempts"][0]["direction_ids"] == ["direction_" + "a" * 32]
+    assert facts["attempts"][0]["failure_reason"] is None
+    assert facts["attempts"][0]["candidate"]["correct"] is True
     active_effect = json.loads((destination / "agent-v0/optimization-summary.json").read_text())
     assert active_effect["version"] == "agent-v0"
     assert active_effect["path"] == "input/agents/agent-v0"
@@ -809,3 +819,156 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert not any(destination.rglob("bootstrap.conversation.jsonl"))
     assert not (control_root / "evolver-evidence-data").exists()
     assert not (destination / "epochs/00000002").exists()
+
+
+def test_latest_evolver_facts_preserve_runtime_failure_diagnosis(tmp_path: Path) -> None:
+    lineage = tmp_path / "lineage"
+    _write(
+        lineage / "epochs/00000001.json",
+        {
+            "selection_reason": "incumbent_retained",
+            "winner_kernel_agent_revision_id": "agent_active",
+            "attempts": [
+                {
+                    "attempt_id": "attempt_failed",
+                    "branch": "challenger",
+                    "status": "failed",
+                    "attempt_report_status": "candidate_ready",
+                    "failure_reason": (
+                        "Optimizer session did not complete successfully: process-exit-126"
+                    ),
+                    "output": None,
+                }
+            ],
+        },
+    )
+    _write(
+        lineage / "reports/00000001/attempt_failed.json",
+        {
+            "direction_events": [{"direction_id": "direction_one"}],
+            "experiments": [{"experiment_id": "experiment_one"}],
+        },
+    )
+
+    facts = _latest_evolver_epoch_facts(lineage, 1)
+
+    attempts = facts["attempts"]
+    assert isinstance(attempts, list)
+    attempt = attempts[0]
+    assert isinstance(attempt, dict)
+    assert attempt["status"] == "failed"
+    assert attempt["attempt_report_status"] == "candidate_ready"
+    failure_reason = attempt["failure_reason"]
+    assert isinstance(failure_reason, str)
+    assert failure_reason.endswith("process-exit-126")
+    assert attempt["candidate"] is None
+    assert attempt["direction_ids"] == ["direction_one"]
+    assert attempt["experiment_ids"] == ["experiment_one"]
+
+
+def test_evolver_reads_live_journal_from_attempt_without_terminal_report(tmp_path: Path) -> None:
+    lineage = tmp_path / "lineage"
+    attempt_id = "attempt_" + "a" * 32
+    direction_id = "direction_" + "b" * 32
+    experiment_id = "experiment_" + "c" * 32
+    _write(
+        lineage / "epochs/00000001.json",
+        {
+            "selection_reason": "latency",
+            "winner_kernel_agent_revision_id": "agentrev_" + "d" * 32,
+            "attempts": [{"attempt_id": attempt_id, "status": "infrastructure_failed"}],
+        },
+    )
+    _write(
+        lineage / f"journals/00000001/{attempt_id}.json",
+        {
+            "attempt_id": attempt_id,
+            "direction_events": [
+                {
+                    "direction_id": direction_id,
+                    "direction_event_id": "directionevent_" + "e" * 32,
+                    "recorded_at": "2026-09-14T00:00:00+00:00",
+                    "action": "propose",
+                    "name": "Reorder loads",
+                    "hypothesis": "Coalescing reduces transactions",
+                }
+            ],
+            "experiments": [
+                {
+                    "experiment_id": experiment_id,
+                    "direction_id": direction_id,
+                    "name": "First probe",
+                }
+            ],
+        },
+    )
+
+    facts = _latest_evolver_epoch_facts(lineage, 1)
+    assert facts["attempts"][0]["direction_ids"] == [direction_id]
+    assert facts["attempts"][0]["experiment_ids"] == [experiment_id]
+    destination = tmp_path / "evolver-journal"
+    _materialize_evolver_journal(destination, lineage, 1)
+    direction_index = json.loads((destination / "directions/index.json").read_text())
+    direction = json.loads((destination / f"directions/{direction_id}.json").read_text())
+    experiment = json.loads((destination / f"experiments/{experiment_id}.json").read_text())
+    assert direction_index[0]["name"] == "Reorder loads"
+    assert direction["events"][0]["hypothesis"] == "Coalescing reduces transactions"
+    assert experiment["name"] == "First probe"
+
+
+def test_evolver_journal_includes_bootstrap_direction_records(tmp_path: Path) -> None:
+    lineage = tmp_path / "lineage"
+    direction_id = "direction_" + "a" * 32
+    experiment_id = "experiment_" + "b" * 32
+    _write(
+        lineage / "bootstrap/report.json",
+        {
+            "attempt_id": "attempt_" + "c" * 32,
+            "direction_events": [
+                {
+                    "direction_id": direction_id,
+                    "direction_event_id": "directionevent_" + "d" * 32,
+                    "recorded_at": "2026-09-14T00:00:00+00:00",
+                    "action": "propose",
+                    "name": "Baseline construction",
+                }
+            ],
+            "experiments": [{"experiment_id": experiment_id, "name": "Baseline test"}],
+        },
+    )
+
+    destination = tmp_path / "evolver-journal"
+    _materialize_evolver_journal(destination, lineage, 0)
+
+    assert json.loads((destination / "directions/index.json").read_text())[0][
+        "direction_id"
+    ] == direction_id
+    assert json.loads((destination / "experiments/index.json").read_text())[0][
+        "experiment_id"
+    ] == experiment_id
+
+
+def test_evolver_journal_includes_prior_suggested_directions(tmp_path: Path) -> None:
+    lineage = tmp_path / "lineage"
+    direction_id = "direction_" + "a" * 32
+    _write(
+        lineage / "epochs/00000001.json",
+        {
+            "suggested_directions": [
+                {
+                    "direction_id": direction_id,
+                    "status": "suggested",
+                    "name": "Try a split reduction",
+                    "hypothesis": "A split reduction could shorten the critical path",
+                    "created_at": "2026-09-14T00:00:00+00:00",
+                }
+            ]
+        },
+    )
+    destination = tmp_path / "evolver-journal"
+    _materialize_evolver_journal(destination, lineage, 1)
+    index = json.loads((destination / "directions/index.json").read_text())
+    record = json.loads((destination / f"directions/{direction_id}.json").read_text())
+    assert index[0]["direction_id"] == direction_id
+    assert index[0]["latest_action"] == "suggest"
+    assert record["events"][0]["status"] == "suggested"

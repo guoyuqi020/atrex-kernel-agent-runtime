@@ -160,10 +160,217 @@ def assemble_evolver_evidence_view(
             continue
         _materialize_evolver_agent_sessions(destination, revision_id, entry / "sessions")
         _materialize_evolver_agent_reports(destination, revision_id, entry / "reports")
+    write_canonical_json(
+        destination / "latest-epoch-facts.json",
+        _latest_evolver_epoch_facts(lineage_payload, through_epoch),
+    )
+    _materialize_evolver_journal(destination / "journal", lineage_payload, through_epoch)
     shutil.rmtree(destination / "bootstrap")
     shutil.rmtree(destination / "epochs")
     make_tree_read_only(destination)
     return manifest
+
+
+def _latest_evolver_epoch_facts(
+    lineage_payload: Path,
+    through_epoch: int,
+) -> dict[str, JsonValue]:
+    """Index trusted outcomes across the last completed Epoch's Branches.
+
+    Journal IDs are navigation hints, not a claim that Agent-authored analysis is
+    authoritative. Raw failure reasons remain visible so an Evolver cannot infer
+    a Journal defect merely from a missing Candidate.
+    """
+    if through_epoch == 0:
+        return {
+            "epoch_number": None,
+            "selection_reason": None,
+            "winner_kernel_agent_revision_id": None,
+            "attempts": [],
+        }
+    epoch = _json_object(
+        lineage_payload / "epochs" / f"{through_epoch:08d}.json",
+        "Evolver latest Epoch facts",
+    )
+    raw_attempts = epoch.get("attempts")
+    if not isinstance(raw_attempts, list):
+        raise ValueError("Evolver latest Epoch has no Attempt facts")
+    attempts: list[JsonValue] = []
+    for raw in raw_attempts:
+        if not isinstance(raw, dict):
+            raise ValueError("Evolver latest Epoch Attempt is invalid")
+        attempt_id = raw.get("attempt_id")
+        if not isinstance(attempt_id, str):
+            raise ValueError("Evolver latest Epoch Attempt has no ID")
+        failure_reason = raw.get("failure_reason")
+        if failure_reason is not None and not isinstance(failure_reason, str):
+            raise ValueError("Evolver latest Epoch Attempt failure reason is invalid")
+        output = raw.get("output")
+        if output is not None and not isinstance(output, dict):
+            raise ValueError("Evolver latest Epoch Attempt output is invalid")
+        journal_path = lineage_payload / "journals" / f"{through_epoch:08d}" / f"{attempt_id}.json"
+        report_path = lineage_payload / "reports" / f"{through_epoch:08d}" / f"{attempt_id}.json"
+        direction_ids: list[str] = []
+        experiment_ids: list[str] = []
+        source = journal_path if journal_path.is_file() else report_path
+        if source.exists():
+            report = _json_object(source, "Evolver latest Attempt Journal")
+            direction_events = report.get("direction_events")
+            if isinstance(direction_events, list):
+                for event in direction_events:
+                    if isinstance(event, dict):
+                        direction_id = event.get("direction_id")
+                        if isinstance(direction_id, str):
+                            direction_ids.append(direction_id)
+            experiments = report.get("experiments")
+            if isinstance(experiments, list):
+                for experiment in experiments:
+                    if isinstance(experiment, dict):
+                        experiment_id = experiment.get("experiment_id")
+                        if isinstance(experiment_id, str):
+                            experiment_ids.append(experiment_id)
+        attempts.append(
+            {
+                "attempt_id": attempt_id,
+                "kernel_agent_revision_id": raw.get("kernel_agent_revision_id"),
+                "branch": raw.get("branch"),
+                "challenger_ordinal": raw.get("challenger_ordinal"),
+                "trajectory_ordinal": raw.get("trajectory_ordinal"),
+                "attempt_ordinal": raw.get("ordinal"),
+                "input_kernel_revision_id": raw.get("input_kernel_revision_id"),
+                "accepted_as_branch_best": raw.get("accepted_as_branch_best"),
+                "status": raw.get("status"),
+                "attempt_report_status": raw.get("attempt_report_status"),
+                "failure_reason": failure_reason,
+                "candidate": (
+                    None
+                    if output is None
+                    else {
+                        "kernel_revision_id": output.get("kernel_revision_id"),
+                        "kernel_artifact_digest": output.get("artifact_digest"),
+                        "correct": output.get("correct"),
+                        "latency_us": output.get("latency_us"),
+                        "gateway_result_digest": output.get("gateway_result_digest"),
+                    }
+                ),
+                "direction_ids": cast(JsonValue, sorted(set(direction_ids))),
+                "experiment_ids": cast(JsonValue, sorted(set(experiment_ids))),
+            }
+        )
+    return {
+        "epoch_number": through_epoch,
+        "selection_reason": epoch.get("selection_reason"),
+        "winner_kernel_agent_revision_id": epoch.get("winner_kernel_agent_revision_id"),
+        "attempts": attempts,
+    }
+
+
+def _materialize_evolver_journal(
+    destination: Path, lineage_payload: Path, through_epoch: int
+) -> None:
+    """Give Evolver bounded, lazy full Journal reads across all completed Branches."""
+    directions: dict[str, list[dict[str, JsonValue]]] = {}
+    experiments: dict[str, dict[str, JsonValue]] = {}
+    bootstrap = lineage_payload / "bootstrap" / "report.json"
+    sources = [bootstrap] if bootstrap.is_file() and not bootstrap.is_symlink() else []
+    for number in range(1, through_epoch + 1):
+        epoch = _json_object(
+            lineage_payload / "epochs" / f"{number:08d}.json",
+            "Evolver historical Epoch",
+        )
+        for suggested in epoch.get("suggested_directions", []):
+            if not isinstance(suggested, dict):
+                raise ValueError("Evolver suggested Direction is invalid")
+            direction_id = suggested.get("direction_id")
+            if (
+                not isinstance(direction_id, str)
+                or re.fullmatch(r"direction_[0-9a-f]{32}", direction_id) is None
+            ):
+                raise ValueError("Evolver suggested Direction ID is invalid")
+            directions.setdefault(direction_id, []).append(
+                cast(dict[str, JsonValue], {
+                    **suggested,
+                    "action": "suggest",
+                    "recorded_at": suggested.get("created_at"),
+                })
+            )
+        journal_root = lineage_payload / "journals" / f"{number:08d}"
+        sources.extend(
+            sorted(journal_root.glob("*.json"))
+            if journal_root.is_dir()
+            else sorted((lineage_payload / "reports" / f"{number:08d}").glob("*.json"))
+        )
+    for source in sources:
+        journal = _json_object(source, "Evolver historical Journal")
+        for raw in journal.get("direction_events", []):
+            if not isinstance(raw, dict):
+                raise ValueError("Evolver Direction Event is invalid")
+            direction_id = raw.get("direction_id")
+            if (
+                not isinstance(direction_id, str)
+                or re.fullmatch(r"direction_[0-9a-f]{32}", direction_id) is None
+            ):
+                raise ValueError("Evolver Direction ID is invalid")
+            directions.setdefault(direction_id, []).append(cast(dict[str, JsonValue], raw))
+        for raw in journal.get("experiments", []):
+            if not isinstance(raw, dict):
+                raise ValueError("Evolver Experiment is invalid")
+            experiment_id = raw.get("experiment_id")
+            if (
+                not isinstance(experiment_id, str)
+                or re.fullmatch(r"experiment_[0-9a-f]{32}", experiment_id) is None
+            ):
+                raise ValueError("Evolver Experiment ID is invalid")
+            previous = experiments.get(experiment_id)
+            if previous is not None and previous != raw:
+                raise ValueError("Evolver Experiment ID has conflicting records")
+            experiments[experiment_id] = cast(dict[str, JsonValue], raw)
+    destination.mkdir(mode=0o700)
+    direction_root = destination / "directions"
+    experiment_root = destination / "experiments"
+    direction_root.mkdir(mode=0o700)
+    experiment_root.mkdir(mode=0o700)
+    for direction_id, events in sorted(directions.items()):
+        events.sort(
+            key=lambda event: (
+                str(event.get("recorded_at")), str(event.get("direction_event_id"))
+            )
+        )
+        write_canonical_json(
+            direction_root / f"{direction_id}.json",
+            {"direction_id": direction_id, "events": events},
+        )
+    for experiment_id, experiment in sorted(experiments.items()):
+        write_canonical_json(experiment_root / f"{experiment_id}.json", experiment)
+    write_canonical_json(
+        direction_root / "index.json",
+        [
+            {
+                "direction_id": direction_id,
+                "name": next(
+                    (
+                        event.get("name")
+                        for event in events
+                        if event.get("action") in {"propose", "suggest"}
+                    ),
+                    None,
+                ),
+                "latest_action": events[-1].get("action"),
+            }
+            for direction_id, events in sorted(directions.items())
+        ],
+    )
+    write_canonical_json(
+        experiment_root / "index.json",
+        [
+            {
+                "experiment_id": experiment_id,
+                "direction_id": item.get("direction_id"),
+                "name": item.get("name"),
+            }
+            for experiment_id, item in sorted(experiments.items())
+        ],
+    )
 
 
 def evolver_agent_optimization_summary(

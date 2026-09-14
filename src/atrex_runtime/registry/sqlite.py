@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
+from ..direction_genealogy import suggested_direction_id
 from ..domain.errors import InvalidTransitionError
 from ..domain.ids import (
     ArtifactDigest,
@@ -72,7 +73,7 @@ from ..domain.models import (
 from ..sqlite_support import configure_durable_sqlite
 from .stop_migration import migrate_stops
 
-SCHEMA_VERSION = 33
+SCHEMA_VERSION = 36
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -445,9 +446,11 @@ class SqliteRegistry:
             "SELECT source_provenance_digest AS digest FROM kernel_agent_revisions",
             "SELECT evolution_trace_digest AS digest FROM kernel_agent_revisions",
             "SELECT evolution_trace_digest AS digest FROM epoch_challengers",
+            "SELECT evolution_trace_digest AS digest FROM epoch_suggested_directions",
             "SELECT artifact_digest AS digest FROM kernel_revisions",
             "SELECT gateway_result_digest AS digest FROM kernel_revisions",
             "SELECT gateway_result_digest AS digest FROM kernel_measurements",
+            "SELECT result_artifact_digest AS digest FROM authoritative_abba_batches",
             "SELECT evidence_checkpoint AS digest FROM lineages",
             "SELECT evidence_checkpoint AS digest FROM epochs",
             "SELECT attempt_evidence_digest AS digest FROM attempts",
@@ -507,6 +510,105 @@ class SqliteRegistry:
         if version == 32:
             with self._lock:
                 migrate_stops(self._connection)
+            # A migration probe may deliberately suppress the legacy step. Avoid recursing
+            # unless it actually advanced the on-disk schema version.
+            migrated = self._connection.execute("PRAGMA user_version").fetchone()
+            if migrated is not None and int(migrated[0]) > version:
+                self._migrate()
+            return
+        if version == 33:
+            with self._transaction(migration=True):
+                self._connection.execute(
+                    """CREATE TABLE IF NOT EXISTS authoritative_abba_batches (
+                           task_digest TEXT PRIMARY KEY,
+                           result_artifact_digest TEXT NOT NULL,
+                           created_at TEXT NOT NULL
+                       )"""
+                )
+                self._connection.execute("PRAGMA user_version = 34")
+            self._migrate()
+            return
+        if version == 34:
+            with self._transaction(migration=True):
+                self._connection.execute(
+                    """CREATE TABLE IF NOT EXISTS epoch_direction_proposals (
+                           proposal_id TEXT PRIMARY KEY,
+                           epoch_id TEXT NOT NULL REFERENCES epochs(id),
+                           evolution_key TEXT NOT NULL,
+                           proposal_ordinal INTEGER NOT NULL CHECK (proposal_ordinal > 0),
+                           evolution_trace_digest TEXT NOT NULL,
+                           proposal_json TEXT NOT NULL,
+                           created_at TEXT NOT NULL,
+                           UNIQUE (evolution_key, proposal_ordinal)
+                       )"""
+                )
+                self._connection.execute(
+                    "CREATE INDEX IF NOT EXISTS epoch_direction_proposals_by_epoch "
+                    "ON epoch_direction_proposals(epoch_id, evolution_key, proposal_ordinal)"
+                )
+                self._connection.execute("PRAGMA user_version = 35")
+            self._migrate()
+            return
+        if version == 35:
+            with self._transaction(migration=True):
+                self._connection.execute(
+                    """CREATE TABLE IF NOT EXISTS epoch_suggested_directions (
+                           direction_id TEXT PRIMARY KEY,
+                           epoch_id TEXT NOT NULL REFERENCES epochs(id),
+                           evolution_key TEXT NOT NULL,
+                           suggestion_ordinal INTEGER NOT NULL CHECK (suggestion_ordinal > 0),
+                           evolution_trace_digest TEXT NOT NULL,
+                           direction_json TEXT NOT NULL,
+                           created_at TEXT NOT NULL,
+                           UNIQUE (evolution_key, suggestion_ordinal)
+                       )"""
+                )
+                self._connection.execute(
+                    "CREATE INDEX IF NOT EXISTS epoch_suggested_directions_by_epoch "
+                    "ON epoch_suggested_directions(epoch_id, evolution_key, suggestion_ordinal)"
+                )
+                # Preserve locally created v35 suggestions while replacing their
+                # dedicated IDs and payload shape with ordinary Direction identities.
+                legacy = self._connection.execute(
+                    "SELECT * FROM epoch_direction_proposals "
+                    "ORDER BY evolution_key, proposal_ordinal"
+                ).fetchall()
+                for row in legacy:
+                    proposal = json.loads(_required_text(row, "proposal_json"))
+                    if not isinstance(proposal, dict):
+                        raise TypeError("Legacy Direction proposal must be an object")
+                    relationship = proposal.get("relationship")
+                    definition = {
+                        field: proposal[field]
+                        for field in (
+                            "name", "hypothesis", "rationale", "plan",
+                            "success_criteria", "stop_conditions",
+                        )
+                    }
+                    definition.update(
+                        relationship=None if relationship == "new" else relationship,
+                        derived_from_direction_ids=proposal.get("related_direction_ids", []),
+                        derived_from_experiment_ids=proposal.get(
+                            "supporting_experiment_ids", []
+                        ),
+                        supersedes_direction_id=None,
+                    )
+                    evolution_key = _required_text(row, "evolution_key")
+                    ordinal = _required_int(row, "proposal_ordinal")
+                    self._connection.execute(
+                        """INSERT INTO epoch_suggested_directions VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (
+                            suggested_direction_id(evolution_key, ordinal),
+                            _required_text(row, "epoch_id"),
+                            evolution_key,
+                            ordinal,
+                            _required_text(row, "evolution_trace_digest"),
+                            json.dumps(definition, sort_keys=True, separators=(",", ":")),
+                            _required_text(row, "created_at"),
+                        ),
+                    )
+                self._connection.execute("DROP TABLE epoch_direction_proposals")
+                self._connection.execute("PRAGMA user_version = 36")
             return
         if version == 23:
             with self._lock:
@@ -3023,6 +3125,43 @@ class SqliteRegistry:
             )
         return measurement
 
+    def get_authoritative_abba_batch(self, task_digest: ArtifactDigest) -> ArtifactDigest | None:
+        """Read the durable result of one exact physical ABBA request."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT result_artifact_digest FROM authoritative_abba_batches "
+                "WHERE task_digest = ?",
+                (str(task_digest),),
+            ).fetchone()
+        return (
+            None
+            if row is None
+            else parse_artifact_digest(_required_text(row, "result_artifact_digest"))
+        )
+
+    def record_authoritative_abba_batch(
+        self, task_digest: ArtifactDigest, result_digest: ArtifactDigest
+    ) -> ArtifactDigest:
+        """Bind a completed request once; a concurrent winner supplies the canonical result."""
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT result_artifact_digest FROM authoritative_abba_batches "
+                "WHERE task_digest = ?",
+                (str(task_digest),),
+            ).fetchone()
+            if row is not None:
+                return parse_artifact_digest(_required_text(row, "result_artifact_digest"))
+            self._connection.execute(
+                "INSERT INTO authoritative_abba_batches VALUES (?, ?, ?)",
+                (str(task_digest), str(result_digest), self._clock()),
+            )
+            self._event(
+                "comparison.abba_batch_recorded",
+                str(task_digest),
+                {"task_digest": task_digest, "gateway_result_digest": result_digest},
+            )
+        return result_digest
+
     def list_kernel_measurements(self, revision_id: KernelRevisionId) -> list[KernelMeasurement]:
         """Return durable repeated-Evaluate samples in creation order."""
         self.get_kernel_revision(revision_id)
@@ -3568,6 +3707,140 @@ class SqliteRegistry:
                 (epoch_id,),
             ).fetchall()
         return [self._map_epoch_challenger(row) for row in rows]
+
+    def record_epoch_suggested_directions(
+        self,
+        epoch_id: EpochId,
+        evolution_key: str,
+        evolution_trace_digest: ArtifactDigest,
+        directions: tuple[dict[str, object], ...],
+    ) -> tuple[dict[str, object], ...]:
+        """Seal immutable Lineage-level Directions independently of Agent selection."""
+        if not evolution_key.startswith(f"epoch:{epoch_id}:challenger:"):
+            raise ValueError("Suggested Direction Evolution key disagrees with Epoch")
+        if len(directions) > 8:
+            raise ValueError("Evolver suggested too many Directions")
+        trace = parse_artifact_digest(str(evolution_trace_digest))
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT status FROM epochs WHERE id = ?", (epoch_id,)
+            ).fetchone()
+            if row is None or row["status"] != EpochStatus.BUILDING_CHALLENGER.value:
+                raise InvalidTransitionError("Suggested Directions require a building Epoch")
+            existing = self._connection.execute(
+                """SELECT suggestion_ordinal, evolution_trace_digest, direction_json
+                   FROM epoch_suggested_directions WHERE evolution_key = ?
+                   ORDER BY suggestion_ordinal""",
+                (evolution_key,),
+            ).fetchall()
+            if existing:
+                expected = [
+                    json.dumps(item, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+                    for item in directions
+                ]
+                if len(existing) != len(expected) or any(
+                    row["evolution_trace_digest"] != trace
+                    or row["direction_json"] != expected[index]
+                    for index, row in enumerate(existing)
+                ):
+                    raise InvalidTransitionError(
+                        "Recovered suggested Direction disagrees with its recorded Evolution"
+                    )
+                return self._list_epoch_suggested_directions_locked(epoch_id)
+            for ordinal, direction in enumerate(directions, start=1):
+                self._connection.execute(
+                    """INSERT INTO epoch_suggested_directions(
+                           direction_id, epoch_id, evolution_key, suggestion_ordinal,
+                           evolution_trace_digest, direction_json, created_at
+                       ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (
+                        suggested_direction_id(evolution_key, ordinal),
+                        epoch_id, evolution_key, ordinal, trace,
+                        json.dumps(
+                            direction, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                        ),
+                        _utc_now(),
+                    ),
+                )
+            if directions:
+                self._event(
+                    "epoch.suggested_directions_recorded", epoch_id,
+                    {"evolution_trace_digest": trace, "count": len(directions)},
+                )
+            return self._list_epoch_suggested_directions_locked(epoch_id)
+
+    def _list_epoch_suggested_directions_locked(
+        self, epoch_id: EpochId
+    ) -> tuple[dict[str, object], ...]:
+        rows = self._connection.execute(
+            """SELECT direction_id, epoch_id, suggestion_ordinal, evolution_trace_digest,
+                      direction_json, created_at
+               FROM epoch_suggested_directions WHERE epoch_id = ?
+               ORDER BY evolution_key, suggestion_ordinal""",
+            (epoch_id,),
+        ).fetchall()
+        values: list[dict[str, object]] = []
+        for row in rows:
+            definition = json.loads(_required_text(row, "direction_json"))
+            if not isinstance(definition, dict):
+                raise TypeError("Persisted suggested Direction must be an object")
+            values.append(
+                {
+                    **definition,
+                    "direction_id": _required_text(row, "direction_id"),
+                    "status": "suggested",
+                    "epoch_id": _required_text(row, "epoch_id"),
+                    "suggestion_ordinal": _required_int(row, "suggestion_ordinal"),
+                    "evolution_trace_digest": _required_text(row, "evolution_trace_digest"),
+                    "created_at": _required_text(row, "created_at"),
+                }
+            )
+        return tuple(values)
+
+    def list_epoch_suggested_directions(self, epoch_id: EpochId) -> tuple[dict[str, object], ...]:
+        """List immutable suggested Directions from Evolvers for one Epoch."""
+        with self._lock:
+            return self._list_epoch_suggested_directions_locked(epoch_id)
+
+    def close_challenger_pool(
+        self,
+        epoch_id: EpochId,
+        attached_count: int,
+        evolution_trace_digest: ArtifactDigest,
+    ) -> None:
+        """Finish an Epoch's pool early after an audited no-change proposal."""
+        trace = parse_artifact_digest(str(evolution_trace_digest))
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT * FROM epochs WHERE id = ?", (epoch_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Epoch not found: {epoch_id}")
+            epoch = self._map_epoch(row)
+            if epoch.status is not EpochStatus.BUILDING_CHALLENGER:
+                raise InvalidTransitionError("Challenger pool is not being built")
+            if (
+                attached_count < 0
+                or attached_count >= epoch.challenger_count
+                or attached_count != len(epoch.challenger_kernel_agent_revision_ids)
+            ):
+                raise InvalidTransitionError(
+                    "no_change must close exactly the already attached Challenger pool"
+                )
+            self._connection.execute(
+                """UPDATE epochs SET challenger_count = ?, status = 'ready'
+                   WHERE id = ? AND status = 'building_challenger'""",
+                (attached_count, epoch_id),
+            )
+            self._event(
+                "epoch.challenger_pool_closed",
+                epoch_id,
+                {
+                    "attached_count": attached_count,
+                    "proposal_type": "no_change",
+                    "evolution_trace_digest": trace,
+                },
+            )
 
     def transition_epoch(
         self,

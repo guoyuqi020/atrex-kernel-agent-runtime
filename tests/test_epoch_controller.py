@@ -42,6 +42,7 @@ from atrex_runtime.ports import (
     BuildChallengerResult,
     KernelAgentCandidate,
     KernelAgentCandidateProposal,
+    KernelAgentNoChangeProposal,
     KernelAgentReuseProposal,
     KernelComparisonResult,
     RunAttemptRequest,
@@ -156,6 +157,31 @@ class NoChangeEvolver(FakeEvolver):
             ),
             build.evolution_trace_digest,
         )
+
+
+class DecliningEvolver(FakeEvolver):
+    """Stop building Challengers after a configurable number of proposals."""
+
+    def __init__(self, accepted_count: int) -> None:
+        super().__init__()
+        self.accepted_count = accepted_count
+
+    async def build_challenger(self, request: BuildChallengerRequest) -> BuildChallengerResult:
+        if len(self.calls) == self.accepted_count:
+            self.calls.append(request)
+            return BuildChallengerResult(
+                KernelAgentNoChangeProposal("no_change"),
+                digest("declined-evolution-trace"),
+                ({
+                    "name": "Combine the two measured layout ideas",
+                    "hypothesis": "The combination might reduce traffic",
+                    "rationale": "Untested cross-branch synthesis",
+                    "plan": ["Implement, then measure the combination"],
+                    "success_criteria": "Correctness and lower paired latency",
+                    "stop_conditions": "Incorrectness or no measurable gain",
+                },),
+            )
+        return await super().build_challenger(request)
 
 
 class ReuseEvolver(FakeEvolver):
@@ -673,6 +699,43 @@ async def test_multiple_challengers_are_built_sequentially_with_expanding_visibi
         result.epoch.challenger_kernel_agent_revision_ids
     )
     registry.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("accepted_count", [0, 1])
+async def test_evolver_can_close_challenger_pool_without_forcing_a_new_revision(
+    tmp_path: Path,
+    accepted_count: int,
+) -> None:
+    registry = SqliteRegistry(tmp_path / "runtime.db")
+    seeded = seed_lineage(registry, challenger_count=2, attempts_per_trajectory=1)
+    evolver = DecliningEvolver(accepted_count)
+    optimizer = ScriptedOptimizer(
+        seeded.active_revision_id,
+        active=[candidate("active", 90)],
+        challenger=[candidate("challenger", 80)] if accepted_count else [],
+    )
+
+    result = await EpochController(
+        registry, evolver, optimizer, FakeAttemptEvidence()
+    ).run_epoch(seeded.lineage_id, 1)
+
+    assert result.epoch.status is EpochStatus.COMPLETED
+    assert result.epoch.challenger_count == accepted_count
+    assert len(result.epoch.challenger_kernel_agent_revision_ids) == accepted_count
+    assert len(evolver.calls) == accepted_count + 1
+    assert len(optimizer.calls[BranchRole.ACTIVE]) == 1
+    assert len(optimizer.calls[BranchRole.CHALLENGER]) == accepted_count
+    assert len(registry.list_epoch_challengers(result.epoch.id)) == accepted_count
+    assert digest("declined-evolution-trace") in registry.list_referenced_artifact_digests()
+    suggestions = registry.list_epoch_suggested_directions(result.epoch.id)
+    assert len(suggestions) == 1
+    assert suggestions[0]["name"] == "Combine the two measured layout ideas"
+    assert suggestions[0]["status"] == "suggested"
+    assert str(suggestions[0]["direction_id"]).startswith("direction_")
+    registry.close()
+    with SqliteRegistry(tmp_path / "runtime.db") as reopened:
+        assert reopened.list_epoch_suggested_directions(result.epoch.id) == suggestions
 
 
 @pytest.mark.anyio

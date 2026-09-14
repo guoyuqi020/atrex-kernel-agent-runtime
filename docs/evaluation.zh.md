@@ -218,7 +218,14 @@ Job ID，按 5/10/20/40 秒退避，之后每 60 秒持续重试。Candidate 校
   的不确定性阈值。
 - `same_allocation_abba`：在每个 Shape Batch 的同一 Agate Allocation 内交错测量 A/B；每个
   Repeat 各测一次 A、B，并在 `A, B` 与 `B, A` 之间交替，因此两个 Repeat 形成
-  `A, B, B, A`。Runtime 校验 Schedule 并持久化每一轮结果。
+  `A, B, B, A`。Runtime 独立执行三次完整 Schedule，校验 Shape 覆盖一致，对 A/B 分别逐
+  Shape 取延迟中位数，再计算权威几何平均延迟。任一轮明确的正确性失败都使比较失败；每次物理
+  测量仍分别记录。
+
+权威 ABBA 将每个已完成的物理 Shape Batch 按精确 Revision Pair、封存 Contract、Evaluator、
+用途、Schedule 和测量轮次登记。恢复相同的比较时，Runtime 从 Registry 和 Artifact Store 读取
+已完成的批次，不重复提交；三轮测量各有独立身份。Agate 瞬时错误会以新 Job 重试失败批次，
+而不同 Revision Pair 会重新测量。
 
 所选 Comparator 的 B 聚合值就是 Candidate 的权威延迟，比较后不会再执行第二次独立 Attempt
 终评。没有有效提名的 Attempt 仍进入 Attempt 历史，但不消耗 Kernel 版本号。

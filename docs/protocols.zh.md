@@ -178,11 +178,12 @@ Metadata，拒绝不安全 Tree 内容并封存完整 Source。Runtime 持有 Ba
 Contract 提供 Phase、Path、Usage 与受限 Authority。
 
 Evolution Input 冻结当前参赛者、可见历史 Agent、Evidence、旧 Report、DSL 与 Candidate Seed。
-Output 有三种：
+Output 有四种：
 
 - `evolved`：Parent 为 Active 的新 Revision；
 - `reuse`：原样复用可见历史 Revision；
 - `evolve_from_history`：Parent 为可见历史 Revision 的新 Revision。
+- `no_change`：不创建新 Revision，关闭剩余 Challenger 名额，以 Active 和已创建的 Challenger 继续 Epoch。
 
 Runtime 在封存前校验所选 Source、Source-relative Changed Path、私有 State Diff、同 DSL 身份、
 File Policy 与 Manifest。进化内容只属于该 Lineage；Runtime 不推送回 Core 仓库。

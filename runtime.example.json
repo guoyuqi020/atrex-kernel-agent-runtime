@@ -22,6 +22,7 @@
     "artifacts_root": "state/artifacts"
   },
   "gateway_proxy": {
+    "suggestion_ttl_epochs": 1,
     "max_request_bytes": 1048576,
     "max_candidate_files": 64,
     "max_candidate_bytes": 524288,

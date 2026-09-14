@@ -27,7 +27,9 @@ Bootstrap 与普通优化 Attempt 都以 `candidate_ready` 提名最终的 `work
 并要求存在一个针对完全相同字节的正确探索记录。Bootstrap 使用 Runtime 凭据和稳定的
 Runtime-final Idempotency Key 向 Agate 重新提交评测。优化 Attempt 则临时注册准确的提名 Artifact，
 并把最终权威交给 Kernel 留存：普通 Evaluate 按配置次数分别测量 A/B，以 B 的算术平均和聚合
-Result 完成终结；同 Allocation ABBA 以 B 的几何平均和成对聚合 Result 完成终结。两种替换都在
+Result 完成终结；同 Allocation ABBA 独立执行三次成对 Schedule，以 B 的逐 Shape 中位数计算
+几何平均，并用成对聚合 Result 完成终结。已完成的物理批次按精确身份持久登记，中断后可复用。
+两种替换都在
 Attempt 完成前发生。基础设施失败不会伪造 Outcome。
 
 Gateway Control schema 6 保留全部评测记录以及权威 Outcome 对应的 Source Evaluation Identity。

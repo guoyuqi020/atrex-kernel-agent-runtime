@@ -14,11 +14,16 @@ input/
 ├── agents/agent-vN/
 │   ├── src/ and Agent configuration
 │   └── {prompts,insights,skills,tools}/
-├── evidence/agent-vN/
-│   ├── resources/trajectories/trajectory-NNNNNNNN/{prompts,insights,skills,tools}/
-│   ├── optimization-summary.json
-│   ├── sessions/trajectory-NNNNNNNN/attempt-NNNNNNNN.conversation.jsonl
-│   └── reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json
+├── evidence/
+│   ├── latest-epoch-facts.json
+│   ├── journal/
+│   │   ├── directions/{index.json,direction_<id>.json}
+│   │   └── experiments/{index.json,experiment_<id>.json}
+│   └── agent-vN/
+│       ├── resources/trajectories/trajectory-NNNNNNNN/{prompts,insights,skills,tools}/
+│       ├── optimization-summary.json
+│       ├── sessions/trajectory-NNNNNNNN/attempt-NNNNNNNN.conversation.jsonl
+│       └── reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json
 └── evolution-reports/evo-N.json
 ```
 
@@ -35,6 +40,26 @@ recent completed Epoch also have `sessions/` and `reports/`, and all of those se
 Epoch, so their behavior is directly comparable. Every other version has Source, State, and a career
 summary but no conversations and no Attempt reports. Bootstrap, older-Epoch conversations, and detailed
 Runtime history are not exposed.
+
+`input/evidence/latest-epoch-facts.json` is a compact cross-Branch index for the latest completed
+Epoch. It records each Attempt's Runtime status, exact failure reason, report status, Candidate
+Artifact/Result identities and outcome, and whether it became Branch best,
+plus Direction/Experiment IDs and the final selection reason. Outcome and failure fields
+come from Runtime's frozen records; Direction/Experiment IDs index Agent-authored Journals and do
+not certify their analyses. Read this file and the optimization summaries first. Use the IDs and
+per-Agent reports to select which conversations need close inspection. A missing Candidate by itself
+does not diagnose an Agent or Journal failure; check the Runtime failure reason and Session first.
+
+`journal/directions/index.json` and `journal/experiments/index.json` index Bootstrap and the completed Lineage's
+append-only Journal. Read selected `<id>.json` files for full Direction events and Experiments,
+including entries from Attempts without terminal Reports. Gateway measurements are facts;
+Directions suggested by Bootstrap or earlier Evolvers also appear here as historical `suggest`
+records with ordinary Direction IDs. They are untested; a suggestion is eligible for adoption
+only during its next optimization round (by default, one Epoch). Older suggestions remain
+historical references for a new derived Direction (for example, `refinement`), but not a new
+`adoption`. Their descendants
+do not change the original suggestion. Agent-authored analyses are interpretations. Evolver can suggest a new or corrected Direction in
+its report, but cannot start or validate it.
 
 Each Session-context entry's `relationship` names its Epoch role. The entries whose relationship is
 `active` or `challenger` are exactly the last completed Epoch's comparison pool, so their `version`

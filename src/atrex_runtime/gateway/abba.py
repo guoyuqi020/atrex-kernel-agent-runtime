@@ -12,7 +12,6 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
-from uuid import uuid4
 
 import anyio
 
@@ -29,6 +28,7 @@ from ..ports import (
     KernelPairMeasurementRunner,
 )
 from ..roofline import strip_roofline_hardware_suffix
+from ..serialization import canonical_json_digest
 from . import abba_remote
 from .agate import AgateClient
 from .batched_evaluate import sorted_shape_ids, subset_shape_document
@@ -37,6 +37,7 @@ from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContext
 from .correctness import merge_correctness_summaries
 from .execution import call_agate_json
 from .job_recovery import JobExecution, run_with_log_recovery
+from .stability import MEASUREMENT_REPETITIONS, median_latency_by_shape
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 # One transient Agate batch used to fail the whole Epoch selection, discarding every sibling
@@ -376,77 +377,136 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             shape_ids[offset : offset + shape_batch_size]
             for offset in range(0, len(shape_ids), shape_batch_size)
         )
-        comparison_id = uuid4().hex
-        payloads: list[dict[str, JsonValue] | None] = [None] * len(batches)
-        jobs: list[dict[str, JsonValue] | None] = [None] * len(batches)
+        comparison_id = str(
+            canonical_json_digest(
+                {
+                    "policy": "authoritative_abba_per_shape_median",
+                    "measurement_repetitions": MEASUREMENT_REPETITIONS,
+                    "incumbent_revision_id": incumbent.id,
+                    "candidate_revision_id": candidate.id,
+                    "incumbent_artifact_digest": incumbent.artifact_digest,
+                    "candidate_artifact_digest": candidate.artifact_digest,
+                    "evaluation_contract_digest": context.evaluation_contract_digest,
+                    "evaluation_contract": contract.model_dump(mode="json"),
+                    "evaluator_bundle_digest": evaluator_bundle_digest,
+                    "purpose": purpose.value,
+                    "schedule": schedule,
+                    "shape_batches": batches,
+                    "per_run_timeout_seconds": per_run_timeout_seconds,
+                    "allocation_timeout_seconds": allocation_timeout_seconds,
+                }
+            )
+        ).removeprefix("sha256:")
         limiter = anyio.Semaphore(max_parallel_shape_batches)
+        repetitions: list[dict[str, object]] = []
+        for repetition in range(MEASUREMENT_REPETITIONS):
+            results: list[
+                tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str] | None
+            ] = [None] * len(batches)
 
-        async def run_batch(index: int, batch: list[str]) -> None:
-            attempt = 0
-            while True:
-                try:
-                    async with limiter:
-                        job, payload = await self._run_batch(
-                            comparison_id=comparison_id,
-                            batch_index=index,
-                            context_name=context.operator,
-                            hardware_target=context.agate_gpu,
-                            contract=contract,
-                            shape_ids=batch,
-                            schedule=schedule,
-                            incumbent_source=incumbent_source,
-                            candidate_source=candidate_source,
-                            evaluator_files=evaluator_files,
-                            per_run_timeout_seconds=per_run_timeout_seconds,
-                            allocation_timeout_seconds=allocation_timeout_seconds,
-                            purpose=purpose,
-                            incumbent=incumbent,
-                            candidate=candidate,
+            async def run_batch(
+                index: int,
+                batch: list[str],
+                measurement_repetition: int,
+                outputs: list[
+                    tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str] | None
+                ],
+            ) -> None:
+                attempt = 0
+                while True:
+                    try:
+                        async with limiter:
+                            result = await self._run_batch(
+                                comparison_id=comparison_id,
+                                measurement_repetition=measurement_repetition,
+                                retry=attempt,
+                                batch_index=index,
+                                context_name=context.operator,
+                                hardware_target=context.agate_gpu,
+                                contract=contract,
+                                shape_ids=batch,
+                                schedule=schedule,
+                                incumbent_source=incumbent_source,
+                                candidate_source=candidate_source,
+                                evaluator_files=evaluator_files,
+                                per_run_timeout_seconds=per_run_timeout_seconds,
+                                allocation_timeout_seconds=allocation_timeout_seconds,
+                                purpose=purpose,
+                                incumbent=incumbent,
+                                candidate=candidate,
+                            )
+                    except InfrastructureError as failure:
+                        attempt += 1
+                        if attempt > _ABBA_BATCH_RETRIES:
+                            raise
+                        failure_payload: dict[str, JsonValue]
+                        if isinstance(failure, AbbaBatchFailure):
+                            failure_payload = failure.event_payload()
+                        else:
+                            failure_payload = {
+                                "error_class": None,
+                                "reason": None,
+                                "trace_id": None,
+                                "retryable": True,
+                                "failure_type": type(failure).__name__,
+                                "detail": str(failure),
+                            }
+                        self._journal.record_runtime_event(
+                            "comparison.abba_batch_retried",
+                            candidate.id,
+                            {
+                                "comparison_id": comparison_id,
+                                "measurement_repetition": measurement_repetition + 1,
+                                "batch_index": index,
+                                "operator": context.operator,
+                                "attempt": attempt,
+                                "max_retries": _ABBA_BATCH_RETRIES,
+                                "retry_delay_seconds": _ABBA_RETRY_DELAY_SECONDS,
+                                **failure_payload,
+                            },
                         )
-                except InfrastructureError as failure:
-                    attempt += 1
-                    if attempt > _ABBA_BATCH_RETRIES:
-                        raise
-                    failure_payload: dict[str, JsonValue]
-                    if isinstance(failure, AbbaBatchFailure):
-                        failure_payload = failure.event_payload()
-                    else:
-                        failure_payload = {
-                            "error_class": None,
-                            "reason": None,
-                            "trace_id": None,
-                            "retryable": True,
-                            "failure_type": type(failure).__name__,
-                            "detail": str(failure),
-                        }
-                    self._journal.record_runtime_event(
-                        "comparison.abba_batch_retried",
-                        candidate.id,
-                        {
-                            "comparison_id": comparison_id,
-                            "batch_index": index,
-                            "operator": context.operator,
-                            "attempt": attempt,
-                            "max_retries": _ABBA_BATCH_RETRIES,
-                            "retry_delay_seconds": _ABBA_RETRY_DELAY_SECONDS,
-                            **failure_payload,
-                        },
-                    )
-                    await anyio.sleep(_ABBA_RETRY_DELAY_SECONDS)
-                    continue
-                jobs[index] = job
-                payloads[index] = payload
-                return
+                        await anyio.sleep(_ABBA_RETRY_DELAY_SECONDS)
+                        continue
+                    outputs[index] = result
+                    return
 
-        async with anyio.create_task_group() as tasks:
-            for index, batch in enumerate(batches):
-                tasks.start_soon(run_batch, index, batch)
-
-        complete_jobs = [job for job in jobs if job is not None]
-        complete_payloads = [payload for payload in payloads if payload is not None]
-        if len(complete_jobs) != len(batches) or len(complete_payloads) != len(batches):
-            raise InfrastructureError("ABBA Shape batch execution was incomplete")
-        merged = self._merge_payloads(complete_payloads, schedule, shape_ids)
+            async with anyio.create_task_group() as tasks:
+                for index, batch in enumerate(batches):
+                    tasks.start_soon(run_batch, index, batch, repetition, results)
+            completed = [result for result in results if result is not None]
+            if len(completed) != len(batches):
+                raise InfrastructureError("ABBA Shape batch execution was incomplete")
+            jobs = [result[0] for result in completed]
+            payloads = [result[1] for result in completed]
+            merged = self._merge_payloads(payloads, schedule, shape_ids)
+            repetitions.append(
+                {
+                    "measurement_repetition": repetition + 1,
+                    "jobs": jobs,
+                    "payloads": payloads,
+                    "batch_result_digests": [str(result[2]) for result in completed],
+                    "completed_at": max(result[3] for result in completed),
+                    "measurements": merged,
+                    "incumbent": self._aggregate_revision_metrics(
+                        merged, "incumbent", repeats, shape_ids
+                    ),
+                    "candidate": self._aggregate_revision_metrics(
+                        merged, "candidate", repeats, shape_ids
+                    ),
+                }
+            )
+        incumbent_metrics = self._median_revision_metrics(repetitions, "incumbent", shape_ids)
+        candidate_metrics = self._median_revision_metrics(repetitions, "candidate", shape_ids)
+        all_jobs = [
+            job
+            for repetition in repetitions
+            for job in cast(list[dict[str, JsonValue]], repetition["jobs"])
+        ]
+        all_payloads = [
+            payload
+            for repetition in repetitions
+            for payload in cast(list[dict[str, JsonValue]], repetition["payloads"])
+        ]
         aggregate: dict[str, JsonValue] = {
             "schema_version": 1,
             "operation": "same_allocation_abba",
@@ -460,30 +520,38 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             ),
             "schedule": cast(list[JsonValue], schedule),
             "shape_batches": cast(list[JsonValue], [list(batch) for batch in batches]),
-            "jobs": cast(list[JsonValue], complete_jobs),
-            "payloads": cast(list[JsonValue], complete_payloads),
-            "measurements": cast(list[JsonValue], merged),
-            "incumbent": cast(
-                dict[str, JsonValue],
-                self._aggregate_revision_metrics(merged, "incumbent", repeats, shape_ids),
-            ),
-            "candidate": cast(
-                dict[str, JsonValue],
-                self._aggregate_revision_metrics(merged, "candidate", repeats, shape_ids),
-            ),
+            "measurement_aggregation": {
+                "repetitions": MEASUREMENT_REPETITIONS,
+                "method": "per_shape_median",
+            },
+            "jobs": cast(list[JsonValue], all_jobs),
+            "payloads": cast(list[JsonValue], all_payloads),
+            "repetitions": cast(list[JsonValue], repetitions),
+            "incumbent": cast(JsonValue, incumbent_metrics),
+            "candidate": cast(JsonValue, candidate_metrics),
         }
         result_digest = self._artifacts.put_json(aggregate, ArtifactKind.GATEWAY_RESULT)
-        job_ids = [job.get("job_id") for job in complete_jobs]
-        joined_job_ids = ",".join(value for value in job_ids if isinstance(value, str)) or None
-        incumbent_runs, candidate_runs = self._record_runs(
-            merged,
-            incumbent,
-            candidate,
-            purpose,
-            repeats,
-            result_digest,
-            joined_job_ids,
-        )
+        all_incumbent_runs: list[KernelMeasurementRun] = []
+        all_candidate_runs: list[KernelMeasurementRun] = []
+        for index, repetition_entry in enumerate(repetitions):
+            jobs = cast(list[dict[str, JsonValue]], repetition_entry["jobs"])
+            job_ids = [job.get("job_id") for job in jobs]
+            joined_job_ids = ",".join(value for value in job_ids if isinstance(value, str)) or None
+            incumbent_runs, candidate_runs = self._record_runs(
+                cast(list[dict[str, object]], repetition_entry["measurements"]),
+                incumbent,
+                candidate,
+                purpose,
+                repeats,
+                result_digest,
+                joined_job_ids,
+                comparison_id=comparison_id,
+                repeat_offset=index * repeats,
+                created_at=cast(str, repetition_entry["completed_at"]),
+            )
+            all_incumbent_runs.extend(incumbent_runs)
+            all_candidate_runs.extend(candidate_runs)
+        all_job_ids = [job.get("job_id") for job in all_jobs]
         self._journal.record_runtime_event(
             "comparison.abba_completed",
             candidate.id,
@@ -495,21 +563,26 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                 "incumbent_kernel_revision_id": incumbent.id,
                 "candidate_kernel_revision_id": candidate.id,
                 "repeats": repeats,
+                "measurement_repetitions": MEASUREMENT_REPETITIONS,
                 "shape_batch_count": len(batches),
-                "agate_job_ids": [value for value in job_ids if isinstance(value, str)],
+                "agate_job_ids": [value for value in all_job_ids if isinstance(value, str)],
                 "gateway_result_digest": result_digest,
             },
         )
         return KernelPairMeasurementResult(
-            incumbent_runs,
-            candidate_runs,
+            tuple(all_incumbent_runs),
+            tuple(all_candidate_runs),
             gateway_result_digest=result_digest,
+            incumbent_latency_us=cast(float | None, incumbent_metrics["latency_us"]),
+            candidate_latency_us=cast(float | None, candidate_metrics["latency_us"]),
         )
 
     async def _run_batch(
         self,
         *,
         comparison_id: str,
+        measurement_repetition: int,
+        retry: int,
         batch_index: int,
         context_name: str,
         hardware_target: str,
@@ -524,7 +597,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         purpose: KernelMeasurementPurpose,
         incumbent: KernelRevision,
         candidate: KernelRevision,
-    ) -> tuple[dict[str, JsonValue], dict[str, JsonValue]]:
+    ) -> tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str]:
         dev_request = build_abba_source_request(
             hardware_target=hardware_target,
             contract=contract,
@@ -536,6 +609,31 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             per_run_timeout_seconds=per_run_timeout_seconds,
             allocation_timeout_seconds=allocation_timeout_seconds,
         )
+        task_digest = canonical_json_digest(
+            {
+                "comparison_id": comparison_id,
+                "measurement_repetition": measurement_repetition,
+                "batch_index": batch_index,
+                "purpose": purpose.value,
+                "agate_request": dev_request,
+            }
+        )
+        cached = self._journal.get_authoritative_abba_batch(task_digest)
+        if cached is not None:
+            self._journal.record_runtime_event(
+                "comparison.abba_batch_reused",
+                candidate.id,
+                {
+                    "comparison_id": comparison_id,
+                    "measurement_repetition": measurement_repetition + 1,
+                    "batch_index": batch_index,
+                    "task_digest": task_digest,
+                    "gateway_result_digest": cached,
+                },
+            )
+            job, payload, completed_at = self._cached_batch(cached, schedule)
+            return job, payload, cached, completed_at
+        dev_request["idempotency_key"] = f"runtime-abba:{task_digest}:retry-{retry}"
 
         async def execute(submission: dict[str, object]) -> JobExecution:
             accepted = await self._call(lambda: self._client.submit_job("dev", submission))
@@ -547,7 +645,9 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                 candidate.id,
                 {
                     "comparison_id": comparison_id,
+                    "measurement_repetition": measurement_repetition + 1,
                     "batch_index": batch_index,
+                    "task_digest": task_digest,
                     "purpose": purpose.value,
                     "incumbent_kernel_revision_id": incumbent.id,
                     "candidate_kernel_revision_id": candidate.id,
@@ -566,7 +666,87 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             raise InfrastructureError("Agate ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:
             raise AbbaBatchFailure(job)
-        return job, _parse_remote_payload(job, schedule)
+        payload = _parse_remote_payload(job, schedule)
+        completed_at = self._clock()
+        stored = self._artifacts.put_json(
+            {"job": job, "payload": payload, "completed_at": completed_at},
+            ArtifactKind.GATEWAY_RESULT,
+        )
+        canonical = self._journal.record_authoritative_abba_batch(task_digest, stored)
+        if canonical != stored:
+            job, payload, completed_at = self._cached_batch(canonical, schedule)
+            return job, payload, canonical, completed_at
+        return job, payload, stored, completed_at
+
+    def _cached_batch(
+        self, digest: ArtifactDigest, schedule: list[dict[str, int | str]]
+    ) -> tuple[dict[str, JsonValue], dict[str, JsonValue], str]:
+        artifact = self._artifacts.verify(digest)
+        if artifact.kind is not ArtifactKind.GATEWAY_RESULT:
+            raise InfrastructureError("Cached ABBA batch has the wrong Artifact kind")
+        value = json.loads((artifact.payload_path / "value.json").read_text(encoding="utf-8"))
+        if not isinstance(value, dict):
+            raise InfrastructureError("Cached ABBA batch is not a JSON object")
+        job, payload, completed_at = (
+            value.get("job"),
+            value.get("payload"),
+            value.get("completed_at"),
+        )
+        if (
+            not isinstance(job, dict)
+            or not isinstance(payload, dict)
+            or not isinstance(completed_at, str)
+        ):
+            raise InfrastructureError("Cached ABBA batch is incomplete")
+        if _parse_remote_payload(job, schedule) != payload:
+            raise InfrastructureError("Cached ABBA batch disagrees with its Agate result")
+        return job, payload, completed_at
+
+    @staticmethod
+    def _median_revision_metrics(
+        repetitions: list[dict[str, object]], revision: str, shape_ids: list[str]
+    ) -> dict[str, object]:
+        metrics = [cast(dict[str, object], item[revision]) for item in repetitions]
+        correct = len(metrics) == MEASUREMENT_REPETITIONS and all(
+            item.get("correct") is True for item in metrics
+        )
+        latency_by_shape: dict[str, float] = {}
+        if correct:
+            maps = tuple(cast(dict[str, float], item["latency_us_by_shape"]) for item in metrics)
+            latency_by_shape = median_latency_by_shape(maps)
+            if set(latency_by_shape) != set(shape_ids):
+                raise InfrastructureError("ABBA repetitions have incomplete Shape coverage")
+        latency = (
+            math.exp(statistics.fmean(math.log(value) for value in latency_by_shape.values()))
+            if latency_by_shape
+            else None
+        )
+        sol_maps = tuple(cast(dict[str, float], item["sol_pct_by_shape"]) for item in metrics)
+        sol_by_shape = (
+            median_latency_by_shape(sol_maps)
+            if len(sol_maps) == MEASUREMENT_REPETITIONS
+            and all(set(value) == set(shape_ids) for value in sol_maps)
+            else {}
+        )
+        sol_pct = (
+            (
+                0.0
+                if any(value == 0 for value in sol_by_shape.values())
+                else math.exp(statistics.fmean(math.log(value) for value in sol_by_shape.values()))
+            )
+            if sol_by_shape
+            else None
+        )
+        return {
+            "correct": correct,
+            "correctness": merge_correctness_summaries(
+                [item.get("correctness") for item in metrics], passed=correct
+            ),
+            "latency_us": latency,
+            "latency_us_by_shape": latency_by_shape,
+            "sol_pct": sol_pct,
+            "sol_pct_by_shape": sol_by_shape,
+        }
 
     def _kernel_source(
         self,
@@ -774,20 +954,27 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         repeats: int,
         result_digest: ArtifactDigest,
         job_ids: str | None,
+        *,
+        comparison_id: str,
+        repeat_offset: int,
+        created_at: str,
     ) -> tuple[tuple[KernelMeasurementRun, ...], tuple[KernelMeasurementRun, ...]]:
         grouped: dict[str, list[KernelMeasurementRun]] = {"incumbent": [], "candidate": []}
         revisions = {"incumbent": incumbent, "candidate": candidate}
         for row in rows:
             label = str(row["revision"])
-            repeat = int(cast(int, row["repeat"]))
+            repeat = repeat_offset + int(cast(int, row["repeat"]))
             correct = bool(row["correct"])
             latency_value = row.get("latency_us")
             latency = float(latency_value) if isinstance(latency_value, (int, float)) else None
-            run = KernelMeasurementRun(repeat, correct, latency if correct else None)
+            run = KernelMeasurementRun(
+                repeat, correct, latency if correct else None, result_digest, job_ids
+            )
             grouped[label].append(run)
             self._journal.record_kernel_measurement(
                 KernelMeasurement(
-                    id=uuid4().hex,
+                    id="abba_"
+                    + hashlib.sha256(f"{comparison_id}:{label}:{repeat}".encode()).hexdigest(),
                     kernel_revision_id=revisions[label].id,
                     purpose=purpose,
                     repeat=repeat,
@@ -795,7 +982,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     latency_us=run.latency_us,
                     gateway_result_digest=result_digest,
                     agate_job_id=job_ids,
-                    created_at=self._clock(),
+                    created_at=created_at,
                 )
             )
         incumbent_runs = tuple(sorted(grouped["incumbent"], key=lambda run: run.repeat))

@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+from ..direction_genealogy import suggestion_availability
 from ..domain.errors import (
     DirectionConcurrencyError,
     GatewayCapabilityPolicyChangedError,
@@ -199,12 +200,16 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         *,
         signing_key: bytes,
         clock: Callable[[], datetime] = _utc_now,
+        suggestion_ttl_epochs: int = 1,
     ) -> None:
         if len(signing_key) < 32:
             raise ValueError("Gateway capability signing key must contain at least 32 bytes")
+        if suggestion_ttl_epochs < 1:
+            raise ValueError("suggestion_ttl_epochs must be positive")
         self._registry = registry
         self._signing_key = signing_key
         self._clock = clock
+        self._suggestion_ttl_epochs = suggestion_ttl_epochs
         database_path = Path(path)
         database_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._connection = sqlite3.connect(
@@ -1132,6 +1137,41 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             values.append(value)
         return tuple(values)
 
+    def visible_suggested_directions(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
+        """Project immutable Evolver suggestions against the caller's Epoch window."""
+        try:
+            attempt = self._registry.get_attempt(attempt_id)
+        except KeyError:
+            # Bootstrap has no Epoch-scoped Evolver suggestions.
+            return ()
+        current = self._registry.get_epoch(attempt.epoch_id)
+        values: list[dict[str, object]] = []
+        for epoch in self._registry.list_epochs(current.lineage_id):
+            if epoch.number > current.number or (
+                epoch.number < current.number and epoch.status is not EpochStatus.COMPLETED
+            ):
+                continue
+            status = self.suggestion_status(attempt_id, created_epoch_number=epoch.number)
+            values.extend(
+                {**direction, "status": status}
+                for direction in self._registry.list_epoch_suggested_directions(epoch.id)
+            )
+        return tuple(values)
+
+    def suggestion_status(self, attempt_id: AttemptId, *, created_epoch_number: int) -> str:
+        """Bootstrap suggestions enter Epoch 1; Evolver suggestions enter their own Epoch."""
+        if created_epoch_number < 0:
+            raise ValueError("Suggestion origin Epoch cannot be negative")
+        try:
+            attempt = self._registry.get_attempt(attempt_id)
+        except KeyError:
+            return "suggested"
+        return suggestion_availability(
+            self._registry.get_epoch(attempt.epoch_id).number,
+            created_epoch_number,
+            self._suggestion_ttl_epochs,
+        )
+
     def append_experiment(
         self,
         attempt_id: AttemptId,
@@ -1872,6 +1912,28 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     all_visible.append(attempt.id)
                     seen.add(attempt.id)
         return lineage_id, (*all_visible, current_attempt_id)
+
+    def visible_journal_attempt_ids(
+        self,
+        current_attempt_id: AttemptId,
+    ) -> tuple[LineageId, tuple[AttemptId, ...]]:
+        """Include every finished prior-Epoch Journal, even if its Attempt failed."""
+        lineage_id, visible = self.visible_kernel_trial_attempt_ids(current_attempt_id)
+        try:
+            current = self._registry.get_attempt(current_attempt_id)
+        except KeyError:
+            return lineage_id, visible
+        current_epoch = self._registry.get_epoch(current.epoch_id)
+        all_visible = list(visible)
+        seen = set(visible)
+        for epoch in self._registry.list_epochs(lineage_id):
+            if epoch.number >= current_epoch.number or epoch.status is not EpochStatus.COMPLETED:
+                continue
+            for attempt in self._registry.list_attempts(epoch.id):
+                if attempt.status is not AttemptStatus.RUNNING and attempt.id not in seen:
+                    all_visible.append(attempt.id)
+                    seen.add(attempt.id)
+        return lineage_id, tuple(all_visible)
 
     def visible_attempt_report_artifacts(
         self,

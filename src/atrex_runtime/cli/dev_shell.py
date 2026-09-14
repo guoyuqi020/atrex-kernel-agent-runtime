@@ -79,6 +79,7 @@ def open_optimizer_dev_shell(
             settings.storage.gateway_database,
             registry,
             signing_key=signing_key,
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
         evidence_settings = campaign.evidence
         evidence = build_dev_shell_evidence(
@@ -230,6 +231,7 @@ def open_temporary_optimizer_dev_shell(
                 os.environ,
                 settings.gateway_proxy.capability_signing_key_env,
             ),
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
         operations = frozenset(GatewayOperation(value) for value in campaign.gateway_operations)
         service = TemporaryOptimizerDevShell(

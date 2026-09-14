@@ -11,7 +11,12 @@ from uuid import uuid4
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..direction_genealogy import RELATIONSHIP_FIELDS, relationship_fields, validate_relationship
-from ..domain.errors import DirectionConcurrencyError, InfrastructureError
+from ..domain.errors import (
+    DirectionConcurrencyError,
+    InfrastructureError,
+    OptimizerSuggestionForbiddenError,
+    SuggestedDirectionTransitionError,
+)
 from ..domain.ids import AttemptId, parse_artifact_digest
 from ..workers.attempt_report import (
     AttemptDirectionEventV1,
@@ -57,6 +62,7 @@ _EXPERIMENT_FIELDS = {
 }
 _DIRECTION_STATUSES = {
     "propose": "proposed",
+    "suggest": "suggested",
     "start": "in_progress",
     "complete": "completed",
     "abandon": "abandoned",
@@ -90,6 +96,10 @@ class RuntimeJournalService:
 
     def validate_report_journal(self, report: AttemptReportV12) -> None:
         """An empty or edited report must not erase a live authoritative Journal."""
+        if not self._is_bootstrap(report.attempt_id) and any(
+            event.action == "suggest" for event in report.direction_events
+        ):
+            raise OptimizerSuggestionForbiddenError("report.direction_events.action")
         in_progress = sorted(
             direction_id
             for direction_id, direction in self._direction_views(report.attempt_id).items()
@@ -102,6 +112,11 @@ class RuntimeJournalService:
             )
         events = self._current_direction_events(report.attempt_id)
         experiments = self._current_experiments(report.attempt_id)
+        if any(event.action == "suggest" for event in report.direction_events) and not events:
+            raise ValueError(
+                "Bootstrap suggestions must be recorded with update-direction before "
+                "attempt-report; a report alone cannot create suggested Directions"
+            )
         # Direct report-only clients must not bypass conclusion/evidence validation.
         declared = [
             event for event in report.direction_events if event.hypothesis_status is not None
@@ -281,7 +296,7 @@ class RuntimeJournalService:
         return values
 
     def _visible_attempt_ids(self, attempt_id: AttemptId) -> tuple[AttemptId, ...]:
-        _lineage_id, attempt_ids = self.control.visible_kernel_trial_attempt_ids(attempt_id)
+        _lineage_id, attempt_ids = self.control.visible_journal_attempt_ids(attempt_id)
         return attempt_ids
 
     def _current_direction_events(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
@@ -405,11 +420,30 @@ class RuntimeJournalService:
 
     def _direction_views(self, attempt_id: AttemptId) -> dict[str, dict[str, object]]:
         directions: dict[str, dict[str, object]] = {}
+        for suggested in self.control.visible_suggested_directions(attempt_id):
+            direction_id = str(suggested["direction_id"])
+            if direction_id in directions:
+                raise ValueError("Suggested Direction identity is duplicated")
+            directions[direction_id] = {
+                "direction_id": direction_id,
+                "name": suggested["name"],
+                "hypothesis": suggested["hypothesis"],
+                "rationale": suggested["rationale"],
+                "plan": suggested["plan"],
+                "success_criteria": suggested["success_criteria"],
+                "stop_conditions": suggested["stop_conditions"],
+                "status": suggested["status"],
+                "analysis": None,
+                "supporting_experiment_ids": [],
+                "associated_experiment_ids": [],
+                "hypothesis_status": "unresolved",
+                **relationship_fields(suggested),
+            }
         for event in self._visible_direction_events(attempt_id):
             direction_id = str(event["direction_id"])
             action = str(event["action"])
             existing = directions.get(direction_id)
-            if action == "propose":
+            if action in {"propose", "suggest"}:
                 if existing is not None:
                     raise ValueError("Direction history contains duplicate proposals")
                 directions[direction_id] = {
@@ -420,7 +454,11 @@ class RuntimeJournalService:
                     "plan": event["plan"],
                     "success_criteria": event["success_criteria"],
                     "stop_conditions": event["stop_conditions"],
-                    "status": _DIRECTION_STATUSES[action],
+                    "status": (
+                        self.control.suggestion_status(attempt_id, created_epoch_number=0)
+                        if action == "suggest"
+                        else _DIRECTION_STATUSES[action]
+                    ),
                     "analysis": None,
                     "supporting_experiment_ids": [],
                     "associated_experiment_ids": [],
@@ -445,6 +483,16 @@ class RuntimeJournalService:
             for experiment_id in cast(list[str], event["supporting_experiment_ids"]):
                 if experiment_id not in associated:
                     associated.append(experiment_id)
+        adopted = {
+            str(parent)
+            for direction in directions.values()
+            if direction.get("relationship") == "adoption"
+            for parent in cast(list[str], direction.get("derived_from_direction_ids") or [])
+        }
+        for direction_id in adopted:
+            direction = directions.get(direction_id)
+            if direction is not None and direction["status"] == "expired":
+                direction["status"] = "adopted"
         for experiment in self._visible_experiments(attempt_id):
             direction = directions.get(str(experiment["direction_id"]))
             if direction is None:
@@ -537,7 +585,9 @@ class RuntimeJournalService:
         action = value.get("action")
         if not isinstance(action, str):
             raise ValueError("Direction action must be text")
-        if action == "propose":
+        if action in {"propose", "suggest"}:
+            if action == "suggest" and not self._is_bootstrap(request.attempt_id):
+                raise OptimizerSuggestionForbiddenError("request.action")
             if set(value) - RELATIONSHIP_FIELDS != _DIRECTION_PROPOSAL_FIELDS:
                 raise ValueError(
                     f"Direction proposal requires {sorted(_DIRECTION_PROPOSAL_FIELDS)}; "
@@ -595,6 +645,10 @@ class RuntimeJournalService:
             direction = self._direction_views(request.attempt_id).get(direction_id)
             if direction is None:
                 raise ValueError("Direction ID is outside the current Attempt's visible history")
+            if direction["status"] in {"suggested", "expired", "adopted"}:
+                raise SuggestedDirectionTransitionError(
+                    direction_id, action, status=str(direction["status"])
+                )
             _text(value.get("analysis"), "Direction analysis")
             if action == "start":
                 started = {

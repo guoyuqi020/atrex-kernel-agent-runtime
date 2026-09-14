@@ -188,6 +188,7 @@ def build_campaign_runtime(
             settings.storage.gateway_database,
             registry,
             signing_key=signing_key,
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
         worker_launcher = build_worker_launcher(settings, environment)
         optimizer_environment = campaign.optimizer.environment.resolve(environment)
@@ -263,6 +264,7 @@ def build_campaign_runtime(
                 worker_sessions=registry,
                 backend=campaign.evolver.agent_backend,
                 max_infrastructure_retries=campaign.max_infrastructure_retries,
+                suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
             )
 
         evolver = _LazyEvolverRunner(build_evolver)
@@ -316,6 +318,7 @@ def build_campaign_runtime(
                 registry,
                 artifacts,
                 evidence_projector,
+                control,
                 control,
             ),
             RegistryLineageLeaseManager(

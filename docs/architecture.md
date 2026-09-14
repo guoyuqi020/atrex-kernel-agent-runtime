@@ -49,8 +49,8 @@ the role matters.
   persistence.
 - Core owns Optimizer prompts, workflow, Backend adapters, Runtime Tool bindings, and Agent-authored
   Direction/Experiment/Attempt reports.
-- Evolver owns one same-DSL Agent-change hypothesis and may modify Candidate source plus the
-  Candidate Runtime State seed. It does not evaluate Kernels.
+- Evolver owns one same-DSL Agent-change hypothesis and may modify the Candidate Bundle, or report
+  `no_change` when evidence does not support an Agent-controllable improvement. It does not evaluate Kernels.
 - Agate owns compilation, correctness, profiling, and performance execution.
 - GPU Wiki supplies external knowledge. Runtime freezes each query interaction before returning
   knowledge to Core and never uploads Agent history, query consumption, or Session traces.
@@ -102,16 +102,17 @@ interaction but Core exposes only knowledge content. Runtime sends no post-Epoch
 ### Epoch
 
 Runtime snapshots the Active Agent, starting Kernel, common Runtime State, and Evidence. It invokes
-the Evolver serially to construct `K` Challengers. Each proposal may create a revision from Active,
-reuse a historical revision, or create a revision from history. Revision ancestry remains a tree;
-reuse and Epoch participation are separate provenance.
+the Evolver serially to construct up to `K` Challengers. Each proposal may create a revision from Active,
+reuse a historical revision, create a revision from history, or decline further construction with
+`no_change`. Revision ancestry remains a tree; reuse and Epoch participation are separate provenance.
 
 After the pool is frozen, Active and Challenger Branches run concurrently up to
 `max_parallel_branches`. Each Branch runs `Y` Trajectories concurrently; each Trajectory runs `X`
 fresh-session Attempts serially. All participants start from the same Epoch Kernel and cannot see
 sibling in-progress work. Runtime then selects the best Kernel and independently compares Agent
-revisions. An Epoch therefore contains `(1 + K) × Y × X` Optimizer Attempts and `K` Evolver
-executions. Physical provider calls may also include infrastructure retries and bounded report-only
+revisions. If `C ≤ K` Challengers are attached, the Epoch contains `(1 + C) × Y × X` Optimizer
+Attempts and `C` Evolver executions, plus one more when `no_change` closes the pool. Physical provider
+calls may also include infrastructure retries and bounded report-only
 continuations; neither increases the configured Attempt count.
 
 Completed Evidence becomes the next Epoch checkpoint. Optimizers see every completed Epoch Branch,

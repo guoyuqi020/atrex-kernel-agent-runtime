@@ -190,6 +190,7 @@ def build_runtime_application(
             settings.storage.gateway_database,
             registry,
             signing_key=signing_key,
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
         campaign = settings.campaign
         gate_policy = settings.gate_policy or (None if campaign is None else campaign.gate_policy)

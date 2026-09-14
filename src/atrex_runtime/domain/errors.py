@@ -88,6 +88,32 @@ class DirectionConcurrencyError(ValueError):
         )
 
 
+class OptimizerSuggestionForbiddenError(ValueError):
+    """An Optimizer tried to create a Bootstrap-only suggested Direction."""
+
+    def __init__(self, field_path: str) -> None:
+        self.field_path = field_path
+        super().__init__(
+            "Optimizer cannot use action=suggest; suggested Directions can be "
+            "created only during Bootstrap"
+        )
+
+
+class SuggestedDirectionTransitionError(ValueError):
+    """An immutable suggestion was used as a mutable Direction."""
+
+    def __init__(self, direction_id: str, action: str, *, status: str = "suggested") -> None:
+        self.direction_id = direction_id
+        self.action = action
+        self.status = status
+        article = "An" if status[0] in "aeiou" else "A"
+        super().__init__(
+            f"{article} {status} Direction cannot be started, measured, or closed: "
+            f"action={action}, direction_id={direction_id}. Propose your own derived "
+            "Direction before exploring it"
+        )
+
+
 class DuplicateGatewayTaskError(ValueError):
     """An exact full-Evaluate task already completed or is currently running."""
 

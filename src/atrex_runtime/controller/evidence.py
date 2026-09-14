@@ -49,6 +49,14 @@ class HistoricalGatewayEvidenceSource(Protocol):
     ) -> tuple[GatewayKernelTrialRecord, ...]: ...
 
 
+class HistoricalJournalEvidenceSource(Protocol):
+    """Read the durable live Journal even when no terminal Attempt Report exists."""
+
+    def list_direction_events(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]: ...
+
+    def list_experiments(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]: ...
+
+
 class EvidenceCheckpointV1(BaseModel):
     """Identity of one flat cumulative Evidence bundle."""
 
@@ -90,11 +98,13 @@ class LocalEvidenceAssembler:
         artifacts: LocalArtifactStore,
         projector: EvidenceArtifactProjector | None = None,
         measurements: HistoricalGatewayEvidenceSource | None = None,
+        journals: HistoricalJournalEvidenceSource | None = None,
     ) -> None:
         self._registry = registry
         self._artifacts = artifacts
         self._projector = projector
         self._measurements = measurements
+        self._journals = journals
         self._reports = RuntimeAttemptReportProjector(registry, artifacts)
 
     def create_initial(
@@ -276,6 +286,7 @@ class LocalEvidenceAssembler:
                 "reports",
                 "measurements",
                 "kernel-trials",
+                "journals",
             }
         ):
             raise ValueError("lineage checkpoint has an unsupported file layout")
@@ -339,12 +350,15 @@ class LocalEvidenceAssembler:
         report_root = staging / "reports" / f"{epoch_number:08d}"
         measurement_root = staging / "measurements"
         trial_root = staging / "kernel-trials"
+        journal_root = staging / "journals" / f"{epoch_number:08d}"
         trace_root.mkdir(parents=True, mode=0o700)
         lesson_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         diff_root.mkdir(parents=True, mode=0o700)
         report_root.mkdir(parents=True, mode=0o700)
         measurement_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         trial_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        if self._journals is not None:
+            journal_root.mkdir(parents=True, mode=0o700)
         lessons: list[JsonValue] = []
         trace_files: list[JsonValue] = []
         diff_files: list[JsonValue] = []
@@ -400,6 +414,15 @@ class LocalEvidenceAssembler:
                     },
                 )
         for attempt in self._registry.list_attempts(epoch_id):
+            if self._journals is not None:
+                write_canonical_json(
+                    journal_root / f"{attempt.id}.json",
+                    {
+                        "attempt_id": attempt.id,
+                        "direction_events": list(self._journals.list_direction_events(attempt.id)),
+                        "experiments": list(self._journals.list_experiments(attempt.id)),
+                    },
+                )
             if attempt.attempt_report_digest is not None:
                 report = self._attempt_report_value(attempt)
                 report_relative = f"reports/{epoch_number:08d}/{attempt.id}.json"
@@ -525,6 +548,7 @@ class LocalEvidenceAssembler:
             "reports",
             "measurements",
             "kernel-trials",
+            "journals",
         ):
             source = previous / name
             if source.is_dir():
@@ -615,6 +639,7 @@ class LocalEvidenceAssembler:
                     "kernel_agent_revision_id": attempt.kernel_agent_revision_id,
                     "input_kernel_revision_id": attempt.input_kernel_revision_id,
                     "accepted_as_branch_best": attempt.accepted_as_branch_best,
+                    "status": attempt.status.value,
                     "failure_reason": attempt.failure_reason,
                     "attempt_report_digest": attempt.attempt_report_digest,
                     "attempt_report_status": attempt.attempt_report_status,
@@ -642,6 +667,7 @@ class LocalEvidenceAssembler:
                 }
                 for item in self._registry.list_epoch_challengers(epoch.id)
             ],
+            "suggested_directions": list(self._registry.list_epoch_suggested_directions(epoch.id)),
             "challenger_count": epoch.challenger_count,
             "trajectories_per_branch": epoch.trajectories_per_branch,
             "attempts_per_trajectory": epoch.attempts_per_trajectory,

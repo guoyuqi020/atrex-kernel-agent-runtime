@@ -4,9 +4,18 @@ from __future__ import annotations
 
 import re
 from collections.abc import Mapping
+from hashlib import sha256
 from typing import Any
 
-RELATIONSHIPS = ("retry", "refinement", "reimplementation", "correction", "port", "combination")
+RELATIONSHIPS = (
+    "retry",
+    "refinement",
+    "reimplementation",
+    "correction",
+    "port",
+    "combination",
+    "adoption",
+)
 RELATIONSHIP_FIELDS = frozenset(
     {
         "relationship",
@@ -15,6 +24,26 @@ RELATIONSHIP_FIELDS = frozenset(
         "supersedes_direction_id",
     }
 )
+
+
+def suggested_direction_id(evolution_key: str, ordinal: int) -> str:
+    """Derive a stable Direction identity for one Evolver submission."""
+    if not evolution_key or ordinal < 1:
+        raise ValueError("Suggested Direction requires an Evolution key and positive ordinal")
+    return "direction_" + sha256(f"suggested:{evolution_key}:{ordinal}".encode()).hexdigest()[:32]
+
+
+def suggestion_availability(
+    current_epoch_number: int, origin_epoch_number: int, ttl_epochs: int
+) -> str:
+    """A Bootstrap suggestion starts in Epoch 1; an Evolver suggestion starts in its Epoch."""
+    if current_epoch_number < 1 or origin_epoch_number < 0 or ttl_epochs < 1:
+        raise ValueError("Suggestion Epoch numbers and TTL are invalid")
+    return (
+        "suggested"
+        if current_epoch_number - max(1, origin_epoch_number) < ttl_epochs
+        else "expired"
+    )
 
 
 def relationship_fields(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -61,6 +90,18 @@ def validate_relationship(
         if parent not in directions:
             raise ValueError(
                 f"Parent Direction {parent} is not visible; load an existing Direction first"
+            )
+    if kind == "adoption":
+        if len(parents) != 1 or evidence or supersedes is not None:
+            raise ValueError(
+                "adoption requires exactly one suggested parent Direction and no other ancestry; "
+                "use refinement when changing the suggestion"
+            )
+        parent_status = directions[parents[0]].get("status")
+        if parent_status != "suggested":
+            raise ValueError(
+                "adoption requires an unexpired suggested parent Direction; "
+                f"current status is {parent_status}. Use refinement to revisit older advice"
             )
     effective_parents = set(parents)
     for experiment_id in evidence:

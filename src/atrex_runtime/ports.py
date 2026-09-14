@@ -70,7 +70,16 @@ class KernelAgentReuseProposal:
     candidate_revision_id: KernelAgentRevisionId
 
 
-KernelAgentChallengerProposal = KernelAgentCandidateProposal | KernelAgentReuseProposal
+@dataclass(frozen=True, slots=True)
+class KernelAgentNoChangeProposal:
+    """Do not create any more Challengers for this Epoch."""
+
+    proposal_type: Literal["no_change"]
+
+
+KernelAgentChallengerProposal = (
+    KernelAgentCandidateProposal | KernelAgentReuseProposal | KernelAgentNoChangeProposal
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +88,7 @@ class BuildChallengerResult:
 
     proposal: KernelAgentChallengerProposal
     evolution_trace_digest: ArtifactDigest
+    suggested_directions: tuple[dict[str, object], ...] = ()
 
 
 class EvolverRunner(Protocol):
@@ -228,6 +238,8 @@ class KernelPairMeasurementResult:
     incumbent_runs: tuple[KernelMeasurementRun, ...]
     candidate_runs: tuple[KernelMeasurementRun, ...]
     gateway_result_digest: ArtifactDigest | None = None
+    incumbent_latency_us: float | None = None
+    candidate_latency_us: float | None = None
 
 
 class KernelPairMeasurementRunner(Protocol):
@@ -337,6 +349,16 @@ class KernelMeasurementJournal(RuntimeEventRecorder, Protocol):
 
     def record_kernel_measurement(self, measurement: KernelMeasurement) -> KernelMeasurement:
         """Store one immutable measurement idempotently."""
+        ...
+
+    def get_authoritative_abba_batch(self, task_digest: ArtifactDigest) -> ArtifactDigest | None:
+        """Find a completed physical ABBA batch by its exact request identity."""
+        ...
+
+    def record_authoritative_abba_batch(
+        self, task_digest: ArtifactDigest, result_digest: ArtifactDigest
+    ) -> ArtifactDigest:
+        """Bind a completed physical ABBA batch to its immutable result."""
         ...
 
 

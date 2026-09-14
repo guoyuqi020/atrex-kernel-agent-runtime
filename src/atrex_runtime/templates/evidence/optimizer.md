@@ -100,14 +100,26 @@ results remain visible.
 
 Resume the same unfinished hypothesis with `update-direction` and its existing Direction ID.
 When you revisit, reinterpret, port, or combine earlier work as a new hypothesis, use `action="propose"`
-with optional `relationship`: `retry`, `refinement`, `reimplementation`, `correction`, `port`, or
-`combination`. Cite visible `derived_from_direction_ids` and/or `derived_from_experiment_ids` and
+with optional `relationship`: `retry`, `refinement`, `reimplementation`, `correction`, `port`,
+`combination`, or `adoption`. Cite visible `derived_from_direction_ids` and/or `derived_from_experiment_ids` and
 explain the connection in the proposal's `rationale`. Use list/load tools to obtain real IDs first.
 Each list allows at most 32 unique IDs. A combination needs two distinct parent Directions, either
 directly or through their Experiments. A correction may also specify `supersedes_direction_id` naming
 one of those parents; this records a revised interpretation without changing the parent's status.
 Ancestry is fixed when the proposal is recorded. To correct it, propose a new derived Direction;
 do not rewrite history. These links describe your interpretation, not proof of a performance gain.
+
+`list-directions` includes Bootstrap- and Evolver-created Directions; use `load-direction` to
+inspect one. A `suggested` Direction is untested and cannot be started,
+measured, or closed. An Optimizer cannot create a suggestion (`action="suggest"`), including in
+its terminal report. To use one, call `update-direction` with `action="propose"`, a complete
+definition, `relationship="adoption"`, and `derived_from_direction_ids` containing its ID.
+For a changed hypothesis use `relationship="refinement"` instead. The new Direction gets its
+own ID and can then be started. Its suggested parent remains unchanged; follow that parent's
+ancestry only when you need to inspect the earlier evidence.
+An unused suggestion is `expired` after its configured eligibility window; one previously adopted
+is `adopted`. Both remain readable but cannot be newly adopted. You may propose a new
+`refinement` citing either as historical context, with a fresh rationale.
 
 ## Trust and measurement reuse
 

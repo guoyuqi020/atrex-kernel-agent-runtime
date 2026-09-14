@@ -31,6 +31,7 @@ from atrex_runtime.ports import (
     BuildChallengerRequest,
     BuildChallengerResult,
     KernelAgentCandidateProposal,
+    KernelAgentNoChangeProposal,
     KernelAgentReuseProposal,
 )
 from atrex_runtime.registry.sqlite import SqliteRegistry
@@ -39,6 +40,7 @@ from atrex_runtime.workers.evolution import (
     EvolutionOutput,
     EvolutionProcessConfig,
     EvolutionSessionResult,
+    EvolutionSuggestedDirectionV1,
     EvolutionWorkspaceAssembler,
     EvolverBundleRunner,
     PreparedEvolution,
@@ -316,7 +318,7 @@ def _evolver_bundle(
     return artifacts.put_directory(source, ArtifactKind.EVOLVER_BUNDLE)
 
 
-def _reuse_agent_script(tmp_path: Path, revision_id: str) -> Path:
+def _reuse_agent_script(tmp_path: Path, revision_id: str, *, proposal_type: str = "reuse") -> Path:
     script = tmp_path / "reuse.py"
     script.write_text(
         """import json
@@ -343,7 +345,9 @@ Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
     "usage_complete": True,
 }))
 Path(os.environ["ATREX_EVOLUTION_OUTPUT"]).write_text(json.dumps({
-    "proposal_type": "reuse",
+    "proposal_type": """
+        + json.dumps(proposal_type)
+        + """,
     "kernel_agent_revision_id": """
         + json.dumps(revision_id)
         + """,
@@ -817,6 +821,8 @@ def test_evolution_workspace_pools_the_last_completed_epoch_challenger_winner(
     assert sorted(child.name for child in (prepared.root / "input/evidence").iterdir()) == [
         "agent-v0",
         "agent-v1",
+        "journal",
+        "latest-epoch-facts.json",
     ]
     assert not (prepared.root / "input/current-epoch-challengers").exists()
     assert not (prepared.root / "input/historical").exists()
@@ -905,6 +911,8 @@ def test_evolution_workspace_keys_same_ordinal_challengers_by_distinct_versions(
         "agent-v0",
         "agent-v1",
         "agent-v2",
+        "journal",
+        "latest-epoch-facts.json",
     ]
     assert not (prepared.root / "input/evidence/agent-v2/sessions").exists()
     assert not (prepared.root / "input/evidence/agent-v2/reports").exists()
@@ -1238,6 +1246,7 @@ async def test_fixed_runner_collects_complete_repository_candidate(
     assert previous_report["evolution_number"] == 1
     expected_projected_report = dict(trace["output"])
     expected_projected_report.pop("kernel_agent_revision_id")
+    expected_projected_report.pop("suggested_directions")
     expected_projected_report.pop("contributing_paths")
     expected_projected_report["contributing_paths"] = []
     assert previous_report["report"] == expected_projected_report
@@ -1376,6 +1385,55 @@ async def test_fixed_runner_reuses_a_visible_historical_revision_without_new_con
 
 
 @pytest.mark.anyio
+async def test_fixed_runner_can_decline_to_create_a_challenger(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request = _request(artifacts, tmp_path)
+    sessions = SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        EvolutionProcessConfig(
+            bundle_commit="0" * 40,
+            bundle_tree="1" * 40,
+            bundle_artifact_digest=digest("evolver-bundle"),
+            command_argv=(
+                str(Path(sys.executable).resolve()),
+                str(
+                    _reuse_agent_script(
+                        tmp_path,
+                        request.parent_revision.id,
+                        proposal_type="no_change",
+                    )
+                ),
+            ),
+            agent_backend="claude",
+            isolated_home_environment_keys=(),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            environment=(),
+            timeout_seconds=10,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+        ),
+    )
+    runner = EvolverBundleRunner(
+        EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts),
+        sessions,
+        artifacts,
+        FakeRuntimeEventRecorder([]),
+        kernel_agent_limits=kernel_agent_limits(),
+        max_output_manifest_bytes=8192,
+    )
+
+    build = await runner.build_challenger(request)
+
+    assert isinstance(build.proposal, KernelAgentNoChangeProposal)
+    trace = json.loads(
+        (artifacts.verify(build.evolution_trace_digest).payload_path / "value.json").read_text()
+    )
+    assert trace["output"]["proposal_type"] == "no_change"
+    assert trace["candidate"] is None
+
+
+@pytest.mark.anyio
 async def test_fixed_runner_evolves_from_history_only_after_runtime_candidate_reset(
     tmp_path: Path,
 ) -> None:
@@ -1462,7 +1520,82 @@ def test_evolution_output_field_set_matches_the_frozen_evolver_contract() -> Non
     finally:
         sys.path.remove(str(evolver_src))
 
-    assert set(EvolutionOutput.model_fields) == set(EVOLUTION_OUTPUT_FIELDS)
+    assert set(EvolutionOutput.model_fields) == set(EVOLUTION_OUTPUT_FIELDS) | {
+        "suggested_directions"
+    }
+
+
+def test_evolver_can_derive_a_suggestion_from_bootstrap_history(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    checkpoint_root = tmp_path / "checkpoint"
+    report = checkpoint_root / "bootstrap" / "report.json"
+    report.parent.mkdir(parents=True)
+    parent_id = "direction_" + "a" * 32
+    report.write_text(
+        json.dumps(
+            {
+                "direction_events": [{"action": "suggest", "direction_id": parent_id}],
+                "experiments": [],
+            }
+        )
+    )
+    checkpoint = artifacts.put_directory(checkpoint_root, ArtifactKind.EVIDENCE)
+    suggestion = EvolutionSuggestedDirectionV1(
+        name="Revisit staged reduction",
+        hypothesis="Staging may shorten the reduction path",
+        rationale="Bootstrap left this mechanism untested",
+        plan=("Implement staging", "Evaluate the candidate"),
+        success_criteria="Correct and faster",
+        stop_conditions="Incorrect or no measurable gain",
+        relationship="adoption",
+        derived_from_direction_ids=(parent_id,),
+    )
+    runner = object.__new__(EvolverBundleRunner)
+    runner._artifacts = artifacts
+    runner._suggestion_ttl_epochs = 1
+    runner._validate_suggested_directions(checkpoint, "epoch:example:challenger:1", (suggestion,))
+
+
+def test_evolver_cannot_adopt_an_expired_bootstrap_suggestion(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    checkpoint_root = tmp_path / "checkpoint"
+    report = checkpoint_root / "bootstrap" / "report.json"
+    report.parent.mkdir(parents=True)
+    parent_id = "direction_" + "a" * 32
+    report.write_text(
+        json.dumps(
+            {
+                "direction_events": [{"action": "suggest", "direction_id": parent_id}],
+                "experiments": [],
+            }
+        )
+    )
+    epoch = checkpoint_root / "epochs" / "00000001.json"
+    epoch.parent.mkdir(parents=True)
+    epoch.write_text("{}")
+    checkpoint = artifacts.put_directory(checkpoint_root, ArtifactKind.EVIDENCE)
+    suggestion = EvolutionSuggestedDirectionV1(
+        name="Revisit staged reduction",
+        hypothesis="Staging may shorten the reduction path",
+        rationale="Bootstrap left this mechanism untested",
+        plan=("Implement staging", "Evaluate the candidate"),
+        success_criteria="Correct and faster",
+        stop_conditions="Incorrect or no measurable gain",
+        relationship="adoption",
+        derived_from_direction_ids=(parent_id,),
+    )
+    runner = object.__new__(EvolverBundleRunner)
+    runner._artifacts = artifacts
+    runner._suggestion_ttl_epochs = 1
+    with pytest.raises(ValueError, match="unexpired suggested parent"):
+        runner._validate_suggested_directions(
+            checkpoint, "epoch:example:challenger:1", (suggestion,)
+        )
+    runner._validate_suggested_directions(
+        checkpoint,
+        "epoch:example:challenger:1",
+        (suggestion.model_copy(update={"relationship": "refinement"}),),
+    )
 
 
 def _sibling_revision(
@@ -1689,7 +1822,15 @@ Path("scratch/evolution-report-draft.json").write_text(json.dumps({
     "expected_effect": "Produce one valid complete Challenger Bundle.",
     "changed_paths": ["prompts/integration.md"],
     "contributing_paths": [],
-    "unimplemented_capabilities": []
+    "unimplemented_capabilities": [],
+    "suggested_directions": [{
+        "name": "Try a narrower launch configuration",
+        "hypothesis": "A smaller launch may reduce overhead",
+        "rationale": "The next Epoch can test this independently",
+        "plan": ["Implement a candidate", "Compare measured latency"],
+        "success_criteria": "Correct and faster",
+        "stop_conditions": "Correctness fails or no gain",
+    }]
 }))
 published = subprocess.run(
     [
@@ -1775,6 +1916,7 @@ print(json.dumps({
     )
     assert trace["process_returncode"] == 0
     assert trace["token_usage"]["consumed"] == 24
+    assert build.suggested_directions[0]["name"] == "Try a narrower launch configuration"
     session_trace = artifacts.verify(trace["session_trace_digest"]).payload_path
     assert '"input_tokens": 16' in (session_trace / "provider/stdout.stream-json").read_text()
 

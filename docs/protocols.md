@@ -215,6 +215,8 @@ DSL, and Candidate seed. One output uses:
 - `evolved`: new revision parented by Active;
 - `reuse`: existing visible revision unchanged;
 - `evolve_from_history`: new revision parented by a visible historical revision.
+- `no_change`: no new revision; close remaining Challenger slots and continue the Epoch with
+  Active and any already attached Challengers.
 
 Runtime validates selected source, source-relative changed paths, private State diff, same-DSL
 identity, file policy, and manifest before sealing. Evolved content is Lineage-local; Runtime never

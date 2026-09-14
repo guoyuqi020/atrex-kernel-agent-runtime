@@ -47,8 +47,8 @@ flowchart LR
   Session 捕获、不可变 Artifact 与自适应 State 持久化。
 - Core 持有 Optimizer Prompt、Workflow、Backend Adapter、Runtime Tool Binding，以及 Agent 编写的
   Direction、Experiment 与 Attempt Report。
-- Evolver 持有一个同 DSL Agent 修改假设，可以修改 Candidate Source 与 Candidate Runtime State
-  Seed，但不评测 Kernel。
+- Evolver 持有一个同 DSL Agent 修改假设，可以修改 Candidate Bundle；没有证据支持 Agent 可控改进时，
+  也可以提交 `no_change`。它不评测 Kernel。
 - Agate 持有编译、正确性、Profile 与性能执行。
 - GPU Wiki 提供外源知识。Runtime 在向 Core 返回知识前冻结查询交互，不上传 Agent 历史、消费
   记录或 Session Trace。
@@ -94,14 +94,16 @@ Wiki 发送 Epoch 后数据。
 ### Epoch
 
 Runtime 冻结 Active Agent、起始 Kernel、公共 Runtime State 与 Evidence，然后串行调用 Evolver 构造
-`K` 个 Challenger。每个提案可以从 Active 创建 Revision、复用历史 Revision，或从历史创建新
-Revision。Revision 祖先关系仍是树；复用和 Epoch 参赛来源单独记录。
+最多 `K` 个 Challenger。每个提案可以从 Active 创建 Revision、复用历史 Revision、从历史创建新
+Revision，或用 `no_change` 停止继续构建。
+Revision 祖先关系仍是树；复用和 Epoch 参赛来源单独记录。
 
 Pool 冻结后，Active 与 Challenger Branch 在 `max_parallel_branches` 限制下并发。每个 Branch
 并发运行 `Y` 条 Trajectory，每条 Trajectory 串行运行 `X` 个全新 Session Attempt。所有参与者从
 同一个 Epoch Kernel 开始，不能看到兄弟分支的进行中工作。之后 Runtime 选择最佳 Kernel，并独立
-比较 Agent Revision。因此一个 Epoch 包含 `(1 + K) × Y × X` 个 Optimizer Attempt 和 `K` 次
-Evolver 执行。物理 Provider 调用还可能包含基础设施重试和有上限的报告补交，均不增加配置的
+比较 Agent Revision。若实际接入 `C ≤ K` 个 Challenger，Epoch 包含 `(1 + C) × Y × X` 个
+Optimizer Attempt；Evolver 执行 `C` 次，若以 `no_change` 结束则再加一次。物理 Provider 调用还可能
+包含基础设施重试和有上限的报告补交，均不增加配置的
 Attempt 数量。
 
 完成后的 Evidence 成为下一 Epoch Checkpoint。Optimizer 可以看到全部已完成 Epoch Branch，以及当前

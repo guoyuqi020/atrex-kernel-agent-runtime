@@ -235,7 +235,7 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `gateway-execute` | GPU/Agate Operation 与参数；Candidate 操作默认上传当前 Working Kernel。Evaluate 可通过 `candidate_path` 选择 B，通过 `comparison.baseline_path` 选择比较基线 A。 |
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
 | `result-artifact-read` | 按 Result Artifact Digest 读取规范化的 Agent 可见结果；请求 JSON 不写 `operation`。 |
-| `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；关闭时显式选择支持 Experiment 并声明 hypothesis_status，返回稳定 Direction ID。 |
+| `update-direction` | 以 `propose` 创建不可变 Direction 定义（Bootstrap 还可用 `suggest`），或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；关闭时显式选择支持 Experiment 并声明 hypothesis_status，返回稳定 Direction ID。 |
 | `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称、生命周期状态、hypothesis_status 和已声明的谱系关系原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction，包括 hypothesis_status、全部 associated_experiment_ids 以及最近一次关闭时显式选中的 supporting_experiment_ids。 |
 | `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis` 与 Action；Runtime 冻结所选 Result 与对应 Kernel 的身份。每条 Experiment 至少绑定一个 Kernel 对应的 Gateway Result；abandon_direction 可单边，Bootstrap baseline 只需 after。返回稳定 Experiment ID。 |
@@ -341,7 +341,7 @@ Journal，但不向 Agent 暴露分支、Epoch、Attempt、选中状态或当前
 按分支标签保留每个已完成分支。运行中
 Epoch 仍只可见同 Trajectory 更早 Attempt，并行分支要到 Epoch barrier 后才会可见。它们使用
 Attempt-scoped Runtime Journal Endpoint，不访问 Agate、不消耗 Gateway 配额，也不能任意选择 Attempt 或 Lineage。
-Direction 历史遵循相同的已完成全路径/运行中同 Trajectory 可见边界；Agent-facing 结果不暴露
+Direction/Experiment 历史还包含已完成 Epoch 内失败 Attempt 的持久 Journal；这不会扩大 Kernel 测量的可见范围。运行中仍只可见同 Trajectory 历史；Agent-facing 结果不暴露
 Branch、Epoch、Attempt、选中状态或当前/历史来源。
 `load-direction` 会根据每个可见 Experiment 的 `direction_id` 反向派生关联；因此记录 Experiment 后，
 对应 Direction 的 `associated_experiment_ids` 立即更新。`supporting_experiment_ids` 仅保留最近一次
@@ -487,12 +487,15 @@ Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份�
 仅上一个完成 Epoch 的参赛者拥有该 Epoch 的 Conversation 与 Attempt Report。历史报告
 `input/evolution-reports/evo-N.json` 的 `parent.path` 和 `generated_agent.path` 指向完整 Bundle；
 贡献路径属于原始生成 Session，不保证当前资源仍与原始内容一致。
+`input/evidence/latest-epoch-facts.json` 索引上一完成 Epoch 各分支的 Runtime Attempt 状态、失败原因、
+Candidate 结果及 Agent 自述 Journal ID。
+`input/evidence/journal/directions/index.json` 和 `experiments/index.json` 可定位 Bootstrap 与已完成 Epoch 的完整 `<id>.json` 记录，包括没有终态报告的 Attempt。
 
 从历史派生时先复制完整历史 Bundle 到 Candidate，再修改；报告所选 `kernel_agent_revision_id`，
 `changed_paths` 为相对于 Bundle 根目录的排序文件 Diff，包括四目录改动。Runtime 独立校验 Diff，
-封存完整 Bundle 和四目录 Checkpoint。Optimizer 的权限与继承规则不变：实现、Prompts、Insights、
-Skills 只读，仅 Tools 可写。
+封存完整 Bundle 和四目录 Checkpoint。Optimizer 的权限与继承规则不变：实现只读，四个自适应目录可写。
 
+`no_change` 指向当前 Active Revision，不修改 Candidate，关闭剩余 Challenger 名额而不跳过 Epoch。
 `contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许
 `input/agents/agent-vN/` 和 `input/evidence/agent-vN/resources/`，包括 Parent 其他 Trajectory 的资源。
 仅阅读和自动继承 Parent 不算贡献。路径必须存在、无链接或越界，且属于合格已评估历史或 Parent，
@@ -501,6 +504,9 @@ Skills 只读，仅 Tools 可写。
 
 Evolver 通过本地 `evolution-report` 提交 Draft；错误返回 `issues`、`request_schema` 和 `recovery`，
 不发布。首次成功原子生成 `scratch/evolution-report.json`，Session 退出后 Runtime 再独立校验。
+可选的 `suggested_directions` 最多包含八条带证据引用、尚未验证的搜索方向。Runtime 为每条分配普通 `direction_...` ID，并持久化不可变的来源记录；这独立于 `evolved`、`reuse` 或 `no_change`。各 Branch 可通过 `list-directions` 发现，通过 `load-direction` 查看。建议方向不能直接启动、测量或关闭。Optimizer 如需采纳，应 `propose` 一个自己的 Direction，以 `relationship="adoption"` 和 `derived_from_direction_ids` 指向该建议；修改假设则使用 `refinement`。采纳不证明假设成立，也不修改来源记录。
+Bootstrap 也可用 `update-direction` 的 `action="suggest"` 和完整 Direction 定义，把未验证的后续想法立即写入 Runtime Journal。返回的普通 Direction ID 对后续 Optimizer Attempt 和 Evolver 可见。其他阶段不能调用 `suggest`；单靠终态报告不能凭空创建建议。
+`gateway_proxy.suggestion_ttl_epochs` 默认是 `1`：Bootstrap 建议可在 Epoch 1 采纳，Evolver 建议可在它准备的 Epoch 采纳。进入下一 Epoch 后，未被采纳的建议在读取时显示为 `expired`，已有采纳子 Direction 的显示为 `adopted`。这只是读取时的状态投影，不改写历史来源记录。两种状态仍可读取、引用并派生新的 `refinement`，但不能再次以 `adoption` 采纳。增大配置值可延长有效 Epoch 数。
 
 ## Direction 谱系
 
@@ -525,11 +531,12 @@ Evolver 通过本地 `evolution-report` 提交 Draft；错误返回 `issues`、`
 ```
 
 关系类型为 `retry`（重试）、`refinement`（细化）、`reimplementation`（重新实现）、
-`correction`（纠错）、`port`（移植）、`combination`（组合）。原有 `rationale` 解释关系。
+`correction`（纠错）、`port`（移植）、`combination`（组合）、`adoption`（采纳）。原有 `rationale` 解释关系。
 两个来源列表可各自省略，每个最多 32 个不重复的可见 ID；Experiment 所属 Direction 也视为父方向。
 每项关系至少一个父方向，组合至少两个不同父方向。纠错可指定 `supersedes_direction_id`，但只能指向
-其父方向，且不会改变父方向生命周期。全部校验成功后才写入；生命周期更新不能改写谱系，纠正声明需
-创建新的派生 Direction。继续相同的未完成假设应复用已有 ID。List/load 返回已声明关系；旧记录不补造关系。
+其父方向，且不会改变父方向生命周期。`adoption` 必须且只能指向一个当前有效的 `suggested` 父方向，不能同时引用
+Experiment；改变假设或重新探索已过期建议应使用 `refinement`。全部校验成功后才写入；生命周期更新不能改写谱系，
+纠正声明需创建新的派生 Direction。继续相同的未完成假设应复用已有 ID。List/load 返回已声明关系；旧记录不补造关系。
 
 通过 `list-directions` 和 `load-direction` 查看已声明关系，通过 `load-experiment` 读取引用的实验。
 不提供独立关系图导出，也不为 Evolver 生成额外谱系文件。关系仍然是 Agent 的分析声明；测量和 Gate

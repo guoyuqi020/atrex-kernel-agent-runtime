@@ -27,6 +27,8 @@ from ..domain.errors import (
     GatewayOperationsInProgressError,
     InfrastructureError,
     InvalidTransitionError,
+    OptimizerSuggestionForbiddenError,
+    SuggestedDirectionTransitionError,
 )
 from ..domain.ids import ArtifactDigest, AttemptId, LineageId, parse_artifact_digest
 from ..domain.models import Dsl
@@ -1984,6 +1986,74 @@ def _invalid_request_response(
                     "instruction": (
                         "The requested Direction was not started. Retry start only after no other "
                         "Direction is in progress"
+                    )
+                },
+            ],
+        )
+    if isinstance(error, OptimizerSuggestionForbiddenError):
+        response["issues"] = cast(
+            JsonValue,
+            [{"path": error.field_path, "code": "forbidden_action", "message": str(error)}],
+        )
+        response["recovery"] = cast(
+            JsonValue,
+            [
+                {
+                    "instruction": (
+                        "For a new hypothesis, call update-direction with action=propose "
+                        "and the complete Direction definition"
+                    )
+                },
+                {
+                    "instruction": (
+                        "To use an existing suggested Direction, first load-direction by its "
+                        "ID, then propose a new Direction with relationship=adoption and "
+                        "derived_from_direction_ids containing that ID. Use refinement "
+                        "instead if you change its hypothesis"
+                    )
+                },
+            ],
+        )
+    if isinstance(error, SuggestedDirectionTransitionError):
+        response["issues"] = cast(
+            JsonValue,
+            [
+                {
+                    "path": "request.direction_id",
+                    "code": (
+                        f"{error.status}_direction_not_startable"
+                        if error.action == "start"
+                        else f"{error.status}_direction_immutable"
+                    ),
+                    "message": str(error),
+                }
+            ],
+        )
+        response["recovery"] = cast(
+            JsonValue,
+            [
+                {
+                    "tool": "load-direction",
+                    "request": {"direction_id": error.direction_id},
+                },
+                {
+                    "instruction": (
+                        "Call update-direction with action=propose, a complete Direction "
+                        "definition, and derived_from_direction_ids containing "
+                        f"{error.direction_id}. "
+                        + (
+                            "Use relationship=adoption for the unchanged suggestion, or "
+                            "relationship=refinement if you change its hypothesis"
+                            if error.status == "suggested"
+                            else "This suggestion is no longer eligible for adoption; "
+                            "use relationship=refinement and explain why revisiting it is useful"
+                        )
+                    )
+                },
+                {
+                    "instruction": (
+                        "Start the new Direction ID returned by propose. Do not retry the "
+                        "lifecycle action on the suggested Direction"
                     )
                 },
             ],

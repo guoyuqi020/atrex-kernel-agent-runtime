@@ -275,3 +275,44 @@ async def test_same_allocation_abba_requires_all_runs_and_strict_percent_gain() 
     assert authoritative.gateway_result_digest == digest("abba-result")
     assert authoritative.correct is True
     assert authoritative.latency_us == pytest.approx(math.sqrt(90.0 * 92.0))
+
+
+@pytest.mark.anyio
+async def test_abba_comparator_uses_authoritative_per_shape_median() -> None:
+    def kernel(label: str) -> KernelRevision:
+        return KernelRevision(
+            id=new_kernel_revision_id(),
+            parent_id=None,
+            artifact_digest=digest(f"{label}-kernel"),
+            produced_by_attempt_id=None,
+            evaluation=KernelEvaluation(True, 999, digest(f"{label}-gateway")),
+            created_at=NOW,
+        )
+
+    incumbent = kernel("median-base")
+    candidate = kernel("median-candidate")
+
+    class Runner:
+        async def run_pair(self, *args: object, **kwargs: object) -> KernelPairMeasurementResult:
+            return KernelPairMeasurementResult(
+                (KernelMeasurementRun(0, True, 100.0), KernelMeasurementRun(1, True, 100.0)),
+                (KernelMeasurementRun(0, True, 90.0), KernelMeasurementRun(1, True, 90.0)),
+                gateway_result_digest=digest("median-result"),
+                incumbent_latency_us=100.0,
+                candidate_latency_us=99.0,
+            )
+
+    result = await SameAllocationAbbaKernelComparator(
+        Runner(),  # type: ignore[arg-type]
+        repeats=2,
+        minimum_improvement_percent=5.0,
+        per_run_timeout_seconds=100,
+        allocation_timeout_seconds=500,
+        shape_batch_size=4,
+        max_parallel_shape_batches=2,
+        purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
+    ).compare(incumbent, candidate)
+
+    assert not result.accepted
+    assert result.authoritative_candidate is not None
+    assert result.authoritative_candidate.latency_us == 99.0

@@ -202,6 +202,24 @@ def test_attempt_report_models_one_sided_baseline_experiment(tmp_path: Path) -> 
     assert report.experiments[0].after is not None
 
 
+def test_bootstrap_report_can_preserve_a_suggested_direction() -> None:
+    value = _value(new_attempt_id())
+    events = value["direction_events"]
+    assert isinstance(events, list)
+    suggestion = dict(events[0])
+    suggestion.update(
+        direction_event_id="directionevent_" + "4" * 32,
+        direction_id="direction_" + "b" * 32,
+        action="suggest",
+        name="try a staged reduction later",
+        hypothesis="staging may shorten the reduction path",
+        rationale="baseline construction did not test this idea",
+    )
+    events.append(suggestion)
+    report = AttemptReportV12.model_validate(value)
+    assert report.direction_events[-1].action == "suggest"
+
+
 def test_attempt_report_rejects_baseline_with_before_evidence(tmp_path: Path) -> None:
     attempt_id = new_attempt_id()
     value = _value(attempt_id)

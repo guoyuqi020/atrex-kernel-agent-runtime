@@ -7,6 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from typing import cast
 
 import pytest
 from conftest import NOW, digest, seed_lineage
@@ -49,9 +50,51 @@ from atrex_runtime.gateway.control import (
 from atrex_runtime.gateway.control_schema import GATEWAY_SCHEMA_VERSION
 from atrex_runtime.gateway.journals import RuntimeJournalService
 from atrex_runtime.ports import RunAttemptRequest
+from atrex_runtime.registry.base import Registry
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
 NOW_DATETIME = datetime(2026, 8, 14, tzinfo=UTC)
+
+
+def test_evolver_suggestion_ttl_is_projected_without_mutating_history(tmp_path: Path) -> None:
+    lineage_id = parse_lineage_id("lineage_" + "a" * 32)
+    previous = SimpleNamespace(
+        id=new_epoch_id(), lineage_id=lineage_id, number=1, status=EpochStatus.COMPLETED
+    )
+    current = SimpleNamespace(
+        id=new_epoch_id(), lineage_id=lineage_id, number=2, status=EpochStatus.RUNNING
+    )
+    raw = {"direction_id": "direction_" + "b" * 32, "name": "Try staged loads"}
+    registry = SimpleNamespace(
+        get_attempt=lambda _attempt_id: SimpleNamespace(epoch_id=current.id),
+        get_epoch=lambda epoch_id: previous if epoch_id == previous.id else current,
+        list_epochs=lambda _lineage_id: [previous, current],
+        list_epoch_suggested_directions=lambda epoch_id: (raw,) if epoch_id == previous.id else (),
+    )
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        cast(Registry, registry),
+        signing_key=b"s" * 32,
+        suggestion_ttl_epochs=1,
+    )
+    try:
+        attempt_id = new_attempt_id()
+        assert control.visible_suggested_directions(attempt_id)[0]["status"] == "expired"
+        assert raw == {"direction_id": "direction_" + "b" * 32, "name": "Try staged loads"}
+        assert control.suggestion_status(attempt_id, created_epoch_number=0) == "expired"
+    finally:
+        control.close()
+
+    longer = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        cast(Registry, registry),
+        signing_key=b"s" * 32,
+        suggestion_ttl_epochs=2,
+    )
+    try:
+        assert longer.visible_suggested_directions(new_attempt_id())[0]["status"] == "suggested"
+    finally:
+        longer.close()
 
 
 def test_exact_evaluate_task_reservation_is_durable_and_single_owner(tmp_path: Path) -> None:

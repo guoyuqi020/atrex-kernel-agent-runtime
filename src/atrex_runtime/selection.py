@@ -162,8 +162,16 @@ class SameAllocationAbbaKernelComparator(KernelComparator):
             shape_batch_size=self._shape_batch_size,
             max_parallel_shape_batches=self._max_parallel_shape_batches,
         )
-        incumbent_mean = _measurement_geomean(result.incumbent_runs, self._repeats)
-        candidate_mean = _measurement_geomean(result.candidate_runs, self._repeats)
+        incumbent_mean = (
+            result.incumbent_latency_us
+            if result.incumbent_latency_us is not None
+            else _measurement_geomean(result.incumbent_runs, self._repeats)
+        )
+        candidate_mean = (
+            result.candidate_latency_us
+            if result.candidate_latency_us is not None
+            else _measurement_geomean(result.candidate_runs, self._repeats)
+        )
         authoritative_candidate = (
             AttemptCandidateResult(
                 artifact_digest=candidate.artifact_digest,

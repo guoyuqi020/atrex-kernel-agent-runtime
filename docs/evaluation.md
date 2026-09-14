@@ -247,7 +247,16 @@ An ordinary Attempt uses `kernel_retention_comparison`:
   repeats; the Candidate must be correct and exceed the configured uncertainty threshold.
 - `same_allocation_abba`: runs interleaved A/B measurements inside one Agate allocation per Shape
   batch. Each repeat measures both revisions; pair order alternates between `A, B` and `B, A`, so
-  two repeats produce `A, B, B, A`. Runtime validates the schedule and stores every run.
+  two repeats produce `A, B, B, A`. Runtime executes that complete schedule three independent
+  times, validates matching Shape coverage, takes the median latency for each Shape and side, then
+  computes the authoritative geomean. An explicit correctness failure in any round fails the
+  comparison. Every physical run remains recorded.
+
+For authoritative ABBA, Runtime records each completed physical Shape batch under an identity
+covering the exact revision pair, sealed Contract, evaluator, purpose, schedule, and repetition.
+Resuming the same comparison reads completed batches from the Registry and Artifact Store instead
+of submitting them again. The three repetitions have distinct identities; transient Agate failures
+retry the affected batch with a fresh Job, and a different revision pair starts fresh measurements.
 
 The selected comparator's B aggregate is the Candidate's authoritative latency. There is no second
 independent Attempt-final evaluation after comparison. An Attempt that produces no valid

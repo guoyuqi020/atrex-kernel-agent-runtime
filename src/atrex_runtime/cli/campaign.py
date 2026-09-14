@@ -56,6 +56,7 @@ def bootstrap_campaign(config_path: str, campaign_path: str) -> None:
                     os.environ,
                     settings.gateway_proxy.capability_signing_key_env,
                 ),
+                suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
             )
         )
         try:

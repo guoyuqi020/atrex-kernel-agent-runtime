@@ -260,7 +260,7 @@ helpers are supported for a shared custom input generator and Shapes.
 | `gateway-execute` | One GPU/Agate operation and its parameters; Candidate operations upload the working Kernel by default. Evaluate can select Candidate B with `candidate_path` and comparison baseline A with `comparison.baseline_path`. |
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
 | `result-artifact-read` | Reads a normalized Agent-visible Result Artifact by digest; request JSON omits `operation`. |
-| `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Closures explicitly select supporting Experiments and declare hypothesis_status; returns the stable Direction ID. |
+| `update-direction` | Creates an immutable Direction definition with `propose` (or Bootstrap-only `suggest`), or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Closures explicitly select supporting Experiments and declare hypothesis_status; returns the stable Direction ID. |
 | `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, lifecycle status, hypothesis_status, and any declared ancestry to that file and returns only status, file, and count. |
 | `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction, including hypothesis_status, all associated_experiment_ids and the latest explicitly selected supporting_experiment_ids. |
 | `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, and action. Runtime freezes the Trials' Kernel and Result Artifact identities. Every Experiment needs at least one Kernel-bound Gateway Result. `abandon_direction` may be one-sided; Bootstrap `baseline` requires only `after`. Returns the stable Experiment ID. |
@@ -392,8 +392,9 @@ limited to earlier Attempts on the same trajectory; parallel branches become vis
 Epoch barrier. These reads use the Attempt-scoped Runtime Journal endpoint, never contact Agate,
 consume no Gateway quota, and cannot select an
 arbitrary Attempt or Lineage.
-Direction history follows the same completed/all-path and in-progress/same-trajectory visibility
-boundary. Agent-facing Direction results intentionally hide Branch, Epoch, Attempt, selection, and
+Direction/Experiment history also includes durable Journal entries from failed Attempts in completed
+Epochs; this does not expand Kernel measurement visibility. In-progress visibility stays on the same
+trajectory. Agent-facing Direction results intentionally hide Branch, Epoch, Attempt, selection, and
 current/history provenance.
 `load-direction` derives the reverse Experiment association from each visible Experiment's
 `direction_id`; recording an Experiment therefore updates the loaded Direction view immediately.
@@ -558,6 +559,10 @@ there is no second Source/State pair to edit.
 its Conversations and Attempt reports. Prior reports at `input/evolution-reports/evo-N.json`
 link `parent.path` and `generated_agent.path` to complete Bundles; contributing paths refer to
 locations in the original producing Session, not guaranteed-current resource contents.
+`input/evidence/latest-epoch-facts.json` indexes Runtime Attempt status, failure reasons, Candidate
+outcomes, and Agent-authored Journal IDs across the last completed Epoch's Branches.
+`input/evidence/journal/directions/index.json` and `experiments/index.json` locate full `<id>.json`
+records from Bootstrap and completed Epochs, including Attempts without a terminal report.
 
 For `evolve_from_history`, copy the selected complete historical Bundle into Candidate before editing.
 Declare that revision as `kernel_agent_revision_id` and report the exact sorted Bundle-relative
@@ -565,7 +570,8 @@ Declare that revision as `kernel_agent_revision_id` and report the exact sorted 
 the complete Bundle plus a four-directory checkpoint. Optimizer permissions and inheritance rules
 are unchanged: implementation is read-only, the four adaptive directories remain writable.
 
-`contributing_paths` records sorted, unique workspace-relative files or directories actually incorporated from
+`no_change` names the Active revision, leaves Candidate untouched, and closes any remaining
+Challenger slots without skipping the Epoch. `contributing_paths` records sorted, unique workspace-relative files or directories actually incorporated from
 `input/agents/agent-vN/` or `input/evidence/agent-vN/resources/`, including Parent resources from other
 Trajectories. Mere reading and automatic Parent inheritance are not contributions. Paths must exist,
 contain no links/traversal, and belong to eligible evaluated history or Parent, never a same-Epoch
@@ -575,6 +581,23 @@ in the Evolution Trace; the field does not change the Bundle base or revision an
 Evolver submits a draft through its local `evolution-report` tool. Invalid submissions return `issues`,
 `request_schema`, and `recovery` without publishing; the first success atomically writes
 `scratch/evolution-report.json`. Runtime independently revalidates the report after Session exit.
+The optional `suggested_directions` array contains at most eight untested, evidence-linked search
+directions. Runtime records each with an ordinary `direction_...` ID and an immutable source event,
+independently of `evolved`, `reuse`, or `no_change`. Every Branch can find them via
+`list-directions` and inspect one via `load-direction`. A suggested Direction cannot be started,
+measured, or closed. An Optimizer may propose its own Direction with `relationship="adoption"`
+and `derived_from_direction_ids` containing the suggested ID; use `refinement` if the hypothesis
+changes. This does not certify the suggestion or mutate its source.
+Bootstrap can also call `update-direction` with `action="suggest"` and a complete Direction
+definition to save an untested future idea immediately in its Runtime Journal. The returned
+ordinary Direction ID is visible to later Optimizer Attempts and Evolvers. `suggest` is rejected
+outside Bootstrap; a terminal report alone cannot manufacture a suggestion.
+`gateway_proxy.suggestion_ttl_epochs` defaults to `1`. A Bootstrap suggestion is adoptable in
+Epoch 1; an Evolver suggestion is adoptable in the Epoch it prepares. At the next Epoch boundary,
+an unused suggestion reads as `expired`, or `adopted` if a child Direction was proposed with
+`relationship="adoption"`. These are read-time statuses, not rewrites of the historical source.
+Both remain readable and can be cited in a new `refinement`, but neither can be newly adopted.
+Increasing the setting extends the number of eligible Epochs.
 
 ## Direction genealogy
 
@@ -598,11 +621,13 @@ Evolver submits a draft through its local `evolution-report` tool. Invalid submi
 }
 ```
 
-Relationship types are `retry`, `refinement`, `reimplementation`, `correction`, `port`, and
-`combination`. The existing `rationale` explains the connection. Either parent list may be omitted;
+Relationship types are `retry`, `refinement`, `reimplementation`, `correction`, `port`,
+`combination`, and `adoption`. The existing `rationale` explains the connection. Either parent list may be omitted;
 each permits at most 32 unique IDs from the caller's existing visible history. Experiments imply their
 owning Directions as parents. Every relation needs at least one parent; combinations need two distinct
 parents. A correction may set `supersedes_direction_id` to a parent without changing its lifecycle.
+`adoption` requires exactly one currently eligible `suggested` parent Direction and no Experiment
+ancestry; use `refinement` to change the hypothesis or revisit an expired suggestion.
 Validation precedes persistence. Lifecycle updates cannot rewrite ancestry; propose a new Direction
 to correct an earlier declaration. Resume an unchanged unfinished hypothesis with its existing ID.
 List/load return declared ancestry; old records remain valid and acquire no fabricated links.

@@ -480,6 +480,7 @@ def bootstrap_runs(
             settings.storage.gateway_database,
             registry,
             signing_key=signing_key,
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
         try:
             if generation is None:
@@ -518,6 +519,7 @@ def evaluations(
             settings.storage.gateway_database,
             registry,
             signing_key=signing_key,
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
         try:
             if attempt_value is not None:
@@ -571,6 +573,7 @@ def kernel_trials(
             settings.storage.gateway_database,
             registry,
             signing_key=signing_key,
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
         try:
             if attempt_value is not None:

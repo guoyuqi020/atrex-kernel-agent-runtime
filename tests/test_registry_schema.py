@@ -39,6 +39,38 @@ def test_registry_initializes_current_schema(tmp_path: Path) -> None:
     assert "runtime_state_digest" in agent_columns
 
 
+def test_authoritative_abba_batch_cache_survives_registry_reopen(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite"
+    task_digest = digest("abba-task")
+    result_digest = digest("abba-result")
+    with SqliteRegistry(path) as registry:
+        assert registry.get_authoritative_abba_batch(task_digest) is None
+        assert registry.record_authoritative_abba_batch(task_digest, result_digest) == result_digest
+        assert result_digest in registry.list_referenced_artifact_digests()
+
+    with SqliteRegistry(path) as registry:
+        assert registry.get_authoritative_abba_batch(task_digest) == result_digest
+        assert (
+            registry.record_authoritative_abba_batch(task_digest, digest("late-result"))
+            == result_digest
+        )
+
+
+def test_registry_migrates_schema_33_abba_cache(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite"
+    with SqliteRegistry(path):
+        pass
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("DROP TABLE authoritative_abba_batches")
+        connection.execute("PRAGMA user_version = 33")
+
+    with SqliteRegistry(path) as registry:
+        assert registry.get_authoritative_abba_batch(digest("missing-task")) is None
+
+    with closing(sqlite3.connect(path)) as connection:
+        assert connection.execute("PRAGMA user_version").fetchone() == (SCHEMA_VERSION,)
+
+
 def test_registry_migrates_schema_27_agent_bundle_state_digest(tmp_path: Path) -> None:
     path = tmp_path / "registry.sqlite"
     with closing(sqlite3.connect(path)) as connection:
