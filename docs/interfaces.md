@@ -268,6 +268,13 @@ helpers are supported for a shared custom input generator and Shapes.
 | `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
 | `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
 
+If `load-direction`, a lifecycle `update-direction`, or `record-experiment` cannot resolve a
+Direction ID, the error echoes the requested ID and identifies the failing field. It suggests at
+most three IDs one character edit away, drawn only from the current Attempt's visible history,
+and provides `load-direction` / `list-directions` recovery requests. Verify the intended Direction,
+correct the original request, and retry; no Journal entry is written or ID automatically replaced.
+A missing visible ID does not establish whether it exists elsewhere.
+
 The example configurations and production workspace generator set
 `campaign.optimizer.max_attempt_report_bytes` to `1048576` (1 MiB). This limits the complete
 terminal Report, including the Journals attached by the tool. Core/KDA check the assembled size

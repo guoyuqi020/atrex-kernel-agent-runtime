@@ -67,6 +67,33 @@ class LineageLeaseUnavailableError(RuntimeError):
     """Another trusted scheduler currently owns the requested lineage."""
 
 
+class DirectionLookupError(ValueError):
+    """A Direction ID did not resolve within the caller's visible history."""
+
+    def __init__(
+        self,
+        requested_direction_id: str,
+        suggested_direction_ids: tuple[str, ...],
+        *,
+        field_path: str,
+    ) -> None:
+        self.requested_direction_id = requested_direction_id
+        self.suggested_direction_ids = suggested_direction_ids
+        self.field_path = field_path
+        suggestion = (
+            f" Did you mean one of {list(suggested_direction_ids)}?"
+            if suggested_direction_ids
+            else ""
+        )
+        super().__init__(
+            f"Direction ID {requested_direction_id!r} was not found in the current "
+            f"Attempt's visible history.{suggestion} "
+            "Verify the exact ID with load-direction or list-directions, correct the "
+            "original request, and retry. No Journal entry was written; Runtime does "
+            "not automatically replace Direction IDs"
+        )
+
+
 class DirectionConcurrencyError(ValueError):
     """A logical Attempt tried to explore more than one Direction concurrently."""
 

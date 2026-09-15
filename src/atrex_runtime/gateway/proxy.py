@@ -23,6 +23,7 @@ from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..asgi import AsgiReceive, AsgiSend, bearer_token, json_response, read_request_body
 from ..domain.errors import (
     DirectionConcurrencyError,
+    DirectionLookupError,
     DuplicateGatewayTaskError,
     GatewayOperationsInProgressError,
     InfrastructureError,
@@ -1950,6 +1951,37 @@ def _invalid_request_response(
         "error": "invalid_request",
         "detail": str(error),
     }
+    if isinstance(error, DirectionLookupError):
+        response["issues"] = cast(
+            JsonValue,
+            [{"path": error.field_path, "code": "direction_not_found", "message": str(error)}],
+        )
+        response["requested_direction_id"] = error.requested_direction_id
+        response["suggested_direction_ids"] = list(error.suggested_direction_ids)
+        response["recovery"] = cast(
+            JsonValue,
+            [
+                {
+                    "tool": "load-direction",
+                    "request": {"direction_id": candidate},
+                    "instruction": "Check this visible near-match before correcting the request",
+                }
+                for candidate in error.suggested_direction_ids
+            ]
+            + [
+                {
+                    "tool": "list-directions",
+                    "request": {"file": "scratch/directions-index.json"},
+                    "instruction": "Read the file to verify the exact visible Direction ID",
+                },
+                {
+                    "instruction": (
+                        "Correct direction_id in the original request and retry. "
+                        "No Journal entry was written; IDs are not automatically replaced"
+                    )
+                },
+            ],
+        )
     if isinstance(error, DirectionConcurrencyError):
         active_ids = list(error.in_progress_direction_ids)
         response["issues"] = cast(

@@ -243,6 +243,11 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
 
+`load-direction`、更新已有 Direction 的 `update-direction` 和 `record-experiment` 找不到 Direction ID
+时，错误会回显请求 ID、标明错误字段，并仅从当前 Attempt 可见历史中提供最多三个单字符编辑距离的候选
+ID，以及 `load-direction` / `list-directions` 修复请求。核对目标 Direction 后，修改原请求并重试；失败
+请求不会写入 Journal，也不会自动替换 ID。在可见历史中未找到，不代表已经确定它在其他范围是否存在。
+
 示例配置与生产 Workspace 生成器将 `campaign.optimizer.max_attempt_report_bytes` 设为
 `1048576`（1 MiB），限制包含工具自动附加 Journal 的完整终态 Report。Core/KDA 在提交前检查
 组装后的大小，Runtime 代理在接受前检查，Worker 在 Session 结束后读取文件时再次检查。

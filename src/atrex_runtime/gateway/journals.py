@@ -13,6 +13,7 @@ from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..direction_genealogy import RELATIONSHIP_FIELDS, relationship_fields, validate_relationship
 from ..domain.errors import (
     DirectionConcurrencyError,
+    DirectionLookupError,
     InfrastructureError,
     OptimizerSuggestionForbiddenError,
     SuggestedDirectionTransitionError,
@@ -75,6 +76,19 @@ def _text(value: object, label: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{label} must be non-empty text")
     return value
+
+
+def _one_edit_apart(first: str, second: str) -> bool:
+    """Match exactly one substitution, insertion, or deletion, not a fuzzy identity."""
+    if len(first) == len(second):
+        return sum(left != right for left, right in zip(first, second, strict=True)) == 1
+    if abs(len(first) - len(second)) != 1:
+        return False
+    shorter, longer = (first, second) if len(first) < len(second) else (second, first)
+    for index, character in enumerate(shorter):
+        if character != longer[index]:
+            return shorter[index:] == longer[index + 1 :]
+    return True
 
 
 def _text_array(value: object, label: str, *, required: bool = False) -> list[str]:
@@ -188,15 +202,12 @@ class RuntimeJournalService:
                 },
             )
         if isinstance(request, DirectionLoadRequestV2):
-            try:
-                return cast(
-                    dict[str, JsonValue],
-                    self._direction_views(request.attempt_id)[request.direction_id],
-                )
-            except KeyError as error:
-                raise ValueError(
-                    "Direction ID is outside the current Attempt's visible history"
-                ) from error
+            return cast(
+                dict[str, JsonValue],
+                self._require_direction(
+                    request.attempt_id, request.direction_id, field_path="direction_id"
+                ),
+            )
         if isinstance(request, ExperimentRecordRequestV2):
             return self._record_experiment(request, authorization)
         if request.operation == "experiments_list":
@@ -417,6 +428,23 @@ class RuntimeJournalService:
         if len(set(experiment_ids)) != len(experiment_ids):
             raise ValueError("Visible Experiment history contains duplicate Experiment IDs")
         return values
+
+    def _require_direction(
+        self, attempt_id: AttemptId, direction_id: str, *, field_path: str
+    ) -> dict[str, object]:
+        directions = self._direction_views(attempt_id)
+        direction = directions.get(direction_id)
+        if direction is None:
+            # Never search the global Journal: even typo hints must obey visibility.
+            suggestions = tuple(
+                sorted(
+                    candidate
+                    for candidate in directions
+                    if _one_edit_apart(direction_id, candidate)
+                )[:3]
+            )
+            raise DirectionLookupError(direction_id, suggestions, field_path=field_path)
+        return direction
 
     def _direction_views(self, attempt_id: AttemptId) -> dict[str, dict[str, object]]:
         directions: dict[str, dict[str, object]] = {}
@@ -642,9 +670,9 @@ class RuntimeJournalService:
             if action not in {"start", "complete", "abandon", "block", "defer"}:
                 raise ValueError("Direction update action is invalid")
             direction_id = _text(value.get("direction_id"), "Direction ID")
-            direction = self._direction_views(request.attempt_id).get(direction_id)
-            if direction is None:
-                raise ValueError("Direction ID is outside the current Attempt's visible history")
+            direction = self._require_direction(
+                request.attempt_id, direction_id, field_path="request.direction_id"
+            )
             if direction["status"] in {"suggested", "expired", "adopted"}:
                 raise SuggestedDirectionTransitionError(
                     direction_id, action, status=str(direction["status"])
@@ -722,9 +750,9 @@ class RuntimeJournalService:
         for field in _EXPERIMENT_FIELDS - {"action", "before", "after"}:
             _text(value.get(field), f"Experiment {field}")
         direction_id = str(value["direction_id"])
-        direction = self._direction_views(request.attempt_id).get(direction_id)
-        if direction is None:
-            raise ValueError("Experiment Direction is outside visible history")
+        direction = self._require_direction(
+            request.attempt_id, direction_id, field_path="request.direction_id"
+        )
         if direction["status"] not in {
             "in_progress",
             "completed",
