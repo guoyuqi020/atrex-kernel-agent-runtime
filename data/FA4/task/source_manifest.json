@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "name": "fa4_prefill_hd256_two_page_r0",
+  "adapter": "adapter.py",
+  "source": {
+    "name": "pristine_fa4_b54df166_with_quack_053",
+    "revision": "7b077cf391a98a06ad9464530f0a4c9c7be3f477",
+    "archive_paths": ["vendor", "vendor_support", "PROVENANCE.json"],
+    "package_root": "."
+  },
+  "editable_roots": ["vendor/flash_attention/flash_attn/cute"],
+  "runtime_requirements": [
+    {"distribution": "torch", "import": "torch", "version": ">=2.9.0"},
+    {"distribution": "nvidia-cutlass-dsl", "import": "cutlass", "version": "==4.6.1"}
+  ],
+  "repository_search": {"mode": "snapshot"}
+}

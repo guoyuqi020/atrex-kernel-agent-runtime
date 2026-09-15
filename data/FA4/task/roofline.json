@@ -1,0 +1,304 @@
+{
+  "shapes": {
+    "0": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.006224827733333334
+      },
+      "semantic_Q_read_bytes": 5246976,
+      "semantic_Q_write_bytes": 1638400,
+      "semantic_W_flops": {
+        "fp8_e4m3": 28011724800
+      }
+    },
+    "1": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.12993813981866667
+      },
+      "semantic_Q_read_bytes": 38928384,
+      "semantic_Q_write_bytes": 69206016,
+      "semantic_W_flops": {
+        "fp8_e4m3": 584721629184
+      }
+    },
+    "10": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 2.0170814368426666
+      },
+      "semantic_Q_read_bytes": 121367040,
+      "semantic_Q_write_bytes": 131178496,
+      "semantic_W_flops": {
+        "fp8_e4m3": 9076866465792
+      }
+    },
+    "11": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 3.9951479603199997
+      },
+      "semantic_Q_read_bytes": 99483648,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 17978165821440
+      }
+    },
+    "12": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.12336106336711111
+      },
+      "semantic_Q_read_bytes": 79822848,
+      "semantic_Q_write_bytes": 134217728,
+      "semantic_W_flops": {
+        "fp8_e4m3": 555124785152
+      }
+    },
+    "13": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.7381582693262223
+      },
+      "semantic_Q_read_bytes": 134662656,
+      "semantic_Q_write_bytes": 127901696,
+      "semantic_W_flops": {
+        "fp8_e4m3": 7821712211968
+      }
+    },
+    "14": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.877001703424
+      },
+      "semantic_Q_read_bytes": 77856768,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 3946507665408
+      }
+    },
+    "15": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.1070111634773334
+      },
+      "semantic_Q_read_bytes": 93281280,
+      "semantic_Q_write_bytes": 115851264,
+      "semantic_W_flops": {
+        "fp8_e4m3": 4981550235648
+      }
+    },
+    "16": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 5.164452806656
+      },
+      "semantic_Q_read_bytes": 112459776,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 23240037629952
+      }
+    },
+    "17": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.656538267648
+      },
+      "semantic_Q_read_bytes": 73531392,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 7454422204416
+      }
+    },
+    "18": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.136847224832
+      },
+      "semantic_Q_read_bytes": 86507520,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 5115812511744
+      }
+    },
+    "19": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.29712078848
+      },
+      "semantic_Q_read_bytes": 90528768,
+      "semantic_Q_write_bytes": 126337024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 5837043548160
+      }
+    },
+    "2": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.3338980297386667
+      },
+      "semantic_Q_read_bytes": 128294400,
+      "semantic_Q_write_bytes": 116580352,
+      "semantic_W_flops": {
+        "fp8_e4m3": 6002541133824
+      }
+    },
+    "20": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.19037675337955556
+      },
+      "semantic_Q_read_bytes": 84702720,
+      "semantic_Q_write_bytes": 134217728,
+      "semantic_W_flops": {
+        "fp8_e4m3": 856695390208
+      }
+    },
+    "21": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.8450263977528889
+      },
+      "semantic_Q_read_bytes": 93846528,
+      "semantic_Q_write_bytes": 109166592,
+      "semantic_W_flops": {
+        "fp8_e4m3": 3802618789888
+      }
+    },
+    "22": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 3.410495537152
+      },
+      "semantic_Q_read_bytes": 92995584,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 15347229917184
+      }
+    },
+    "23": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.5266155069440002
+      },
+      "semantic_Q_read_bytes": 99483648,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 6869769781248
+      }
+    },
+    "24": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 4.579800383488
+      },
+      "semantic_Q_read_bytes": 105971712,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 20609101725696
+      }
+    },
+    "25": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.176013901824
+      },
+      "semantic_Q_read_bytes": 83110400,
+      "semantic_Q_write_bytes": 134217728,
+      "semantic_W_flops": {
+        "fp8_e4m3": 792062558208
+      }
+    },
+    "26": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.03248837973333333
+      },
+      "semantic_Q_read_bytes": 19464192,
+      "semantic_Q_write_bytes": 34603008,
+      "semantic_W_flops": {
+        "fp8_e4m3": 146197708800
+      }
+    },
+    "27": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.3939362802346669
+      },
+      "semantic_Q_read_bytes": 100902912,
+      "semantic_Q_write_bytes": 117866496,
+      "semantic_W_flops": {
+        "fp8_e4m3": 6272713261056
+      }
+    },
+    "28": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.8172583171413335
+      },
+      "semantic_Q_read_bytes": 110317056,
+      "semantic_Q_write_bytes": 99999744,
+      "semantic_W_flops": {
+        "fp8_e4m3": 8177662427136
+      }
+    },
+    "29": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.2544986571662222
+      },
+      "semantic_Q_read_bytes": 91040256,
+      "semantic_Q_write_bytes": 115712000,
+      "semantic_W_flops": {
+        "fp8_e4m3": 5645243957248
+      }
+    },
+    "3": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.28688123312355557
+      },
+      "semantic_Q_read_bytes": 91626496,
+      "semantic_Q_write_bytes": 134217728,
+      "semantic_W_flops": {
+        "fp8_e4m3": 1290965549056
+      }
+    },
+    "4": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 1.1702838667946667
+      },
+      "semantic_Q_read_bytes": 101346816,
+      "semantic_Q_write_bytes": 126345216,
+      "semantic_W_flops": {
+        "fp8_e4m3": 5266277400576
+      }
+    },
+    "5": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 2.630958972928
+      },
+      "semantic_Q_read_bytes": 84344832,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 11839315378176
+      }
+    },
+    "6": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.08287550759822222
+      },
+      "semantic_Q_read_bytes": 36318208,
+      "semantic_Q_write_bytes": 55730176,
+      "semantic_W_flops": {
+        "fp8_e4m3": 372939784192
+      }
+    },
+    "7": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 2.760881733632
+      },
+      "semantic_Q_read_bytes": 103809024,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 12423967801344
+      }
+    },
+    "8": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.682117562368
+      },
+      "semantic_Q_read_bytes": 62717952,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 3069529030656
+      }
+    },
+    "9": {
+      "SOL_time_ms": {
+        "NVIDIA B300 (SM100)": 0.07481590852266666
+      },
+      "semantic_Q_read_bytes": 18074112,
+      "semantic_Q_write_bytes": 28286976,
+      "semantic_W_flops": {
+        "fp8_e4m3": 336671588352
+      }
+    }
+  }
+}

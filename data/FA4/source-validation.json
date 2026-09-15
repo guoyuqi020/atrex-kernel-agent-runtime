@@ -1,0 +1,17 @@
+{
+  "validated_at": "2026-09-15 Asia/Shanghai",
+  "gateway": "production",
+  "gpu": "L20D / SM103",
+  "upstream_p128": {
+    "job_id": "dv_245a022043b5",
+    "status": "passed",
+    "output_shape": [128, 16, 256],
+    "meaning": "The pristine FA4 HD256 2CTA source closure JIT-compiles and executes on Agate."
+  },
+  "current_target_abi": {
+    "job_id": "dv_8c0f56af90a6",
+    "status": "bringup_required",
+    "first_failure": "SM100 forward with head_dim=256 does not support seqused_q/seqused_k",
+    "meaning": "The production ABI reaches the intended pristine dedicated kernel; no C05 compatibility implementation was smuggled into R0."
+  }
+}
