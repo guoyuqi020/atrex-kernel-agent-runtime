@@ -26,7 +26,7 @@ from .execution import (
     store_gateway_result,
     submit_agate_job,
 )
-from .job_recovery import JobExecution, run_with_log_recovery
+from .job_recovery import JobExecution, run_with_job_recovery
 from .production_policy import ProductionKernelPolicy
 from .protocol import EvaluationV2
 
@@ -142,7 +142,7 @@ class AgateLineageSeedEvaluator:
                 return job_id, job
 
             try:
-                job_id, job = await run_with_log_recovery(payload, execute)
+                job_id, job = await run_with_job_recovery(payload, execute)
             except AgateCandidateRejection as rejection:
                 return ShapeBatchOutcome(
                     {"status": "rejected", "error": rejection.payload},
@@ -216,7 +216,7 @@ class AgateLineageSeedEvaluator:
             return job_id, job
 
         try:
-            job_id, job = await run_with_log_recovery(payload, execute)
+            job_id, job = await run_with_job_recovery(payload, execute)
             if job.get("status") not in _TERMINAL:
                 raise InfrastructureError("Lineage seed Agate Profile did not terminate")
             self._events.record_runtime_event(

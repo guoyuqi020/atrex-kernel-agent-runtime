@@ -36,7 +36,7 @@ from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContextResolver
 from .correctness import merge_correctness_summaries
 from .execution import call_agate_json
-from .job_recovery import JobExecution, run_with_log_recovery
+from .job_recovery import JobExecution, run_with_job_recovery
 from .stability import MEASUREMENT_REPETITIONS, median_latency_by_shape
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
@@ -661,7 +661,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             )
             return job_id, job
 
-        _, job = await run_with_log_recovery(dev_request, execute)
+        _, job = await run_with_job_recovery(dev_request, execute)
         if job.get("status") not in _TERMINAL:
             raise InfrastructureError("Agate ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:

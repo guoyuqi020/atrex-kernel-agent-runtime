@@ -32,7 +32,7 @@ from .contract import AgateEvaluationContext, AgateEvaluationContextResolver
 from .control_models import GatewayOperation
 from .correctness import correctness_summary
 from .execution import call_agate_json
-from .job_recovery import JobExecution, run_with_log_recovery
+from .job_recovery import JobExecution, run_with_job_recovery
 from .private_results import project_private_job
 from .protocol import AGATE_MAX_JOB_TIMEOUT_S, EvaluateParametersV2
 from .proxy import GatewayAdapter, GatewayAdapterRequest, GatewayAdapterResult
@@ -260,7 +260,7 @@ class AgentAbbaGatewayAdapter:
             )
             return job_id, job
 
-        _, job = await run_with_log_recovery(payload, execute)
+        _, job = await run_with_job_recovery(payload, execute)
         if job.get("status") not in {"succeeded", "failed", "cancelled"}:
             raise InfrastructureError("Agent ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:

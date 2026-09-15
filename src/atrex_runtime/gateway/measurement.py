@@ -29,7 +29,7 @@ from .batched_evaluate import (
 from .candidate import resolve_kernel_candidate
 from .contract import RegistryKernelEvaluationContextResolver
 from .execution import build_evaluation_request, call_agate_json
-from .job_recovery import JobExecution, run_with_log_recovery
+from .job_recovery import JobExecution, run_with_job_recovery
 from .protocol import EvaluationV2
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
@@ -145,7 +145,7 @@ class AgateKernelMeasurementRunner(KernelMeasurementRunner):
                 return job_id, job
 
             try:
-                job_id, job = await run_with_log_recovery(payload, execute)
+                job_id, job = await run_with_job_recovery(payload, execute)
             except AgateCandidateRejection as rejection:
                 return ShapeBatchOutcome(
                     {"status": "rejected", "error": rejection.payload},

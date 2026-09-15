@@ -36,14 +36,18 @@ Optimizer and Evolver are deployment-approved Git repositories pinned by full co
    Non-retryable 4xx validation or authorization errors still return immediately because the
    request must change before it can succeed. Terminal job results such as compilation or
    correctness failure are results, not transport errors, and are not resubmitted by this policy.
-   One collection failure is intercepted: Job `status=failed`, `error_class=infra`,
-   `reason=logs_unavailable`, and `error.details.backend_state=succeeded`. During submit-and-wait,
+   Explicit terminal infrastructure failures (`status=failed`, `error.error_class=infra`),
+   including lost logs and Ray runtime-environment setup failures, are recovered separately.
+   During submit-and-wait,
    Runtime resubmits the same workload with a replacement idempotency key and waits for the new
    Job ID; it does not poll the failed Job again. Delays are 5, 10, 20, 40, then 60 seconds
    indefinitely, until recovery or cancellation. Evaluate retries only the affected Shape batch.
    This also applies to Profile, Dev, Check, Disassemble, Bootstrap, seed evaluation and ABBA.
-   Each replacement follows normal Job binding/event recording. Explicit polls remain read-only;
-   other Job outcomes, transport retries and Agent error formatting are unchanged.
+   Each replacement follows normal Job binding/event recording. Already completed sibling batches
+   are retained; these retries do not consume Session recovery generations or ABBA's separate
+   malformed-result retry budget. Explicit polls remain read-only. Candidate compilation and
+   correctness failures, unclassified errors, and cancelled Jobs are not resubmitted. Cancellation
+   interrupts backoff; transport retries and Agent error formatting are unchanged.
    The periodic health observation remains a bounded one-shot probe; it never owns Campaign work.
 6. Keep Runtime, Gateway, and optional Wiki available while running Campaign schema-v3 bootstrap;
    Core baseline sessions call back through Runtime.

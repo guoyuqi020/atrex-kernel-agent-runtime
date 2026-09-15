@@ -40,7 +40,7 @@ from .contract import (
 )
 from .control_models import GatewayOperation
 from .correctness import correctness_summary
-from .job_recovery import JobExecution, run_with_log_recovery
+from .job_recovery import JobExecution, run_with_job_recovery
 from .private_results import (
     project_candidate_rejection,
     project_compile_job,
@@ -682,7 +682,7 @@ class AgateGatewayAdapter:
             return job_id, job
 
         try:
-            _, job = await run_with_log_recovery(payload, execute)
+            _, job = await run_with_job_recovery(payload, execute)
         except AgateCandidateRejection as rejection:
             rejected: dict[str, JsonValue] = {"status": "rejected", "error": rejection.payload}
             return GatewayAdapterResult(
@@ -842,7 +842,7 @@ class AgateGatewayAdapter:
             return job_id, job
 
         try:
-            _, job = await run_with_log_recovery(payload, execute)
+            _, job = await run_with_job_recovery(payload, execute)
             if job.get("status") not in _TERMINAL_STATUSES:
                 raise InfrastructureError("Agate Profile did not reach a terminal state")
             return job

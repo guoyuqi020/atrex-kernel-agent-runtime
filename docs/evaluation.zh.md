@@ -208,9 +208,10 @@ Kernel `v0`，此时没有 Incumbent 比较。
 
 随仓库提供的策略将 `bootstrap.bench_iters` 设为 100，与普通 Optimizer Evaluate 一致。默认两个
 阶段（先 1 case，再 5 cases）都使用该性能采样预算，并共用单 Shape、最多 16 批并发的执行器和
-Agate 重试策略。网络错误重试原请求；`logs_unavailable` 且后端成功时，只重提失败批次并获取新
-Job ID，按 5/10/20/40 秒退避，之后每 60 秒持续重试。Candidate 校验和正确性失败不按基础设施
-错误重试。
+Agate 重试策略。网络错误重试原请求；终态失败明确标记为 `error_class=infra` 时，只重提失败
+批次并获取新 Job ID，按 5/10/20/40 秒退避，之后每 60 秒持续重试，直到恢复或取消。
+已完成的同组批次保持不变，不推进 Session Recovery Generation；权威和 Agent ABBA 同样适用。
+Candidate 校验、编译和正确性失败、未分类错误及已取消的 Job 不按基础设施错误重试。
 
 普通 Attempt 使用 `kernel_retention_comparison`：
 

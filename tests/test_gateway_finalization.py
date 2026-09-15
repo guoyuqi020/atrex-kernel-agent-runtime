@@ -262,11 +262,11 @@ def _subject(attempt_id: object) -> BootstrapGatewaySubject:
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("lost_logs", [False, True])
+@pytest.mark.parametrize("failure_reason", [None, "logs_unavailable", "exec_failed"])
 async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-    lost_logs: bool,
+    failure_reason: str | None,
 ) -> None:
     delays: list[float] = []
     fetched: list[str] = []
@@ -283,12 +283,12 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
         ) -> dict[str, object]:
             fetched.append(job_id)
             job = super().get_job(job_id, wait, timeout, include_spec)
-            if lost_logs and job_id == "ev_final_0":
+            if failure_reason is not None and job_id == "ev_final_0":
                 return {
                     "job_id": job_id,
                     "status": "failed",
                     "error": {
-                        "error_class": "infra", "reason": "logs_unavailable",
+                        "error_class": "infra", "reason": failure_reason,
                         "details": {"backend_state": "succeeded"},
                     },
                 }
@@ -355,18 +355,19 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert recovered == outcome
     assert outcome.correct is True
     assert outcome.latency_us == 7.5
-    expected_jobs = 6 if lost_logs else 5
+    expected_jobs = 6 if failure_reason is not None else 5
     assert len(client.submitted) == expected_jobs
     assert len(fetched) == len(set(fetched)) == expected_jobs
-    assert delays == ([5] if lost_logs else [])
+    assert delays == ([5] if failure_reason is not None else [])
     assert len({r["idempotency_key"] for r in client.submitted}) == expected_jobs
     assert [
         len(request["reference"]["shapes"])
         for request in client.submitted  # type: ignore[index]
     ] == [1] * expected_jobs
-    if lost_logs:
+    if failure_reason is not None:
+        prefix = "logs-retry:" if failure_reason == "logs_unavailable" else "infra-retry:"
         replacement = next(
-            r for r in client.submitted if str(r["idempotency_key"]).startswith("logs-retry:")
+            r for r in client.submitted if str(r["idempotency_key"]).startswith(prefix)
         )
         assert {k: v for k, v in replacement.items() if k != "idempotency_key"} == {
             k: v for k, v in client.submitted[0].items() if k != "idempotency_key"

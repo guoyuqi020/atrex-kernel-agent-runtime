@@ -22,7 +22,6 @@ from atrex_runtime.domain.models import (
     KernelRevision,
 )
 from atrex_runtime.gateway.abba import (
-    AbbaBatchFailure,
     AgateSameAllocationAbbaRunner,
     CommitPinnedAtrexBenchEvaluator,
 )
@@ -486,12 +485,16 @@ async def _run_pair(
 
 
 @pytest.mark.anyio
-async def test_transient_abba_batch_is_retried_up_to_the_ceiling(
+async def test_terminal_infra_abba_batch_recovers_inside_shared_job_boundary(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Ten consecutive transient failures still converge, which is the whole retry budget."""
-    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+    delays: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
     client = FlakyAgateClient(10)
 
     result, journal = await _run_pair(client, tmp_path)
@@ -500,36 +503,33 @@ async def test_transient_abba_batch_is_retried_up_to_the_ceiling(
     retries = [
         payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
     ]
-    assert len(retries) == 10
-    retry = retries[0]
-    assert isinstance(retry, dict)
-    assert retry["error_class"] == "infra"
-    assert retry["reason"] == "no_result"
-    assert retry["trace_id"] == "req-8567eddfc34a"
-    assert retry["retryable"] is True
-    assert retry["max_retries"] == 10
-    assert "result begin marker not found" in str(retry["detail"])
-    # The attempt counter is per batch, so it climbs from 1 on whichever batch is retried.
-    assert all(isinstance(item, dict) and 1 <= int(str(item["attempt"])) <= 10 for item in retries)
+    assert retries == []  # The outer malformed-result retry budget is untouched.
+    assert len(client.requests) == 16  # Six measured batches plus ten replacements.
+    assert len(delays) == 10
+    assert all(delay in {5, 10, 20, 40, 60} for delay in delays)
     assert any(kind == "comparison.abba_completed" for kind, _, _ in journal.events)
     assert result.gateway_result_digest is not None
 
 
 @pytest.mark.anyio
-async def test_transient_abba_batch_gives_up_past_the_ceiling(
+async def test_terminal_infra_abba_batch_does_not_exhaust_outer_retry_budget(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """One failure past the budget propagates, so an unavailable Agate cannot hang selection."""
-    monkeypatch.setattr("atrex_runtime.gateway.abba._ABBA_RETRY_DELAY_SECONDS", 0.0)
+    async def sleep(_delay: float) -> None:
+        return None
 
-    with pytest.raises(BaseExceptionGroup) as caught:
-        await _run_pair(FlakyAgateClient(11 * 2), tmp_path)
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
+    client = FlakyAgateClient(22, error={
+        "error_class": "infra", "reason": "exec_failed",
+        "message": "runtime_env setup failed: Could not create the actor",
+    })
+    result, journal = await _run_pair(client, tmp_path)
 
-    failures = [error for error in caught.value.exceptions if isinstance(error, AbbaBatchFailure)]
-    assert failures
-    assert all(failure.retryable for failure in failures)
-    assert "reason=no_result" in str(failures[0])
+    assert client.remaining_failures == 0
+    assert len(client.requests) == 28
+    assert all(run.correct for run in result.candidate_runs)
+    assert not any(kind == "comparison.abba_batch_retried" for kind, _, _ in journal.events)
 
 
 @pytest.mark.anyio
@@ -607,9 +607,11 @@ async def test_abba_poll_error_retries_with_a_fresh_job(
 
 
 @pytest.mark.anyio
-async def test_abba_lost_logs_resubmit_beyond_general_retry_ceiling(
+@pytest.mark.parametrize("reason", ["logs_unavailable", "exec_failed"])
+async def test_abba_terminal_infra_resubmits_beyond_general_retry_ceiling(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    reason: str,
 ) -> None:
     delays: list[float] = []
     polled: list[str] = []
@@ -634,7 +636,7 @@ async def test_abba_lost_logs_resubmit_beyond_general_retry_ceiling(
                     "status": "failed",
                     "error": {
                         "error_class": "infra",
-                        "reason": "logs_unavailable",
+                        "reason": reason,
                         "details": {"backend_state": "succeeded"},
                     },
                 }

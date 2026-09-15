@@ -237,9 +237,12 @@ shallower budget shifts the same Kernel's latency by tens of percent on slow ope
 The supplied policies use `bootstrap.bench_iters=100`, matching ordinary Optimizer Evaluate.
 Both default Bootstrap stages (1 then 5 correctness cases) use this sampling budget. Each stage
 uses the same one-Shape/sixteen-concurrent-batch executor and shared Agate retry policy as ordinary
-Evaluate. Transport failures retry the request; `logs_unavailable` with a successful backend
-resubmits only the failed batch with a new Job ID, using 5/10/20/40-second backoff then 60 seconds
-indefinitely. Candidate validation and correctness failures are not infrastructure retries.
+Evaluate. Transport failures retry the request; terminal failures explicitly classified as
+`error_class=infra` resubmit only the failed batch with a new Job ID, using 5/10/20/40-second
+backoff then 60 seconds indefinitely until recovery or cancellation. Completed sibling batches
+are retained, without advancing Session recovery generations. This also applies to authoritative
+and Agent ABBA. Candidate validation, compilation and correctness failures, unclassified errors,
+and cancelled Jobs are not infrastructure retries.
 
 An ordinary Attempt uses `kernel_retention_comparison`:
 

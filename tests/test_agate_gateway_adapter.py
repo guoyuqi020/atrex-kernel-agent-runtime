@@ -917,8 +917,9 @@ async def test_eval_schedules_with_agate_gpu_while_agent_context_uses_arch(
 
 
 @pytest.mark.anyio
-async def test_lost_logs_resubmit_only_failed_shape_jobs(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("reason", ["logs_unavailable", "exec_failed", "deps_install_failed"])
+async def test_infrastructure_failure_resubmits_only_failed_shape_jobs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, reason: str,
 ) -> None:
     class DelayedLogsClient(FakeAgateClient):
         def get_job(
@@ -933,7 +934,7 @@ async def test_lost_logs_resubmit_only_failed_shape_jobs(
                     "result": None,
                     "error": {
                         "error_class": "infra",
-                        "reason": "logs_unavailable",
+                        "reason": reason,
                         "details": {"backend_state": "succeeded", "gc_deferred": True},
                     },
                 }
@@ -951,13 +952,12 @@ async def test_lost_logs_resubmit_only_failed_shape_jobs(
     candidate.mkdir()
     (candidate / "kernel.py").write_text("class Model: pass\n")
     attempt_id = new_attempt_id()
+    request = GatewayAdapterRequest(
+        attempt_id, GatewayOperation.EVALUATE, "terminal-infra",
+        digest("candidate"), candidate, None, None, None,
+    )
     try:
-        result = await adapter.execute(
-            GatewayAdapterRequest(
-                attempt_id, GatewayOperation.EVALUATE, "delayed-logs",
-                digest("candidate"), candidate, None, None, None,
-            )
-        )
+        result = await adapter.execute(request)
         assert result.evaluation is not None and result.evaluation.correct
         assert result.evaluation.latency_us == pytest.approx(math.sqrt(2000 * 4000))
         assert len(raw.submitted) == 3  # Only the failed Shape needs a replacement.
@@ -967,26 +967,31 @@ async def test_lost_logs_resubmit_only_failed_shape_jobs(
         ]
         assert delays == [5]
         assert len({p["idempotency_key"] for _, p in raw.submitted}) == 3
+        prefix = "logs-retry:" if reason == "logs_unavailable" else "infra-retry:"
         replacement = next(p for _, p in raw.submitted
-                           if str(p["idempotency_key"]).startswith("logs-retry:"))
+                           if str(p["idempotency_key"]).startswith(prefix))
         original = raw.requests_by_job["ev_test"]
         assert {k: v for k, v in replacement.items() if k != "idempotency_key"} == {
             k: v for k, v in original.items() if k != "idempotency_key"
         }
         for job_id, *_ in raw.fetched:
             assert jobs.require_owned(attempt_id, job_id).attempt_id == attempt_id
+        # Replay walks existing bindings, including the failed Job's replacement.
+        replayed = await adapter.execute(request)
+        assert replayed.evaluation == result.evaluation
+        assert len(raw.submitted) == 3
     finally:
         jobs.close()
 
 
 @pytest.mark.anyio
-async def test_failed_eval_job_remains_an_infrastructure_outcome(tmp_path: Path) -> None:
+async def test_unclassified_failed_eval_job_is_not_resubmitted(tmp_path: Path) -> None:
     client = FakeAgateClient(
         {
             "job_id": "ev_test",
             "status": "failed",
             "error": {
-                "error_class": "infra",
+                "error_class": "unknown",
                 "reason": "deps_install_failed",
                 "details": {"private_log": "must not reach the Agent"},
             },

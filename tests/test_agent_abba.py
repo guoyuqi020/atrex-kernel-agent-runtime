@@ -129,9 +129,10 @@ class FakeAgate:
                                                    "details": {"logs_tail": _PRIVATE}})
             elif self.failure == "queued":
                 job.update(status="running", result=None)
-            elif self.failure == "logs_once" and len(self.requests) == 1:
+            elif self.failure in {"logs_once", "infra_once"} and len(self.requests) == 1:
                 job.update(status="failed", error={
-                    "error_class": "infra", "reason": "logs_unavailable",
+                    "error_class": "infra",
+                    "reason": "logs_unavailable" if self.failure == "logs_once" else "exec_failed",
                     "details": {"backend_state": "succeeded"},
                 })
             self.jobs[job_id] = job
@@ -418,20 +419,22 @@ async def test_agent_abba_caps_shape_batch_concurrency(case: Case) -> None:
 
 
 @pytest.mark.anyio
-async def test_agent_abba_log_recovery_retains_exact_schedule_and_source(
-    case: Case, monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize("failure", ["logs_once", "infra_once"])
+async def test_agent_abba_infra_recovery_retains_exact_schedule_and_source(
+    case: Case, monkeypatch: pytest.MonkeyPatch, failure: str,
 ) -> None:
     async def no_delay(_seconds: float) -> None:
         return None
 
     monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", no_delay)
-    case.client.failure = "logs_once"
+    case.client.failure = failure
     result = await case.adapter.execute(case.request)
     assert result.worker_result["correct"] is True
     assert len(case.client.requests) == 3
     original = case.client.requests[0]
+    prefix = "logs-retry:" if failure == "logs_once" else "infra-retry:"
     retried = next(row for row in case.client.requests
-                   if row["idempotency_key"].startswith("logs-retry:"))
+                   if row["idempotency_key"].startswith(prefix))
     assert retried["files"] == original["files"]
 
 
