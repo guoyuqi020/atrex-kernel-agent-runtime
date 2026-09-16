@@ -41,6 +41,7 @@ from .contract import (
 from .control_models import GatewayOperation
 from .correctness import correctness_summary
 from .job_recovery import JobExecution, run_with_job_recovery
+from .oss_client import OssAgateClient
 from .private_results import (
     project_candidate_rejection,
     project_compile_job,
@@ -224,7 +225,7 @@ def load_agate_sdk(
             config.secret_key.get_secret_value(),
         )
     client = client_type(config.base_url, auth=auth, timeout=config.http_timeout_s)
-    return cast(AgateClient, RetryingAgateClient(client)), builder
+    return cast(AgateClient, OssAgateClient(RetryingAgateClient(client))), builder
 
 
 @dataclass(frozen=True, slots=True)

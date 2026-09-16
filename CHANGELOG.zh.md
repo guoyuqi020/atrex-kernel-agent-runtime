@@ -6,6 +6,9 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- 超限的 Dev 文件映射自动走 Agate OSS，覆盖源码树 Agent/权威 ABBA。执行前校验归档校验和并
+  还原精确文件；上传各阶段独立重试，不改变逻辑请求身份和测量策略。
+
 - 新增 Agent `evaluate.comparison`（`method="abba"`）：Core 与 KDA 从工作区文件或目录上传
   A/B 两份 Kernel。Runtime 封存源码，并通过 Agate `dev` 使用固定版本评测器及相同输入运行
   测试；记录逐侧测量与相对

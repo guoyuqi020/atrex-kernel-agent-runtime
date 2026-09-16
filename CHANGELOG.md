@@ -6,6 +6,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Automatically upload oversized Dev file maps through Agate OSS, including both source-tree
+  ABBA paths. A checksum-verified archive restores exact files before execution; upload stages
+  retry independently without changing logical request identity or measurement policy.
+
 - Added Agent `evaluate.comparison` with `method="abba"`, using two workspace Kernel files
   (or directories) through Agate `dev`. Core and KDA upload A/B sources; Runtime seals both,
   uses its pinned evaluator and shared input contract, and records per-side measurements and

@@ -1905,7 +1905,7 @@ def test_published_agate_sdk_loads_through_production_factory() -> None:
         )
     )
 
-    assert type(client).__module__ == "atrex_runtime.gateway.retrying_client"
+    assert type(client).__module__ == "atrex_runtime.gateway.oss_client"
     assert type(client.wrapped_client).__module__ == "atrex_gateway_client.client"  # type: ignore[attr-defined]
     assert builder.__module__ == "atrex_gateway_client.payload"
 

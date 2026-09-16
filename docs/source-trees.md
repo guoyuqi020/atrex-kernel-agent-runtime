@@ -75,6 +75,15 @@ root, private input generator/shapes and Gate options are staged together. This 
 Evaluate operation in the durable journal, not Agent-controlled Dev evidence. Native single-file
 Eval transport remains unchanged.
 
+The common SDK submission boundary automatically moves Dev file maps larger than 4 MiB
+(decoded UTF-8 bytes, including both ABBA snapshots and the evaluator) to Agate OSS. Runtime
+creates one deterministic ZIP, calls `prepare_uploads` and `upload_file`, and attaches its opaque
+reference via `oss_files`. A small inline bootstrap verifies SHA-256 and restores the exact paths
+before the original command runs. Upload preparation, PUT and submission follow the usual retry
+policy independently; submission retries reuse the uploaded reference. Logical request/cache
+identity, Gate inputs and same-allocation ABBA semantics do not change. No additional Agent tool,
+OSS credentials or configuration is required; the Agate service must support the SDK upload API.
+
 Supported: full Evaluate, `correctness_only`, custom input/shape overrides, ordinary repeated
 measurement, Agent exploratory ABBA, and Runtime authoritative ABBA. In ABBA every step gets a
 fresh source directory, a fresh process and independent JIT caches within the same allocation.

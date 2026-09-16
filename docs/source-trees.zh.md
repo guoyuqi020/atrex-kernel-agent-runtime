@@ -56,6 +56,13 @@ Agent 工具接口不变，Core/KDA 原有目录 Bundle 提交能力可直接使
 整棵源码、适配器、包根路径、私有输入/Shape 和 Gate 参数。Journal 中仍记为逻辑 Evaluate，
 不是 Agent 自由运行 Dev 后自报的证据。原单文件任务继续使用原生 Agate Eval。
 
+公共 SDK 提交层会将超过 4 MiB 的 Dev 文件映射自动改走 Agate OSS；上限按解码后的 UTF-8
+字节数统计，包含 ABBA 两侧源码和评测器。Runtime 创建确定性 ZIP，通过 `prepare_uploads`
+和 `upload_file` 上传，再用 `oss_files` 携带不透明引用。少量 inline 引导代码先校验 SHA-256，
+按原路径还原文件，再执行原命令。预约、PUT、提交分别沿用退避重试；提交重试复用已上传引用。
+逻辑请求和缓存身份、Gate 输入、同 allocation ABBA 语义均不改变。无需增加 Agent 工具、
+OSS 凭证或配置项，但 Agate 服务必须支持 SDK 上传接口。
+
 已支持 full、`correctness_only`、自定义输入/Shape、普通重复评测、Agent 探索 ABBA，以及
 Runtime 权威 ABBA。ABBA 各步在同一 allocation 中使用不同的源码副本、独立进程和独立 JIT
 缓存，沿用整段测量的锁频策略，防止 A/B 模块与缓存混用。

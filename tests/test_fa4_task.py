@@ -21,11 +21,100 @@ from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.domain.models import Dsl
 from atrex_runtime.gateway.abba import CommitPinnedAtrexBenchEvaluator, build_abba_source_request
 from atrex_runtime.gateway.contract import AgateEvaluationContractV1
+from atrex_runtime.gateway.oss_client import AGATE_MAX_INLINE_DEV_BYTES, OssAgateClient
 from atrex_runtime.gateway.source_tree import SourceTreeAgateClient, attach_source_tree
 from atrex_runtime.kernel_sources import KernelSourceBundle, SourceManifest, import_source_tree
 from atrex_runtime.workers.problem_generalization import validate_public_operator_contract
 
 INPUTS = REPOSITORY / "data/FA4"
+
+
+def test_real_fa4_abba_uses_oss_and_restores_both_complete_snapshots(
+    tmp_path: Path, runner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from atrex_runtime.gateway import oss_remote
+
+    workspace = tmp_path / "FA4"
+    runner.prepare(INPUTS, workspace, None, None)
+    settings = RuntimeSettings.from_file(workspace / "runtime.json")
+    evaluator = CommitPinnedAtrexBenchEvaluator(
+        **settings.campaign.gate_policy.evaluator.model_dump(exclude={"agate_package_version"})
+    )
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    imported = import_source_tree(
+        workspace / "task/source_manifest.json", workspace / "source", artifacts
+    )
+    source = KernelSourceBundle(
+        imported.validate_tree(artifacts.verify(imported.seed_digest).payload_path),
+        imported,
+        "kernel.py",
+    )
+    hot = "vendor/flash_attention/flash_attn/cute/sm100_hd256_2cta_fmha_forward.py"
+    candidate = KernelSourceBundle(
+        {**source.files, hot: source.files[hot] + "\n# candidate-only change\n"},
+        imported,
+        "kernel.py",
+    )
+    contract = AgateEvaluationContractV1.model_validate_json(
+        (workspace / "evaluation-contract.json").read_bytes()
+    )
+    payload = build_abba_source_request(
+        hardware_target="L20D",
+        contract=contract,
+        shape_ids=["0"],
+        schedule=[
+            {"revision": side, "repeat": i // 2}
+            for i, side in enumerate(["incumbent", "candidate", "candidate", "incumbent"])
+        ],
+        incumbent_source=source,
+        candidate_source=candidate,
+        evaluator_files=evaluator.files(),
+        per_run_timeout_seconds=120,
+        allocation_timeout_seconds=600,
+    )
+    assert (
+        sum(len(text.encode()) for text in payload["files"].values()) > AGATE_MAX_INLINE_DEV_BYTES
+    )
+    remote = tmp_path / "remote"
+    remote.mkdir()
+    uploaded = []
+
+    def prepare(gpu, files, *, kind):
+        assert gpu == "L20D" and kind == "dev" and len(files) == 1
+        return {
+            "job_id": "dv_reserved",
+            "uploads": [
+                {
+                    "path": files[0]["path"],
+                    "put_url": "https://oss.example.test/upload",
+                    "upload_ref": "opaque-reference",
+                }
+            ],
+        }
+
+    def upload(url, path):
+        uploaded.append(Path(path).read_bytes())
+
+    wire = OssAgateClient(
+        SimpleNamespace(
+            prepare_uploads=prepare,
+            upload_file=upload,
+            submit_job=lambda kind, request: request,
+        )
+    ).submit_job("dev", payload)
+    assert len(uploaded) == 1
+    assert sum(len(text.encode()) for text in wire["files"].values()) < AGATE_MAX_INLINE_DEV_BYTES
+    assert wire["command"].endswith(f"&& (\n{payload['command']}\n)")
+    attachment = wire["oss_files"][0]
+    archive = remote / attachment["path"]
+    archive.write_bytes(uploaded[0])
+    monkeypatch.chdir(remote)
+    oss_remote.unpack(archive, wire["command"].split()[3])
+    for path, text in payload["files"].items():
+        assert (remote / path).read_bytes() == text.encode("utf-8")
+    assert (remote / "snapshots/incumbent" / hot).read_bytes() != (
+        remote / "snapshots/candidate" / hot
+    ).read_bytes()
 
 
 @pytest.fixture

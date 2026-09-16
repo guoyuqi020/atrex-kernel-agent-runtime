@@ -52,6 +52,17 @@ class RetryingAgateClient:
     def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
         return self._call("submit_job", lambda: self._client.submit_job(kind, request))  # type: ignore[attr-defined]
 
+    def prepare_uploads(
+        self, gpu: str, files: list[dict[str, object]], *, kind: str = "dev"
+    ) -> dict[str, object]:
+        return self._call(
+            "prepare_uploads",
+            lambda: self._client.prepare_uploads(gpu, files, kind=kind),  # type: ignore[attr-defined]
+        )
+
+    def upload_file(self, url: str, path: str) -> None:
+        self._call("upload_file", lambda: self._client.upload_file(url, path))  # type: ignore[attr-defined]
+
     def get_job(
         self,
         job_id: str,
@@ -110,9 +121,7 @@ class RetryingAgateClient:
                         _MAX_BACKOFF_SECONDS,
                         _INITIAL_BACKOFF_SECONDS * (2 ** (error_count - 1)),
                     )
-                    retry_state = (
-                        f"{error_count}/{_EXPONENTIAL_BACKOFF_ERROR_LIMIT}"
-                    )
+                    retry_state = f"{error_count}/{_EXPONENTIAL_BACKOFF_ERROR_LIMIT}"
                 else:
                     delay = _STEADY_RETRY_SECONDS
                     retry_state = f"persistent attempt {error_count}"
