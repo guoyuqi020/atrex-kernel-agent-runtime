@@ -15,6 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from atrex_runtime.ablation_plan import build_ablation_plan
 from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.bootstrap import CampaignSpecV3
 from atrex_runtime.composition.bootstrap import build_optimizer_base_loader
@@ -78,9 +79,12 @@ def prepare(inputs: Path, workspace: Path, backend: str | None, port: int | None
     if integrity is not None:
         verify_assets(inputs, integrity["files_sha256"])
     definition = json.loads((inputs / "campaign.json").read_text())
-    CampaignSpecV3.model_validate(definition)
+    spec = CampaignSpecV3.model_validate(definition)
     if len(definition["lineages"]) != 1:
         raise ValueError("This source-tree task runner requires exactly one DSL Lineage")
+    if not spec.first_epoch_same_agent:
+        raise ValueError("This source-tree task runner requires first_epoch_same_agent=true")
+    ablation = build_ablation_plan({"schedule": {**definition, "event_only": True}})
     manifest = SourceManifest.model_validate_json(
         (inputs / "task/source_manifest.json").read_bytes()
     )
@@ -169,6 +173,7 @@ def prepare(inputs: Path, workspace: Path, backend: str | None, port: int | None
             lock_clocks=gate["lock_clocks"],
         )
         write_json(stage / "campaign.json", definition)
+        write_json(stage / "ablation.json", ablation)
         write_json(stage / "evaluation-contract.json", contract.model_dump(mode="json"))
         write_json(stage / "runtime.json", template)
         # Validate paths against their final directory while loading the staged local evaluator.
@@ -242,6 +247,10 @@ def prepare(inputs: Path, workspace: Path, backend: str | None, port: int | None
                     "production_gate": gate["production_gate"],
                     "seed_static_policy_violations": list(policy_violations),
                     "gpu_jobs_submitted": 0,
+                    "ablation_arm_count": len(ablation["arms"]) + 1,
+                    "ablation_optimizer_attempt_budget_per_trajectory": ablation[
+                        "optimizer_attempt_budget_per_trajectory"
+                    ],
                 },
             )
         stage.rename(workspace)
@@ -329,19 +338,26 @@ def run_cli(arguments: list[str], *, output: Path | None = None) -> object:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "role", choices=("prepare", "smoke", "serve", "bootstrap", "campaign", "inspect")
+        "role",
+        choices=("prepare", "smoke", "serve", "bootstrap", "campaign", "ablation", "inspect"),
     )
     parser.add_argument("--inputs", type=Path, default=REPOSITORY / "data/FA4")
     parser.add_argument("--workspace", type=Path, default=REPOSITORY / "workspaces/FA4")
     parser.add_argument("--backend", choices=("claude", "codex", "qodercli", "pi"))
     parser.add_argument("--port", type=int)
-    parser.add_argument("--target-epoch", type=int, default=1)
+    parser.add_argument(
+        "--target-epoch",
+        type=int,
+        help="absolute main-arm target; defaults to 1 for campaign and 5 for ablation",
+    )
     parser.add_argument(
         "--smoke-mode", choices=("upstream-p128", "target"), default="upstream-p128"
     )
     parser.add_argument("--shape-id", default="0")
     args = parser.parse_args()
-    if args.target_epoch < 1 or (args.port is not None and not 1 <= args.port <= 65535):
+    if (args.target_epoch is not None and args.target_epoch < 1) or (
+        args.port is not None and not 1 <= args.port <= 65535
+    ):
         parser.error("target-epoch must be positive and port must be 1..65535")
     if args.role != "prepare" and (args.backend is not None or args.port is not None):
         parser.error(
@@ -364,6 +380,26 @@ def main() -> None:
 
         runtime_main(["serve", "--config", str(config)])
         return
+    if args.role == "ablation":
+        target_epoch = 5 if args.target_epoch is None else args.target_epoch
+        subprocess.run(
+            [
+                sys.executable,
+                str(REPOSITORY / "scripts/source-tree/run.py"),
+                "--workspace",
+                str(workspace / "ablation-run"),
+                "--config",
+                str(config),
+                "--campaign",
+                str(workspace / "campaign.json"),
+                "--plan",
+                str(workspace / "ablation.json"),
+                "--target-epoch",
+                str(target_epoch),
+            ],
+            check=True,
+        )
+        return
     if args.role in {"bootstrap", "campaign"}:
         result = run_cli(
             ["bootstrap", "--config", str(config), "--campaign", str(workspace / "campaign.json")],
@@ -379,7 +415,7 @@ def main() -> None:
                 "--campaign",
                 result["campaign_id"],
                 "--target-epoch",
-                str(args.target_epoch),
+                str(1 if args.target_epoch is None else args.target_epoch),
             ],
             output=workspace / "epoch-result.json",
         )

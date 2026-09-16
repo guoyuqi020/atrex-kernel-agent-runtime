@@ -38,6 +38,8 @@ data/FA4/
 └── runtime.template.json
 ```
 
+准备时还会用公共生产拓扑生成并冻结 `ablation.json`。
+
 离线封装的 Source Commit 是 `7b077cf391a98a06ad9464530f0a4c9c7be3f477`；它与上游 Commit 不同，因为封装加入了 Quack 依赖和来源记录，但没有修改原始 FA4 源码。Evaluator Commit 是 `ed449b63ecd8aeff4db23be0d9f658d7d50b1cfa`，来自提供的新版评测器，不使用 runtime 当前的 `third_party/atrex-bench`。准备时会验证文件 SHA256、两个 Commit，以及封装的全部 70 个 Source 和 32 个 Evaluator 文件，并实际加载封存的 Optimizer、Evolver 和 Evaluator。详细核对与评测策略差异见 [资料对齐记录](ALIGNMENT.zh.md)。
 
 ## 评测策略和限制
@@ -90,7 +92,23 @@ python3 scripts/source-tree/task.py campaign --target-epoch 1
 python3 scripts/source-tree/task.py inspect
 ```
 
-默认每个 Branch 一条 Trajectory，每个 Epoch 串行 3 个 Attempt；Epoch 1 仅 Active，从 Epoch 2 开始加入一个 Evolver 生成的 Challenger。想继续实验可运行 `campaign --target-epoch 3`；这是绝对目标 Epoch，不是额外运行三轮。不要为同一个 Campaign 同时运行两个 Scheduler。
+主 Campaign 默认每个 Branch 一条 Trajectory，每个 Epoch 串行 3 个 Attempt。Epoch 1 将同一个
+Agent Revision 复制到相互隔离的 Active 和 Challenger 副本分支，不调用 Evolver；从 Epoch 2
+开始加入一个 Evolver 生成的 Challenger。想继续实验可运行 `campaign --target-epoch 3`；这是
+绝对目标 Epoch，不是额外运行三轮。
+
+如需在同一份冻结 Bootstrap Seed 上启动完整生产消融，保持 Runtime 服务运行并执行：
+
+```bash
+python3 scripts/source-tree/task.py ablation
+```
+
+该入口并行启动七个独立 Campaign Scheduler：`evolve-3`、两个 Isolated、两个 Retained、
+`pool-3` 和 `pool-retained-3`。默认目标为 Epoch 5，保证每条 Trajectory 恰好执行 15 个
+Bootstrap 之后的 Optimizer Attempt。只有 `evolve-3` 调用 Evolver，首个 Epoch 仍是同 Agent
+副本；两个 Pool 臂在唯一 Active Branch 中各运行两条 Trajectory。各臂只共享 `v0`，不共享
+后续历史和可写 State。结果及逐臂日志位于 `workspaces/FA4/ablation-run/`。不要同时运行
+`campaign` 与 `ablation`，也不要为同一个 Campaign 启动两个 Scheduler。
 
 运行目录包含 Task 快照、`source/` 与 `evaluator/` 固定 Git Checkout、`runtime.json`、`evaluation-contract.json`、`prepared.json`、Bootstrap/Epoch 结果和 `state/` 下的 Registry、Artifacts、Workspace 与 Session。不要在固定 Checkout 中优化；Agent 修改的是每次 Session 的 `work/kernel/`。Runtime 鉴权密钥在首次运行时自动生成、保存到权限 0600 的 `runtime-secrets.json`，服务与任务进程复用同一份，不必手动生成。
 

@@ -6,6 +6,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Aligned the FA4 source-tree task with the seven-arm production ablation: Epoch 1 now runs
+  same-Agent Active/Challenger replicas, preparation freezes the six control arms, and the task
+  runner can launch all seven Campaigns with 15 Optimizer Attempts per Trajectory.
+
 - Automatically upload oversized Dev file maps through Agate OSS, including both source-tree
   ABBA paths. A checksum-verified archive restores exact files before execution; upload stages
   retry independently without changing logical request identity or measurement policy.

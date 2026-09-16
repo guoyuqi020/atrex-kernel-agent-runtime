@@ -1,6 +1,6 @@
 {
   "schema_version": 3,
-  "creation_key": "qwen38-fa4-prefill-hd256-two-page-r0-20260915",
+  "creation_key": "qwen38-fa4-prefill-hd256-two-page-r0-ablation-20260916",
   "operator": "flashinfer_trtllm_prefill_attention_fp8",
   "hardware_target": "L20D",
   "evaluation_contract": "evaluation-contract.json",
@@ -8,6 +8,7 @@
   "base_revision": {"commit": "85218b7a94bdcd4e67d74cc74e9c53356a5e500c"},
   "challenger_count": 1,
   "challenger_start_epoch": 2,
+  "first_epoch_same_agent": true,
   "trajectories_per_branch": 1,
   "attempts_per_trajectory": 3,
   "lineages": {

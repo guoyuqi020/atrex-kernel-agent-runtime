@@ -6,6 +6,9 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- FA4 源码树任务与生产七臂消融对齐：Epoch 1 使用同 Agent 的 Active/Challenger 副本；准备阶段
+  冻结六个对照臂；任务入口可启动全部七个 Campaign，每条 Trajectory 固定 15 个 Attempt。
+
 - 超限的 Dev 文件映射自动走 Agate OSS，覆盖源码树 Agent/权威 ABBA。执行前校验归档校验和并
   还原精确文件；上传各阶段独立重试，不改变逻辑请求身份和测量策略。
 

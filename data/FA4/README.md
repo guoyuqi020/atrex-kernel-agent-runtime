@@ -46,7 +46,8 @@ snapshot is not a runtime immutability rule; the Runtime Manifest defines that r
 - `asset-integrity.json`: hashes checked against both supplied packages, including all 70 Source
   files and all 32 Evaluator files. Preparation verifies these and the offline Bundle hashes.
 - `initial-evidence/`, `campaign.json`, `runtime.template.json`: task instructions and independent
-  configuration. Optimizer and Evolver are pinned to the current KDA/Evolver Commits.
+  configuration. Preparation also generates a frozen `ablation.json` from the shared production
+  topology. Optimizer and Evolver are pinned to the current KDA/Evolver Commits.
 
 Preparation verifies offline Commits, source locks, public/private Shapes and the actual
 Optimizer, Evolver and Evaluator import paths. Nothing depends on the original directories
@@ -133,10 +134,25 @@ python3 scripts/source-tree/task.py campaign --target-epoch 1
 python3 scripts/source-tree/task.py inspect
 ```
 
-One Trajectory per Branch, three serial Attempts per Epoch. Epoch 1 is Active-only; from
-Epoch 2 one Evolver-generated Challenger competes with Active. Resume through a later absolute
-target with `campaign --target-epoch 3`; it does not add three Epochs. Never run two Schedulers
-for the same Campaign concurrently.
+The main Campaign has one Trajectory per Branch and three serial Attempts per Epoch. Epoch 1 runs
+the same Agent Revision in isolated Active and Challenger-replica Branches; no Evolver runs.
+From Epoch 2, one Evolver-generated Challenger competes with Active. Resume through a later
+absolute target with `campaign --target-epoch 3`; it does not add three Epochs.
+
+To launch the complete production ablation against the same frozen Bootstrap seed, keep the
+Runtime service running and use:
+
+```bash
+python3 scripts/source-tree/task.py ablation
+```
+
+This starts seven independent Campaign schedulers: `evolve-3`, two Isolated replicas, two Retained
+replicas, `pool-3`, and `pool-retained-3`. The default target is Epoch 5, giving every Trajectory
+exactly 15 post-Bootstrap Optimizer Attempts. `evolve-3` is the only Evolver-enabled arm; its first
+Epoch still uses the same-Agent replica. Pool arms use two Trajectories in one Active Branch.
+All arms share `v0`, but do not share later history or writable State. Results and per-arm logs live
+under `workspaces/FA4/ablation-run/`. Never run `campaign` and `ablation`, or two schedulers for the
+same Campaign, concurrently.
 
 The workspace contains task snapshots, fixed source/evaluator Git Checkouts, generated Runtime
 and Evaluation Contract JSON, `prepared.json`, Bootstrap/Epoch results and `state/` with Registry,

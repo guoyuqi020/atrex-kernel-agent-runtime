@@ -15,6 +15,7 @@ import pytest
 from conftest import digest
 from test_source_tree_example_schedule import REPOSITORY, _module
 
+from atrex_runtime.ablation_plan import build_ablation_plan
 from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.bootstrap import CampaignSpecV3
 from atrex_runtime.config import RuntimeSettings
@@ -145,7 +146,12 @@ def test_fa4_target_contract_and_schedule_are_self_contained() -> None:
     assert spec.hardware_target == "L20D"
     assert set(spec.lineages) == {Dsl.CUTEDSL}
     assert spec.challenger_count == 1 and spec.challenger_start_epoch == 2
+    assert spec.first_epoch_same_agent
     assert spec.attempts_per_trajectory == 3 and spec.trajectories_per_branch == 1
+    plan = build_ablation_plan({"schedule": {**spec.model_dump(mode="json"), "event_only": True}})
+    assert len(plan["arms"]) == 6
+    assert plan["optimizer_attempt_budget_per_trajectory"] == 15
+    assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
     shapes = json.loads((INPUTS / "task/shape_valid.json").read_text())
     assert len(shapes) == 30
     public = json.loads((INPUTS / "task/shape_train.json").read_text())
@@ -192,6 +198,10 @@ def test_preparation_is_offline_preserves_inputs_and_exposes_real_r0(
     assert Path(settings.campaign.gate_policy.evaluator.repository) == workspace / "evaluator"
     spec = CampaignSpecV3.from_file(workspace / "campaign.json")
     assert spec.lineages[Dsl.CUTEDSL].source_repository == workspace / "source"
+    frozen_plan = json.loads((workspace / "ablation.json").read_text())
+    assert frozen_plan == build_ablation_plan(
+        {"schedule": {**spec.model_dump(mode="json"), "event_only": True}}
+    )
     contract = AgateEvaluationContractV1.model_validate_json(
         (workspace / "evaluation-contract.json").read_bytes()
     )
@@ -203,6 +213,8 @@ def test_preparation_is_offline_preserves_inputs_and_exposes_real_r0(
     prepared = json.loads((workspace / "prepared.json").read_text())
     assert prepared["gpu_jobs_submitted"] == 0
     assert prepared["seed_static_policy_violations"]  # Why this task disables that static scan.
+    assert prepared["ablation_arm_count"] == 7
+    assert prepared["ablation_optimizer_attempt_budget_per_trajectory"] == 15
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     source = import_source_tree(
         workspace / "task/source_manifest.json", workspace / "source", artifacts
@@ -363,6 +375,41 @@ def test_modified_task_inputs_fail_before_any_workspace_is_created(tmp_path: Pat
         runner.prepare(inputs, workspace, None, None)
     assert not workspace.exists()
     assert not list(tmp_path.glob(".source-tree-prepare-*"))
+
+
+def test_campaign_and_ablation_roles_use_distinct_default_epoch_targets(
+    tmp_path: Path, runner, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "FA4"
+    runner.prepare(INPUTS, workspace, None, None)
+    cli_calls: list[list[str]] = []
+
+    def run_cli(arguments: list[str], *, output: Path):
+        del output
+        cli_calls.append(arguments)
+        return {"campaign_id": "campaign_" + "0" * 32}
+
+    monkeypatch.setattr(runner, "run_cli", run_cli)
+    monkeypatch.setattr(runner.sys, "argv", ["task.py", "campaign", "--workspace", str(workspace)])
+    runner.main()
+    assert [call[0] for call in cli_calls] == ["bootstrap", "run-campaign"]
+    assert cli_calls[1][cli_calls[1].index("--target-epoch") + 1] == "1"
+
+    calls: list[tuple[list[str], bool]] = []
+
+    def run(command: list[str], *, check: bool) -> None:
+        calls.append((command, check))
+
+    monkeypatch.setattr(runner.subprocess, "run", run)
+    monkeypatch.setattr(runner.sys, "argv", ["task.py", "ablation", "--workspace", str(workspace)])
+    runner.main()
+    assert len(calls) == 1 and calls[0][1]
+    command = calls[0][0]
+    assert command[:2] == [runner.sys.executable, str(REPOSITORY / "scripts/source-tree/run.py")]
+    assert command[command.index("--workspace") + 1] == str(workspace / "ablation-run")
+    assert command[command.index("--campaign") + 1] == str(workspace / "campaign.json")
+    assert command[command.index("--plan") + 1] == str(workspace / "ablation.json")
+    assert command[command.index("--target-epoch") + 1] == "5"
 
 
 def test_smoke_stages_original_scripts_source_and_inputs_and_cleans_up(
