@@ -6,6 +6,9 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Evolver 按 Lineage/Backend 持续 resume 原生会话，跨进化、串行 Challenger 构建、基础设施重试和
+  控制器重启保留历史；每次仍加载新的输入和 Candidate，Trace 与用量不重复计入历史内容。
+
 - 明确 Evolver 不限于修复上轮改动，也可分析已完成 Optimizer Trajectory，依据具体运行行为
   判断是否新增能力或修改 Candidate 代码以帮助 Kernel 优化。
 

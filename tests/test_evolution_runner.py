@@ -2174,6 +2174,136 @@ Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
     assert value["secondary_home"] == value["home"]
 
 
+@pytest.mark.anyio
+@pytest.mark.parametrize("backend", ("claude", "codex", "qodercli", "pi"))
+@pytest.mark.parametrize("fail_first", (False, True))
+async def test_real_bundle_resumes_lineage_history_across_parent_revisions(
+    tmp_path: Path, backend: str, fail_first: bool,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request = _request(artifacts, tmp_path)
+    provider_bin = tmp_path / "bin"
+    provider_bin.mkdir()
+    fake_provider = provider_bin / backend
+    fake_provider.write_text("""#!/usr/bin/env python3
+import json
+import os
+import sys
+import uuid
+from pathlib import Path
+
+backend = Path(sys.argv[0]).name
+home = Path(os.environ['HOME'])
+assert not any(key.startswith('ATREX_') for key in os.environ)
+resumed = '--resume' in sys.argv or (backend == 'codex' and 'resume' in sys.argv)
+if backend in ('claude', 'qodercli'):
+    flag = '--resume' if resumed else '--session-id'
+    session_id = sys.argv[sys.argv.index(flag) + 1]
+    native = (home / ('.claude' if backend == 'claude' else '.qoder')
+              / 'projects/test' / (session_id + '.jsonl'))
+elif backend == 'codex':
+    session_id = sys.argv[-2] if resumed else str(uuid.uuid4())
+    native = Path(os.environ['CODEX_HOME']) / 'sessions' / ('rollout-' + session_id + '.jsonl')
+else:
+    native = Path(sys.argv[sys.argv.index('--session') + 1])
+    resumed = native.exists()
+    session_id = 'pi-session'
+assert native.exists() == resumed
+native.parent.mkdir(parents=True, exist_ok=True)
+count = len(native.read_text().splitlines()) if native.exists() else 0
+if resumed:
+    assert count > 0  # The CLI actually received the previous native conversation.
+context = json.loads(os.environ['EVOLUTION_REPORT_CONTEXT_JSON'])
+Path('scratch/evolution-report.json').write_text(json.dumps({
+    'proposal_type': 'no_change', 'kernel_agent_revision_id': context['active_revision_id'],
+    'hypothesis': 'No evidence-supported change.', 'expected_effect': 'Retain Active.',
+    'changed_paths': [], 'contributing_paths': [], 'unimplemented_capabilities': [],
+}))
+usage = {'input_tokens': 10, 'output_tokens': 2,
+         'cache_read_input_tokens': 0, 'cache_creation_input_tokens': 0}
+message = {'type': 'assistant', 'message': {'id': 'response-' + str(count), 'role': 'assistant',
+    'content': [{'type': 'text', 'text': 'Current evidence reviewed.'}], 'usage': usage}}
+with native.open('a') as output:
+    if backend == 'codex':
+        if not resumed:
+            output.write(json.dumps({'type': 'session_meta', 'payload': {
+                'id': session_id, 'cwd': str(Path.cwd())}}) + '\\n')
+        total = 2 if resumed else 1
+        output.write(json.dumps({'type': 'event_msg', 'payload': {'type': 'token_count', 'info': {
+            'last_token_usage': {'input_tokens': 10, 'output_tokens': 2},
+            'total_token_usage': {'input_tokens': 10 * total, 'output_tokens': 2 * total},
+        }}}) + '\\n')
+    else:
+        if backend == 'pi' and not resumed:
+            output.write(json.dumps({'type': 'session', 'id': session_id,
+                                     'cwd': str(Path.cwd())}) + '\\n')
+        elif backend == 'pi':
+            header = json.loads(native.read_text().splitlines()[0])
+            assert header['cwd'] == str(Path.cwd())
+        output.write(json.dumps(message) + '\\n')
+if backend == 'codex':
+    print(json.dumps({'type': 'thread.started', 'thread_id': session_id}))
+    print(json.dumps({'type': 'turn.completed', 'usage': {'input_tokens': 10, 'output_tokens': 2}}))
+elif backend == 'pi':
+    print(json.dumps({'type': 'message_end', 'message': {'role': 'assistant', 'usage': usage}}))
+    print(json.dumps({'type': 'agent_settled'}))
+else:
+    print(json.dumps(message))
+    print(json.dumps({'type': 'result', 'usage': usage, 'total_credits': 2}))
+Path('scratch/provider-observation.json').write_text(json.dumps({
+    'resumed': resumed, 'session_id': session_id}))
+sys.exit(1 if FAIL_FIRST and not resumed else 0)
+""")
+    fake_provider.write_text(fake_provider.read_text().replace("FAIL_FIRST", repr(fail_first)))
+    fake_provider.chmod(0o700)
+    bundle = Path(__file__).resolve().parents[1] / "src/atrex-kernel-agent-evolver"
+    bundle_digest = artifacts.put_directory(bundle, ArtifactKind.EVOLVER_BUNDLE)
+    assembler = EvolutionWorkspaceAssembler(
+        tmp_path / "evolutions", artifacts, evolver_bundle_digest=bundle_digest,
+    )
+    config = EvolutionProcessConfig(
+        bundle_commit="0" * 40, bundle_tree="1" * 40,
+        bundle_artifact_digest=bundle_digest,
+        command_argv=(str(Path(sys.executable).resolve()), str(bundle / "src/main.py")),
+        isolated_home_environment_keys=("HOME",),
+        session_trace_relative_path="scratch/evolver-session",
+        token_usage_report_relative_path="scratch/token-usage.json",
+        environment=(("PATH", f"{provider_bin}{os.pathsep}{os.environ['PATH']}"),),
+        timeout_seconds=10, terminate_grace_seconds=1, max_diagnostic_bytes=8192,
+        agent_backend=backend,
+    )
+    first = assembler.prepare(request)
+    first_result = await SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")), config,
+    ).run(first)
+    assert first_result.returncode == (1 if fail_first else 0), first_result.stderr
+    observation = json.loads((first.root / "scratch/provider-observation.json").read_bytes())
+    assert not observation["resumed"]
+    # A new driver and new Parent reproduce a campaign restart after promotion.
+    new_parent = (
+        request.parent_revision if fail_first
+        else replace(request.parent_revision, id=new_kernel_agent_revision_id())
+    )
+    second = assembler.prepare(replace(
+        request, parent_revision=new_parent,
+        agent_catalog=(replace(request.agent_catalog[0], revision=new_parent),),
+    ))
+    second_result = await SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")), config,
+    ).run(second)
+    assert second_result.returncode == 0, second_result.stderr
+    assert json.loads((second.root / "scratch/provider-observation.json").read_bytes())["resumed"]
+    assert second_result.token_usage.consumed == first_result.token_usage.consumed
+    first_session = json.loads((first.root / "scratch/evolver-session/session.json").read_bytes())
+    second_session = json.loads((second.root / "scratch/evolver-session/session.json").read_bytes())
+    assert second_session["session_id"] == first_session["session_id"]
+    assert second_session["resumed_session"] is True
+    if backend == "claude":
+        raw_path = second.root / "scratch/evolver-session/provider/claude-session.raw-jsonl"
+        raw = raw_path.read_text()
+        assert 'response-0' not in raw and 'response-1' in raw
+
+
 def test_prepare_launch_binds_the_runtime_session_timeout(tmp_path: Path) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(

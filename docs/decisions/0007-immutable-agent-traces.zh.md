@@ -8,7 +8,8 @@
 
 ## 背景
 
-每次 Optimizer 和 Evolver 调用都使用全新进程与 Session。Runtime 需要持久来源用于审计、重试归属、
+每次 Optimizer 和 Evolver 调用都使用全新进程与物理 Worker Session。Optimizer 对话仍然全新，
+托管 Evolver 则 resume 同一 Lineage/Backend 的原生对话。Runtime 需要持久来源用于审计、重试归属、
 Evidence，同时不能把隐藏对话连续性带入后续 Session。原始 Provider 历史
 不适合写入 SQLite，单个 Trace 字段也会覆盖重试记录。
 

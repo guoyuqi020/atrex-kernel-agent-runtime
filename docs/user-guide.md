@@ -138,6 +138,12 @@ authoritative Kernel-retention comparison after a Candidate has been registered.
 reuse that Candidate and do not rerun the Optimizer.
 Evolver process exits and infrastructure failures use the same limit and preserve every failed
 Worker Session and Evolution failure trace before retrying in a fresh workspace.
+Evolver continues one native Provider conversation per Lineage and Backend: its first invocation
+creates a session, and later Evolutions and retries resume it explicitly. Promotion and controller
+restarts preserve that conversation. Each invocation still receives a fresh Candidate and current
+frozen Evidence/report context; arbitrary old scratch and Candidate edits are not restored.
+Invocation traces and usage include only new activity. Keep prior Evolution workspaces, which hold
+the native resume state. Optimizer and Bootstrap still start fresh Provider conversations.
 Retrying the same Campaign resumes completed work; changing immutable inputs is rejected.
 The resulting Epoch-0 Evidence exposes only `bootstrap/report.json` and
 `bootstrap/conversation.jsonl` to later Optimizer/Evolver sessions.

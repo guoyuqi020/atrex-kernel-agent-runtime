@@ -130,6 +130,10 @@ Bootstrap 发生进程退出或基础设施错误时，会在 `campaign.max_infr
 Candidate，不会重新运行 Optimizer。
 Evolver 的进程退出和基础设施错误同样使用该上限；Runtime 会先保留失败 Worker Session 和
 Evolution Failure Trace，再使用新 Workspace 重试。
+Evolver 按 Lineage 和 Backend 保留一条原生 Provider 对话：首次新建，后续进化和重试均显式 resume；
+Agent 晋升和控制器重启不重置它。每次调用仍物化新的 Candidate、当轮冻结 Evidence 和报告上下文，
+不会恢复旧 Candidate 修改或任意 scratch。Trace 与用量只计本轮新增活动。请保留之前的 Evolution
+Workspace，原生恢复状态存放在那里。Optimizer 和 Bootstrap 仍使用全新 Provider 对话。
 生成的 Epoch-0 Evidence 对后续 Optimizer/Evolver 只暴露 `bootstrap/report.json` 和
 `bootstrap/conversation.jsonl`。
 

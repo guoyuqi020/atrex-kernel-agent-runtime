@@ -1,4 +1,4 @@
-"""Fixed, stateless Evolver execution and Challenger collection."""
+"""Versioned Evolver execution with Lineage-local conversation continuation."""
 
 from __future__ import annotations
 
@@ -56,6 +56,7 @@ from .evidence_view import (
     EVOLVER_EVIDENCE_PROMPT_TEXT,
     assemble_evolver_evidence_view,
 )
+from .evolution_continuation import EvolutionConversation
 from .launcher import WorkerLauncher, validate_worker_environment
 from .process import BoundedProcessConfig, BoundedProcessRunner
 from .session_trace import enforce_session_trace_retention
@@ -662,6 +663,7 @@ class PreparedEvolution:
     output_path: Path
     parent_revision: KernelAgentRevision
     model: str | None = None
+    conversation_key: str = ""
 
 
 class EvolutionWorkspaceAssembler:
@@ -918,6 +920,7 @@ class EvolutionWorkspaceAssembler:
         manifest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         manifest_path.write_bytes(manifest.canonical_json_bytes())
         os.chmod(manifest_path, 0o400)
+        checkpoint = json.loads((evidence.payload_path / "checkpoint.json").read_bytes())
         return PreparedEvolution(
             run_root,
             control_root,
@@ -927,6 +930,7 @@ class EvolutionWorkspaceAssembler:
             output_path,
             revision,
             request.model,
+            hashlib.sha256(str(checkpoint["lineage_id"]).encode()).hexdigest(),
         )
 
 
@@ -1016,6 +1020,7 @@ class EvolutionProcessConfig:
             "ATREX_AGENT_REASONING_EFFORT",
             "ATREX_AGENT_SESSION_SETTINGS",
             "ATREX_AGENT_MODEL",
+            "ATREX_EVOLVER_RESUME_SESSION_ID",
             "ATREX_EVOLUTION_INPUT",
             "ATREX_EVOLUTION_INPUT_JSON",
             "ATREX_EVOLUTION_WORKSPACE",
@@ -1094,6 +1099,17 @@ class SubprocessEvolutionSessionDriver:
         return await anyio.to_thread.run_sync(self._run_sync, prepared)
 
     def _run_sync(self, prepared: PreparedEvolution) -> EvolutionSessionResult:
+        with self._conversation(prepared).owned():
+            return self._run_owned_sync(prepared)
+
+    def _conversation(self, prepared: PreparedEvolution) -> EvolutionConversation:
+        return EvolutionConversation(
+            prepared.control_root.parents[2],
+            prepared.conversation_key or str(prepared.parent_revision.id),
+            self._config.agent_backend,
+        )
+
+    def _run_owned_sync(self, prepared: PreparedEvolution) -> EvolutionSessionResult:
         launch = self.prepare_launch(prepared)
         command_argv = self._config.command_argv
         argv = self._launcher.wrap(
@@ -1101,6 +1117,7 @@ class SubprocessEvolutionSessionDriver:
             workspace=prepared.root,
             environment=launch.environment,
         )
+        self._conversation(prepared).remember(prepared.root)
         try:
             result = self._processes.run(
                 argv,
@@ -1144,7 +1161,10 @@ class SubprocessEvolutionSessionDriver:
         """Prepare Evolver-owned paths and its exact environment without starting the Agent."""
         environment = dict(self._config.environment)
         agent_home = prepared.root / "scratch/agent-home"
-        agent_home.mkdir(mode=0o700)
+        agent_home.mkdir(mode=0o700, exist_ok=True)
+        resume_session_id = self._conversation(prepared).restore(prepared.root, agent_home)
+        if resume_session_id is not None:
+            environment["ATREX_EVOLVER_RESUME_SESSION_ID"] = resume_session_id
         environment.update(
             {
                 "ATREX_AGENT_BACKEND": self._config.agent_backend,
@@ -1233,7 +1253,7 @@ class EvolverBundleRunner(EvolverRunner):
         self._max_infrastructure_retries = max_infrastructure_retries
 
     async def build_challenger(self, request: BuildChallengerRequest) -> BuildChallengerResult:
-        """Retry transient Evolver infrastructure failures in fresh Sessions."""
+        """Retry in fresh workspaces while continuing the Lineage's native conversation."""
         failures = 0
         while True:
             try:

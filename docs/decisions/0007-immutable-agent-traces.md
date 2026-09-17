@@ -8,7 +8,9 @@ Accepted and implemented.
 
 ## Context
 
-Every Optimizer and Evolver invocation uses a fresh process and Session. Runtime needs durable
+Every Optimizer and Evolver invocation uses a fresh process and physical Worker Session. Optimizer
+conversations are fresh; managed Evolvers resume the Lineage/Backend's native conversation.
+Runtime needs durable
 provenance for audit, retry attribution, and Evidence without carrying
 hidden conversational continuity into later Sessions. Raw provider history is too large for SQLite,
 and a single Trace field would overwrite retries.

@@ -6,6 +6,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Evolver now resumes one native conversation per Lineage/Backend across Evolutions, sequential
+  Challenger construction, infrastructure retries, and controller restarts. Each invocation still
+  receives fresh inputs and a Candidate; traces and usage exclude already recorded history.
+
 - Clarified that Evolvers can discover new Agent capabilities from completed Optimizer
   Trajectories, independently of reviewing previous changes, and add or modify Candidate code
   only when observed behavior supports a concrete optimization benefit.

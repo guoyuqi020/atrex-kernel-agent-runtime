@@ -483,6 +483,13 @@ ABBA 有自己的候选 Trial，但仍是探索性比较，不能替代提名要
 
 ## Evolver 文件系统接口
 
+同一 Lineage/Backend 的 Evolver 保留一条原生会话：首次新建，后续进化、串行 Challenger 构建及基础设施
+重试均按明确身份 resume。每次仍分配独立 Workspace、进程和 Worker Session。Runtime 在内部
+`.control/evolver-sessions/` 保存指向上一工作区原生状态的指针，只向本轮私有 Home 复制 Provider
+Transcript/索引；凭据投影、当轮输入、Candidate 起点、报告校验和 Gate 不变。需保留旧 Evolution
+Workspace；每轮 Session Artifact 和用量只包含新增活动。独立调用可绑定
+`ATREX_EVOLVER_RESUME_SESSION_ID`，托管调用由 Runtime 设置。
+
 Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份按 Lineage 版本索引的冻结文件
 视图。`input/agents/agent-vN/` 是完整 Agent Bundle，直接包含实现、配置及
 `prompts/`、`insights/`、`skills/`、`tools/`。可写 `candidate/` 使用相同布局。

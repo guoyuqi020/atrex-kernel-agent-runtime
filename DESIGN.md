@@ -640,6 +640,7 @@ Epoch N completes
   |
   v
 One Evolver Session produces each Challenger
+  +-- resume the Lineage/Backend's native Evolver conversation after its first invocation
   +-- evolve current Active
   +-- reuse a historical Agent unchanged
   +-- continue evolution from a historical Agent

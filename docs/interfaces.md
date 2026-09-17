@@ -555,6 +555,16 @@ only for readability.
 
 ## Evolver filesystem interface
 
+Each managed Lineage/Backend retains one native Evolver conversation. The first invocation starts
+it; subsequent Evolutions, including sequential Challenger construction and infrastructure
+retries, resume it by explicit identity. A new workspace/process/Worker Session is still allocated
+for each invocation. Runtime's hidden `.control/evolver-sessions/` pointer tracks the latest native
+state in its previous workspace; only Provider transcripts/indexes are copied into the new private
+home. Credential projection, current inputs, Candidate seeding, report validation, and gates stay
+unchanged. Keep previous Evolution workspaces to resume them. Per-invocation Session Artifacts and
+usage contain only newly captured activity, not replayed history. Standalone callers may bind
+`ATREX_EVOLVER_RESUME_SESSION_ID`; managed Runtime owns this binding.
+
 Evolver has no Runtime Tool or Runtime HTTP capability. Runtime materializes one frozen filesystem
 view keyed by Lineage version. `input/agents/agent-vN/` contains one complete Agent Bundle:
 implementation, configuration, and `prompts/`, `insights/`, `skills/`, `tools/`.
