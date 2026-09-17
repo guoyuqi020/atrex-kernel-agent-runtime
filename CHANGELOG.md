@@ -6,6 +6,23 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Clarified that Evolvers can discover new Agent capabilities from completed Optimizer
+  Trajectories, independently of reviewing previous changes, and add or modify Candidate code
+  only when observed behavior supports a concrete optimization benefit.
+
+- Evolvers now review the previous evaluated Agent changes before editing again, tracing new
+  Tool discovery, execution, and use against expected effects without assuming Branch victory
+  proves effectiveness or an unevaluated proposal has failed.
+
+- Added a Runtime-injected next-Optimizer service catalog for Evolvers, with guidance to compose
+  existing services in Candidate code before reporting capability gaps, without granting new
+  Runtime permissions or executing service calls during Evolution.
+
+- Retired Bootstrap/Evolver Direction suggestions. Live `suggest` actions and Evolution
+  `suggested_directions` fields are rejected with repair guidance; historical Journals remain
+  readable. Evolver now focuses on cross-Branch evidence reconciliation and Agent improvements,
+  while Optimizers choose their own Directions.
+
 - Aligned the FA4 source-tree task with the seven-arm production ablation: Epoch 1 now runs
   same-Agent Active/Challenger replicas, preparation freezes the six control arms, and the task
   runner can launch all seven Campaigns with 15 Optimizer Attempts per Trajectory.

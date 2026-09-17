@@ -109,17 +109,10 @@ one of those parents; this records a revised interpretation without changing the
 Ancestry is fixed when the proposal is recorded. To correct it, propose a new derived Direction;
 do not rewrite history. These links describe your interpretation, not proof of a performance gain.
 
-`list-directions` includes Bootstrap- and Evolver-created Directions; use `load-direction` to
-inspect one. A `suggested` Direction is untested and cannot be started,
-measured, or closed. An Optimizer cannot create a suggestion (`action="suggest"`), including in
-its terminal report. To use one, call `update-direction` with `action="propose"`, a complete
-definition, `relationship="adoption"`, and `derived_from_direction_ids` containing its ID.
-For a changed hypothesis use `relationship="refinement"` instead. The new Direction gets its
-own ID and can then be started. Its suggested parent remains unchanged; follow that parent's
-ancestry only when you need to inspect the earlier evidence.
-An unused suggestion is `expired` after its configured eligibility window; one previously adopted
-is `adopted`. Both remain readable but cannot be newly adopted. You may propose a new
-`refinement` citing either as historical context, with a fresh rationale.
+Use `list-directions` to find prior work and `load-direction` to inspect its evidence. Historical
+suggested Directions remain readable; they are untested recommendations, not facts or required
+next steps. No session can create new suggestions. Choose your own hypothesis from
+the public contract, profiling, and Journal evidence, then record it with `action="propose"`.
 
 ## Trust and measurement reuse
 

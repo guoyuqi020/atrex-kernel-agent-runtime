@@ -338,6 +338,15 @@ def test_bootstrap_defers_shared_direction_and_tool_protocols_to_one_contract() 
     assert "Route Runtime-local Trial, source, and result reads" not in prompt
 
 
+def test_execution_prompts_do_not_request_direction_suggestions() -> None:
+    for phase in ("optimization_attempt", "framework_baseline"):
+        prompt = _rendered_prompts()[phase]
+        assert '`action="suggest"` is unsupported in every session' in prompt
+        assert 'with `action="suggest"`' not in prompt
+    baseline = _rendered_prompts()["framework_baseline"]
+    assert "not forecasting later optimization" in baseline
+
+
 def test_optimizer_prompt_builds_the_terminal_report_incrementally() -> None:
     prompt = _rendered_prompts()["optimization_attempt"]
     normalized = " ".join(prompt.split())

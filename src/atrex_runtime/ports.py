@@ -88,7 +88,6 @@ class BuildChallengerResult:
 
     proposal: KernelAgentChallengerProposal
     evolution_trace_digest: ArtifactDigest
-    suggested_directions: tuple[dict[str, object], ...] = ()
 
 
 class EvolverRunner(Protocol):

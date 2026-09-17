@@ -226,13 +226,6 @@ class EpochController:
                     )
                 )
                 evolution_trace_digest = build.evolution_trace_digest
-                if build.suggested_directions:
-                    self._registry.record_epoch_suggested_directions(
-                        epoch.id,
-                        creation_key,
-                        evolution_trace_digest,
-                        build.suggested_directions,
-                    )
                 if isinstance(build.proposal, KernelAgentNoChangeProposal):
                     self._registry.close_challenger_pool(
                         epoch.id,

@@ -6,6 +6,19 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- 明确 Evolver 不限于修复上轮改动，也可分析已完成 Optimizer Trajectory，依据具体运行行为
+  判断是否新增能力或修改 Candidate 代码以帮助 Kernel 优化。
+
+- Evolver 再次修改前先复核上一轮已评估改动，跟踪新工具的发现、运行和实际使用，对照预期效果，
+  不把分支获胜直接当作改动有效，也不把尚未评估的提案视为失败。
+
+- 为 Evolver 注入下一轮 Optimizer 的 Runtime 服务目录，明确可通过 Candidate 代码组合现有服务，
+  再判断真实能力缺口；不新增 Runtime 权限，也不允许在 Evolution 中调用这些服务。
+
+- 移除 Bootstrap/Evolver 主动建议 Direction 的机制：当前 `suggest` 动作和 Evolution 报告的
+  `suggested_directions` 字段均被拒绝并提供修正提示，历史 Journal 仍可读取。Evolver 专注跨分支
+  证据整合、归因纠偏与 Agent 改进，Optimizer 自主选择研究方向。
+
 - FA4 源码树任务与生产七臂消融对齐：Epoch 1 使用同 Agent 的 Active/Challenger 副本；准备阶段
   冻结六个对照臂；任务入口可启动全部七个 Campaign，每条 Trajectory 固定 15 个 Attempt。
 

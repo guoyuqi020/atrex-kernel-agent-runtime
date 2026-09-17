@@ -18,7 +18,11 @@ from atrex_runtime.domain.ids import new_attempt_id, parse_epoch_id
 from atrex_runtime.gateway import GatewayCapabilityPolicy, GatewayOperation
 from atrex_runtime.gateway.control import BootstrapGatewaySubject, BootstrapRunStatus
 from atrex_runtime.gateway.proxy import GatewayAdapterResult
-from atrex_runtime.workers.attempt_report import AttemptExperimentV8, AttemptReportV12
+from atrex_runtime.workers.attempt_report import (
+    AttemptDirectionEventV1,
+    AttemptExperimentV8,
+    AttemptReportV12,
+)
 
 
 @pytest.mark.anyio
@@ -30,12 +34,12 @@ async def test_optimizer_report_cannot_submit_suggested_direction(history: _Hist
     events[0]["action"] = "suggest"
     report = AttemptReportV12.model_validate(value)
 
-    with pytest.raises(ValueError, match="only during Bootstrap"):
+    with pytest.raises(ValueError, match="no longer supported"):
         history.service._journals.validate_report_journal(report)
 
 
 @pytest.mark.anyio
-async def test_bootstrap_suggestion_is_visible_but_not_startable_in_optimizer(
+async def test_bootstrap_suggestion_creation_is_rejected_but_legacy_journal_is_readable(
     history: _History,
 ) -> None:
     epoch = history.registry.get_epoch(history.current.epoch_id)
@@ -72,20 +76,55 @@ async def test_bootstrap_suggestion_is_visible_but_not_startable_in_optimizer(
         "success_criteria": "Correct and faster",
         "stop_conditions": "Incorrect or no measurable gain",
     }
+    body = json.dumps(
+        {
+            "schema_version": 2,
+            "attempt_id": bootstrap_id,
+            "idempotency_key": "bootstrap-suggestion",
+            "operation": "direction_update",
+            "request": suggestion,
+        }
+    ).encode()
+    with pytest.raises(ValueError, match="no longer supported"):
+        await history.service.execute(capability.token, body, operation_scope="journal")
+    assert history.control.list_direction_events(bootstrap_id) == ()
+
+    value = _value(str(bootstrap_id))
+    value["direction_events"][0]["action"] = "suggest"
+    with pytest.raises(ValueError, match="no longer supported"):
+        history.service._journals.validate_report_journal(AttemptReportV12.model_validate(value))
+
+    # Import a pre-removal Journal event through the internal persistence boundary.
+    suggested_id = "direction_" + "c" * 32
+    history.control.append_direction_event(
+        bootstrap_id,
+        "legacy-bootstrap-suggestion",
+        AttemptDirectionEventV1.model_validate(
+            {
+                **suggestion,
+                "direction_id": suggested_id,
+                "direction_event_id": "directionevent_" + "d" * 32,
+                "recorded_at": NOW_DATETIME.isoformat(),
+                "analysis": None,
+                "supporting_experiment_ids": [],
+            }
+        ).model_dump(mode="json"),
+        recovery_generation=0,
+    )
     response = await history.service.execute(
         capability.token,
         json.dumps(
             {
                 "schema_version": 2,
                 "attempt_id": bootstrap_id,
-                "idempotency_key": "bootstrap-suggestion",
+                "idempotency_key": "bootstrap-proposal",
                 "operation": "direction_update",
-                "request": suggestion,
+                "request": {**suggestion, "action": "propose"},
             }
         ).encode(),
         operation_scope="journal",
     )
-    suggested_id = response.result["direction_id"]
+    assert response.result["direction_id"] != suggested_id
     history.control.finish_bootstrap_run(
         bootstrap_id,
         0,
@@ -103,7 +142,7 @@ async def test_bootstrap_suggestion_is_visible_but_not_startable_in_optimizer(
         )
     assert rejected.value.direction_id == suggested_id
     assert rejected.value.action == "start"
-    with pytest.raises(ValueError, match="only during Bootstrap"):
+    with pytest.raises(ValueError, match="no longer supported"):
         await history.journal("direction_update", request=suggestion)
     child = await history.journal(
         "direction_update",

@@ -172,14 +172,6 @@ class DecliningEvolver(FakeEvolver):
             return BuildChallengerResult(
                 KernelAgentNoChangeProposal("no_change"),
                 digest("declined-evolution-trace"),
-                ({
-                    "name": "Combine the two measured layout ideas",
-                    "hypothesis": "The combination might reduce traffic",
-                    "rationale": "Untested cross-branch synthesis",
-                    "plan": ["Implement, then measure the combination"],
-                    "success_criteria": "Correctness and lower paired latency",
-                    "stop_conditions": "Incorrectness or no measurable gain",
-                },),
             )
         return await super().build_challenger(request)
 
@@ -728,14 +720,10 @@ async def test_evolver_can_close_challenger_pool_without_forcing_a_new_revision(
     assert len(optimizer.calls[BranchRole.CHALLENGER]) == accepted_count
     assert len(registry.list_epoch_challengers(result.epoch.id)) == accepted_count
     assert digest("declined-evolution-trace") in registry.list_referenced_artifact_digests()
-    suggestions = registry.list_epoch_suggested_directions(result.epoch.id)
-    assert len(suggestions) == 1
-    assert suggestions[0]["name"] == "Combine the two measured layout ideas"
-    assert suggestions[0]["status"] == "suggested"
-    assert str(suggestions[0]["direction_id"]).startswith("direction_")
+    assert registry.list_epoch_suggested_directions(result.epoch.id) == ()
     registry.close()
     with SqliteRegistry(tmp_path / "runtime.db") as reopened:
-        assert reopened.list_epoch_suggested_directions(result.epoch.id) == suggestions
+        assert reopened.list_epoch_suggested_directions(result.epoch.id) == ()
 
 
 @pytest.mark.anyio

@@ -14,8 +14,8 @@ from ..direction_genealogy import RELATIONSHIP_FIELDS, relationship_fields, vali
 from ..domain.errors import (
     DirectionConcurrencyError,
     DirectionLookupError,
+    DirectionSuggestionForbiddenError,
     InfrastructureError,
-    OptimizerSuggestionForbiddenError,
     SuggestedDirectionTransitionError,
 )
 from ..domain.ids import AttemptId, parse_artifact_digest
@@ -110,10 +110,8 @@ class RuntimeJournalService:
 
     def validate_report_journal(self, report: AttemptReportV12) -> None:
         """An empty or edited report must not erase a live authoritative Journal."""
-        if not self._is_bootstrap(report.attempt_id) and any(
-            event.action == "suggest" for event in report.direction_events
-        ):
-            raise OptimizerSuggestionForbiddenError("report.direction_events.action")
+        if any(event.action == "suggest" for event in report.direction_events):
+            raise DirectionSuggestionForbiddenError("report.direction_events.action")
         in_progress = sorted(
             direction_id
             for direction_id, direction in self._direction_views(report.attempt_id).items()
@@ -126,11 +124,6 @@ class RuntimeJournalService:
             )
         events = self._current_direction_events(report.attempt_id)
         experiments = self._current_experiments(report.attempt_id)
-        if any(event.action == "suggest" for event in report.direction_events) and not events:
-            raise ValueError(
-                "Bootstrap suggestions must be recorded with update-direction before "
-                "attempt-report; a report alone cannot create suggested Directions"
-            )
         # Direct report-only clients must not bypass conclusion/evidence validation.
         declared = [
             event for event in report.direction_events if event.hypothesis_status is not None
@@ -613,9 +606,9 @@ class RuntimeJournalService:
         action = value.get("action")
         if not isinstance(action, str):
             raise ValueError("Direction action must be text")
-        if action in {"propose", "suggest"}:
-            if action == "suggest" and not self._is_bootstrap(request.attempt_id):
-                raise OptimizerSuggestionForbiddenError("request.action")
+        if action == "suggest":
+            raise DirectionSuggestionForbiddenError("request.action")
+        if action == "propose":
             if set(value) - RELATIONSHIP_FIELDS != _DIRECTION_PROPOSAL_FIELDS:
                 raise ValueError(
                     f"Direction proposal requires {sorted(_DIRECTION_PROPOSAL_FIELDS)}; "

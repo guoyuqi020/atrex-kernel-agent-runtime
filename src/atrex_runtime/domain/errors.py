@@ -115,14 +115,16 @@ class DirectionConcurrencyError(ValueError):
         )
 
 
-class OptimizerSuggestionForbiddenError(ValueError):
-    """An Optimizer tried to create a Bootstrap-only suggested Direction."""
+class DirectionSuggestionForbiddenError(ValueError):
+    """A live Agent tried to create a retired suggested Direction."""
 
     def __init__(self, field_path: str) -> None:
         self.field_path = field_path
         super().__init__(
-            "Optimizer cannot use action=suggest; suggested Directions can be "
-            "created only during Bootstrap"
+            "action=suggest is no longer supported in any session, including Bootstrap. "
+            "Use action=propose for a Direction you intend to explore; existing historical "
+            "suggestions remain readable. Evolver should record evidence-backed attribution "
+            "corrections in the Candidate's Insights, Prompts, Skills, Tools, or workflow"
         )
 
 

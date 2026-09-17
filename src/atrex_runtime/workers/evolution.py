@@ -19,11 +19,6 @@ import anyio
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
-from ..direction_genealogy import (
-    suggested_direction_id,
-    suggestion_availability,
-    validate_relationship,
-)
 from ..domain.errors import InfrastructureError
 from ..domain.ids import (
     ArtifactDigest,
@@ -355,70 +350,6 @@ class UnimplementedCapabilityV1(BaseModel):
     reason_unimplemented: str = Field(min_length=1, max_length=2000)
 
 
-class EvolutionSuggestedDirectionV1(BaseModel):
-    """The ordinary Direction definition to persist with suggested status."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    name: str = Field(min_length=1, max_length=200)
-    hypothesis: str = Field(min_length=1, max_length=2000)
-    rationale: str = Field(min_length=1, max_length=2000)
-    plan: tuple[str, ...] = Field(min_length=1, max_length=8)
-    success_criteria: str = Field(min_length=1, max_length=1000)
-    stop_conditions: str = Field(min_length=1, max_length=1000)
-    relationship: (
-        Literal[
-            "retry",
-            "refinement",
-            "reimplementation",
-            "correction",
-            "port",
-            "combination",
-            "adoption",
-        ]
-        | None
-    ) = None
-    derived_from_direction_ids: tuple[str, ...] = Field(default=(), max_length=32)
-    derived_from_experiment_ids: tuple[str, ...] = Field(default=(), max_length=32)
-    supersedes_direction_id: str | None = Field(default=None, pattern=r"^direction_[0-9a-f]{32}$")
-
-    @field_validator("name", "hypothesis", "rationale", "success_criteria", "stop_conditions")
-    @classmethod
-    def _nonblank(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Suggested Direction text cannot be blank")
-        return value
-
-    @field_validator("plan")
-    @classmethod
-    def _plan(cls, value: tuple[str, ...]) -> tuple[str, ...]:
-        if any(not step.strip() or len(step) > 1000 for step in value):
-            raise ValueError("Suggested Direction plan steps must be non-blank and bounded")
-        return value
-
-    @field_validator("derived_from_direction_ids", "derived_from_experiment_ids")
-    @classmethod
-    def _references(cls, value: tuple[str, ...], info: object) -> tuple[str, ...]:
-        field_name = getattr(info, "field_name", "")
-        prefix = "direction_" if field_name == "derived_from_direction_ids" else "experiment_"
-        if len(set(value)) != len(value) or any(
-            not isinstance(item, str)
-            or not item.startswith(prefix)
-            or len(item) != len(prefix) + 32
-            or any(char not in "0123456789abcdef" for char in item[len(prefix) :])
-            for item in value
-        ):
-            raise ValueError(f"{field_name} must contain unique valid IDs")
-        return value
-
-    @model_validator(mode="after")
-    def _relationship(self) -> Self:
-        has_parent = bool(self.derived_from_direction_ids or self.derived_from_experiment_ids)
-        if (self.relationship is None) != (not has_parent):
-            raise ValueError("Suggested Direction relationship and ancestry must agree")
-        return self
-
-
 class EvolutionOutput(BaseModel):
     """One uniform Agent-authored Challenger proposal."""
 
@@ -436,10 +367,17 @@ class EvolutionOutput(BaseModel):
         max_length=64,
     )
     unimplemented_capabilities: tuple[UnimplementedCapabilityV1, ...] = Field(max_length=64)
-    # Optional so sealed historical Evolution traces remain readable.
-    suggested_directions: tuple[EvolutionSuggestedDirectionV1, ...] = Field(
-        default=(), max_length=8
-    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_suggestions(cls, value: object) -> object:
+        if isinstance(value, dict) and "suggested_directions" in value:
+            raise ValueError(
+                "suggested_directions is no longer supported; remove the field and curate "
+                "evidence-backed corrections in Candidate Insights, Prompts, Skills, Tools, "
+                "or workflow instead. Historical Direction records remain readable"
+            )
+        return value
 
     @field_validator("kernel_agent_revision_id", mode="before")
     @classmethod
@@ -585,12 +523,13 @@ class EvolutionContributionSnapshot(BaseModel):
 
 
 def _upgrade_historical_output(raw: dict[str, object]) -> object:
-    """Translate only sealed ID-only reports; live Agent submissions use paths."""
+    """Normalize sealed legacy reports without changing artifacts or republishing suggestions."""
     output = raw.get("output")
     if not isinstance(output, dict):
         return output
     output = dict(output)
     output.pop("direction_proposals", None)
+    output.pop("suggested_directions", None)
     if "contributing_revision_ids" not in output:
         return output
     legacy = output.pop("contributing_revision_ids")
@@ -1274,14 +1213,11 @@ class EvolverBundleRunner(EvolverRunner):
         worker_sessions: WorkerSessionRecorder | None = None,
         backend: str | None = None,
         max_infrastructure_retries: int = 0,
-        suggestion_ttl_epochs: int = 1,
     ) -> None:
         if max_output_manifest_bytes <= 0:
             raise ValueError("max_output_manifest_bytes must be positive")
         if max_infrastructure_retries < 0:
             raise ValueError("Evolver infrastructure retries cannot be negative")
-        if suggestion_ttl_epochs < 1:
-            raise ValueError("suggestion_ttl_epochs must be positive")
         self._workspaces = workspaces
         self._sessions = sessions
         self._artifacts = artifacts
@@ -1295,7 +1231,6 @@ class EvolverBundleRunner(EvolverRunner):
         self._worker_sessions = worker_sessions
         self._backend = backend
         self._max_infrastructure_retries = max_infrastructure_retries
-        self._suggestion_ttl_epochs = suggestion_ttl_epochs
 
     async def build_challenger(self, request: BuildChallengerRequest) -> BuildChallengerResult:
         """Retry transient Evolver infrastructure failures in fresh Sessions."""
@@ -1593,9 +1528,6 @@ class EvolverBundleRunner(EvolverRunner):
             prepared.output_path,
             max_bytes=self._max_output_manifest_bytes,
         )
-        self._validate_suggested_directions(
-            request.evidence_checkpoint, request.idempotency_key, output.suggested_directions
-        )
         manifest = EvolutionInputManifestV11.model_validate_json(
             prepared.manifest_path.read_bytes()
         )
@@ -1742,105 +1674,7 @@ class EvolverBundleRunner(EvolverRunner):
         return BuildChallengerResult(
             proposal,
             evolution_trace_digest,
-            tuple(item.model_dump(mode="json") for item in output.suggested_directions),
         ), session_trace_digest
-
-    def _validate_suggested_directions(
-        self,
-        evidence_checkpoint: ArtifactDigest,
-        evolution_key: str,
-        suggestions: tuple[EvolutionSuggestedDirectionV1, ...],
-    ) -> None:
-        """Validate Direction ancestry against the sealed checkpoint, not sandbox files."""
-        if not suggestions:
-            return
-        checkpoint = self._artifacts.verify(evidence_checkpoint)
-        if checkpoint.kind is not ArtifactKind.EVIDENCE:
-            raise ValueError("Suggested Directions require an Evidence checkpoint")
-        root = checkpoint.payload_path
-        directions: dict[str, dict[str, object]] = {}
-        experiments: dict[str, dict[str, object]] = {}
-        epoch_roots = sorted((root / "epochs").glob("*.json")) if (root / "epochs").is_dir() else ()
-        current_epoch_number = max((int(path.stem) for path in epoch_roots), default=0) + 1
-
-        def consume_journal(journal: dict[str, object], origin_epoch_number: int) -> None:
-            for event in journal.get("direction_events", []):
-                if (
-                    isinstance(event, dict)
-                    and event.get("action") in {"propose", "suggest"}
-                    and isinstance(event.get("direction_id"), str)
-                ):
-                    directions[str(event["direction_id"])] = {
-                        **event,
-                        "status": (
-                            suggestion_availability(
-                                current_epoch_number,
-                                origin_epoch_number,
-                                self._suggestion_ttl_epochs,
-                            )
-                            if event["action"] == "suggest"
-                            else "proposed"
-                        ),
-                    }
-            for item in journal.get("experiments", []):
-                if isinstance(item, dict) and isinstance(item.get("experiment_id"), str):
-                    experiments[str(item["experiment_id"])] = item
-
-        bootstrap = root / "bootstrap" / "report.json"
-        if bootstrap.is_file() and not bootstrap.is_symlink():
-            bootstrap_value = json.loads(bootstrap.read_bytes())
-            if not isinstance(bootstrap_value, dict):
-                raise ValueError("Sealed Bootstrap Evidence is invalid")
-            consume_journal(bootstrap_value, 0)
-        for epoch_root in epoch_roots:
-            number = epoch_root.stem
-            epoch_value = json.loads(epoch_root.read_bytes())
-            if not isinstance(epoch_value, dict):
-                raise ValueError("Sealed Epoch Evidence is invalid")
-            for suggested in epoch_value.get("suggested_directions", []):
-                if isinstance(suggested, dict) and isinstance(suggested.get("direction_id"), str):
-                    directions[str(suggested["direction_id"])] = {
-                        **suggested,
-                        "status": suggestion_availability(
-                            current_epoch_number,
-                            int(number),
-                            self._suggestion_ttl_epochs,
-                        ),
-                    }
-            journal_root = root / "journals" / number
-            sources = (
-                sorted(journal_root.glob("*.json"))
-                if journal_root.is_dir()
-                else sorted((root / "reports" / number).glob("*.json"))
-            )
-            for source in sources:
-                journal = json.loads(source.read_bytes())
-                if not isinstance(journal, dict):
-                    raise ValueError("Sealed Direction Journal is invalid")
-                consume_journal(journal, int(number))
-        adopted = {
-            str(parent)
-            for direction in directions.values()
-            if direction.get("relationship") == "adoption"
-            for parent in direction.get("derived_from_direction_ids") or []
-        }
-        for direction_id in adopted:
-            direction = directions.get(direction_id)
-            if direction is not None and direction.get("status") == "expired":
-                direction["status"] = "adopted"
-        for ordinal, suggestion in enumerate(suggestions, start=1):
-            try:
-                validate_relationship(
-                    suggested_direction_id(evolution_key, ordinal),
-                    suggestion.model_dump(mode="json"),
-                    directions,
-                    experiments,
-                )
-            except ValueError as error:
-                raise ValueError(
-                    f"suggested_directions[{ordinal - 1}] has invalid frozen-Evidence ancestry: "
-                    f"{error}"
-                ) from error
 
     def _seal_contributions(
         self,

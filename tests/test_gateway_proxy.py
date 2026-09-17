@@ -19,9 +19,9 @@ from test_attempt_report import _value as _report_value
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.domain.errors import (
     DirectionConcurrencyError,
+    DirectionSuggestionForbiddenError,
     DuplicateGatewayTaskError,
     InvalidTransitionError,
-    OptimizerSuggestionForbiddenError,
     SuggestedDirectionTransitionError,
 )
 from atrex_runtime.domain.ids import new_attempt_id, new_epoch_id
@@ -1458,7 +1458,7 @@ def test_direction_concurrency_error_is_machine_readable_and_actionable() -> Non
 
 
 @pytest.mark.parametrize("field_path", ["request.action", "report.direction_events.action"])
-def test_optimizer_suggestion_error_identifies_action_and_recovery(field_path: str) -> None:
+def test_retired_suggestion_error_identifies_action_and_recovery(field_path: str) -> None:
     payload = json.dumps(
         {
             "schema_version": 2,
@@ -1471,7 +1471,7 @@ def test_optimizer_suggestion_error_identifies_action_and_recovery(field_path: s
 
     response = _invalid_request_response(
         payload,
-        OptimizerSuggestionForbiddenError(field_path),
+        DirectionSuggestionForbiddenError(field_path),
         operation_scope="journal",
     )
 
@@ -1483,6 +1483,8 @@ def test_optimizer_suggestion_error_identifies_action_and_recovery(field_path: s
         }
     ]
     recovery = cast(list[dict[str, Any]], response["recovery"])
+    assert "no longer supported" in response["detail"]
+    assert "including Bootstrap" in response["detail"]
     assert "action=propose" in recovery[0]["instruction"]
     assert "relationship=adoption" in recovery[1]["instruction"]
     assert "derived_from_direction_ids" in recovery[1]["instruction"]

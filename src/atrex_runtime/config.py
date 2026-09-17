@@ -79,7 +79,11 @@ class GatewayProxySettings(BaseModel):
     capability_signing_key_env: str = Field(min_length=1)
     candidate_diff_allowed_paths: dict[Dsl, tuple[str, ...]]
     candidate_diff_require_change: bool
-    suggestion_ttl_epochs: int = Field(default=1, ge=1)
+    suggestion_ttl_epochs: int = Field(
+        default=1,
+        ge=1,
+        description="Read-time eligibility window for historical suggested Directions only",
+    )
 
     @model_validator(mode="after")
     def _validate_diff_policy(self) -> GatewayProxySettings:

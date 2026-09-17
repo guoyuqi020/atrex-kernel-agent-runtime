@@ -264,7 +264,6 @@ def build_campaign_runtime(
                 worker_sessions=registry,
                 backend=campaign.evolver.agent_backend,
                 max_infrastructure_retries=campaign.max_infrastructure_retries,
-                suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
             )
 
         evolver = _LazyEvolverRunner(build_evolver)

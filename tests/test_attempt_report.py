@@ -202,7 +202,8 @@ def test_attempt_report_models_one_sided_baseline_experiment(tmp_path: Path) -> 
     assert report.experiments[0].after is not None
 
 
-def test_bootstrap_report_can_preserve_a_suggested_direction() -> None:
+def test_historical_report_can_preserve_a_suggested_direction() -> None:
+    """Historical decoding is allowed; live submission is checked by RuntimeJournalService."""
     value = _value(new_attempt_id())
     events = value["direction_events"]
     assert isinstance(events, list)

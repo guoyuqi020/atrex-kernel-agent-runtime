@@ -1,10 +1,50 @@
 # Evidence input
 
-Kernel Artifacts may contain a multi-file source tree, not just `kernel.py`. Inspect the
-complete file list and read the relevant files through Runtime tools. Optimizer workspaces
-place that tree directly in `work/kernel/`; Runtime injects its fixed adapter and editable-root
-rules. Evolving the Agent does not change those rules. Historical reuse restores the entire
-Kernel Artifact, including its locked support files, not just its entrypoint.
+Kernel Artifacts may contain a multi-file source tree, not just `kernel.py`. The next Optimizer
+receives that tree in `work/kernel/` and must inspect the relevant source files. Runtime injects
+its fixed adapter and editable-root rules; evolving the Agent does not change them. Historical
+Kernel reuse restores the entire Artifact, including its locked support files.
+
+## Runtime services for the next Optimizer
+
+This catalog describes services available in Optimizer and Bootstrap sessions, subject to their
+Capabilities and phase rules. It does not authorize this Evolver to call them. Here, read frozen
+Evidence files and use only the Session-context `evolution_report.tool` for submission.
+
+| Command | Service |
+| --- | --- |
+| `gateway-execute` | Executes one supported GPU operation; Runtime owns Job tracking, infrastructure retries, request deduplication, result projection, and measurement persistence. |
+| `kernel-artifact-read` / `result-artifact-read` | Copies a selected Kernel Artifact source file into `scratch/`, or reads a normalized Agent-visible Result Artifact by digest. |
+| `list-directions` / `load-direction` | Writes the visible Direction index to a requested `scratch/` file, or loads one complete Direction and its evidence links. |
+| `list-experiments` / `load-experiment` | Writes the visible Experiment index to a requested `scratch/` file, or loads one complete recorded Experiment. |
+| `update-direction` / `record-experiment` | Immediately persists Direction lifecycle changes or evidence-linked Experiments; enforces visibility, state, and provenance rules. |
+| `attempt-report` | Validates and publishes the terminal handoff. Invalid drafts can be repaired and resubmitted; Runtime alone decides Kernel retention and Agent promotion. |
+
+Supported `gateway-execute` operations:
+
+- `evaluate`: correctness and per-Shape timing; optional `comparison.method="abba"` compares two
+  Kernel sources. ABBA is an Evaluate option, not a separate operation.
+- `profile`: profiler counters, per-Kernel durations, resource usage, and available SOL evidence;
+  private contract cases are identified only by opaque numeric Shape IDs.
+- `dev`: runs a bounded remote GPU command with selected workspace files for custom probes.
+- `check`: compilation or sanitizer checks.
+- `disassemble`: the Gateway's disassembly operation; use only evidence actually returned.
+- `env`: remote GPU environment and capabilities.
+
+For the standard Agent, the exact CLI form in a later session is
+`python3 agent/optimizer/src/runtime_tools.py <command> --request scratch/<request>.json`.
+Read the Candidate's `atrex-agent.json` `prompt_fragments.attempt_tools` file for request fields,
+examples, and result semantics, and `src/runtime_tools.py` / `src/tool_contracts.py` for bindings
+and local validation. These paths describe the standard implementation, not a requirement to keep
+it. Runtime request errors return the operation's `issues`, `request_schema`, and `recovery`;
+use the supplied contracts, not invented endpoints or guessed IDs.
+
+Runtime also controls private Evaluation inputs, resource limits, Session capture, version sealing,
+recovery, and Gate/comparison policy. Candidate code cannot grant access to hidden Shapes, the
+Registry database, credentials, or management APIs. A convenience interface can be implemented as
+an Agent-side composite Tool, not a new Runtime endpoint. For example, in a later Optimizer session,
+`list-experiments` → `load-experiment` → `result-artifact-read` can feed a compact per-Shape history
+comparison, retaining source Result identities and separating measured facts from new analysis.
 
 Runtime injects this frozen view. Missing participants, Sessions, history, or State are unavailable;
 do not infer them.
@@ -53,13 +93,11 @@ does not diagnose an Agent or Journal failure; check the Runtime failure reason 
 `journal/directions/index.json` and `journal/experiments/index.json` index Bootstrap and the completed Lineage's
 append-only Journal. Read selected `<id>.json` files for full Direction events and Experiments,
 including entries from Attempts without terminal Reports. Gateway measurements are facts;
-Directions suggested by Bootstrap or earlier Evolvers also appear here as historical `suggest`
-records with ordinary Direction IDs. They are untested; a suggestion is eligible for adoption
-only during its next optimization round (by default, one Epoch). Older suggestions remain
-historical references for a new derived Direction (for example, `refinement`), but not a new
-`adoption`. Their descendants
-do not change the original suggestion. Agent-authored analyses are interpretations. Evolver can suggest a new or corrected Direction in
-its report, but cannot start or validate it.
+Agent-authored analyses are interpretations. Historical `suggest` records remain readable;
+they are untested recommendations, not facts. Evolver cannot create or change Directions.
+Compare related hypotheses and Experiments across Branches, check interpretations against
+trusted outcomes, and curate evidence-backed attribution corrections in Candidate Insights,
+Prompts, Skills, Tools, or workflow, citing the relevant IDs without rewriting history.
 
 Each Session-context entry's `relationship` names its Epoch role. The entries whose relationship is
 `active` or `challenger` are exactly the last completed Epoch's comparison pool, so their `version`
@@ -143,6 +181,14 @@ This is provenance, not parentage: `parent` remains the single Bundle base for t
 
 Treat every other report field as intent to test against Source, conversations, Attempt reports, and
 optimization summaries. Bootstrap and unavailable legacy reports have no file.
+
+For a previous-change audit, match `generated_agent.path` to the last completed Epoch's participants
+using the Session-context relationships, then inspect that version's `sessions/` and `reports/`.
+An Agent promoted earlier may now be the Active. A newer `current_epoch_challenger` is unevaluated;
+versions outside the last Epoch pool have no conversations here. Missing observations cannot show
+whether a Tool was unused or ineffective. Per-Trajectory `resources/` and Conversations can help
+identify Tool rewrites, but a terminal resource file alone does not establish the exact code executed
+earlier in a session.
 
 ## Agent Bundles and reusable resources
 

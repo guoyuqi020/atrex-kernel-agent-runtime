@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import ast
 import json
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -12,6 +14,7 @@ from conftest import digest
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.domain.ids import ArtifactDigest
 from atrex_runtime.domain.models import BranchRole
+from atrex_runtime.gateway.proxy import _supported_gateway_operations
 from atrex_runtime.workers.evidence_view import (
     EVIDENCE_PROMPT_SHA256,
     EVIDENCE_PROMPT_TEXT,
@@ -32,6 +35,63 @@ def test_optimizer_prompt_enforces_evolver_owned_agent_content() -> None:
     assert "Only `tools/` is adaptive here" in EVIDENCE_PROMPT_TEXT
     assert "Direction and\nExperiment Journal" in EVIDENCE_PROMPT_TEXT
     assert "Evolver curates" in EVIDENCE_PROMPT_TEXT
+
+
+def _evolver_service_catalog() -> str:
+    _, catalog = EVOLVER_EVIDENCE_PROMPT_TEXT.split(
+        "## Runtime services for the next Optimizer\n", 1
+    )
+    return catalog.split("Runtime injects this frozen view.", 1)[0]
+
+
+@pytest.mark.parametrize("repository", ["kernel-design-agents", "atrex-kernel-agent-core"])
+def test_evolver_service_catalog_matches_standard_public_cli(repository: str) -> None:
+    tool_source = Path(__file__).resolve().parents[1] / "src" / repository / "src/runtime_tools.py"
+    definitions = {
+        node.targets[0].id: node.value
+        for node in ast.parse(tool_source.read_text(encoding="utf-8")).body
+        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)
+    }
+    queries = ast.literal_eval(definitions["_PUBLIC_RUNTIME_QUERY_COMMANDS"])
+    journals = ast.literal_eval(definitions["_RUNTIME_JOURNAL_COMMANDS"])
+    expected = {
+        "gateway-execute",
+        "attempt-report",
+        *queries,
+        *(name for name in journals if not name.startswith("_")),
+    }
+    columns = re.findall(r"^\| (`[^|]+) \|", _evolver_service_catalog(), re.MULTILINE)
+    documented = {name for column in columns for name in re.findall(r"`([a-z-]+)`", column)}
+
+    assert documented == expected
+
+
+def test_evolver_service_catalog_matches_live_gateway_and_preserves_boundaries() -> None:
+    catalog = _evolver_service_catalog()
+    documented = set(re.findall(r"^- `([a-z]+)`:", catalog, re.MULTILINE))
+
+    assert documented == set(_supported_gateway_operations("gateway"))
+    assert 'comparison.method="abba"' in catalog
+    assert "ABBA is an Evaluate option, not a separate operation" in catalog
+    assert "It does not authorize this Evolver to call them" in " ".join(catalog.split())
+    assert "Session-context `evolution_report.tool`" in catalog
+    assert "not a new Runtime endpoint" in catalog
+    assert "separating measured facts from new analysis" in catalog
+    assert "read the relevant files through Runtime tools" not in EVOLVER_EVIDENCE_PROMPT_TEXT
+
+
+def test_evolver_prior_report_guidance_limits_audit_to_observed_agent_changes() -> None:
+    guidance = EVOLVER_EVIDENCE_PROMPT_TEXT.split("## Prior Evolutions\n", 1)[1].split(
+        "## Agent Bundles and reusable resources\n", 1
+    )[0]
+    normalized = " ".join(guidance.split())
+
+    assert "match `generated_agent.path`" in normalized
+    assert "Session-context relationships" in normalized
+    assert "may now be the Active" in normalized
+    assert "`current_epoch_challenger` is unevaluated" in normalized
+    assert "Missing observations cannot show whether a Tool was unused or ineffective" in normalized
+    assert "terminal resource file alone does not establish the exact code executed" in normalized
 
 
 def _write(path: Path, value: object) -> None:

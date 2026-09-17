@@ -40,7 +40,6 @@ from atrex_runtime.workers.evolution import (
     EvolutionOutput,
     EvolutionProcessConfig,
     EvolutionSessionResult,
-    EvolutionSuggestedDirectionV1,
     EvolutionWorkspaceAssembler,
     EvolverBundleRunner,
     PreparedEvolution,
@@ -1246,7 +1245,6 @@ async def test_fixed_runner_collects_complete_repository_candidate(
     assert previous_report["evolution_number"] == 1
     expected_projected_report = dict(trace["output"])
     expected_projected_report.pop("kernel_agent_revision_id")
-    expected_projected_report.pop("suggested_directions")
     expected_projected_report.pop("contributing_paths")
     expected_projected_report["contributing_paths"] = []
     assert previous_report["report"] == expected_projected_report
@@ -1520,82 +1518,38 @@ def test_evolution_output_field_set_matches_the_frozen_evolver_contract() -> Non
     finally:
         sys.path.remove(str(evolver_src))
 
-    assert set(EvolutionOutput.model_fields) == set(EVOLUTION_OUTPUT_FIELDS) | {
-        "suggested_directions"
+    assert set(EvolutionOutput.model_fields) == set(EVOLUTION_OUTPUT_FIELDS)
+
+
+def _minimal_evolution_output() -> dict[str, object]:
+    return {
+        "proposal_type": "no_change",
+        "kernel_agent_revision_id": "agentrev_" + "a" * 32,
+        "hypothesis": "The frozen facts do not justify an Agent change.",
+        "expected_effect": "Reconsider when contradictory evidence appears.",
+        "changed_paths": [],
+        "contributing_paths": [],
+        "unimplemented_capabilities": [],
     }
 
 
-def test_evolver_can_derive_a_suggestion_from_bootstrap_history(tmp_path: Path) -> None:
-    artifacts = LocalArtifactStore(tmp_path / "artifacts")
-    checkpoint_root = tmp_path / "checkpoint"
-    report = checkpoint_root / "bootstrap" / "report.json"
-    report.parent.mkdir(parents=True)
-    parent_id = "direction_" + "a" * 32
-    report.write_text(
-        json.dumps(
-            {
-                "direction_events": [{"action": "suggest", "direction_id": parent_id}],
-                "experiments": [],
-            }
+@pytest.mark.parametrize("suggestions", [[], [{"name": "Untested idea"}]])
+def test_live_evolution_output_rejects_retired_suggestions(suggestions: list[object]) -> None:
+    with pytest.raises(ValueError, match="suggested_directions is no longer supported"):
+        EvolutionOutput.model_validate(
+            {**_minimal_evolution_output(), "suggested_directions": suggestions}
         )
-    )
-    checkpoint = artifacts.put_directory(checkpoint_root, ArtifactKind.EVIDENCE)
-    suggestion = EvolutionSuggestedDirectionV1(
-        name="Revisit staged reduction",
-        hypothesis="Staging may shorten the reduction path",
-        rationale="Bootstrap left this mechanism untested",
-        plan=("Implement staging", "Evaluate the candidate"),
-        success_criteria="Correct and faster",
-        stop_conditions="Incorrect or no measurable gain",
-        relationship="adoption",
-        derived_from_direction_ids=(parent_id,),
-    )
-    runner = object.__new__(EvolverBundleRunner)
-    runner._artifacts = artifacts
-    runner._suggestion_ttl_epochs = 1
-    runner._validate_suggested_directions(checkpoint, "epoch:example:challenger:1", (suggestion,))
 
 
-def test_evolver_cannot_adopt_an_expired_bootstrap_suggestion(tmp_path: Path) -> None:
-    artifacts = LocalArtifactStore(tmp_path / "artifacts")
-    checkpoint_root = tmp_path / "checkpoint"
-    report = checkpoint_root / "bootstrap" / "report.json"
-    report.parent.mkdir(parents=True)
-    parent_id = "direction_" + "a" * 32
-    report.write_text(
-        json.dumps(
-            {
-                "direction_events": [{"action": "suggest", "direction_id": parent_id}],
-                "experiments": [],
-            }
-        )
+def test_historical_evolution_suggestions_remain_decodable_without_republishing() -> None:
+    output = {**_minimal_evolution_output(), "suggested_directions": [{"name": "Old idea"}]}
+    raw = {"output": output}
+    upgraded = _upgrade_historical_output(raw)
+    assert EvolutionOutput.model_validate(upgraded).model_dump(mode="json") == (
+        _minimal_evolution_output()
     )
-    epoch = checkpoint_root / "epochs" / "00000001.json"
-    epoch.parent.mkdir(parents=True)
-    epoch.write_text("{}")
-    checkpoint = artifacts.put_directory(checkpoint_root, ArtifactKind.EVIDENCE)
-    suggestion = EvolutionSuggestedDirectionV1(
-        name="Revisit staged reduction",
-        hypothesis="Staging may shorten the reduction path",
-        rationale="Bootstrap left this mechanism untested",
-        plan=("Implement staging", "Evaluate the candidate"),
-        success_criteria="Correct and faster",
-        stop_conditions="Incorrect or no measurable gain",
-        relationship="adoption",
-        derived_from_direction_ids=(parent_id,),
-    )
-    runner = object.__new__(EvolverBundleRunner)
-    runner._artifacts = artifacts
-    runner._suggestion_ttl_epochs = 1
-    with pytest.raises(ValueError, match="unexpired suggested parent"):
-        runner._validate_suggested_directions(
-            checkpoint, "epoch:example:challenger:1", (suggestion,)
-        )
-    runner._validate_suggested_directions(
-        checkpoint,
-        "epoch:example:challenger:1",
-        (suggestion.model_copy(update={"relationship": "refinement"}),),
-    )
+    assert raw["output"] is output
+    assert output["suggested_directions"] == [{"name": "Old idea"}]
 
 
 def _sibling_revision(
@@ -1822,15 +1776,7 @@ Path("scratch/evolution-report-draft.json").write_text(json.dumps({
     "expected_effect": "Produce one valid complete Challenger Bundle.",
     "changed_paths": ["prompts/integration.md"],
     "contributing_paths": [],
-    "unimplemented_capabilities": [],
-    "suggested_directions": [{
-        "name": "Try a narrower launch configuration",
-        "hypothesis": "A smaller launch may reduce overhead",
-        "rationale": "The next Epoch can test this independently",
-        "plan": ["Implement a candidate", "Compare measured latency"],
-        "success_criteria": "Correct and faster",
-        "stop_conditions": "Correctness fails or no gain",
-    }]
+    "unimplemented_capabilities": []
 }))
 published = subprocess.run(
     [
@@ -1916,7 +1862,7 @@ print(json.dumps({
     )
     assert trace["process_returncode"] == 0
     assert trace["token_usage"]["consumed"] == 24
-    assert build.suggested_directions[0]["name"] == "Try a narrower launch configuration"
+    assert "suggested_directions" not in trace["output"]
     session_trace = artifacts.verify(trace["session_trace_digest"]).payload_path
     assert '"input_tokens": 16' in (session_trace / "provider/stdout.stream-json").read_text()
 
@@ -2258,6 +2204,13 @@ def test_prepare_launch_binds_the_runtime_session_timeout(tmp_path: Path) -> Non
     assert "ATREX_EVOLVER_QUERY_CAPABILITY" not in launch.environment
     assert launch.environment["ATREX_EVOLUTION_INPUT_JSON"].startswith("{")
     assert launch.environment["ATREX_EVIDENCE_PROMPT"].startswith("# Evidence input")
+    assert (
+        "## Runtime services for the next Optimizer" in launch.environment["ATREX_EVIDENCE_PROMPT"]
+    )
+    assert (
+        "It does not authorize this Evolver to call them"
+        in launch.environment["ATREX_EVIDENCE_PROMPT"]
+    )
     assert not (prepared.root / ".runtime").exists()
 
 

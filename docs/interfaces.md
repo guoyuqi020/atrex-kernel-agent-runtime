@@ -260,7 +260,7 @@ helpers are supported for a shared custom input generator and Shapes.
 | `gateway-execute` | One GPU/Agate operation and its parameters; Candidate operations upload the working Kernel by default. Evaluate can select Candidate B with `candidate_path` and comparison baseline A with `comparison.baseline_path`. |
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
 | `result-artifact-read` | Reads a normalized Agent-visible Result Artifact by digest; request JSON omits `operation`. |
-| `update-direction` | Creates an immutable Direction definition with `propose` (or Bootstrap-only `suggest`), or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Closures explicitly select supporting Experiments and declare hypothesis_status; returns the stable Direction ID. |
+| `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Closures explicitly select supporting Experiments and declare hypothesis_status; returns the stable Direction ID. `suggest` is rejected in every session, including Bootstrap. |
 | `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, lifecycle status, hypothesis_status, and any declared ancestry to that file and returns only status, file, and count. |
 | `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction, including hypothesis_status, all associated_experiment_ids and the latest explicitly selected supporting_experiment_ids. |
 | `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, and action. Runtime freezes the Trials' Kernel and Result Artifact identities. Every Experiment needs at least one Kernel-bound Gateway Result. `abandon_direction` may be one-sided; Bootstrap `baseline` requires only `after`. Returns the stable Experiment ID. |
@@ -588,23 +588,45 @@ in the Evolution Trace; the field does not change the Bundle base or revision an
 Evolver submits a draft through its local `evolution-report` tool. Invalid submissions return `issues`,
 `request_schema`, and `recovery` without publishing; the first success atomically writes
 `scratch/evolution-report.json`. Runtime independently revalidates the report after Session exit.
-The optional `suggested_directions` array contains at most eight untested, evidence-linked search
-directions. Runtime records each with an ordinary `direction_...` ID and an immutable source event,
-independently of `evolved`, `reuse`, or `no_change`. Every Branch can find them via
-`list-directions` and inspect one via `load-direction`. A suggested Direction cannot be started,
-measured, or closed. An Optimizer may propose its own Direction with `relationship="adoption"`
-and `derived_from_direction_ids` containing the suggested ID; use `refinement` if the hypothesis
-changes. This does not certify the suggestion or mutate its source.
-Bootstrap can also call `update-direction` with `action="suggest"` and a complete Direction
-definition to save an untested future idea immediately in its Runtime Journal. The returned
-ordinary Direction ID is visible to later Optimizer Attempts and Evolvers. `suggest` is rejected
-outside Bootstrap; a terminal report alone cannot manufacture a suggestion.
-`gateway_proxy.suggestion_ttl_epochs` defaults to `1`. A Bootstrap suggestion is adoptable in
-Epoch 1; an Evolver suggestion is adoptable in the Epoch it prepares. At the next Epoch boundary,
-an unused suggestion reads as `expired`, or `adopted` if a child Direction was proposed with
-`relationship="adoption"`. These are read-time statuses, not rewrites of the historical source.
-Both remain readable and can be cited in a new `refinement`, but neither can be newly adopted.
-Increasing the setting extends the number of eligible Epochs.
+The report has seven fields; `suggested_directions` is unsupported, even when empty. Evolver
+reconciles cross-Branch evidence, distinguishes implementation failures from refuted mechanisms,
+and curates attribution corrections in Candidate Insights, Prompts, Skills, Tools, or workflow,
+citing the relevant Direction/Experiment IDs without rewriting Journal facts. Optimizers choose
+their own research Directions. Bootstrap establishes a correct `v0` and records actual work;
+`action="suggest"` is rejected both by `update-direction` and live terminal Report validation.
+
+Historical suggestions remain readable through `list-directions`/`load-direction` and frozen
+Evolver Evidence. They cannot be started, measured, or closed. Existing genealogy and
+`gateway_proxy.suggestion_ttl_epochs` (default `1`) apply only to those historical records:
+eligible suggestions may be referenced by a new `adoption`; expired/adopted records permit
+`refinement`, not another adoption. This is a read-time projection, not a history rewrite.
+Historical Evolution reports remain decodable, but their old suggestions are never republished.
+
+Runtime's Evolver Evidence Prompt includes a next-Optimizer service catalog: Gateway operations,
+Kernel/Result Artifact reads, Direction/Experiment Journals, and terminal handoff. The catalog
+does not grant those tools to Evolver; Evolution uses frozen files and its local report tool.
+Before reporting an unimplemented capability, Evolver checks whether existing services can be
+composed in Candidate Tools or implementation code. It updates discovery instructions and indexes,
+preserves Result provenance and Runtime enforcement, and uses only bounded CPU/mock checks here.
+`reason_unimplemented` explains the considered services and the remaining concrete blocker, not
+merely the absence of a convenience command. This adds Agent-side capabilities, not Runtime APIs
+or permissions; their effectiveness is tested by the next Epoch.
+
+Before the next edit, Evolver reviews prior evaluated changes by matching Evolution report
+`generated_agent.path` to the latest completed Epoch's Agent sessions, starting with the previous
+Challenger or its promoted Active. It checks availability, discovery, invocation, execution, and
+use of outputs against `expected_effect` and trusted outcomes; it distinguishes missing observations,
+missing triggers, failures, uncertain benefit, and supported benefit/harm. This guides retention,
+repair, simplification, or removal rather than accumulating unverified helpers. The review fits the
+existing `hypothesis`/`expected_effect` fields; it adds no live tests or report schema fields.
+
+New capabilities are not limited to fixing the previous Evolution. Evolver separately analyzes
+the available completed Optimizer Trajectories and their serial Attempts, comparing productive and
+stalled action/result chains against Journals and trusted outcomes. Repeated manual work, fragile
+tool use, missing evidence, or a successful reusable procedure can justify added Tools, bindings,
+or implementation/workflow changes. The proposal connects the observed obstacle to a concrete
+capability and next-Epoch effect; it does not prescribe a Kernel Direction or require a new feature
+when existing capabilities or `no_change` suffice.
 
 ## Direction genealogy
 

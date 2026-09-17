@@ -24,11 +24,11 @@ from ..asgi import AsgiReceive, AsgiSend, bearer_token, json_response, read_requ
 from ..domain.errors import (
     DirectionConcurrencyError,
     DirectionLookupError,
+    DirectionSuggestionForbiddenError,
     DuplicateGatewayTaskError,
     GatewayOperationsInProgressError,
     InfrastructureError,
     InvalidTransitionError,
-    OptimizerSuggestionForbiddenError,
     SuggestedDirectionTransitionError,
 )
 from ..domain.ids import ArtifactDigest, AttemptId, LineageId, parse_artifact_digest
@@ -2022,7 +2022,7 @@ def _invalid_request_response(
                 },
             ],
         )
-    if isinstance(error, OptimizerSuggestionForbiddenError):
+    if isinstance(error, DirectionSuggestionForbiddenError):
         response["issues"] = cast(
             JsonValue,
             [{"path": error.field_path, "code": "forbidden_action", "message": str(error)}],
