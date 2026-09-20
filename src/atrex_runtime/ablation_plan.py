@@ -36,6 +36,10 @@ def build_ablation_plan(
         ephemeral_agent_state: bool,
         workflow_command: str,
         trajectories_per_branch: int = 1,
+        challenger_count: int = 0,
+        challenger_start_epoch: int = 2,
+        first_epoch_same_agent: bool = False,
+        runs_active_branch: bool = True,
     ) -> dict[str, Any]:
         if attempt_budget % attempts_per_trajectory:
             raise ValueError(
@@ -52,11 +56,17 @@ def build_ablation_plan(
             "target_epoch_number": target_epoch,
             "ephemeral_agent_state": ephemeral_agent_state,
             "workflow_command": workflow_command,
-            "challenger_count": 0,
-            "challenger_start_epoch": 2,
-            "first_epoch_same_agent": False,
-            "optimizer_attempt_budget_total": trajectories_per_branch * attempt_budget,
-            "evolution_count": 0,
+            "challenger_count": challenger_count,
+            "challenger_start_epoch": challenger_start_epoch,
+            "first_epoch_same_agent": first_epoch_same_agent,
+            "optimizer_attempt_budget_total": (
+                trajectories_per_branch
+                * attempt_budget
+                * (int(runs_active_branch) + challenger_count)
+            ),
+            "evolution_count": (
+                max(0, target_epoch - challenger_start_epoch + 1) * challenger_count
+            ),
         }
 
     if enabled:
@@ -70,6 +80,50 @@ def build_ablation_plan(
                 workflow_command="workflow/isolated.py",
             )
             for ordinal in range(1, total + 1)
+        )
+        # Run the replicated/evolved Agent alone. There is no same-Epoch Active comparator,
+        # and State resets before every Attempt.
+        arms.extend(
+            arm(
+                kind="isolated-evolve",
+                label=f"ablation-isolated-evolve-{ordinal:02d}",
+                attempts_per_trajectory=3,
+                ephemeral_agent_state=True,
+                workflow_command="workflow/evolve_isolated_3.py",
+                challenger_count=1,
+                first_epoch_same_agent=True,
+                runs_active_branch=False,
+            )
+            for ordinal in range(1, 3)
+        )
+        # Keep the same Challenger-only organization while retaining adaptive State across the
+        # three serial Attempts. Paired replicas separate the State-retention effect from noise.
+        arms.extend(
+            arm(
+                kind="retained-evolve",
+                label=f"ablation-retained-evolve-{ordinal:02d}",
+                attempts_per_trajectory=3,
+                ephemeral_agent_state=False,
+                workflow_command="workflow/evolve_retained_3.py",
+                challenger_count=1,
+                first_epoch_same_agent=True,
+                runs_active_branch=False,
+            )
+            for ordinal in range(1, 3)
+        )
+        # Combine reset-State Pool search with Agent evolution. Active and Challenger each run two
+        # independent Trajectories; Optimizer-produced adaptive State never survives an Attempt.
+        arms.append(
+            arm(
+                kind="isolated-pool-evolve",
+                label="ablation-isolated-pool-evolve-3",
+                attempts_per_trajectory=3,
+                ephemeral_agent_state=True,
+                workflow_command="workflow/evolve_isolated_pool_3.py",
+                trajectories_per_branch=2,
+                challenger_count=1,
+                first_epoch_same_agent=True,
+            )
         )
         # Pair two-Trajectory Pools at three Attempts per Epoch, differing only in
         # whether adaptive Runtime State survives each Attempt. Each has its full budget.

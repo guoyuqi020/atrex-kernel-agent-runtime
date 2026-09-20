@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-默认连接已启动的官方 localhost 服务（`127.0.0.1:8000`、GPU `local`）；可显式覆盖环境变量。部署步骤见 [Agate localhost](../../docs/agate-localhost.zh.md)。
+默认连接远端 Agate 服务；可显式覆盖环境变量。
 
 这个示例让一个 DSL Lineage 完整运行且只运行 Epoch 1。默认配置为：
 
@@ -47,10 +47,10 @@ stderr 被重定向时，Runtime 会自动退化为纯文本时间戳日志，�
 导出Agate 配置后运行：
 
 ```bash
-export AGATE_URL="http://127.0.0.1:8000"
-# export AGATE_AK="..."  # 仅在 Gateway 要求鉴权时设置
-# export AGATE_SK="..."
-export AGATE_GPU="local"
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK="..."
+export AGATE_SK="..."
+export AGATE_GPU="L20N"
 export QODER_PERSONAL_ACCESS_TOKEN="..."
 bash examples/lineage/run.sh
 ```

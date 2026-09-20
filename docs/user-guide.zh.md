@@ -26,16 +26,15 @@ python3 -m venv .venv
 最短端到端检查：
 
 ```bash
-export AGATE_URL="http://127.0.0.1:8000"
-# export AGATE_AK='...'  # only if the Gateway requires authentication
-# export AGATE_SK='...'
-export AGATE_GPU="local"
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK='...'
+export AGATE_SK='...'
+export AGATE_GPU="L20N"
 export QODER_PERSONAL_ACCESS_TOKEN='...'
 bash examples/bootstrap/run.sh
 ```
 
-须先单独部署 Agate 的 `local` 后端；[Agate localhost](agate-localhost.zh.md) 说明默认连接和执行边界。
-显式地址/GPU 环境变量仍可覆盖默认值。
+Runtime 连接远端 Agate 服务；显式地址和 GPU 环境变量仍可覆盖默认值。
 
 脚本会创建隔离 Workspace、生成本地 Secret 和配置、启动 Runtime、Bootstrap 一个 Triton VecAdd
 Lineage、输出检查结果并停止 Runtime。其他样例见 [examples/README.zh.md](../examples/README.zh.md)。

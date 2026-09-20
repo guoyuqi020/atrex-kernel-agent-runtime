@@ -45,7 +45,7 @@ def test_all_bootstrap_shell_wrappers_parse() -> None:
     subprocess.run(("bash", "-n", *(str(path) for path in scripts)), check=True)
 
 
-def test_bootstrap_prepare_defaults_to_localhost_without_credentials(tmp_path: Path) -> None:
+def test_bootstrap_prepare_defaults_to_remote_agate(tmp_path: Path) -> None:
     config_path = tmp_path / "runtime.json"
     spec_path = tmp_path / "campaign.json"
     environment = {
@@ -64,11 +64,11 @@ def test_bootstrap_prepare_defaults_to_localhost_without_credentials(tmp_path: P
 
     settings = RuntimeSettings.from_file(config_path)
     spec = CampaignSpecV3.from_file(spec_path)
-    assert settings.agate.base_url == "http://127.0.0.1:8000"
-    assert settings.agate.auth_mode == "none"
-    assert settings.agate.access_key_env is None
-    assert settings.agate.secret_key_env is None
-    assert spec.hardware_target == "local"
+    assert settings.agate.base_url == "https://atrex-gateway.alibaba-inc.com"
+    assert settings.agate.auth_mode == "ak_sk"
+    assert settings.agate.access_key_env == "AGATE_AK"
+    assert settings.agate.secret_key_env == "AGATE_SK"
+    assert spec.hardware_target == "L20N"
 
 
 def test_bootstrap_prepare_builds_valid_remote_agate_inputs(tmp_path: Path) -> None:

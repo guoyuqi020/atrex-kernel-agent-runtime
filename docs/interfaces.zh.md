@@ -592,9 +592,9 @@ Optimizer Tool，也不会暴露到 Optimizer Session 内。
 轮次结果包含 Attempt 身份、输入/输出/当前 Trajectory Kernel 身份、是否接受、正确性、Latency、
 失败原因以及是否存在 Runtime-State Checkpoint。私有 SDK 分配确定性的序号，Workflow 重启后会幂等
 重放已完成轮次。Kernel 路由只接受 Epoch 起点或本 Epoch 已接受结果；State 路由只接受
-`retain_across_attempts` 下同一 Agent 的已完成 Attempt。Runtime 在选择前要求登记全部已挂接 Branch、
-容量与预算精确匹配，并完成全部计划 Attempt；跨 Epoch 调度、执行、Gateway、Gate、持久化、比较与
-晋升权威仍归 Runtime。
+`retain_across_attempts` 下同一 Agent 的已完成 Attempt。普通组织在选择前必须登记全部已挂接 Branch、
+用完完整预算。受控的仅 Challenger 进化组织可以只登记唯一 Challenger，但必须精确用完单 Branch 预算。
+全部计划 Attempt 都必须完成；跨 Epoch 调度、执行、Gateway、Gate、持久化、比较与晋升权威仍归 Runtime。
 
 ## 外部服务 Contract
 

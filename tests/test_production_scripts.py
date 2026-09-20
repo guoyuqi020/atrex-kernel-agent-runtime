@@ -144,6 +144,51 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     ] == [
         ("isolated", "ablation-isolated-01", 1, 3, 5, True, "workflow/isolated.py"),
         ("isolated", "ablation-isolated-02", 1, 3, 5, True, "workflow/isolated.py"),
+        (
+            "isolated-evolve",
+            "ablation-isolated-evolve-01",
+            1,
+            3,
+            5,
+            True,
+            "workflow/evolve_isolated_3.py",
+        ),
+        (
+            "isolated-evolve",
+            "ablation-isolated-evolve-02",
+            1,
+            3,
+            5,
+            True,
+            "workflow/evolve_isolated_3.py",
+        ),
+        (
+            "retained-evolve",
+            "ablation-retained-evolve-01",
+            1,
+            3,
+            5,
+            False,
+            "workflow/evolve_retained_3.py",
+        ),
+        (
+            "retained-evolve",
+            "ablation-retained-evolve-02",
+            1,
+            3,
+            5,
+            False,
+            "workflow/evolve_retained_3.py",
+        ),
+        (
+            "isolated-pool-evolve",
+            "ablation-isolated-pool-evolve-3",
+            2,
+            3,
+            5,
+            True,
+            "workflow/evolve_isolated_pool_3.py",
+        ),
         ("pooled", "ablation-pool-3", 2, 3, 5, True, "workflow/pool_3.py"),
         (
             "pool-retained",
@@ -231,17 +276,26 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
             }
         )
         assert arm["attempts_per_trajectory"] * arm["target_epoch_number"] == 15
-        total = (
+        per_branch_total = (
             arm["trajectories_per_branch"]
             * arm["attempts_per_trajectory"]
             * arm["target_epoch_number"]
         )
-        assert total == (30 if arm["kind"] in ("pooled", "pool-retained") else 15)
+        evolving = arm["kind"] in (
+            "isolated-evolve",
+            "retained-evolve",
+            "isolated-pool-evolve",
+        )
+        assert per_branch_total == (
+            30 if arm["kind"] in ("pooled", "pool-retained", "isolated-pool-evolve") else 15
+        )
         assert arm["challenger_start_epoch"] == 2
-        assert arm["challenger_count"] == 0
-        assert arm["first_epoch_same_agent"] is False
-        assert arm["evolution_count"] == 0
-        assert arm["optimizer_attempt_budget_total"] == total
+        assert arm["challenger_count"] == (1 if evolving else 0)
+        assert arm["first_epoch_same_agent"] is evolving
+        assert arm["evolution_count"] == (4 if evolving else 0)
+        assert arm["optimizer_attempt_budget_total"] == per_branch_total * (
+            2 if arm["kind"] == "isolated-pool-evolve" else 1
+        )
     # 3 Trajectories x (1 Active + 2 Challengers) = 9.
     assert len(by_kind["isolated"]) == 9
     assert {arm["trajectories_per_branch"] for arm in by_kind["isolated"]} == {1}
@@ -274,6 +328,39 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
         }
         for pooled in by_kind["pooled"]
     ]
+    assert by_kind["isolated-evolve"] == [
+        {
+            "kind": "isolated-evolve",
+            "label": f"ablation-isolated-evolve-{ordinal:02d}",
+            "trajectories_per_branch": 1,
+            "attempts_per_trajectory": 3,
+            "target_epoch_number": 5,
+            "ephemeral_agent_state": True,
+            "workflow_command": "workflow/evolve_isolated_3.py",
+        }
+        for ordinal in (1, 2)
+    ]
+    assert by_kind["retained-evolve"] == [
+        {
+            **isolated_evolve,
+            "kind": "retained-evolve",
+            "label": isolated_evolve["label"].replace("isolated", "retained"),
+            "ephemeral_agent_state": False,
+            "workflow_command": "workflow/evolve_retained_3.py",
+        }
+        for isolated_evolve in by_kind["isolated-evolve"]
+    ]
+    assert by_kind["isolated-pool-evolve"] == [
+        {
+            "kind": "isolated-pool-evolve",
+            "label": "ablation-isolated-pool-evolve-3",
+            "trajectories_per_branch": 2,
+            "attempts_per_trajectory": 3,
+            "target_epoch_number": 5,
+            "ephemeral_agent_state": True,
+            "workflow_command": "workflow/evolve_isolated_pool_3.py",
+        }
+    ]
     # Retained pairs with Isolated one-to-one, differing only in state persistence.
     assert by_kind["retained"] == [
         {
@@ -293,7 +380,13 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
     custom = _ablation_plan(
         {"schedule": {**schedule, "attempts_per_trajectory": 5, "event_only": True}}
     )
-    for expected in by_kind["pooled"] + by_kind["pool-retained"]:
+    for expected in (
+        by_kind["pooled"]
+        + by_kind["pool-retained"]
+        + by_kind["isolated-evolve"]
+        + by_kind["retained-evolve"]
+        + by_kind["isolated-pool-evolve"]
+    ):
         pool = next(arm for arm in custom["arms"] if arm["label"] == expected["label"])
         assert all(pool[key] == value for key, value in expected.items())
     assert all(
@@ -301,7 +394,15 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
         for arm in custom["arms"]
         if arm["kind"] == "retained"
     )
-    assert set(by_kind) == {"isolated", "retained", "pooled", "pool-retained"}
+    assert set(by_kind) == {
+        "isolated",
+        "isolated-evolve",
+        "retained-evolve",
+        "isolated-pool-evolve",
+        "retained",
+        "pooled",
+        "pool-retained",
+    }
 
     with pytest.raises(ValueError, match="cannot spend exactly 15 Attempts"):
         _ablation_plan({"schedule": {**schedule, "attempts_per_trajectory": 4, "event_only": True}})
@@ -312,6 +413,11 @@ def test_default_ablation_plan_keeps_only_three_attempt_schedules() -> None:
     assert [arm["label"] for arm in plan["arms"]] == [
         "ablation-isolated-01",
         "ablation-isolated-02",
+        "ablation-isolated-evolve-01",
+        "ablation-isolated-evolve-02",
+        "ablation-retained-evolve-01",
+        "ablation-retained-evolve-02",
+        "ablation-isolated-pool-evolve-3",
         "ablation-pool-3",
         "ablation-pool-retained-3",
         "ablation-retained-01",
@@ -319,7 +425,19 @@ def test_default_ablation_plan_keeps_only_three_attempt_schedules() -> None:
     ]
     assert all(arm["attempts_per_trajectory"] == 3 for arm in plan["arms"])
     assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
-    assert all(arm["evolution_count"] == 0 for arm in plan["arms"])
+    assert [arm["evolution_count"] for arm in plan["arms"]] == [
+        0,
+        0,
+        4,
+        4,
+        4,
+        4,
+        4,
+        0,
+        0,
+        0,
+        0,
+    ]
 
 
 def test_prepare_seeds_each_dsl_campaign_from_its_own_kernel(tmp_path: Path) -> None:
@@ -411,7 +529,7 @@ def test_prepare_prefers_shape_train_and_keeps_shape_valid_private(tmp_path: Pat
         assert "shape_valid" not in json.dumps(campaign.model_dump(mode="json"))
 
 
-def test_prepare_service_defaults_to_localhost_without_credentials(tmp_path: Path) -> None:
+def test_prepare_service_defaults_to_remote_agate(tmp_path: Path) -> None:
     workspace = tmp_path / "service"
     environment = {key: value for key, value in os.environ.items() if not key.startswith("AGATE_")}
     subprocess.run(
@@ -429,12 +547,12 @@ def test_prepare_service_defaults_to_localhost_without_credentials(tmp_path: Pat
     )
 
     settings = RuntimeSettings.from_file(workspace / "runtime.json")
-    assert settings.agate.base_url == "http://127.0.0.1:8000"
-    assert settings.agate.auth_mode == "none"
+    assert settings.agate.base_url == "https://atrex-gateway.alibaba-inc.com"
+    assert settings.agate.auth_mode == "ak_sk"
     manifest = json.loads(
         workspace.joinpath("production-manifest.json").read_text(encoding="utf-8")
     )
-    assert manifest["hardware_target"] == "local"
+    assert manifest["hardware_target"] == "L20N"
 
 
 def test_prepare_can_attach_task_to_existing_service_workspace(tmp_path: Path) -> None:
@@ -920,6 +1038,20 @@ def test_production_runner_prints_schedule_through_actual_shell(tmp_path: Path) 
     assert "ablation-pool-3=2 Trajectories x 5 Epochs x 3 Attempts" in result.stdout
     assert "0 Challenger(s) (Epoch 1 same Agent: False) = 30 total; 0 Evolutions" in result.stdout
     assert "ablation-pool-retained-3=2 Trajectories x 5 Epochs x 3 Attempts" in result.stdout
+    for label in (
+        "ablation-isolated-evolve-01",
+        "ablation-isolated-evolve-02",
+        "ablation-retained-evolve-01",
+        "ablation-retained-evolve-02",
+    ):
+        assert (
+            f"{label}=1 Trajectories x 5 Epochs x 3 Attempts + 1 Challenger(s) "
+            "(Epoch 1 same Agent: True) = 15 total; 4 Evolutions"
+        ) in result.stdout
+    assert (
+        "ablation-isolated-pool-evolve-3=2 Trajectories x 5 Epochs x 3 Attempts "
+        "+ 1 Challenger(s) (Epoch 1 same Agent: True) = 60 total; 4 Evolutions"
+    ) in result.stdout
     for ordinal in (1, 2):
         assert (
             f"ablation-retained-{ordinal:02d}=1 Trajectories x 5 Epochs x 3 Attempts"

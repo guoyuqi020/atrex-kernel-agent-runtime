@@ -22,7 +22,7 @@ bash examples/evolver-dev-shell/run.sh bash codex
 
 The Backend argument controls the Evolver metadata in the synthetic input; no Backend process is
 started. The example does not require Agate credentials. `AGATE_GPU`, if set, is retained as the
-hardware label; otherwise `local` is used. This shell does not contact Agate.
+hardware label; otherwise `L20N` is used. This shell does not contact Agate.
 
 Inside the shell, inspect each visible Agent version's source and state in
 `input/agents/agent-vN/`, what Runtime derived about it in `input/evidence/agent-vN/`, and the writable

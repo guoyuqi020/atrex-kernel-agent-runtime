@@ -106,8 +106,8 @@ interaction but Core exposes only knowledge content. Runtime sends no post-Epoch
 Runtime snapshots the Active Agent, starting Kernel, common Runtime State, Evidence, and a fixed
 resource envelope. It then runs the Active Agent Revision's versioned Workflow program once in an
 isolated process. Workflow may ask Runtime to attach Active replicas, invoke Evolver serially for up
-to `K` Challengers, divide the exact Optimizer Attempt budget among Branches and Trajectories, execute
-those Branches, and request trusted Kernel and Agent selection. A Challenger proposal may create a
+to `K` Challengers, divide the bounded Optimizer Attempt capacity among Branches and Trajectories,
+execute those Branches, and request trusted Kernel and Agent selection. A Challenger proposal may create a
 revision from Active, reuse a visible historical revision, create one from history, or return
 `no_change`. Revision ancestry remains a tree; reuse and Epoch participation are separate provenance.
 
@@ -115,7 +115,9 @@ Workflow implements one `run_epoch(epoch)` function. Its public SDK creates Bran
 advances synchronized rounds without exposing Attempt ordinals or the wire protocol. After each
 round, code may inspect trusted outcomes, broadcast an accepted Kernel across sibling Trajectories,
 or copy compatible Runtime State by naming its producing Attempt. The SDK privately translates
-rounds into replay-safe Attempt operations. The exact Branch capacity, Runtime-State policy,
+rounds into replay-safe Attempt operations. Normal organizations spend the full configured capacity;
+controlled Challenger-only evolution organizations execute only one Challenger and spend the exact
+single-Branch budget. Branch capacity, Runtime-State policy,
 Challenger set, and Workflow program hash remain frozen and the configured Attempt budget must still
 be spent exactly. Runtime—not Workflow—schedules Epochs, launches and recovers every Attempt,
 performs Gateway evaluation and trusted comparison, validates cross-Trajectory inputs and selection
@@ -136,12 +138,12 @@ Campaign Contract.
 
 Production Bootstrap selects the Runtime-owned `evolve_3.py` construction template when sealing its
 initial Agent Revision. Each ablation Lineage derives its own immutable `agent-v0` from the same
-Optimizer source while selecting the controlled Isolated, Retained, Pool-3, or Pool-Retained-3
-template. Runtime materializes only the selected program as `workflow/main.py`; the sealed Revision
-does not contain the alternative arm programs, so Optimizer and Evolver see only the organization
-that actually runs. Repeated control instances keep independent Revision identities even when their
-selected Workflow content is identical. They share the exact Bootstrap Kernel, not the source
-Lineage's Agent Artifact identity.
+Optimizer source while selecting the controlled Isolated, Isolated-Evolve, Retained-Evolve,
+Isolated-Pool-Evolve, Retained, Pool-3, or Pool-Retained-3 template. Runtime materializes only the selected program as `workflow/main.py`; the
+sealed Revision does not contain the alternative arm programs, so Optimizer and Evolver see only
+the organization that actually runs. Repeated control instances keep independent Revision
+identities even when their selected Workflow content is identical. They share the exact Bootstrap
+Kernel, not the source Lineage's Agent Artifact identity.
 
 The Workflow program belongs to the immutable Agent Revision, but its execution state does not.
 Only the Epoch's Active Revision orchestrates that Epoch; a Challenger's changed Workflow takes
@@ -160,8 +162,11 @@ identity needed for comparison but has independent lifecycle and version histori
 
 With `first_epoch_same_agent=true`, the initial Challenger is a Runtime-created `replica` of
 the Active revision, not an Evolution. Branch identity isolates mutable State and attempts while
-the Agent revision remains unchanged. Kernel selection covers both Branches; the best producer's
-terminal Trajectory State seeds the next Active and Evolver. Replica provenance has no Evolution trace.
+the Agent revision remains unchanged. A normal competition executes both Branches. The controlled
+Challenger-only evolution topologies execute only this replica/Challenger: they have no same-Epoch
+Active control, retain the best Kernel against the Epoch starting Kernel, and promote the sole
+executed Agent for the next Epoch. Isolated-Evolve resets State before every Attempt;
+Retained-Evolve carries it across serial Attempts. Replica provenance has no Evolution trace.
 
 ## Private evaluation boundary
 

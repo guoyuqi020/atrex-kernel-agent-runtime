@@ -32,24 +32,29 @@ python scripts/source-tree/run.py \
   --workspace workspaces/gdn-source-tree/run --target-epoch 100
 ```
 
-默认只用 CuteDSL，但与单文件生产一样有 7 个 Campaign：`evolve-3`、
-`ablation-isolated-01/02`、`ablation-retained-01/02`、`ablation-pool-3` 和
-`ablation-pool-retained-3`。生成的 `ablation.json` 及仓库中的 `ablation.example.json`
+默认只用 CuteDSL，但与单文件生产一样有 12 个 Campaign：`evolve-3`、
+`ablation-isolated-01/02`、`ablation-isolated-evolve-01/02`、
+`ablation-retained-evolve-01/02`、`ablation-isolated-pool-evolve-3`、`ablation-retained-01/02`、
+`ablation-pool-3` 和 `ablation-pool-retained-3`。
+生成的 `ablation.json` 及仓库中的 `ablation.example.json`
 与单文件共享计划生成器。各臂复用一次 Bootstrap 的冻结源码树 v0，对照臂不重复评测。
 
 默认每臂 100 个 Epoch、每轨迹每轮 3 次 Attempt。Isolated/Retained 每实例一条轨迹，
 各 300 次；两个 Pool 各两条轨迹，各 600 次。Isolated/Pool 重置自适应 State，
 Retained/Pool-Retained 保留。Pool 在 Epoch 边界共享最佳 Kernel；Pool-Retained
 还继承获胜轨迹的终态 State，不做合并。不同臂不共享后续历史或可写文件。
-只有主臂进化：首轮用同一 Agent 的两份独立副本，第二轮起 Active + 一个新 Challenger，
-共 600 次 Attempt、99 次 Evolution。全套共 3,000 次 Optimizer Attempt，不启动外部原版 AKA。
+主臂比较 Active 与 Challenger，并作为 Retained-State + Evolution 对照。两个 Isolated-Evolve
+只运行复制/进化得到的 Challenger，每个 Attempt 重置 State；两个 Retained-Evolve 采用相同的仅
+Challenger 拓扑，但在串行 Attempt 间继承 State。两类都不做同轮 Agent 对比。
+Isolated-Pool-Evolve 同时运行 Active/Challenger Pool，每边两条 Trajectory，并在每个 Attempt 前
+重置 Optimizer 产出的自适应 State。全套共 5,400 次 Optimizer Attempt，不启动外部原版 AKA。
 
 `run/` 保存各臂 seed 身份、日志、结果和 `campaign-results.json` 汇总；真正的 Session/Artifact
 仍在配置的 Runtime storage。一个臂失败不取消其他臂，重复运行恢复相同身份。
 `--target-epoch` 只改主臂目标，新对照计划固定每轨迹 300 次；冻结输入不可修改后继续复用。
 已有工作区保留原计划；恢复旧 5 轮实验且不扩展主臂时，显式传入 `--target-epoch 5`。
 单文件模式默认值不变。
-最多并行 10 个 Optimizer，请预留宿主内存。只跑主臂时仍可直接调用 `bootstrap` 和
+最多并行 18 个 Optimizer，请预留宿主内存。只跑主臂时仍可直接调用 `bootstrap` 和
 `run-campaign` 两条原始 CLI 命令。
 
 Bootstrap 启动配置的 Agent，在原始源码上完成评测、Journal 和标准报告，

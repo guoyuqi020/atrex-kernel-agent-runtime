@@ -38,7 +38,7 @@ service 前自行提权；`container` 模式完全不会提权。
 - Epoch 结束后独立比较并选择 Agent，下一 Epoch 再生成一个 Challenger；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
 
-默认 `event_only=true` 时，每个 DSL 共运行 7 个 Campaign 实例，含主臂。所有臂共享同一份冻结的
+默认 `event_only=true` 时，每个 DSL 共运行 12 个 Campaign 实例，含主臂。所有臂共享同一份冻结的
 Bootstrap v0，对照臂不重复 Bootstrap 或 Baseline 测量。默认均运行 5 个 Epoch，每条 Trajectory
 在每个 Epoch 串行执行 3 个 Attempt：
 
@@ -46,6 +46,9 @@ Bootstrap v0，对照臂不重复 Bootstrap 或 Baseline 测量。默认均运�
 |---|---|---:|---|---:|
 | `evolve-3`（主臂） | Active + Challenger，各一条 Trajectory | 30 | 是 | 4 |
 | `ablation-isolated-01/02` | 两个独立实例，各一条 Trajectory | 各 15，共 30 | 否 | 0 |
+| `ablation-isolated-evolve-01/02` | 仅 Challenger，各一条 Trajectory | 各 15，共 30 | 否 | 各 4 |
+| `ablation-retained-evolve-01/02` | 仅 Challenger，各一条 Trajectory | 各 15，共 30 | 是 | 各 4 |
+| `ablation-isolated-pool-evolve-3` | Active + Challenger，各两条 Trajectory | 60 | 否 | 4 |
 | `ablation-retained-01/02` | 两个独立实例，各一条 Trajectory | 各 15，共 30 | 是 | 0 |
 | `ablation-pool-3` | 同一 Branch 内两条 Trajectory | 30 | 否 | 0 |
 | `ablation-pool-retained-3` | 同一 Branch 内两条 Trajectory | 30 | 是 | 0 |
@@ -58,12 +61,20 @@ Pool 的 Trajectory 在同一 Epoch 内独立运行，在下一 Epoch 共享已�
 重新开始。Pool-Retained 还继承该 Kernel 产出 Trajectory 的终态 State；State 选择继承，不合并，
 也不实时同步。所有对照臂的 Source 固定。两个 Pool 臂始终使用两条 Trajectory、每 Epoch 三次 Attempt。
 
-只有主臂运行 Evolver。`first_epoch_same_agent=true` 使首轮使用同一 Agent 的副本，不产生新
-Agent Revision 或 Evolution Report。两分支 State 独立，下一轮 Active 和 Evolver 从最佳 Kernel
-所属 Trajectory 的终态 State 开始。Bootstrap 和 Evolver Session 不计入 Optimizer Attempts。
+主臂、四个仅 Challenger 的进化臂和 Isolated-Pool-Evolve 都运行 Evolver。主臂是双分支 Retained-State + Evolution 对照，
+仍比较 Active 与 Challenger。Isolated-Evolve 和 Retained-Evolve 都只运行复制/进化得到的
+Challenger，不运行同轮 Active；二者唯一差别是每个 Attempt 前重置 State，还是在三个串行 Attempt
+间继承 State。`first_epoch_same_agent=true` 使首轮使用 Active 副本，不产生新 Agent Revision 或
+Evolution Report。Bootstrap 和 Evolver Session 不计入 Attempt。
+
+Isolated-Pool-Evolve 同时运行 Active 和 Challenger Pool，每边两条独立 Trajectory。它在每个
+Attempt 前重置自适应 State，因此 Optimizer 产出的 Tool/Skill/Memory/Knowledge 不会继承；Kernel
+进展与 Runtime Journal 历史仍由 Runtime 保留。
 
 每个臂都持有 Lineage-local `agent-v0`，并在其中冻结自己的可执行 Workflow：`evolve_3.py`、
-`isolated.py`、`retained.py`、`pool_3.py` 或 `pool_retained_3.py`。Optimizer Source 与共享
+`evolve_isolated_3.py`、`evolve_retained_3.py`、`evolve_isolated_pool_3.py`、`isolated.py`、`retained.py`、`pool_3.py` 或
+`pool_retained_3.py`。
+Optimizer Source 与共享
 Bootstrap Kernel 仍受控；Runtime 不再根据臂 Label 推断组织拓扑。
 
 主臂位于 `dsls/DSL/`，对照臂文件位于 `dsls/DSL/ablation-*/`。生成的 `ablation.json` 冻结对照臂配置，
@@ -81,9 +92,8 @@ Worker 边界有两种选择：
   Namespace，Docker/Kubernetes 则提供共享的内存、CPU 与 PID 总限额。不要挂载 Docker Socket、
   Runtime Secret、私有评测数据或无关宿主路径。
 
-两种模式都需要受支持的 Agent CLI 和已经运行的官方 Agate 服务，并直接复用所在环境的 DNS 与公网连接。
-默认地址为 `http://127.0.0.1:8000`、GPU 为 `local`；本地服务启用鉴权时才需 AK/SK，显式非本机
-地址沿用 AK/SK。Agate 须单独部署，脚本仅管理 Runtime/Wiki，见 [Agate localhost](../../docs/agate-localhost.zh.md)。
+两种模式都需要受支持的 Agent CLI 和远端 Agate 服务，并直接复用所在环境的 DNS 与公网连接。
+默认地址为 `https://atrex-gateway.alibaba-inc.com`、GPU 为 `L20N`，且必须提供 AK/SK。
 `sandbox` 模式下，服务脚本会让 Local Wiki 以配置的非 root Sandbox Worker 身份运行；
 `container` 模式沿用容器进程用户，建议直接以非 root 用户启动外层容器，并先验证 bwrap 能创建
 User/PID/IPC/UTS Namespace。

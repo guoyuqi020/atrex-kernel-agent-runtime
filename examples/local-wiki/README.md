@@ -100,11 +100,12 @@ Optimizer to QoderCLI and inherits `QODER_PERSONAL_ACCESS_TOKEN` from the launch
 Change `campaign.optimizer.agent_backend` in this example's `runtime.json` to select another
 supported Backend. Credential values are never printed or copied into the workspace.
 
-Keep the official local Agate Gateway listening on `127.0.0.1:8000` with a `local` GPU alias,
-then run (see [deployment](../../docs/agate-localhost.md)):
+Export the remote Agate credentials, then run:
 
 ```bash
 # Terminal 2
+export AGATE_AK="..."
+export AGATE_SK="..."
 bash examples/local-wiki/start-runtime.sh
 
 # Terminal 3

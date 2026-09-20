@@ -17,14 +17,17 @@ from atrex_runtime.gateway.configuration import (
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_localhost_defaults_need_no_remote_credentials() -> None:
+def test_remote_defaults_require_remote_credentials() -> None:
     settings = agate_settings_from_environment({})
-    assert settings.base_url == "http://127.0.0.1:8000"
-    assert settings.auth_mode == "none"
-    assert settings.access_key_env is None
-    connection = build_agate_connection(settings, {})
+    assert settings.base_url == "https://atrex-gateway.alibaba-inc.com"
+    assert settings.auth_mode == "ak_sk"
+    assert settings.access_key_env == "AGATE_AK"
+    with pytest.raises(ValueError, match="AGATE_AK"):
+        build_agate_connection(settings, {})
+    environment = {"AGATE_AK": "test-ak", "AGATE_SK": "test-sk"}
+    connection = build_agate_connection(settings, environment)
     assert connection.base_url == settings.base_url
-    assert connection.auth_mode == "none"
+    assert connection.auth_mode == "ak_sk"
     assert (
         AgateConnectionConfig(auth_mode="none", http_timeout_s=10, wait_timeout_s=20).base_url
         == settings.base_url
@@ -57,7 +60,7 @@ def test_explicit_remote_gateway_keeps_existing_auth_policy() -> None:
 @pytest.mark.parametrize(
     "environment, expected",
     [
-        ({}, 0),
+        ({}, 64),
         ({"AGATE_URL": "http://localhost:8080"}, 0),
         ({"AGATE_URL": "http://localhost"}, 0),
         ({"AGATE_URL": "http://localhost.attacker.test:8080"}, 64),

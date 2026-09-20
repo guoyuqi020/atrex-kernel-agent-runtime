@@ -34,8 +34,10 @@
     "candidate_diff_require_change": true
   },
   "agate": {
-    "base_url": "http://127.0.0.1:8000",
-    "auth_mode": "none",
+    "base_url": "https://atrex-gateway.alibaba-inc.com",
+    "auth_mode": "ak_sk",
+    "access_key_env": "AGATE_AK",
+    "secret_key_env": "AGATE_SK",
     "http_timeout_s": 600,
     "wait_timeout_s": 1200,
     "health_check_interval_s": 30

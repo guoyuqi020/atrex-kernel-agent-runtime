@@ -7,6 +7,10 @@ runs the Active Branch and every Challenger Branch concurrently, bounded by depl
 `max_parallel_branches` (positive, default `4`). Within an admitted Branch, its configured
 Trajectories remain concurrent and every Trajectory's Attempts remain serial.
 
+Controlled Challenger-only evolution workflows are the sole exception: they intentionally omit
+Active and run only `challenger-1`, so there is no same-Epoch Agent comparison. The Challenger still competes
+against the frozen starting Kernel for Kernel retention and is the sole eligible next Agent.
+
 All Branches use the same frozen Epoch starting Kernel and Evidence. They cannot consume sibling
 intermediate results. Agent selection begins only after every Branch finishes successfully.
 
@@ -18,6 +22,7 @@ sibling cleanup; an unexpected process interruption preserves the running Epoch 
 ## Consequences
 
 The maximum concurrent Optimizer Session count is
-`min(1 + K, max_parallel_branches) × Y`. The limit is Runtime deployment policy rather than immutable
+`min(B, max_parallel_branches) × Y`, where `B` is the number of Branches actually selected by the
+validated Workflow (normally `1 + K`, and `1` for Challenger-only evolution). The limit is Runtime deployment policy rather than immutable
 Campaign topology, so operators can match model, Gateway, and GPU capacity without changing Lineage
 identity.

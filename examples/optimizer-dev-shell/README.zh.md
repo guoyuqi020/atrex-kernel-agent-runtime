@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-默认连接已启动的官方 localhost 服务（`127.0.0.1:8000`、GPU `local`）；可显式覆盖环境变量。部署步骤见 [Agate localhost](../../docs/agate-localhost.zh.md)。
+默认连接远端 Agate 服务；可显式覆盖环境变量。
 
 该示例只创建一个可丢弃的 Optimizer 兼容工作区，不运行 Bootstrap，不创建持久化 Campaign 或
 Lineage，也不启动任何 Agent Backend。
@@ -22,10 +22,10 @@ Namespace 隔离网络，并通过 systemd/cgroup-v2 限制资源。Wrapper 要�
 先导出Agate 配置：
 
 ```bash
-export AGATE_URL="http://127.0.0.1:8000"
-# export AGATE_AK="..."  # 仅在 Gateway 要求鉴权时设置
-# export AGATE_SK="..."
-export AGATE_GPU="local"
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK="..."
+export AGATE_SK="..."
+export AGATE_GPU="L20N"
 bash examples/optimizer-dev-shell/run.sh zsh qodercli
 ```
 

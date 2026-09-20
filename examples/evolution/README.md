@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Defaults connect to an already-running official localhost Gateway (`127.0.0.1:8000`, GPU `local`); explicit environment overrides remain supported. See [Agate localhost](../../docs/agate-localhost.md) for deployment.
+Defaults connect to the remote Agate service; explicit environment overrides remain supported.
 
 This example runs one Triton Lineage through Epoch 3 and exercises two controlled Agent evolutions:
 
@@ -22,10 +22,10 @@ VecAdd inputs and generic helpers under `examples/shared/`, never another runnab
 Export the Agate and pinned Evolver Bundle requirements first:
 
 ```bash
-export AGATE_URL="http://127.0.0.1:8000"
-# export AGATE_AK="..."  # only if the Gateway requires authentication
-# export AGATE_SK="..."
-export AGATE_GPU="local"
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK="..."
+export AGATE_SK="..."
+export AGATE_GPU="L20N"
 export QODER_PERSONAL_ACCESS_TOKEN="..."
 ```
 

@@ -15,8 +15,8 @@ from .domain.models import Dsl
 from .kernel_agents import KernelAgentBundleLimits
 
 RUNTIME_CONFIG_VERSION: Literal[1] = 1
-DEFAULT_AGATE_URL = "http://127.0.0.1:8000"
-DEFAULT_AGATE_GPU = "local"
+DEFAULT_AGATE_URL = "https://atrex-gateway.alibaba-inc.com"
+DEFAULT_AGATE_GPU = "L20N"
 _ENVIRONMENT_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 AgentBackend = Literal["claude", "codex", "qodercli", "pi"]
 ReasoningEffort = Literal["low", "medium", "high", "max"]

@@ -74,12 +74,15 @@ class EpochRunResult:
     @property
     def active_score(self) -> BranchScore:
         """Return the first and only Active score."""
-        return self.scores[0]
+        for score in self.scores:
+            if score.branch is BranchRole.ACTIVE:
+                return score
+        raise InvalidTransitionError(f"Epoch {self.epoch.id} did not execute an Active Branch")
 
     @property
     def challenger_scores(self) -> tuple[BranchScore, ...]:
         """Return Challenger scores in configured ordinal order."""
-        return self.scores[1:]
+        return tuple(score for score in self.scores if score.branch is BranchRole.CHALLENGER)
 
 
 class _EpochWorkflowOperations(AgentWorkflowOperationHandler):
@@ -676,9 +679,7 @@ class EpochController:
             branch=branch,
             challenger_ordinal=challenger_ordinal,
             kernel_agent_revision_id=revision_id,
-            kind=(
-                "executable_epoch_workflow_v2" if existing is None else existing.kind
-            ),
+            kind=("executable_epoch_workflow_v2" if existing is None else existing.kind),
             program_sha256=program_sha256,
             trajectories=trajectory_count,
             attempts_per_trajectory=attempt_capacity,
@@ -700,8 +701,7 @@ class EpochController:
                     "Workflow cannot add a new Trajectory after Attempt execution starts"
                 )
             planned = sum(
-                item.attempt_budget
-                for item in self._registry.list_epoch_branch_workflows(epoch.id)
+                item.attempt_budget for item in self._registry.list_epoch_branch_workflows(epoch.id)
             )
             requested = trajectory_count * attempt_capacity
             if planned + requested > optimizer_attempt_budget:
@@ -1014,9 +1014,7 @@ class EpochController:
 
         if state_from_attempt_id is not None:
             if workflow.runtime_state_policy is not RuntimeStatePolicy.RETAIN_ACROSS_ATTEMPTS:
-                raise ValueError(
-                    "input_state_from_attempt_id requires retain_across_attempts"
-                )
+                raise ValueError("input_state_from_attempt_id requires retain_across_attempts")
             source = self._registry.get_attempt(state_from_attempt_id)
             if source.epoch_id != epoch.id or source.status is not AttemptStatus.COMPLETED:
                 raise ValueError("Runtime State source must be a completed Attempt in this Epoch")
@@ -1119,17 +1117,30 @@ class EpochController:
                 for ordinal in range(1, len(self._registry.list_epoch_challengers(epoch.id)) + 1)
             ),
         }
-        if identities != required:
+        challenger_only = identities == {(BranchRole.CHALLENGER, 1)} and len(required) == 2
+        if identities != required and not challenger_only:
             raise ValueError(
-                "Workflow must register Active and every attached Challenger before Attempts"
+                "Workflow must register Active and every attached Challenger, or register only "
+                "challenger-1 when intentionally running one evolved Agent without an Active "
+                "comparator"
             )
         if any(item.program_sha256 != program_sha256 for item in workflows):
             raise InvalidTransitionError("Workflow Branch was frozen by another program")
         planned = sum(item.attempt_budget for item in workflows)
-        if planned != optimizer_attempt_budget:
+        if planned <= 0 or planned > optimizer_attempt_budget:
             raise ValueError(
-                "Workflow must allocate the Runtime Optimizer Attempt budget exactly: "
-                f"allocated {planned}, required {optimizer_attempt_budget}"
+                "Workflow Attempt allocation must be positive and cannot exceed the Runtime "
+                f"capacity: allocated {planned}, capacity {optimizer_attempt_budget}"
+            )
+        required_budget = (
+            epoch.trajectories_per_branch * epoch.attempts_per_trajectory
+            if challenger_only
+            else optimizer_attempt_budget
+        )
+        if planned != required_budget:
+            raise ValueError(
+                "Workflow must allocate the exact budget for its selected Branch topology: "
+                f"allocated {planned}, required {required_budget}"
             )
 
     def _workflow_validate_selection_ready(
@@ -1145,11 +1156,13 @@ class EpochController:
             optimizer_attempt_budget=optimizer_attempt_budget,
             program_sha256=program_sha256,
         )
+        workflows = self._registry.list_epoch_branch_workflows(epoch.id)
+        planned = sum(item.attempt_budget for item in workflows)
         attempts = self._registry.list_attempts(epoch.id)
-        if len(attempts) != optimizer_attempt_budget:
+        if len(attempts) != planned:
             raise InvalidTransitionError(
                 "Workflow cannot select before every allocated Attempt has run: "
-                f"completed or present {len(attempts)}, required {optimizer_attempt_budget}"
+                f"completed or present {len(attempts)}, required {planned}"
             )
         if any(attempt.status is not AttemptStatus.COMPLETED for attempt in attempts):
             raise InvalidTransitionError("Workflow cannot select with unfinished Attempts")
@@ -1648,6 +1661,17 @@ class EpochController:
         )
 
     def _scores(self, epoch: Epoch) -> tuple[BranchScore, ...]:
+        workflows = self._registry.list_epoch_branch_workflows(epoch.id)
+        if workflows:
+            return tuple(
+                self._score_branch(
+                    epoch,
+                    workflow.branch,
+                    workflow.challenger_ordinal,
+                    workflow.kernel_agent_revision_id,
+                )
+                for workflow in workflows
+            )
         return (
             self._score_branch(
                 epoch,

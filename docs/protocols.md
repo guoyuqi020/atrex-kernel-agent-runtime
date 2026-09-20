@@ -225,12 +225,14 @@ specifications do the same when cloning a shared Bootstrap baseline, so the sele
 Agent Revision code rather than a controller-side label or topology preset, while Optimizer and
 Evolver never receive unrelated arm implementations.
 
-The context provides DSL/Epoch identity and a resource envelope: maximum Challenger slots, exact
-Optimizer Attempt budget, default topology, and default Runtime-State policy. Pool creation freezes
-each Branch capacity and State policy. The private SDK assigns explicit Attempt ordinals, so a
-Workflow restart replays completed logical rounds idempotently; round callbacks run again over the
-same trusted outcomes. All attached Branches must be registered and their capacities must spend the
-budget exactly. `epoch.complete()` rejects missing or unfinished work and commits only Runtime's
+The context provides DSL/Epoch identity and a resource envelope: maximum Challenger slots, hard
+Optimizer Attempt capacity, default topology, and default Runtime-State policy. Pool creation
+freezes each Branch capacity and State policy. The private SDK assigns explicit Attempt ordinals,
+so a Workflow restart replays completed logical rounds idempotently; round callbacks run again over
+the same trusted outcomes. Normal multi-Branch organizations must register every attached Branch
+and spend the full budget exactly. A controlled Challenger-only evolution organization may omit
+Active and execute only the sole Challenger, but must spend the exact configured single-Branch budget.
+`epoch.complete()` rejects any other subset, missing or unfinished work, and commits only Runtime's
 trusted Kernel and Agent selections.
 
 Workflow code has no Gateway, Registry, hidden-Test, arbitrary Worker-launch, Gate, promotion,

@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-默认连接已启动的官方 localhost 服务（`127.0.0.1:8000`、GPU `local`）；可显式覆盖环境变量。部署步骤见 [Agate localhost](../../docs/agate-localhost.zh.md)。
+默认连接官方远端 Agate 服务；可显式覆盖环境变量。
 
 本示例通过当前 `PATH` 解析到的官方 `agate` CLI 直接调用真实 Agate 服务，不会在本机
 启动或模拟 Agate。
@@ -12,18 +12,16 @@
 
 ## 配置连接
 
-脚本默认连接 localhost，只有需要时才覆盖地址；如果服务要求鉴权，再设置该服务的 AK/SK：
+脚本默认连接官方远端地址，并要求设置对应的 AK/SK：
 
 ```bash
-export AGATE_URL="http://127.0.0.1:8000"
-
-# 仅在此服务启用鉴权时设置：
-# export AGATE_AK="..."
-# export AGATE_SK="..."
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK="..."
+export AGATE_SK="..."
 ```
 
 不要把凭证写入 `runtime.json`，也不要提交到仓库。官方 CLI 会从环境变量读取
-`AGATE_AK`/`AGATE_SK`。如果服务采用无鉴权模式，则无需设置鉴权变量。
+`AGATE_AK`/`AGATE_SK`。
 
 脚本直接运行当前环境中的 `agate`，不会固定仓库虚拟环境路径。需要时可把 `AGATE_BIN` 设置为
 另一个命令或当前平台上的路径。macOS 创建的虚拟环境不能在 Linux 中复用；从 Linux 执行前应创建
@@ -33,7 +31,7 @@ export AGATE_URL="http://127.0.0.1:8000"
 
 ```bash
 bash examples/agate/check-service.sh
-export AGATE_GPU="local"
+export AGATE_GPU="L20N"
 ```
 
 `check-service.sh` 只查询服务，不会提交 GPU Job。
@@ -98,7 +96,6 @@ Optimizer Session 中，Agent 应调用 Runtime Gateway Tool：Runtime 会把请
 并确保 Agate 凭证不会进入 Agent 工作区。
 
 若要让 Runtime 连接同一个服务，只在 `runtime.json` 的 `agate` 段写入非敏感连接策略，
-选择 `auth_mode`（`none` 或 `ak_sk`）。AK/SK 模式需指定凭证环境变量的名称：
+选择 `auth_mode`（`none`、`token` 或 `ak_sk`）。AK/SK 模式需指定凭证环境变量的名称：
 `"access_key_env": "AGATE_AK"` 和 `"secret_key_env": "AGATE_SK"`。
-示例准备脚本在本机地址且无凭证时选择无鉴权，否则选择 AK/SK。每个示例使用自己的
-`runtime.json`，不导入其他示例的配置。
+每个示例使用自己的 `runtime.json`，不导入其他示例的配置。

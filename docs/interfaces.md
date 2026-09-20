@@ -713,9 +713,10 @@ acceptance, correctness, latency, failure reason, and whether a Runtime-State ch
 The private SDK assigns deterministic ordinals and replays completed rounds idempotently after a
 Workflow restart. Kernel routing accepts only the Epoch start or an accepted same-Epoch result; State routing
 accepts only a completed same-Agent Attempt under `retain_across_attempts`. Runtime requires all
-attached Branches, an exact capacity/budget match, and every planned Attempt completed before
-completion. It retains cross-Epoch scheduling, execution, Gateway, Gate, persistence, comparison,
-and promotion authority.
+attached Branches and the full budget for normal organizations. A controlled Challenger-only
+evolution organization may register only its sole Challenger and must spend the exact single-Branch budget.
+Every planned Attempt must complete before Epoch completion. Runtime retains cross-Epoch scheduling,
+execution, Gateway, Gate, persistence, comparison, and promotion authority.
 
 ## External service contracts
 

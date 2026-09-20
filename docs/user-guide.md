@@ -27,16 +27,15 @@ inside the wheel; Runtime imports their configured Git commits at execution time
 The shortest end-to-end check is:
 
 ```bash
-export AGATE_URL="http://127.0.0.1:8000"
-# export AGATE_AK='...'  # only if the Gateway requires authentication
-# export AGATE_SK='...'
-export AGATE_GPU="local"
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK='...'
+export AGATE_SK='...'
+export AGATE_GPU="L20N"
 export QODER_PERSONAL_ACCESS_TOKEN='...'
 bash examples/bootstrap/run.sh
 ```
 
-Deploy Agate separately with the `local` backend first; [Agate localhost](agate-localhost.md) documents
-the connection defaults and execution boundary. Explicit endpoint/GPU exports still override defaults.
+Runtime connects to the remote Agate service. Explicit endpoint and GPU exports override the defaults.
 
 The script creates an isolated workspace, generates local secrets and config, starts Runtime,
 bootstraps one Triton VecAdd Lineage, inspects the result, and stops Runtime. Other examples are

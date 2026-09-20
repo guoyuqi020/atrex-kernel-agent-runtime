@@ -679,9 +679,11 @@ async def test_source_tree_ablation_preserves_full_v0_and_edit_boundary(source_s
         boot = _bootstrapper(registry, source_seed.artifacts, loader, baseline)
         result = boot.bootstrap_campaign(CampaignSpecV3.from_file(spec_path))
         seeder = LineageSeeder(
-            registry, source_seed.artifacts,
+            registry,
+            source_seed.artifacts,
             KernelAgentRevisionBuilder(source_seed.artifacts, limits=kernel_agent_limits()),
-            NoEvaluation(), evolver_commit="e" * 40,
+            NoEvaluation(),
+            evolver_commit="e" * 40,
         )
         arm_seeder = AblationArmSeeder(registry, seeder)
         policy = json.loads(
@@ -690,10 +692,16 @@ async def test_source_tree_ablation_preserves_full_v0_and_edit_boundary(source_s
         ids = set()
         for arm in build_ablation_plan(policy)["arms"]:
             spec = AblationArmSpecV1(
-                creation_key=arm["label"], source_lineage_id=result.lineages[0].lineage_id,
-                **{key: arm[key] for key in (
-                    "attempts_per_trajectory", "trajectories_per_branch", "ephemeral_agent_state",
-                )},
+                creation_key=arm["label"],
+                source_lineage_id=result.lineages[0].lineage_id,
+                **{
+                    key: arm[key]
+                    for key in (
+                        "attempts_per_trajectory",
+                        "trajectories_per_branch",
+                        "ephemeral_agent_state",
+                    )
+                },
             )
             cloned = await arm_seeder.seed_arm(spec)
             assert await arm_seeder.seed_arm(spec) == cloned
@@ -713,5 +721,5 @@ async def test_source_tree_ablation_preserves_full_v0_and_edit_boundary(source_s
             restored = tmp_path / arm["label"]
             source_seed.artifacts.materialize(cloned.lineage.kernel_artifact_digest, restored)
             assert source.validate_tree(restored) == source.validate_tree(source_seed.working)
-        assert len(ids) == 6
+        assert len(ids) == 11
         assert baseline.calls == [Dsl.CUTEDSL]

@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-默认连接已启动的官方 localhost 服务（`127.0.0.1:8000`、GPU `local`）；可显式覆盖环境变量。部署步骤见 [Agate localhost](../../docs/agate-localhost.zh.md)。
+默认连接远端 Agate 服务；可显式覆盖环境变量。
 
 这个示例运行一个 Triton Lineage 到 Epoch 3，并展示两次受控 Agent 进化：
 
@@ -22,10 +22,10 @@ VecAdd 输入与通用 Helper，不依赖其他可运行示例。
 先准备Agate、QoderCLI 和固定 Evolver Bundle 所需环境：
 
 ```bash
-export AGATE_URL="http://127.0.0.1:8000"
-# export AGATE_AK="..."  # 仅在 Gateway 要求鉴权时设置
-# export AGATE_SK="..."
-export AGATE_GPU="local"
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK="..."
+export AGATE_SK="..."
+export AGATE_GPU="L20N"
 export QODER_PERSONAL_ACCESS_TOKEN="..."
 ```
 

@@ -17,9 +17,8 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
   Retained、Pool-3 与 Pool-Retained-3 仍分别执行独立版本化程序，同时共享受控的 Optimizer Source
   与完全相同的 Bootstrap Kernel。
 
-- 默认通过 HTTP 接入官方 Agate localhost 后端（`127.0.0.1:8000`、GPU `local`）。配置生成和
-  CLI 示例保留显式地址覆盖与服务端 AK/SK 鉴权；无鉴权 loopback 部署可不设置凭据。
-  Runtime/Wiki 脚本不管理 Agate 服务。
+- 默认连接官方远端 Agate 服务（`https://atrex-gateway.alibaba-inc.com`、GPU `L20N`）。
+  配置生成和 CLI 示例保留显式地址/GPU 覆盖，并要求提供远端服务的 AK/SK 凭据。
 
 - Agent 完整 Evaluate 与权威 ABBA 改为每个 Shape 执行一次测量，不再额外执行三次完整调用并
   逐 Shape 取中位数。单 Job 内 GPU Benchmark 采样及配置的 ABBA Schedule 不变；结果标记为
@@ -47,8 +46,9 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
   `suggested_directions` 字段均被拒绝并提供修正提示，历史 Journal 仍可读取。Evolver 专注跨分支
   证据整合、归因纠偏与 Agent 改进，Optimizer 自主选择研究方向。
 
-- FA4 源码树任务与生产七臂消融对齐：Epoch 1 使用同 Agent 的 Active/Challenger 副本；准备阶段
-  冻结六个对照臂；任务入口可启动全部七个 Campaign，每条 Trajectory 固定 15 个 Attempt。
+- FA4 源码树任务与生产消融对齐：Epoch 1 使用同 Agent 副本；准备阶段冻结十一个对照臂（含成对的
+  仅 Challenger Isolated-Evolve/Retained-Evolve 对照，以及 Active/Challenger
+  Isolated-Pool-Evolve 对照）；任务入口可启动全部十二个 Campaign，每条 Trajectory 固定 15 个 Attempt。
 
 - 超限的 Dev 文件映射自动走 Agate OSS，覆盖源码树 Agent/权威 ABBA。执行前校验归档校验和并
   还原精确文件；上传各阶段独立重试，不改变逻辑请求身份和测量策略。

@@ -14,7 +14,7 @@ usage:
 start options:
   --target-epoch N
   --workspace DIR
-  --hardware-target GPU       defaults to AGATE_GPU or local
+  --hardware-target GPU       defaults to AGATE_GPU or L20N
   --seed-source FILE
   --dsl-seed-source DSL=PATH   repeatable; seeds one DSL from its own kernel
   --optimizer-model MODEL

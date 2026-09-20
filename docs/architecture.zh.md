@@ -97,7 +97,7 @@ Wiki 发送 Epoch 后数据。
 
 Runtime 冻结 Active Agent、起始 Kernel、公共 Runtime State、Evidence 和固定资源包络，然后在隔离
 子进程中只运行一次 Active Agent Revision 的版本化 Workflow。Workflow 可以请求 Runtime 挂接 Active
-副本、串行调用 Evolver 构造最多 `K` 个 Challenger、把精确 Optimizer Attempt 预算分配到 Branch 与
+副本、串行调用 Evolver 构造最多 `K` 个 Challenger、把有界 Optimizer Attempt 容量分配到 Branch 与
 Trajectory、执行这些 Branch，并请求可信 Kernel/Agent 选择。Challenger 提案可以从 Active 创建
 Revision、复用可见历史 Revision、从历史创建新 Revision，或用 `no_change` 停止继续构建；Revision
 祖先关系仍是树，复用和 Epoch 参赛来源单独记录。
@@ -105,8 +105,9 @@ Revision、复用可见历史 Revision、从历史创建新 Revision，或用 `n
 Workflow 只实现一个 `run_epoch(epoch)` 函数。其公开 SDK 创建 Branch 内 Pool 并推进同步轮次，不向
 Workflow 暴露 Attempt 序号或底层协议。每轮结束后，代码可以检查可信结果、把已接受 Kernel 广播给
 兄弟 Trajectory，或通过产出 Attempt 复制兼容 Runtime State；SDK 在内部把轮次翻译成可重放的 Attempt
-操作。准确 Branch 容量、Runtime-State 策略、Challenger 集合与 Workflow 程序 Hash 仍会冻结，并且
-必须精确花完配置预算。Runtime 而非 Workflow 负责调度 Epoch、启动和恢复每个 Attempt、执行 Gateway
+操作。普通组织必须花完整体容量；受控的仅 Challenger 进化拓扑只执行唯一 Challenger，并精确花完单 Branch
+预算。准确 Branch 容量、Runtime-State 策略、Challenger 集合与 Workflow 程序 Hash 仍会冻结。
+Runtime 而非 Workflow 负责调度 Epoch、启动和恢复每个 Attempt、执行 Gateway
 评测与可信比较、校验跨 Trajectory 输入与选择身份并提交晋升。物理 Provider 调用可能包含基础设施
 重试和有上限的报告补交，均不增加 Attempt 数量。
 
@@ -121,7 +122,8 @@ Source/State 与生涯汇总，以及更早的 Evolution Report。
 
 生产 Bootstrap 在封存初始 Agent Revision 时选择 Runtime 持有的 `evolve_3.py` 构造模板。每条
 Ablation Lineage 从同一份 Optimizer Source 派生自己的不可变 `agent-v0`，分别选择受控的
-Isolated、Retained、Pool-3 或 Pool-Retained-3 模板。Runtime 只把被选中的程序物化为
+Isolated、Isolated-Evolve、Retained-Evolve、Isolated-Pool-Evolve、Retained、Pool-3 或
+Pool-Retained-3 模板。Runtime 只把被选中的程序物化为
 `workflow/main.py`；封存后的 Revision 不包含其他消融臂程序，因此 Optimizer 和 Evolver 只能看到
 实际执行的组织方式。重复对照实例即使选择相同 Workflow 内容，也保留独立 Revision 身份；各臂共享
 的是完全相同的 Bootstrap Kernel，而不是源 Lineage 的 Agent Artifact 身份。
@@ -139,9 +141,11 @@ Lineage。`challenger_count` 默认 0，也可启用进化频率对照；`challe
 `prompts/`、`insights/`、`skills/` 与 `tools/`。该 Arm 共享可比较的源评测身份，但生命周期和版本历史独立。
 
 启用 `first_epoch_same_agent=true` 后，首轮 Challenger 是 Runtime 创建的 Active 同版本
-`replica`，不属于一次进化。两个分支的 Attempt 和可写 State 独立，Agent Revision 不变。
-Kernel 选择覆盖两边，最优 Kernel 所属 Trajectory 的终态 State 供下一轮 Active 和 Evolver 使用；
-Replica 来源记录不包含 Evolution Trace。
+`replica`，不属于一次进化，Agent Revision 不变。普通竞争会执行 Active 与 Challenger 两边。
+受控的仅 Challenger 进化拓扑只执行该副本/Challenger：同一 Epoch 没有 Active 对照，Kernel 仍与
+Epoch 起点 Kernel 比较并保留较优者，唯一实际执行的 Agent 则晋升到下一 Epoch。Isolated-Evolve
+在每次 Attempt 前重置 State，Retained-Evolve 在串行 Attempt 间继承 State。Replica 来源记录不包含
+Evolution Trace。
 
 ## 私有评测边界
 

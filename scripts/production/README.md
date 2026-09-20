@@ -28,7 +28,7 @@ transient-service and sandbox execution. In `container` mode they never escalate
   three serial Attempts on each Branch.
 - Epoch completion independently compares Kernels and selects the next Active Agent.
 
-With the default `event_only=true`, each DSL runs seven Campaign instances including the main arm.
+With the default `event_only=true`, each DSL runs twelve Campaign instances including the main arm.
 All share the same frozen Bootstrap v0; controls do not repeat Bootstrap or baseline measurement.
 All default schedules run 5 Epochs with 3 serial Attempts per Trajectory per Epoch:
 
@@ -36,6 +36,9 @@ All default schedules run 5 Epochs with 3 serial Attempts per Trajectory per Epo
 |---|---|---:|---|---:|
 | `evolve-3` (main) | Active + Challenger, one Trajectory each | 30 | yes | 4 |
 | `ablation-isolated-01/02` | Two independent instances, one Trajectory each | 15 each, 30 combined | no | 0 |
+| `ablation-isolated-evolve-01/02` | Challenger only, one Trajectory each | 15 each, 30 combined | no | 4 each |
+| `ablation-retained-evolve-01/02` | Challenger only, one Trajectory each | 15 each, 30 combined | yes | 4 each |
+| `ablation-isolated-pool-evolve-3` | Active + Challenger, two Trajectories each | 60 | no | 4 |
 | `ablation-retained-01/02` | Two independent instances, one Trajectory each | 15 each, 30 combined | yes | 0 |
 | `ablation-pool-3` | Two Trajectories in one Branch | 30 | no | 0 |
 | `ablation-pool-retained-3` | Two Trajectories in one Branch | 30 | yes | 0 |
@@ -50,13 +53,22 @@ restarting from the selected best Kernel. Pool-Retained also inherits its produc
 terminal State; State is selected, not merged or synchronized live. Source stays fixed in all controls.
 Both Pool arms always use two Trajectories and three Attempts per Epoch.
 
-Only the main arm runs Evolver. With `first_epoch_same_agent=true`, its first Epoch uses a same-Agent
-replica without creating a new Agent revision or Evolution Report. Branch States are independent;
-the next Active and Evolver inherit the best-Kernel Trajectory's terminal State. Bootstrap and Evolver
-Sessions are excluded from Optimizer Attempt counts.
+The main, four Challenger-only arms, and Isolated-Pool-Evolve run Evolver. The main arm is the two-Branch
+Retained-State evolution reference and still compares Active against Challenger. Isolated-Evolve
+and Retained-Evolve run only the replicated/evolved Challenger, with no same-Epoch Active
+comparator; they differ only in whether State resets before every Attempt or persists across the
+three serial Attempts. With `first_epoch_same_agent=true`, Epoch 1 uses an Active replica without
+creating a new Agent revision or Evolution Report. Bootstrap and Evolver Sessions are excluded from
+Attempt counts.
+
+Isolated-Pool-Evolve runs Active and Challenger Pools, each with two independent Trajectories. It
+resets adaptive State before every Attempt, so Optimizer-produced Tools/Skills/Memory/Knowledge do
+not survive; Kernel progress and Runtime Journal history remain authoritative.
 
 Each arm owns a Lineage-local `agent-v0` that freezes its executable Workflow: `evolve_3.py`,
-`isolated.py`, `retained.py`, `pool_3.py`, or `pool_retained_3.py`. The Optimizer source and shared
+`evolve_isolated_3.py`, `evolve_retained_3.py`, `evolve_isolated_pool_3.py`, `isolated.py`, `retained.py`, `pool_3.py`, or
+`pool_retained_3.py`. The
+Optimizer source and shared
 Bootstrap Kernel remain controlled; Runtime no longer infers arm organization from its label.
 
 The main arm lives at `dsls/DSL/`; control files are under `dsls/DSL/ablation-*/`.
@@ -78,10 +90,8 @@ Choose one Worker boundary:
   Worker filesystem/namespace; the outer container supplies their shared memory, CPU, and PID total
   limits. Do not mount the Docker socket, Runtime secrets, private evaluator data, or unrelated paths.
 
-Both modes require one supported Agent CLI and an already-running official Agate service.
-The default is `http://127.0.0.1:8000`, GPU `local`; AK/SK is required only when the localhost server
-enables authentication. Explicit non-loopback endpoints retain AK/SK authentication. Agate must be
-deployed separately; these scripts manage Runtime/Wiki only. See [Agate localhost](../../docs/agate-localhost.md).
+Both modes require one supported Agent CLI and the remote Agate service. The default endpoint is
+`https://atrex-gateway.alibaba-inc.com`, the default GPU selector is `L20N`, and AK/SK is required.
 In `container` mode, run the outer container as a non-root user when practical and verify that bwrap
 can create its user/PID/IPC/UTS namespaces; managed Runtime and Local Wiki processes retain that
 container identity.

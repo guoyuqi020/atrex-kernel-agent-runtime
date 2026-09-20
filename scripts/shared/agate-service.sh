@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 atrex_default_agate_environment() {
-  export AGATE_URL="${AGATE_URL:-http://127.0.0.1:8000}"
-  export AGATE_GPU="${AGATE_GPU:-local}"
+  export AGATE_URL="${AGATE_URL:-https://atrex-gateway.alibaba-inc.com}"
+  export AGATE_GPU="${AGATE_GPU:-L20N}"
 }
 
 atrex_require_agate_environment() {
@@ -17,7 +17,7 @@ atrex_require_agate_environment() {
       ;;
   esac
   if [[ -z "${AGATE_AK:-}" || -z "${AGATE_SK:-}" ]]; then
-    echo "Agate requires both AGATE_AK and AGATE_SK; unauthenticated localhost may omit both." >&2
+    echo "Remote Agate requires both AGATE_AK and AGATE_SK." >&2
     return 64
   fi
 }

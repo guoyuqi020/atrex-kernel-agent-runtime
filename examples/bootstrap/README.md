@@ -2,7 +2,7 @@
 
 English | [中文](README.zh.md)
 
-Defaults connect to an already-running official localhost Gateway (`127.0.0.1:8000`, GPU `local`); explicit environment overrides remain supported. See [Agate localhost](../../docs/agate-localhost.md) for deployment.
+Defaults connect to the remote Agate service; explicit environment overrides remain supported.
 
 This example bootstraps one real Triton VecAdd lineage. It starts the Runtime control service,
 launches the commit-pinned Core in `framework_baseline` mode, lets Core submit its candidate through
@@ -24,10 +24,10 @@ connection. `AGATE_GPU` must exactly match one environment returned by `agate en
 ```bash
 # Optional when ~/.qoder and ~/.qodersec contain a valid login:
 # export QODER_PERSONAL_ACCESS_TOKEN="..."
-export AGATE_URL="http://127.0.0.1:8000"
-# export AGATE_AK="..."  # only if the Gateway requires authentication
-# export AGATE_SK="..."
-export AGATE_GPU="local"
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK="..."
+export AGATE_SK="..."
+export AGATE_GPU="L20N"
 ```
 
 The wrapper may pass `QODER_PERSONAL_ACCESS_TOKEN` through the configured Worker environment. When

@@ -64,17 +64,16 @@ git submodule update --init --recursive
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 
-export AGATE_URL="http://127.0.0.1:8000"
-# export AGATE_AK='...'  # only if the Gateway requires authentication
-# export AGATE_SK='...'
-export AGATE_GPU="local"
+export AGATE_URL="https://atrex-gateway.alibaba-inc.com"
+export AGATE_AK='...'
+export AGATE_SK='...'
+export AGATE_GPU="L20N"
 export QODER_PERSONAL_ACCESS_TOKEN='...'
 
 bash examples/bootstrap/run.sh
 ```
 
-Agate must already be deployed on the GPU node with its `local` backend. Runtime/Wiki scripts do not
-start it. See [Agate localhost](docs/agate-localhost.md) for deployment and execution-isolation requirements.
+Runtime connects to the remote Agate service and requires its AK/SK credentials.
 
 The examples generate isolated configuration and state under `workspaces/`; they do not reuse a
 root `runtime.json`. For a real deployment, copy `runtime.example.json`, select `development` only

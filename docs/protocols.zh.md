@@ -189,11 +189,12 @@ Campaign Bootstrap 可以提供 `workflow_command`，作为 Runtime 构造模板
 Ablation Arm 在克隆共享 Bootstrap Baseline 时执行同样派生，因此被选择的组织方式来自 Agent
 Revision 代码，而不是控制器侧的 Label 或拓扑预设，同时 Optimizer 和 Evolver 不会收到无关臂实现。
 
-Context 提供 DSL/Epoch 身份与资源包络：最多 Challenger 数、精确 Optimizer Attempt 预算、默认拓扑和
+Context 提供 DSL/Epoch 身份与资源包络：最多 Challenger 数、Optimizer Attempt 硬容量、默认拓扑和
 默认 Runtime-State 策略。创建 Pool 时会冻结 Branch 容量与 State 策略；私有 SDK 分配显式 Attempt
-序号，使 Workflow 重启后可以幂等重放已完成逻辑轮次，并让轮次回调重新处理同一份可信结果。全部已挂接
-Branch 都必须登记，容量总和必须精确等于预算；`epoch.complete()` 会拒绝缺失或未完成工作，并且只提交
-Runtime 的可信 Kernel 与 Agent 选择。
+序号，使 Workflow 重启后可以幂等重放已完成逻辑轮次，并让轮次回调重新处理同一份可信结果。普通多
+Branch 组织必须登记所有已挂接 Branch，并精确用完全部预算。受控的仅 Challenger 进化组织可以省略
+Active、只执行唯一 Challenger，但必须精确用完配置的单 Branch 预算。`epoch.complete()` 会拒绝其他
+Branch 子集、缺失或未完成工作，并且只提交 Runtime 的可信 Kernel 与 Agent 选择。
 
 Workflow 不能获得 Gateway、Registry、隐藏 Test、任意 Worker 启动、Gate、晋升、回滚或追加预算权限。
 Runtime 负责启动和恢复 Attempt、评测 Kernel、比较 Candidate/Agent、持久化状态并提交晋升。托管生产

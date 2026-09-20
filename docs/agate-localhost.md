@@ -2,8 +2,9 @@
 
 English | [中文](agate-localhost.zh.md)
 
-Runtime defaults to the official Agate HTTP service at `http://127.0.0.1:8000`, using GPU selector
-`local`. Localhost is an Agate deployment backend, not a new Runtime evaluator or an SDK transport:
+Runtime defaults to the official remote Agate service. This document describes the optional,
+explicit localhost override at `http://127.0.0.1:8000` with GPU selector `local`. Localhost is an
+Agate deployment backend, not a new Runtime evaluator or an SDK transport:
 Evaluate, ABBA, Profile, Dev, Check and Disassemble keep the same SDK calls and Runtime recording,
 deduplication, retry and result-projection policies.
 
@@ -34,7 +35,7 @@ appropriate authentication and execution isolation.
 
 ## Connect Runtime
 
-These defaults apply when the environment variables are unset:
+Override the remote defaults explicitly:
 
 ```bash
 export AGATE_URL=http://127.0.0.1:8000
@@ -51,7 +52,7 @@ or stop Agate. `local` means the GPU of the Agate server, not the Agent sandbox.
 container, ensure this endpoint is actually reachable from that container; otherwise set `AGATE_URL`
 to the GPU executor's accessible address and supply its credentials.
 
-Explicit URL/GPU values still override the defaults. GDN/FA4 input packs retain their declared
+GDN/FA4 input packs retain their declared
 `L20D` scheduling target; configure `L20D` as an alias of the local cluster when running those packs
 on the matching GPU. Runtime continues to query Agate for the actual architecture shown to Agents.
 Existing Campaigns retain sealed GPU/input identities, so use a new workspace when changing the

@@ -6,6 +6,10 @@ Evolver 调用保持串行，直到配置的 Challenger Pool 完整。随后 Run
 全部 Challenger Branch，并受部署配置 `max_parallel_branches` 限制（正数，默认 `4`）。每个获准
 运行的 Branch 内仍并发执行配置的 Trajectory，而每条 Trajectory 的 Attempt 保持串行。
 
+受控的仅 Challenger 进化 Workflow 是唯一例外：它有意省略 Active，只运行 `challenger-1`，因此同一
+Epoch 不做 Agent 对照。Challenger 产出的 Kernel 仍与冻结的起点 Kernel 比较决定是否保留，而该
+Challenger 是下一 Epoch 唯一可选 Agent。
+
 所有 Branch 使用同一个冻结的 Epoch 起始 Kernel 和 Evidence，不能消费兄弟 Branch 的中间结果。
 只有全部 Branch 成功结束后，Runtime 才开始 Agent 选择。
 
@@ -16,5 +20,6 @@ Runtime 在 Branch 任务内部捕获异常，避免 Task Group 默认取消兄�
 ## 影响
 
 Optimizer Session 最大并发数为
-`min(1 + K, max_parallel_branches) × Y`。该上限属于 Runtime 部署策略，不属于不可变 Campaign
+`min(B, max_parallel_branches) × Y`，其中 `B` 是经校验的 Workflow 实际选择的 Branch 数（普通情况
+为 `1 + K`，仅 Challenger 进化为 `1`）。该上限属于 Runtime 部署策略，不属于不可变 Campaign
 拓扑，因此运维可以按模型、Gateway 与 GPU 容量调整，而不改变 Lineage 身份。

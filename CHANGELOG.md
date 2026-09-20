@@ -19,9 +19,9 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   Pool-Retained-3 still execute distinct versioned programs while sharing the controlled Optimizer
   source and exact Bootstrap Kernel.
 
-- Default to the official Agate localhost backend over HTTP (`127.0.0.1:8000`, GPU `local`).
-  Preparation and CLI examples retain explicit endpoint overrides and server AK/SK authentication;
-  an unauthenticated loopback deployment may omit credentials. Runtime/Wiki scripts do not manage Agate.
+- Default to the official remote Agate service (`https://atrex-gateway.alibaba-inc.com`, GPU
+  `L20N`). Preparation and CLI examples retain explicit endpoint/GPU overrides and require the
+  remote service's AK/SK credentials.
 
 - Full Agent Evaluate and authoritative ABBA now execute one measurement per Shape instead of
   three complete calls with per-Shape medians. Inner GPU benchmark sampling and configured ABBA
@@ -55,9 +55,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   readable. Evolver now focuses on cross-Branch evidence reconciliation and Agent improvements,
   while Optimizers choose their own Directions.
 
-- Aligned the FA4 source-tree task with the seven-arm production ablation: Epoch 1 now runs
-  same-Agent Active/Challenger replicas, preparation freezes the six control arms, and the task
-  runner can launch all seven Campaigns with 15 Optimizer Attempts per Trajectory.
+- Aligned the FA4 source-tree task with the production ablation: Epoch 1 now runs same-Agent
+  replicas, preparation freezes eleven control arms (including paired Challenger-only
+  Isolated-Evolve/Retained-Evolve controls and an Active/Challenger Isolated-Pool-Evolve control),
+  and the task runner can launch all twelve Campaigns with 15 Optimizer Attempts per Trajectory.
 
 - Automatically upload oversized Dev file maps through Agate OSS, including both source-tree
   ABBA paths. A checksum-verified archive restores exact files before execution; upload stages

@@ -2,8 +2,9 @@
 
 [English](agate-localhost.md) | 中文
 
-Runtime 默认连接官方 Agate HTTP 服务 `http://127.0.0.1:8000`，GPU 选择器为 `local`。
-Localhost 是 Agate 的部署后端，不是新的 Runtime 评测器或 SDK 传输方式。Evaluate、ABBA、
+Runtime 默认连接官方远端 Agate 服务。本文说明如何显式覆盖为可选的 localhost 部署：
+`http://127.0.0.1:8000`、GPU 选择器 `local`。Localhost 是 Agate 的部署后端，不是新的 Runtime
+评测器或 SDK 传输方式。Evaluate、ABBA、
 Profile、Dev、Check、Disassemble 沿用同一套 SDK 调用及 Runtime 记录、去重、重试和结果投影策略。
 
 ## 在 GPU 机器上部署 Agate
@@ -31,7 +32,7 @@ AGATE_CONFIG_FILE=/path/to/agate-local.json python3 -m app.main
 
 ## 连接 Runtime
 
-环境变量未设置时采用以下默认值：
+显式覆盖远端默认值：
 
 ```bash
 export AGATE_URL=http://127.0.0.1:8000
@@ -47,7 +48,7 @@ Agate 必须先启动。服务脚本仅管理 Runtime/Wiki，不安装、启动�
 `local` 指 Agate 服务所在机器的 GPU，不是 Agent 沙箱。Runtime 若运行在容器内，须确保能从该
 容器访问此地址；否则设置可达的 GPU 执行器地址及对应凭据。
 
-显式 URL/GPU 仍覆盖默认值。GDN/FA4 输入包保持原先声明的 `L20D` 调度目标，在对应 GPU 上运行时
+GDN/FA4 输入包保持原先声明的 `L20D` 调度目标，在对应 GPU 上运行时
 应将 `L20D` 加入本地 Cluster 的 aliases。Runtime 仍从 Agate 查询实际架构并告知 Agent。
 已有 Campaign 的 GPU/输入身份已封存，切换执行环境应使用新工作区；更新模板不会覆盖已生成的
 常驻服务配置。

@@ -25,7 +25,16 @@ KERNEL_AGENT_IGNORED_FILE_NAMES = frozenset({".coverage", ".DS_Store"})
 KERNEL_AGENT_IGNORED_FILE_SUFFIXES = frozenset({".pyc", ".pyo"})
 KERNEL_AGENT_WORKFLOW_MAIN = "workflow/main.py"
 KERNEL_AGENT_WORKFLOW_TEMPLATE_NAMES = frozenset(
-    {"evolve_3.py", "isolated.py", "pool_3.py", "pool_retained_3.py", "retained.py"}
+    {
+        "evolve_3.py",
+        "evolve_isolated_3.py",
+        "evolve_isolated_pool_3.py",
+        "evolve_retained_3.py",
+        "isolated.py",
+        "pool_3.py",
+        "pool_retained_3.py",
+        "retained.py",
+    }
 )
 KERNEL_AGENT_WORKFLOW_TEMPLATES = Path(__file__).resolve().parents[1] / "workflow_templates"
 

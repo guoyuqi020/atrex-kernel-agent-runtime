@@ -29,9 +29,9 @@ def test_source_tree_arms_keep_topology_with_one_hundred_epochs(relative: str) -
     single_file = build_ablation_plan(policy)
     assert single_file["optimizer_attempt_budget_per_trajectory"] == 15
     assert all(arm["target_epoch_number"] == 5 for arm in single_file["arms"])
-    assert len(plan["arms"]) == 6
+    assert len(plan["arms"]) == 11
     assert all(arm["target_epoch_number"] == 100 for arm in plan["arms"])
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 2400
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 4800
     campaign = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/ablation-campaign.json")
     for key in (
         "attempts_per_trajectory",
@@ -96,13 +96,21 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
             assert command[1] == "seed-ablation-arm"
             seed = json.loads(Path(command[-1]).read_text())
             assert seed["source_lineage_id"] == "lineage_" + "0" * 32
-            assert seed["challenger_count"] == 0
             assert seed["workflow_command"].startswith("workflow/")
+            label = Path(command[-1]).parent.name
+            planned_arms = json.loads(plan_path.read_text())["arms"]
+            planned = next(arm for arm in planned_arms if arm["label"] == label)
+            for key in (
+                "challenger_count",
+                "challenger_start_epoch",
+                "first_epoch_same_agent",
+                "workflow_command",
+            ):
+                assert seed[key] == planned[key]
             if fail == "seed":
                 raise subprocess.CalledProcessError(1, command)
             # Deterministic arm identity across resumptions.
-            label = Path(command[-1]).parent.name
-            labels = [arm["label"] for arm in json.loads(plan_path.read_text())["arms"]]
+            labels = [arm["label"] for arm in planned_arms]
             suffix = f"{labels.index(label) + 1:032x}"
             result = {
                 "campaign_id": "campaign_" + suffix,
@@ -136,7 +144,7 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
 
         def poll(self):
             # Every arm must start before the first wait: no accidental serialization.
-            assert len(processes) % 7 == 0
+            assert len(processes) % 12 == 0
             return 1 if fail == "arm" and self.campaign.endswith("1".zfill(32)) else 0
 
     def run_json(cli, arguments, output, log):
@@ -160,18 +168,18 @@ def test_bootstrap_once_shared_seed_parallel_launch_and_resume(tmp_path, monkeyp
     test = launch_fixture(tmp_path, monkeypatch)
     test.module.main()
     summary = json.loads((test.workspace / "campaign-results.json").read_text())
-    assert len(summary["arms"]) == 7
+    assert len(summary["arms"]) == 12
     assert all(arm["status"] == "completed" for arm in summary["arms"])
-    assert len(test.calls) == 7  # one Bootstrap, six measurement-free seed operations
-    assert len(test.processes) == 7
-    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 7
+    assert len(test.calls) == 12  # one Bootstrap, eleven measurement-free seed operations
+    assert len(test.processes) == 12
+    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 12
     for arm in summary["arms"]:
         assert Path(arm["result_path"]).is_file()
         assert "attempt finished" in Path(arm["log"]).read_text()
     test.module.main()
     resumed = json.loads((test.workspace / "campaign-results.json").read_text())
     assert resumed == summary
-    assert len(test.processes) == 14
+    assert len(test.processes) == 24
 
 
 def test_source_tree_runner_defaults_all_arms_to_one_hundred_epochs(tmp_path, monkeypatch):
@@ -179,7 +187,7 @@ def test_source_tree_runner_defaults_all_arms_to_one_hundred_epochs(tmp_path, mo
     test.module.main()
     arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
     assert all(arm["target_epoch_number"] == 100 for arm in arms)
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 3000
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 5400
 
 
 def test_existing_five_epoch_plan_is_not_rewritten(tmp_path, monkeypatch):
@@ -209,8 +217,8 @@ def test_failure_is_reported_without_silently_losing_other_arms(tmp_path, monkey
     else:
         summary = json.loads((test.workspace / "campaign-results.json").read_text())
         statuses = [arm["status"] for arm in summary["arms"]]
-        assert statuses.count("failed") == (1 if fail == "arm" else 7)
-        assert statuses.count("completed") == (6 if fail == "arm" else 0)
+        assert statuses.count("failed") == (1 if fail == "arm" else 12)
+        assert statuses.count("completed") == (11 if fail == "arm" else 0)
 
 
 def test_changed_plan_or_frozen_campaign_rejected_before_execution(tmp_path, monkeypatch):

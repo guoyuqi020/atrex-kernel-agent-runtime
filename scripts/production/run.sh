@@ -16,7 +16,7 @@ Options:
   --target-epoch N             absolute Epoch target to complete; defaults to 5
   --workspace DIR
   --service-workspace DIR      reuse its running Runtime/Wiki without managing services
-  --hardware-target GPU        defaults to AGATE_GPU or local
+  --hardware-target GPU        defaults to AGATE_GPU or L20N
   --seed-source FILE           defaults to reference.py
   --dsl-seed-source DSL=PATH   repeatable; seeds one DSL from its own kernel
   --optimizer-model MODEL
@@ -447,7 +447,7 @@ if plan.get("enabled"):
         ("{label}={trajectories_per_branch} Trajectories x {target_epoch_number} Epochs "
          "x {attempts_per_trajectory} Attempts + {challenger_count} Challenger(s) "
          "(Epoch 1 same Agent: {first_epoch_same_agent}) = {optimizer_attempt_budget_total} total; "
-         "{evolution_count} Evolutions ({budget} Active Attempts/Trajectory)").format(
+         "{evolution_count} Evolutions ({budget} Attempts/executed Trajectory)").format(
             **arm,
             budget=plan["optimizer_attempt_budget_per_trajectory"],
         )
@@ -456,7 +456,7 @@ if plan.get("enabled"):
     print("Ablation arms: " + ", ".join(values))
 ' "${atrex_prod_ablation_plan}"
 fi
-echo "Evolve arms run the same Agent on two isolated Branches in Epoch 1; Evolution starts at Epoch 2."
+echo "The main and Isolated-Pool-Evolve arms run Active plus a replica Challenger in Epoch 1; Challenger-only Isolated-Evolve and Retained-Evolve controls run only the replica. Evolution starts at Epoch 2."
 
 for dsl in "${dsls[@]}"; do
   run_dsl_pipeline "${dsl}" &

@@ -13,7 +13,7 @@ from .agate import AgateConnectionConfig
 def agate_settings_from_environment(
     environment: Mapping[str, str], *, base_url: str | None = None
 ) -> AgateSettings:
-    """Default to the official localhost Gateway; keep explicit endpoints and credentials."""
+    """Default to the official remote Gateway; keep explicit endpoint overrides."""
     url = base_url or environment.get("AGATE_URL") or DEFAULT_AGATE_URL
     local = urlsplit(url).hostname in {"127.0.0.1", "localhost", "::1"}
     credentials = bool(environment.get("AGATE_AK") or environment.get("AGATE_SK"))

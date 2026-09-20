@@ -72,6 +72,9 @@ def test_complete_kda_bundle_can_be_sealed(exported_bundle: Path, tmp_path: Path
         assert (sealed / path).is_file(), f"Bundle is missing {path}"
     for name in (
         "evolve_3.py",
+        "evolve_isolated_3.py",
+        "evolve_isolated_pool_3.py",
+        "evolve_retained_3.py",
         "isolated.py",
         "retained.py",
         "pool_3.py",
@@ -333,9 +336,63 @@ def test_control_workflow_program_owns_exact_topology(
 
 
 @pytest.mark.parametrize("bundle_name", ("kernel-design-agents", "atrex-kernel-agent-core"))
-def test_evolve_3_workflow_owns_active_challenger_organization(bundle_name: str) -> None:
+@pytest.mark.parametrize(
+    ("program_name", "state_policy", "branches", "epoch_number", "agent_operation"),
+    (
+        (
+            "evolve_3.py",
+            "retain_across_attempts",
+            ("active", "challenger-1"),
+            2,
+            "evolve_agent",
+        ),
+        (
+            "evolve_isolated_3.py",
+            "reset_each_attempt",
+            ("challenger-1",),
+            1,
+            "replicate_active",
+        ),
+        (
+            "evolve_isolated_3.py",
+            "reset_each_attempt",
+            ("challenger-1",),
+            2,
+            "evolve_agent",
+        ),
+        (
+            "evolve_retained_3.py",
+            "retain_across_attempts",
+            ("challenger-1",),
+            1,
+            "replicate_active",
+        ),
+        (
+            "evolve_retained_3.py",
+            "retain_across_attempts",
+            ("challenger-1",),
+            2,
+            "evolve_agent",
+        ),
+        (
+            "evolve_isolated_pool_3.py",
+            "reset_each_attempt",
+            ("active", "active", "challenger-1", "challenger-1"),
+            2,
+            "evolve_agent",
+        ),
+    ),
+)
+def test_evolution_workflow_owns_selected_branch_organization(
+    bundle_name: str,
+    program_name: str,
+    state_policy: str,
+    branches: tuple[str, ...],
+    epoch_number: int,
+    agent_operation: str,
+) -> None:
     bundle = RUNTIME_ROOT / "src" / bundle_name
-    program_path = RUNTIME_ROOT / "src/atrex_runtime/workflow_templates/evolve_3.py"
+    program_path = RUNTIME_ROOT / "src/atrex_runtime/workflow_templates" / program_name
     process = subprocess.Popen(
         (sys.executable, str(program_path)),
         cwd=bundle / "workflow",
@@ -354,13 +411,13 @@ def test_evolve_3_workflow_owns_active_challenger_organization(bundle_name: str)
             "kernel_agent_revision_id": "agentrev_" + "0" * 32,
             "dsl": "triton",
             "epoch_id": "epoch_" + "0" * 32,
-            "epoch_number": 2,
+            "epoch_number": epoch_number,
             "first_epoch_same_agent": True,
             "workflow_program_sha256": "a" * 64,
         },
         "limits": {
             "max_challengers": 1,
-            "optimizer_attempts": 6,
+            "optimizer_attempts": max(6, len(branches) * 3),
             "default_trajectories": 1,
             "default_attempts_per_trajectory": 3,
             "default_runtime_state_policy": "retain_across_attempts",
@@ -369,7 +426,7 @@ def test_evolve_3_workflow_owns_active_challenger_organization(bundle_name: str)
     process.stdin.write(json.dumps(context) + "\n")
     process.stdin.flush()
     evolve = json.loads(process.stdout.readline())
-    assert evolve["operation"] == "evolve_agent"
+    assert evolve["operation"] == agent_operation
     process.stdin.write(
         json.dumps(
             {
@@ -381,13 +438,11 @@ def test_evolve_3_workflow_owns_active_challenger_organization(bundle_name: str)
         + "\n"
     )
     process.stdin.flush()
-    created = [_accept_trajectory(process), _accept_trajectory(process)]
-    assert [call["arguments"]["branch"] for call in created] == [
-        "active",
-        "challenger-1",
-    ]
+    created = [_accept_trajectory(process) for _ in branches]
+    assert [call["arguments"]["branch"] for call in created] == list(branches)
+    assert all(call["arguments"]["runtime_state_policy"] == state_policy for call in created)
     batches = [_accept_attempt_batch(process) for _ in range(3)]
-    assert all(len(call["arguments"]["launches"]) == 2 for call in batches)
+    assert all(len(call["arguments"]["launches"]) == len(branches) for call in batches)
     _finish_workflow(process, context["context"]["epoch_id"])
     process.stdin.close()
     assert process.wait(timeout=5) == 0

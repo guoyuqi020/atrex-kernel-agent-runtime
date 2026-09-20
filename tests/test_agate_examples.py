@@ -22,13 +22,15 @@ def test_all_agate_shell_wrappers_parse() -> None:
     subprocess.run(("bash", "-n", *(str(path) for path in scripts)), check=True)
 
 
-def test_agate_example_defaults_to_the_official_localhost_service(tmp_path: Path) -> None:
+def test_agate_example_defaults_to_the_official_remote_service(tmp_path: Path) -> None:
     executable = tmp_path / "agate"
     executable.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
     executable.chmod(0o700)
     environment = dict(os.environ)
     environment.pop("AGATE_URL", None)
     environment.pop("AGATE_GPU", None)
+    environment["AGATE_AK"] = "test-ak"
+    environment["AGATE_SK"] = "test-sk"
     environment["PATH"] = f"{tmp_path}{os.pathsep}{environment['PATH']}"
     result = subprocess.run(
         (
@@ -45,7 +47,7 @@ def test_agate_example_defaults_to_the_official_localhost_service(tmp_path: Path
     )
 
     assert result.returncode == 0
-    assert result.stdout == "http://127.0.0.1:8000 local"
+    assert result.stdout == "https://atrex-gateway.alibaba-inc.com L20N"
 
 
 def test_agate_example_resolves_the_cli_from_path(tmp_path: Path) -> None:
