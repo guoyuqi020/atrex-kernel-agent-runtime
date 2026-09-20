@@ -99,6 +99,45 @@ class EvolverRunner(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class RunAgentWorkflowRequest:
+    """Trusted Epoch context supplied to one executable Agent Workflow."""
+
+    revision: KernelAgentRevision
+    epoch_id: EpochId
+    epoch_number: int
+    max_challengers: int
+    optimizer_attempt_budget: int
+    default_trajectories: int
+    default_attempts_per_trajectory: int
+    default_runtime_state_policy: str
+    first_epoch_same_agent: bool
+
+
+class AgentWorkflowOperationHandler(Protocol):
+    """Execute one capability-bounded operation requested by Workflow code."""
+
+    async def execute_workflow_operation(
+        self,
+        operation: str,
+        arguments: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        """Execute one idempotent Runtime service and return its safe projection."""
+        ...
+
+
+class AgentWorkflowRunner(Protocol):
+    """Run an immutable Agent Revision's executable Epoch orchestration code."""
+
+    async def run(
+        self,
+        request: RunAgentWorkflowRequest,
+        operations: AgentWorkflowOperationHandler,
+    ) -> None:
+        """Run Workflow code until it durably completes the Epoch."""
+        ...
+
+
+@dataclass(frozen=True, slots=True)
 class BuildAttemptEvidenceRequest:
     """Identity and immutable epoch input for one branch-local Evidence snapshot."""
 

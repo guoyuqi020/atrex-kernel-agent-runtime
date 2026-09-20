@@ -15,6 +15,8 @@ from .domain.models import Dsl
 from .kernel_agents import KernelAgentBundleLimits
 
 RUNTIME_CONFIG_VERSION: Literal[1] = 1
+DEFAULT_AGATE_URL = "http://127.0.0.1:8000"
+DEFAULT_AGATE_GPU = "local"
 _ENVIRONMENT_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 AgentBackend = Literal["claude", "codex", "qodercli", "pi"]
 ReasoningEffort = Literal["low", "medium", "high", "max"]
@@ -99,7 +101,7 @@ class AgateSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    base_url: str
+    base_url: str = DEFAULT_AGATE_URL
     auth_mode: Literal["none", "token", "ak_sk"]
     token_env: str | None = None
     access_key_env: str | None = None

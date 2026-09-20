@@ -182,7 +182,7 @@ def open_temporary_optimizer_dev_shell(
         optimizer = loader.build_candidate(dsl, spec.base_revision.commit).candidate
 
         contract_value = json.loads(spec.evaluation_contract.read_bytes())
-        contract = AgateEvaluationContractV1.model_validate(contract_value)
+        contract = AgateEvaluationContractV1.model_validate(contract_value).with_shape_holdout()
         gate_policy = build_gate_contract_policy(settings)
         if gate_policy is not None:
             contract = gate_policy.apply(contract)

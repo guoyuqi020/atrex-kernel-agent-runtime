@@ -51,11 +51,14 @@ def _agent_artifact(artifacts: LocalArtifactStore, root: Path) -> ArtifactDigest
                 "schema_version": 1,
                 "bundle_format": "atrex-kernel-agent-bundle-v1",
                 "entrypoint": {"command": "src/main.py"},
+                "workflow": {"command": "workflow/main.py"},
             }
         ),
         encoding="utf-8",
     )
     (source / "src/main.py").write_text("def optimize(): ...\n", encoding="utf-8")
+    (source / "workflow").mkdir()
+    (source / "workflow/main.py").write_text("# main.py\n", encoding="utf-8")
     return artifacts.put_directory(source, ArtifactKind.KERNEL_AGENT)
 
 
@@ -272,6 +275,54 @@ async def test_two_ablation_arms_are_mutually_independent(
             assert lineage.challenger_count == 0
             assert lineage.bootstrap_source_lineage_id == evolution_lineage_id
         assert len(evaluator.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_ablation_agent_v0_freezes_its_selected_workflow(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    evaluator = FakeEvaluator(artifacts, [])
+    with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
+        seeder, _campaign_id, source_id = await _evolution_arm(
+            registry,
+            artifacts,
+            tmp_path,
+            evaluator,
+        )
+        arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
+        isolated = await arms.seed_arm(
+            AblationArmSpecV1(
+                creation_key="isolated-workflow",
+                source_lineage_id=source_id,
+                attempts_per_trajectory=3,
+                workflow_command="workflow/isolated.py",
+            )
+        )
+        retained = await arms.seed_arm(
+            AblationArmSpecV1(
+                creation_key="retained-workflow",
+                source_lineage_id=source_id,
+                attempts_per_trajectory=3,
+                ephemeral_agent_state=False,
+                workflow_command="workflow/retained.py",
+            )
+        )
+
+        assert isolated.lineage.agent_artifact_digest != retained.lineage.agent_artifact_digest
+        for result, selector in (
+            (isolated, "workflow/isolated.py"),
+            (retained, "workflow/retained.py"),
+        ):
+            root = artifacts.verify(result.lineage.agent_artifact_digest).payload_path
+            manifest = json.loads((root / "atrex-bundle.json").read_text())
+            assert manifest["workflow"]["command"] == "workflow/main.py"
+            assert (root / "workflow/main.py").read_bytes() == (
+                Path(__file__).resolve().parents[1]
+                / "src/atrex_runtime/workflow_templates"
+                / Path(selector).name
+            ).read_bytes()
+            assert not (root / selector).exists()
+            assert result.lineage.source_agent_revision_id is not None
+            assert result.workflow_command == selector
 
 
 @pytest.mark.anyio

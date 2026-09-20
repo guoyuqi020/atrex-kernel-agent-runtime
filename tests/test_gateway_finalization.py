@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -210,11 +210,12 @@ class FakeEvents:
 
 
 class FakeContexts:
-    def __init__(self, shape_count: int = 1) -> None:
+    def __init__(self, shape_count: int = 1, *, holdout: bool = False) -> None:
         self._shape_count = shape_count
+        self._holdout = holdout
 
     def resolve(self, _attempt_id: object) -> AgateEvaluationContext:
-        return AgateEvaluationContext(
+        context = AgateEvaluationContext(
             "vector_add",
             "L20N",
             Dsl.TRITON,
@@ -233,6 +234,9 @@ class FakeContexts:
                 lock_clocks=True,
             ),
         )
+        if self._holdout:
+            context = replace(context, contract=context.contract.with_shape_holdout())
+        return context
 
 
 def _builder(
@@ -263,10 +267,12 @@ def _subject(attempt_id: object) -> BootstrapGatewaySubject:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("failure_reason", [None, "logs_unavailable", "exec_failed"])
+@pytest.mark.parametrize("holdout", [False, True])
 async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     failure_reason: str | None,
+    holdout: bool,
 ) -> None:
     delays: list[float] = []
     fetched: list[str] = []
@@ -329,10 +335,11 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     )
     client = Client()
     events = FakeEvents()
+    contexts = FakeContexts(5, holdout=holdout)
     finalizer = AgateAuthoritativeCandidateEvaluator(
         client,  # type: ignore[arg-type]
         _builder,
-        FakeContexts(5),
+        contexts,
         artifacts,
         control,
         events,
@@ -355,7 +362,8 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert recovered == outcome
     assert outcome.correct is True
     assert outcome.latency_us == 7.5
-    expected_jobs = 6 if failure_reason is not None else 5
+    shape_ids = set(contexts.resolve(attempt_id).contract.for_agent().shapes)
+    expected_jobs = len(shape_ids) + int(failure_reason is not None)
     assert len(client.submitted) == expected_jobs
     assert len(fetched) == len(set(fetched)) == expected_jobs
     assert delays == ([5] if failure_reason is not None else [])
@@ -364,6 +372,9 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
         len(request["reference"]["shapes"])
         for request in client.submitted  # type: ignore[index]
     ] == [1] * expected_jobs
+    assert {
+        sid for request in client.submitted for sid in request["reference"]["shapes"]
+    } == shape_ids
     if failure_reason is not None:
         prefix = "logs-retry:" if failure_reason == "logs_unavailable" else "infra-retry:"
         replacement = next(

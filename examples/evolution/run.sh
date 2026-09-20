@@ -11,7 +11,7 @@ if (( $# != 0 )); then
 fi
 
 atrex_example_prepare_gpu_wiki
-atrex_example_require_remote_agate
+atrex_example_require_agate
 atrex_example_require_agent_backend optimizer
 atrex_example_require_agent_backend evolver
 atrex_example_load_local_secrets

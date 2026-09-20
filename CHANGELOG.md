@@ -6,6 +6,34 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Agent Revisions may now carry executable `workflow/main.py` Epoch orchestration. Runtime runs the
+  Active Revision's program through the Worker isolation boundary. Agent code implements exactly one
+  `run_epoch(epoch)` function over Pools and synchronized rounds; the SDK hides Attempt ordinals and
+  the wire protocol while still permitting result-dependent Kernel/State routing. Runtime enforces
+  the exact budget, makes round replay idempotent, and retains cross-Epoch scheduling, evaluation,
+  Gate, promotion, rollback, and Registry authority.
+
+- Production and ablation Lineages now use Runtime-owned arm templates to construct their initial
+  Agent Revision. Only the selected program is sealed as `workflow/main.py`; unrelated arm programs
+  are not visible to Optimizer or Evolver. `evolve-3`, Isolated, Retained, Pool-3, and
+  Pool-Retained-3 still execute distinct versioned programs while sharing the controlled Optimizer
+  source and exact Bootstrap Kernel.
+
+- Default to the official Agate localhost backend over HTTP (`127.0.0.1:8000`, GPU `local`).
+  Preparation and CLI examples retain explicit endpoint overrides and server AK/SK authentication;
+  an unauthenticated loopback deployment may omit credentials. Runtime/Wiki scripts do not manage Agate.
+
+- Full Agent Evaluate and authoritative ABBA now execute one measurement per Shape instead of
+  three complete calls with per-Shape medians. Inner GPU benchmark sampling and configured ABBA
+  schedules are unchanged; result metadata reports `single_measurement` with one repetition.
+
+- New Campaigns seal a fixed-seed (`42`) random 50/50 Valid/Test Shape split. Agent operations and ordinary
+  evaluation use Valid only; authoritative Runtime ABBA uses Valid + Test. Agent Evidence exposes
+  no Test rows, full-set latency aggregates, or Test error metrics. Odd extras go to Valid;
+  single-Shape tasks are rejected. Each subset randomly samples at most 15 Shapes; excess Shapes
+  are excluded from evaluation, with matching metadata/Roofline subsetting. A private `shape_split`
+  record seals the seed, algorithm, source population, and selections. VecAdd examples now include two Shapes.
+
 - Evolver now resumes one native conversation per Lineage/Backend across Evolutions, sequential
   Challenger construction, infrastructure retries, and controller restarts. Each invocation still
   receives fresh inputs and a Candidate; traces and usage exclude already recorded history.

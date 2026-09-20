@@ -27,13 +27,16 @@ inside the wheel; Runtime imports their configured Git commits at execution time
 The shortest end-to-end check is:
 
 ```bash
-export AGATE_URL='https://your-agate.example.com'
-export AGATE_AK='...'
-export AGATE_SK='...'
-export AGATE_GPU='H20'
+export AGATE_URL="http://127.0.0.1:8000"
+# export AGATE_AK='...'  # only if the Gateway requires authentication
+# export AGATE_SK='...'
+export AGATE_GPU="local"
 export QODER_PERSONAL_ACCESS_TOKEN='...'
 bash examples/bootstrap/run.sh
 ```
+
+Deploy Agate separately with the `local` backend first; [Agate localhost](agate-localhost.md) documents
+the connection defaults and execution boundary. Explicit endpoint/GPU exports still override defaults.
 
 The script creates an isolated workspace, generates local secrets and config, starts Runtime,
 bootstraps one Triton VecAdd Lineage, inspects the result, and stops Runtime. Other examples are
@@ -68,8 +71,8 @@ Runtime process environment:
 ```bash
 export ATREX_CAPABILITY_SIGNING_KEY="$(openssl rand -base64 32)"
 export ATREX_ADMIN_BEARER_TOKEN="$(openssl rand -hex 32)"
-export AGATE_AK='...'
-export AGATE_SK='...'
+# export AGATE_AK='...'  # only if the Gateway requires authentication
+# export AGATE_SK='...'
 # Export only the provider credential required by the selected Backend.
 ```
 
@@ -269,6 +272,7 @@ Create a small Ablation v1 JSON file naming a source Lineage and its control top
   "attempts_per_trajectory": 3,
   "trajectories_per_branch": 1,
   "ephemeral_agent_state": true,
+  "workflow_command": "workflow/isolated.py",
   "optimizer_model": null
 }
 ```
@@ -280,8 +284,11 @@ atrex-kernel-agent-runtime seed-ablation-arm \
 ```
 
 Runtime creates a separate one-Lineage Campaign from the source Bootstrap baseline with no
-Challenger. Use `ephemeral_agent_state=true` to reset adaptive Prompts/Insights/Skills/Tools every Attempt; use false
-to retain serial State and isolate only the absence of Evolver changes.
+Challenger. Use `ephemeral_agent_state=true` to reset adaptive Prompts/Insights/Skills/Tools every
+Attempt; use false to retain serial State and isolate only the absence of Evolver changes.
+`workflow_command` names a Runtime-owned construction template. Runtime materializes the selected
+program as the derived control arm's sole `workflow/main.py` entry and seals its own `agent-v0`;
+other arm templates are not included in that Revision.
 
 For an evolving control, set `challenger_count=1`, `challenger_start_epoch=2`,
 `first_epoch_same_agent=true`, and `ephemeral_agent_state=false`. Use the returned Campaign ID

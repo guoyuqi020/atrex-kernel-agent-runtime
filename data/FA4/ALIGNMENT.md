@@ -56,7 +56,7 @@ warmup, timeouts and ABBA. Compared with bare `run_eval.py` defaults:
 | Correctness cases | 1 per Shape | Bootstrap 1 then 5; Optimizer 5; Retention 1 |
 | Candidate / performance timeout | 60s / 600s | Candidate 120s; ordinary tree performance and outer run budget 600s; each ABBA A/B run budget 120s |
 | Clock policy | off unless configured | locked externally, evaluator checks external marker |
-| Batching/repetition | given Shapes in one invocation | 1 Shape per batch, up to 16 concurrent batches; one logical ordinary Evaluate; ABBA three complete comparisons with per-Shape medians, repeats=2 (A/B/B/A) each |
+| Batching/repetition | given Shapes in one invocation | 1 Shape per batch, up to 16 concurrent batches; one logical ordinary Evaluate; one complete ABBA comparison, repeats=2 (A/B/B/A), without an extra cross-job median |
 
 Thus evaluator code and acceptance definition match, but complete execution conditions do not.
 Hash equality is not evidence of equal latency across policies or measurement windows.

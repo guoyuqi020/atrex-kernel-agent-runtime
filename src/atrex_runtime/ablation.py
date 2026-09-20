@@ -19,6 +19,7 @@ from .domain.ids import (
     parse_lineage_id,
 )
 from .domain.models import Campaign, CampaignStatus
+from .kernel_agents import KernelAgentBundleWorkflowV1
 from .lineage_seed import (
     LineageBaselineSeedV1,
     LineageSeeder,
@@ -53,6 +54,7 @@ class AblationArmSpecV1(BaseModel):
     # Resetting Skills and Tools every Attempt ablates Agent-level accumulation as well.
     # Retaining them preserves serial learning; challenger_count controls evolution separately.
     ephemeral_agent_state: bool = True
+    workflow_command: str | None = None
     optimizer_model: str | None = Field(default=None, min_length=1, max_length=200)
 
     @field_validator("creation_key")
@@ -86,6 +88,13 @@ class AblationArmSpecV1(BaseModel):
             raise ValueError("ablation arm Optimizer model is invalid")
         return normalized
 
+    @field_validator("workflow_command")
+    @classmethod
+    def _validate_workflow_command(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return KernelAgentBundleWorkflowV1(command=value).command
+
     @classmethod
     def from_file(cls, path: str | Path) -> Self:
         """Parse one strict ablation arm spec."""
@@ -117,6 +126,7 @@ class AblationArmResult:
     challenger_count: int
     challenger_start_epoch: int
     first_epoch_same_agent: bool
+    workflow_command: str | None
     lineage: LineageSeedResult
 
 
@@ -174,6 +184,7 @@ class AblationArmSeeder:
                 trajectories_per_branch=spec.trajectories_per_branch,
                 attempts_per_trajectory=spec.attempts_per_trajectory,
                 ephemeral_agent_state=spec.ephemeral_agent_state,
+                workflow_command=spec.workflow_command,
             ),
         )
         return AblationArmResult(
@@ -185,6 +196,7 @@ class AblationArmSeeder:
             challenger_count=spec.challenger_count,
             challenger_start_epoch=spec.challenger_start_epoch,
             first_epoch_same_agent=spec.first_epoch_same_agent,
+            workflow_command=spec.workflow_command,
             lineage=lineage,
         )
 

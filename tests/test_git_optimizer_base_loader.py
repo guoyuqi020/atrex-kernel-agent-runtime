@@ -52,11 +52,14 @@ def _repository(tmp_path: Path) -> tuple[Path, str]:
                 "entrypoint": {
                     "command": "src/main.py",
                 },
+                "workflow": {"command": "workflow/main.py"},
             }
         ),
         encoding="utf-8",
     )
     (repository / "src/main.py").write_text("def optimize(): ...\n")
+    (repository / "workflow").mkdir()
+    (repository / "workflow/main.py").write_text("print('main')\n")
     _run(repository, "add", ".")
     _run(
         repository,
@@ -108,6 +111,30 @@ def test_loader_reads_exact_local_commit_and_seals_complete_tree(tmp_path: Path)
     assert value["repository"] == repository.as_uri()
     assert value["commit"] == commit
     assert value["optimizer_digest"] == result.candidate.optimizer_digest
+
+
+def test_loader_seals_selected_workflow_into_base_revision(tmp_path: Path) -> None:
+    repository, commit = _repository(tmp_path)
+    loader, artifacts = _loader(tmp_path, repository)
+
+    result = loader.build_candidate(
+        Dsl.TRITON,
+        commit,
+        workflow_command="workflow/evolve_3.py",
+    )
+
+    optimizer = artifacts.verify(result.candidate.optimizer_digest).payload_path
+    manifest = json.loads((optimizer / "atrex-bundle.json").read_text())
+    assert manifest["workflow"] == {"command": "workflow/main.py"}
+    assert (optimizer / "workflow/main.py").read_bytes() == (
+        Path(__file__).resolve().parents[1] / "src/atrex_runtime/workflow_templates/evolve_3.py"
+    ).read_bytes()
+    assert not (optimizer / "workflow/evolve_3.py").exists()
+    provenance = json.loads(
+        (artifacts.verify(result.source_provenance_digest).payload_path / "value.json").read_text()
+    )
+    assert provenance["workflow_command"] == "workflow/evolve_3.py"
+    assert provenance["optimizer_digest"] == result.candidate.optimizer_digest
 
 
 def test_loader_rejects_remote_repository(tmp_path: Path) -> None:

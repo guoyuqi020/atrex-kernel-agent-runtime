@@ -98,7 +98,8 @@ QoderCLI，并从启动环境继承 `QODER_PERSONAL_ACCESS_TOKEN`。修改本 Ex
 中的 `campaign.optimizer.agent_backend` 可以选择其他受支持 Backend。凭据值不会打印或复制进
 Workspace。
 
-保持外部 Agate 兼容 Gateway 监听 `127.0.0.1:9000`，然后分别运行：
+先让官方本地 Agate Gateway 监听 `127.0.0.1:8000`，并配置 `local` GPU alias，
+然后分别运行（参见[部署说明](../../docs/agate-localhost.zh.md)）：
 
 ```bash
 # 终端 2

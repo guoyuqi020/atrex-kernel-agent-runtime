@@ -16,7 +16,7 @@ Options:
   --target-epoch N             absolute Epoch target to complete; defaults to 5
   --workspace DIR
   --service-workspace DIR      reuse its running Runtime/Wiki without managing services
-  --hardware-target GPU        defaults to AGATE_GPU
+  --hardware-target GPU        defaults to AGATE_GPU or local
   --seed-source FILE           defaults to reference.py
   --dsl-seed-source DSL=PATH   repeatable; seeds one DSL from its own kernel
   --optimizer-model MODEL
@@ -82,6 +82,8 @@ if [[ -n "${env_file}" ]]; then
   source "${env_file}"
   hardware_target="${hardware_target:-${AGATE_GPU:-}}"
 fi
+atrex_default_agate_environment
+hardware_target="${hardware_target:-${AGATE_GPU}}"
 
 if [[ "${prepared}" == false ]]; then
   workspace_output="$(mktemp "${TMPDIR:-/tmp}/atrex-production-workspace.XXXXXX")"
@@ -247,7 +249,7 @@ ablation_arm_labels() {
   "${atrex_prod_python}" -c '
 import json, re, sys
 value = json.load(open(sys.argv[1], encoding="utf-8"))
-if value.get("schema_version") != 4:
+if value.get("schema_version") != 5:
     raise SystemExit(f"unsupported ablation plan schema: {sys.argv[1]}")
 if not value.get("enabled"):
     raise SystemExit(0)
@@ -287,6 +289,7 @@ json.dump(
         "challenger_count": int(arm["challenger_count"]),
         "challenger_start_epoch": int(arm["challenger_start_epoch"]),
         "first_epoch_same_agent": bool(arm["first_epoch_same_agent"]),
+        "workflow_command": arm["workflow_command"],
     },
     open(sys.argv[3], "w", encoding="utf-8"),
     indent=2,

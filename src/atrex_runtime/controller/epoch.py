@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -11,12 +11,18 @@ import anyio
 
 from ..domain.errors import InfrastructureError, InvalidTransitionError
 from ..domain.ids import (
+    AttemptId,
+    EpochId,
     KernelAgentRevisionId,
+    KernelRevisionId,
     LineageId,
     new_attempt_id,
     new_epoch_id,
     new_kernel_agent_revision_id,
     new_kernel_revision_id,
+    parse_attempt_id,
+    parse_kernel_agent_revision_id,
+    parse_kernel_revision_id,
 )
 from ..domain.models import (
     AgentSelectionReason,
@@ -27,14 +33,18 @@ from ..domain.models import (
     BranchScore,
     ChallengerProposalType,
     Epoch,
+    EpochBranchWorkflow,
     EpochChallenger,
     EpochSelection,
     EpochStatus,
     KernelAgentRevision,
     KernelEvaluation,
     KernelRevision,
+    RuntimeStatePolicy,
 )
 from ..ports import (
+    AgentWorkflowOperationHandler,
+    AgentWorkflowRunner,
     AttemptEvidenceAssembler,
     BuildAttemptEvidenceRequest,
     BuildChallengerRequest,
@@ -43,6 +53,7 @@ from ..ports import (
     KernelAgentReuseProposal,
     KernelComparator,
     OptimizerRunner,
+    RunAgentWorkflowRequest,
     RunAttemptRequest,
 )
 from ..registry.base import Registry
@@ -71,6 +82,164 @@ class EpochRunResult:
         return self.scores[1:]
 
 
+class _EpochWorkflowOperations(AgentWorkflowOperationHandler):
+    """Capability surface exposed to one untrusted executable Epoch Workflow."""
+
+    def __init__(
+        self,
+        controller: EpochController,
+        epoch: Epoch,
+        *,
+        optimizer_attempt_budget: int,
+    ) -> None:
+        self._controller = controller
+        self._epoch_id = epoch.id
+        self._optimizer_attempt_budget = optimizer_attempt_budget
+        self._program_sha256: str | None = None
+        self._selected_kernel_revision_id: str | None = None
+        self._selected_agent_revision_id: str | None = None
+        self._selection_reason: AgentSelectionReason | None = None
+
+    async def execute_workflow_operation(
+        self,
+        operation: str,
+        arguments: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        program_sha256 = arguments.get("_runtime_workflow_program_sha256")
+        if not isinstance(program_sha256, str):
+            raise ValueError("Runtime omitted trusted Workflow identity")
+        if self._program_sha256 is None:
+            self._program_sha256 = program_sha256
+        elif self._program_sha256 != program_sha256:
+            raise InvalidTransitionError("Workflow program identity changed during one Epoch")
+        public = {
+            key: value
+            for key, value in arguments.items()
+            if key != "_runtime_workflow_program_sha256"
+        }
+        if operation == "replicate_active":
+            ordinal = self._positive_int(public, "challenger_ordinal")
+            agent_revision_id = self._controller._workflow_replicate_active(
+                self._epoch_id,
+                ordinal,
+            )
+            return {"kernel_agent_revision_id": agent_revision_id}
+        if operation == "evolve_agent":
+            ordinal = self._positive_int(public, "challenger_ordinal")
+            evolved_revision_id = await self._controller._workflow_evolve_agent(
+                self._epoch_id,
+                ordinal,
+            )
+            return {
+                "kernel_agent_revision_id": evolved_revision_id,
+                "created": evolved_revision_id is not None,
+            }
+        if operation == "create_trajectory":
+            return self._controller._workflow_create_trajectory(
+                self._epoch_id,
+                public,
+                optimizer_attempt_budget=self._optimizer_attempt_budget,
+                program_sha256=program_sha256,
+            )
+        if operation == "run_attempts_parallel":
+            launches = public.get("launches")
+            if not isinstance(launches, list):
+                raise ValueError("run_attempts_parallel requires a launches array")
+            return await self._controller._workflow_run_attempts_parallel(
+                self._epoch_id,
+                tuple(launches),
+                optimizer_attempt_budget=self._optimizer_attempt_budget,
+                program_sha256=program_sha256,
+            )
+        if operation == "trajectory_status":
+            return self._controller._workflow_trajectory_status(
+                self._epoch_id,
+                public,
+            )
+        if operation == "run_branches":
+            branches = public.get("branches")
+            if not isinstance(branches, list):
+                raise ValueError("run_branches requires a branches array")
+            return await self._controller._workflow_run_branches_legacy(
+                self._epoch_id,
+                tuple(branches),
+                optimizer_attempt_budget=self._optimizer_attempt_budget,
+                program_sha256=program_sha256,
+            )
+        if operation == "select_best_kernel":
+            self._controller._workflow_validate_selection_ready(
+                self._epoch_id,
+                optimizer_attempt_budget=self._optimizer_attempt_budget,
+                program_sha256=program_sha256,
+            )
+            if self._selected_kernel_revision_id is not None:
+                selected = self._controller._registry.get_kernel_revision(
+                    parse_kernel_revision_id(self._selected_kernel_revision_id)
+                )
+                return {
+                    "kernel_revision_id": selected.id,
+                    "latency_us": selected.evaluation.latency_us,
+                }
+            kernel_revision = self._controller._workflow_select_best_kernel(self._epoch_id)
+            self._selected_kernel_revision_id = str(kernel_revision.id)
+            return {
+                "kernel_revision_id": kernel_revision.id,
+                "latency_us": kernel_revision.evaluation.latency_us,
+            }
+        if operation == "compare_agents":
+            self._controller._workflow_validate_selection_ready(
+                self._epoch_id,
+                optimizer_attempt_budget=self._optimizer_attempt_budget,
+                program_sha256=program_sha256,
+            )
+            if self._selected_agent_revision_id is not None:
+                return {
+                    "kernel_agent_revision_id": self._selected_agent_revision_id,
+                    "reason": (
+                        None if self._selection_reason is None else self._selection_reason.value
+                    ),
+                }
+            score, reason = await self._controller._workflow_compare_agents(self._epoch_id)
+            self._selected_agent_revision_id = str(score.kernel_agent_revision_id)
+            self._selection_reason = reason
+            return {
+                "kernel_agent_revision_id": score.kernel_agent_revision_id,
+                "reason": None if reason is None else reason.value,
+            }
+        if operation == "complete_epoch":
+            kernel_revision_id = public.get("kernel_revision_id")
+            requested_agent_revision_id = public.get("kernel_agent_revision_id")
+            if not isinstance(kernel_revision_id, str) or not isinstance(
+                requested_agent_revision_id, str
+            ):
+                raise ValueError(
+                    "complete_epoch requires kernel_revision_id and kernel_agent_revision_id"
+                )
+            if kernel_revision_id != self._selected_kernel_revision_id:
+                raise InvalidTransitionError(
+                    "Workflow must complete with select_best_kernel's exact result"
+                )
+            if requested_agent_revision_id != self._selected_agent_revision_id:
+                raise InvalidTransitionError(
+                    "Workflow must complete with compare_agents' exact result"
+                )
+            epoch = self._controller._workflow_complete_epoch(
+                self._epoch_id,
+                kernel_revision_id,
+                requested_agent_revision_id,
+                self._selection_reason,
+            )
+            return {"epoch_id": epoch.id, "status": epoch.status.value}
+        raise ValueError(f"unsupported Workflow Runtime operation: {operation}")
+
+    @staticmethod
+    def _positive_int(arguments: Mapping[str, object], name: str) -> int:
+        value = arguments.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+        return value
+
+
 class EpochController:
     """Persist every intent and resume an epoch from its last committed transition."""
 
@@ -87,6 +256,7 @@ class EpochController:
         kernel_measurement_uncertainty_us: float = 0.0,
         agent_measurement_uncertainty_us: float = 0.0,
         max_parallel_branches: int = 4,
+        workflow_runner: AgentWorkflowRunner | None = None,
         clock: Callable[[], str] = _utc_now,
         attempt_finished: Callable[[Epoch, Attempt], None] | None = None,
     ) -> None:
@@ -110,6 +280,7 @@ class EpochController:
         self._max_infrastructure_retries = max_infrastructure_retries
         self._agent_measurement_uncertainty_us = agent_measurement_uncertainty_us
         self._max_parallel_branches = max_parallel_branches
+        self._workflow_runner = workflow_runner
         self._clock = clock
         self._attempt_finished = attempt_finished
 
@@ -151,6 +322,8 @@ class EpochController:
             epoch = self._registry.resume_stopped_epoch(epoch.id)
         if epoch.status is EpochStatus.FAILED:
             raise InvalidTransitionError(f"Epoch {epoch.id} has failed")
+        if self._workflow_runner is not None:
+            return await self._run_executable_workflow_epoch(epoch)
         if epoch.status is EpochStatus.BUILDING_CHALLENGER:
             try:
                 await self._ensure_challengers(epoch)
@@ -185,10 +358,78 @@ class EpochController:
             raise InvalidTransitionError(f"Epoch {epoch.id} stopped in {epoch.status}")
         return EpochRunResult(epoch, self._scores(epoch))
 
-    async def _ensure_challengers(self, epoch: Epoch) -> None:
+    async def _run_executable_workflow_epoch(self, epoch: Epoch) -> EpochRunResult:
+        """Let the Active Agent Revision orchestrate one Epoch through Runtime services."""
+        if epoch.status is EpochStatus.COMPLETED:
+            return EpochRunResult(epoch, self._scores(epoch))
+        if epoch.status not in {
+            EpochStatus.BUILDING_CHALLENGER,
+            EpochStatus.READY,
+            EpochStatus.RUNNING,
+            EpochStatus.SELECTING,
+        }:
+            raise InvalidTransitionError(
+                f"Epoch {epoch.id} cannot run executable Workflow from {epoch.status}"
+            )
+        lineage = self._registry.get_lineage(epoch.lineage_id)
+        configured_challengers = lineage.challengers_for_epoch(epoch.number)
+        # The resource envelope is immutable Lineage input, not a projection of
+        # partially registered Trajectories. A Workflow may be interrupted after
+        # freezing only its first Branch; deriving the budget from that prefix would
+        # shrink the resumed Epoch and make deterministic replay impossible.
+        optimizer_attempt_budget = (
+            (1 + configured_challengers)
+            * epoch.trajectories_per_branch
+            * epoch.attempts_per_trajectory
+        )
+        active = self._registry.get_kernel_agent_revision(epoch.active_kernel_agent_revision_id)
+        operations = _EpochWorkflowOperations(
+            self,
+            epoch,
+            optimizer_attempt_budget=optimizer_attempt_budget,
+        )
+        workflow_runner = self._workflow_runner
+        if workflow_runner is None:
+            raise AssertionError("executable Workflow runner disappeared")
+        await workflow_runner.run(
+            RunAgentWorkflowRequest(
+                revision=active,
+                epoch_id=epoch.id,
+                epoch_number=epoch.number,
+                max_challengers=(
+                    epoch.challenger_count
+                    if epoch.status is not EpochStatus.BUILDING_CHALLENGER
+                    else configured_challengers
+                ),
+                optimizer_attempt_budget=optimizer_attempt_budget,
+                default_trajectories=epoch.trajectories_per_branch,
+                default_attempts_per_trajectory=epoch.attempts_per_trajectory,
+                default_runtime_state_policy=(
+                    RuntimeStatePolicy.RESET_EACH_ATTEMPT.value
+                    if lineage.ephemeral_agent_state
+                    else RuntimeStatePolicy.RETAIN_ACROSS_ATTEMPTS.value
+                ),
+                first_epoch_same_agent=lineage.first_epoch_same_agent,
+            ),
+            operations,
+        )
+        epoch = self._registry.get_epoch(epoch.id)
+        if epoch.status is not EpochStatus.COMPLETED:
+            raise InvalidTransitionError(
+                f"Agent Workflow exited without completing Epoch {epoch.id}"
+            )
+        return EpochRunResult(epoch, self._scores(epoch))
+
+    async def _ensure_challengers(
+        self,
+        epoch: Epoch,
+        *,
+        through_ordinal: int | None = None,
+        honor_first_epoch_replica: bool = True,
+    ) -> None:
         lineage = self._registry.get_lineage(epoch.lineage_id)
         parent = self._registry.get_kernel_agent_revision(epoch.active_kernel_agent_revision_id)
-        if epoch.number == 1 and lineage.first_epoch_same_agent:
+        if honor_first_epoch_replica and epoch.number == 1 and lineage.first_epoch_same_agent:
             self._registry.attach_challenger(
                 EpochChallenger(
                     epoch_id=epoch.id,
@@ -200,9 +441,14 @@ class EpochController:
                 )
             )
             return
+        target_ordinal = epoch.challenger_count
+        if through_ordinal is not None:
+            if through_ordinal <= 0 or through_ordinal > epoch.challenger_count:
+                raise ValueError("Workflow Challenger ordinal exceeds the Runtime limit")
+            target_ordinal = through_ordinal
         for challenger_ordinal in range(
             len(epoch.challenger_kernel_agent_revision_ids) + 1,
-            epoch.challenger_count + 1,
+            target_ordinal + 1,
         ):
             creation_key = f"epoch:{epoch.id}:challenger:{challenger_ordinal}"
             revision = self._registry.find_kernel_agent_revision_by_creation_key(creation_key)
@@ -316,6 +562,726 @@ class EpochController:
             )
             epoch = self._registry.get_epoch(epoch.id)
 
+    def _workflow_replicate_active(
+        self,
+        epoch_id: EpochId,
+        challenger_ordinal: int,
+    ) -> KernelAgentRevisionId:
+        """Idempotently attach the Active Agent as an isolated Workflow Branch."""
+        epoch = self._registry.get_epoch(epoch_id)
+        if challenger_ordinal > epoch.challenger_count:
+            raise ValueError("Replica Challenger exceeds the Runtime limit")
+        existing = self._registry.list_epoch_challengers(epoch.id)
+        if challenger_ordinal <= len(existing):
+            challenger = existing[challenger_ordinal - 1]
+            if (
+                challenger.proposal_type is not ChallengerProposalType.REPLICA
+                or challenger.kernel_agent_revision_id != epoch.active_kernel_agent_revision_id
+            ):
+                raise InvalidTransitionError(
+                    "Recovered Workflow Challenger is not the requested Active replica"
+                )
+            return challenger.kernel_agent_revision_id
+        if challenger_ordinal != len(existing) + 1:
+            raise ValueError("Workflow must create Challenger replicas in ordinal order")
+        parent = self._registry.get_kernel_agent_revision(epoch.active_kernel_agent_revision_id)
+        self._registry.attach_challenger(
+            EpochChallenger(
+                epoch_id=epoch.id,
+                challenger_ordinal=challenger_ordinal,
+                kernel_agent_revision_id=parent.id,
+                base_revision_id=parent.id,
+                proposal_type=ChallengerProposalType.REPLICA,
+                evolution_trace_digest=None,
+            )
+        )
+        return parent.id
+
+    async def _workflow_evolve_agent(
+        self,
+        epoch_id: EpochId,
+        challenger_ordinal: int,
+    ) -> KernelAgentRevisionId | None:
+        """Idempotently invoke Evolver for exactly one indexed Challenger."""
+        epoch = self._registry.get_epoch(epoch_id)
+        existing = self._registry.list_epoch_challengers(epoch.id)
+        if challenger_ordinal <= len(existing):
+            challenger = existing[challenger_ordinal - 1]
+            if challenger.proposal_type is ChallengerProposalType.REPLICA:
+                raise InvalidTransitionError(
+                    "Recovered Workflow Challenger is a replica, not an Evolver result"
+                )
+            return challenger.kernel_agent_revision_id
+        if challenger_ordinal != len(existing) + 1:
+            raise ValueError("Workflow must evolve Challengers in ordinal order")
+        await self._ensure_challengers(
+            epoch,
+            through_ordinal=challenger_ordinal,
+            honor_first_epoch_replica=False,
+        )
+        epoch = self._registry.get_epoch(epoch.id)
+        if challenger_ordinal > len(epoch.challenger_kernel_agent_revision_ids):
+            return None
+        return epoch.challenger_kernel_agent_revision_ids[challenger_ordinal - 1]
+
+    def _workflow_create_trajectory(
+        self,
+        epoch_id: EpochId,
+        arguments: Mapping[str, object],
+        *,
+        optimizer_attempt_budget: int,
+        program_sha256: str,
+    ) -> Mapping[str, object]:
+        """Freeze one Branch capacity and return one stable Trajectory handle.
+
+        The operation is intentionally idempotent. A restarted Workflow can recreate
+        the same handles, but it cannot mutate a Branch plan after the first Attempt.
+        Execution is separate and happens through ``run_attempts_parallel``.
+        """
+        epoch = self._registry.get_epoch(epoch_id)
+        label = arguments.get("branch")
+        if not isinstance(label, str):
+            raise ValueError("create_trajectory requires a branch label")
+        branch, challenger_ordinal = self._workflow_branch_identity(label)
+        trajectory_ordinal = self._positive_workflow_int(arguments, "trajectory_ordinal")
+        trajectory_count = self._positive_workflow_int(arguments, "trajectory_count")
+        attempt_capacity = self._positive_workflow_int(arguments, "attempt_capacity")
+        if trajectory_ordinal > trajectory_count:
+            raise ValueError("trajectory_ordinal exceeds trajectory_count")
+        policy_value = arguments.get("runtime_state_policy")
+        if not isinstance(policy_value, str):
+            raise ValueError("runtime_state_policy must be a string")
+        try:
+            policy = RuntimeStatePolicy(policy_value)
+        except (TypeError, ValueError) as error:
+            raise ValueError(
+                "runtime_state_policy must be reset_each_attempt or retain_across_attempts"
+            ) from error
+
+        attached = self._registry.list_epoch_challengers(epoch.id)
+        if branch is BranchRole.ACTIVE:
+            revision_id = epoch.active_kernel_agent_revision_id
+        else:
+            if challenger_ordinal > len(attached):
+                raise ValueError(f"Workflow Branch {label} has no attached Challenger Agent")
+            revision_id = attached[challenger_ordinal - 1].kernel_agent_revision_id
+
+        existing = self._registry.get_epoch_branch_workflow(
+            epoch.id,
+            branch,
+            challenger_ordinal,
+        )
+        expected = EpochBranchWorkflow(
+            epoch_id=epoch.id,
+            branch=branch,
+            challenger_ordinal=challenger_ordinal,
+            kernel_agent_revision_id=revision_id,
+            kind=(
+                "executable_epoch_workflow_v2" if existing is None else existing.kind
+            ),
+            program_sha256=program_sha256,
+            trajectories=trajectory_count,
+            attempts_per_trajectory=attempt_capacity,
+            runtime_state_policy=policy,
+            created_at=(self._clock() if existing is None else existing.created_at),
+        )
+        if existing is not None:
+            if existing != expected:
+                raise InvalidTransitionError(
+                    "Recovered Trajectory differs from its frozen Branch plan"
+                )
+            workflow = existing
+        else:
+            if epoch.status not in {
+                EpochStatus.BUILDING_CHALLENGER,
+                EpochStatus.READY,
+            }:
+                raise InvalidTransitionError(
+                    "Workflow cannot add a new Trajectory after Attempt execution starts"
+                )
+            planned = sum(
+                item.attempt_budget
+                for item in self._registry.list_epoch_branch_workflows(epoch.id)
+            )
+            requested = trajectory_count * attempt_capacity
+            if planned + requested > optimizer_attempt_budget:
+                raise ValueError(
+                    "Workflow Branch capacities exceed the Runtime Optimizer Attempt budget: "
+                    f"requested {planned + requested}, allowed {optimizer_attempt_budget}"
+                )
+            workflow = self._registry.ensure_epoch_branch_workflow(expected)
+
+        self._registry.freeze_epoch_workflow_challengers(
+            epoch.id,
+            len(attached),
+            program_sha256,
+        )
+        return {
+            "branch": label,
+            "trajectory_ordinal": trajectory_ordinal,
+            "attempt_capacity": workflow.attempts_per_trajectory,
+            "runtime_state_policy": workflow.runtime_state_policy.value,
+            "kernel_agent_revision_id": workflow.kernel_agent_revision_id,
+        }
+
+    async def _workflow_run_branches_legacy(
+        self,
+        epoch_id: EpochId,
+        raw_branches: tuple[object, ...],
+        *,
+        optimizer_attempt_budget: int,
+        program_sha256: str,
+    ) -> Mapping[str, object]:
+        """Resume pre-v2 Agent revisions without exposing this coarse API to new Bundles."""
+        if not raw_branches:
+            raise ValueError("Workflow must run at least the Active Branch")
+        plans: list[tuple[str, int, int]] = []
+        for raw in raw_branches:
+            if not isinstance(raw, dict):
+                raise ValueError("each Workflow Branch must be an object")
+            label = raw.get("branch")
+            if not isinstance(label, str):
+                raise ValueError("Workflow Branch requires a branch label")
+            trajectories = self._positive_workflow_int(raw, "trajectories")
+            attempts = self._positive_workflow_int(raw, "attempts_per_trajectory")
+            policy = raw.get("runtime_state_policy")
+            if not isinstance(policy, str):
+                raise ValueError("runtime_state_policy must be a string")
+            for trajectory_ordinal in range(1, trajectories + 1):
+                self._workflow_create_trajectory(
+                    epoch_id,
+                    {
+                        "branch": label,
+                        "trajectory_ordinal": trajectory_ordinal,
+                        "trajectory_count": trajectories,
+                        "attempt_capacity": attempts,
+                        "runtime_state_policy": policy,
+                    },
+                    optimizer_attempt_budget=optimizer_attempt_budget,
+                    program_sha256=program_sha256,
+                )
+            plans.append((label, trajectories, attempts))
+
+        for attempt_ordinal in range(1, max(attempts for _, _, attempts in plans) + 1):
+            launches = [
+                {
+                    "branch": label,
+                    "trajectory_ordinal": trajectory_ordinal,
+                    "attempt_ordinal": attempt_ordinal,
+                }
+                for label, trajectories, attempts in plans
+                if attempt_ordinal <= attempts
+                for trajectory_ordinal in range(1, trajectories + 1)
+            ]
+            await self._workflow_run_attempts_parallel(
+                epoch_id,
+                tuple(launches),
+                optimizer_attempt_budget=optimizer_attempt_budget,
+                program_sha256=program_sha256,
+            )
+        scores = self._scores(self._registry.get_epoch(epoch_id))
+        return {
+            "branches": [
+                {
+                    "branch": (
+                        "active"
+                        if score.branch is BranchRole.ACTIVE
+                        else f"challenger-{score.challenger_ordinal}"
+                    ),
+                    "kernel_agent_revision_id": score.kernel_agent_revision_id,
+                    "best_latency_us": score.best_latency_us,
+                    "valid_candidates": score.valid_candidates,
+                    "failed_candidates": score.failed_candidates,
+                }
+                for score in scores
+            ]
+        }
+
+    async def _workflow_run_attempts_parallel(
+        self,
+        epoch_id: EpochId,
+        raw_launches: tuple[object, ...],
+        *,
+        optimizer_attempt_budget: int,
+        program_sha256: str,
+    ) -> Mapping[str, object]:
+        """Execute explicit logical Attempts, possibly across Trajectories in parallel."""
+        if not raw_launches:
+            raise ValueError("run_attempts_parallel requires at least one launch")
+        epoch = self._registry.get_epoch(epoch_id)
+        self._workflow_validate_plan(
+            epoch,
+            optimizer_attempt_budget=optimizer_attempt_budget,
+            program_sha256=program_sha256,
+        )
+        if epoch.status is EpochStatus.READY:
+            self._registry.transition_epoch(
+                epoch.id,
+                EpochStatus.READY,
+                EpochStatus.RUNNING,
+            )
+            epoch = self._registry.get_epoch(epoch.id)
+        if epoch.status is not EpochStatus.RUNNING:
+            raise InvalidTransitionError(
+                f"Workflow cannot run Attempts while Epoch is {epoch.status}"
+            )
+
+        launches: list[
+            tuple[BranchRole, int, int, int, KernelRevisionId | None, AttemptId | None]
+        ] = []
+        trajectory_identities: set[tuple[BranchRole, int, int]] = set()
+        attempt_identities: set[tuple[BranchRole, int, int, int]] = set()
+        for raw in raw_launches:
+            if not isinstance(raw, dict):
+                raise ValueError("each Workflow Attempt launch must be an object")
+            label = raw.get("branch")
+            if not isinstance(label, str):
+                raise ValueError("Attempt launch requires a branch label")
+            branch, challenger_ordinal = self._workflow_branch_identity(label)
+            trajectory_ordinal = self._positive_workflow_int(raw, "trajectory_ordinal")
+            attempt_ordinal = self._positive_workflow_int(raw, "attempt_ordinal")
+            workflow = self._registry.get_epoch_branch_workflow(
+                epoch.id,
+                branch,
+                challenger_ordinal,
+            )
+            if workflow is None:
+                raise ValueError(f"Attempt launch names an unregistered Branch: {label}")
+            if trajectory_ordinal > workflow.trajectories:
+                raise ValueError("Attempt launch Trajectory exceeds its registered capacity")
+            if attempt_ordinal > workflow.attempts_per_trajectory:
+                raise ValueError("Attempt launch ordinal exceeds its registered capacity")
+            trajectory_identity = (branch, challenger_ordinal, trajectory_ordinal)
+            if trajectory_identity in trajectory_identities:
+                raise ValueError(
+                    "one parallel batch cannot launch two Attempts on the same Trajectory"
+                )
+            trajectory_identities.add(trajectory_identity)
+            attempt_identity = (*trajectory_identity, attempt_ordinal)
+            if attempt_identity in attempt_identities:
+                raise ValueError("Workflow Attempt launch is duplicated")
+            attempt_identities.add(attempt_identity)
+
+            raw_kernel = raw.get("input_kernel_revision_id")
+            input_kernel_id = None
+            if raw_kernel is not None:
+                if not isinstance(raw_kernel, str):
+                    raise ValueError("input_kernel_revision_id must be a string or null")
+                input_kernel_id = parse_kernel_revision_id(raw_kernel)
+            raw_state_attempt = raw.get("input_state_from_attempt_id")
+            state_attempt_id = None
+            if raw_state_attempt is not None:
+                if not isinstance(raw_state_attempt, str):
+                    raise ValueError("input_state_from_attempt_id must be a string or null")
+                state_attempt_id = parse_attempt_id(raw_state_attempt)
+            launches.append(
+                (
+                    branch,
+                    challenger_ordinal,
+                    trajectory_ordinal,
+                    attempt_ordinal,
+                    input_kernel_id,
+                    state_attempt_id,
+                )
+            )
+
+        limiter = anyio.Semaphore(self._max_parallel_branches)
+        outcomes: list[tuple[int, Mapping[str, object]]] = []
+        failures: list[BaseException] = []
+
+        async def run_one(
+            index: int,
+            launch: tuple[
+                BranchRole,
+                int,
+                int,
+                int,
+                KernelRevisionId | None,
+                AttemptId | None,
+            ],
+        ) -> None:
+            async with limiter:
+                try:
+                    outcome = await self._workflow_run_attempt(epoch, *launch)
+                    outcomes.append((index, outcome))
+                except BaseException as error:
+                    failures.append(error)
+
+        async with anyio.create_task_group() as tasks:
+            for index, launch in enumerate(launches):
+                tasks.start_soon(run_one, index, launch)
+        if failures:
+            infrastructure = next(
+                (
+                    self._first_infrastructure_error(error)
+                    for error in failures
+                    if self._first_infrastructure_error(error) is not None
+                ),
+                None,
+            )
+            if infrastructure is not None:
+                raise infrastructure
+            raise failures[0]
+        return {"attempts": [value for _, value in sorted(outcomes)]}
+
+    async def _workflow_run_attempt(
+        self,
+        epoch: Epoch,
+        branch: BranchRole,
+        challenger_ordinal: int,
+        trajectory_ordinal: int,
+        attempt_ordinal: int,
+        requested_kernel_id: KernelRevisionId | None,
+        state_from_attempt_id: AttemptId | None,
+    ) -> Mapping[str, object]:
+        workflow = self._registry.get_epoch_branch_workflow(
+            epoch.id,
+            branch,
+            challenger_ordinal,
+        )
+        if workflow is None:
+            raise ValueError("Attempt launch has no registered Branch Workflow")
+        input_kernel_id = epoch.starting_kernel_revision_id
+        for previous_ordinal in range(1, attempt_ordinal):
+            previous = self._registry.find_attempt(
+                epoch.id,
+                branch,
+                challenger_ordinal,
+                trajectory_ordinal,
+                previous_ordinal,
+            )
+            if previous is None or previous.status is not AttemptStatus.COMPLETED:
+                raise InvalidTransitionError(
+                    "Workflow must complete earlier Trajectory Attempts before a later ordinal"
+                )
+            if previous.accepted_as_branch_best:
+                if previous.output_kernel_revision_id is None:
+                    raise InvalidTransitionError("accepted Attempt has no output Kernel")
+                input_kernel_id = previous.output_kernel_revision_id
+        if requested_kernel_id is not None:
+            self._workflow_validate_kernel_input(epoch, requested_kernel_id)
+            input_kernel_id = requested_kernel_id
+
+        attempt = self._registry.find_attempt(
+            epoch.id,
+            branch,
+            challenger_ordinal,
+            trajectory_ordinal,
+            attempt_ordinal,
+        )
+        if attempt is None:
+            attempt_id = new_attempt_id()
+            evidence_digest = self._attempt_evidence.assemble(
+                BuildAttemptEvidenceRequest(
+                    attempt_id=attempt_id,
+                    epoch_id=epoch.id,
+                    branch=branch,
+                    challenger_ordinal=challenger_ordinal,
+                    trajectory_ordinal=trajectory_ordinal,
+                    ordinal=attempt_ordinal,
+                    epoch_evidence_checkpoint=epoch.evidence_checkpoint,
+                )
+            )
+            created_at = self._clock()
+            attempt = Attempt(
+                id=attempt_id,
+                epoch_id=epoch.id,
+                branch=branch,
+                challenger_ordinal=challenger_ordinal,
+                trajectory_ordinal=trajectory_ordinal,
+                ordinal=attempt_ordinal,
+                kernel_agent_revision_id=workflow.kernel_agent_revision_id,
+                input_kernel_revision_id=input_kernel_id,
+                attempt_evidence_digest=evidence_digest,
+                output_kernel_revision_id=None,
+                accepted_as_branch_best=False,
+                status=AttemptStatus.RUNNING,
+                infrastructure_failures=0,
+                recovery_generation=0,
+                authority_started_at=created_at,
+                failure_reason=None,
+                created_at=created_at,
+                completed_at=None,
+            )
+            self._registry.insert_attempt(attempt)
+        elif (
+            attempt.input_kernel_revision_id != input_kernel_id
+            or attempt.kernel_agent_revision_id != workflow.kernel_agent_revision_id
+        ):
+            raise InvalidTransitionError(
+                "Recovered Workflow Attempt differs from its original Kernel or Agent input"
+            )
+
+        if state_from_attempt_id is not None:
+            if workflow.runtime_state_policy is not RuntimeStatePolicy.RETAIN_ACROSS_ATTEMPTS:
+                raise ValueError(
+                    "input_state_from_attempt_id requires retain_across_attempts"
+                )
+            source = self._registry.get_attempt(state_from_attempt_id)
+            if source.epoch_id != epoch.id or source.status is not AttemptStatus.COMPLETED:
+                raise ValueError("Runtime State source must be a completed Attempt in this Epoch")
+            if source.kernel_agent_revision_id != attempt.kernel_agent_revision_id:
+                raise ValueError("Runtime State cannot cross Kernel Agent revisions")
+            if source.runtime_state_digest is None:
+                raise ValueError("Runtime State source Attempt has no State checkpoint")
+            if attempt.input_runtime_state_digest is None:
+                self._registry.record_attempt_input_runtime_state(
+                    attempt.id,
+                    source.runtime_state_digest,
+                )
+                self._registry.record_runtime_event(
+                    "epoch.workflow_state_routed",
+                    epoch.id,
+                    {
+                        "source_attempt_id": source.id,
+                        "target_attempt_id": attempt.id,
+                        "runtime_state_digest": source.runtime_state_digest,
+                    },
+                )
+                attempt = self._registry.get_attempt(attempt.id)
+            elif attempt.input_runtime_state_digest != source.runtime_state_digest:
+                raise InvalidTransitionError(
+                    "Recovered Workflow Attempt names a different Runtime State source"
+                )
+
+        evidence_request = BuildAttemptEvidenceRequest(
+            attempt_id=attempt.id,
+            epoch_id=epoch.id,
+            branch=branch,
+            challenger_ordinal=challenger_ordinal,
+            trajectory_ordinal=trajectory_ordinal,
+            ordinal=attempt_ordinal,
+            epoch_evidence_checkpoint=epoch.evidence_checkpoint,
+        )
+        self._attempt_evidence.validate(attempt.attempt_evidence_digest, evidence_request)
+        was_completed = attempt.status is AttemptStatus.COMPLETED
+        attempt = await self._finish_attempt(epoch, attempt)
+        if not was_completed and self._attempt_finished is not None:
+            with suppress(Exception):
+                self._attempt_finished(epoch, attempt)
+        return self._workflow_attempt_projection(attempt)
+
+    def _workflow_trajectory_status(
+        self,
+        epoch_id: EpochId,
+        arguments: Mapping[str, object],
+    ) -> Mapping[str, object]:
+        epoch = self._registry.get_epoch(epoch_id)
+        label = arguments.get("branch")
+        if not isinstance(label, str):
+            raise ValueError("trajectory_status requires a branch label")
+        branch, challenger_ordinal = self._workflow_branch_identity(label)
+        trajectory_ordinal = self._positive_workflow_int(arguments, "trajectory_ordinal")
+        workflow = self._registry.get_epoch_branch_workflow(
+            epoch.id,
+            branch,
+            challenger_ordinal,
+        )
+        if workflow is None or trajectory_ordinal > workflow.trajectories:
+            raise ValueError("trajectory_status names an unregistered Trajectory")
+        attempts = [
+            attempt
+            for attempt in self._registry.list_attempts(epoch.id)
+            if attempt.branch is branch
+            and attempt.challenger_ordinal == challenger_ordinal
+            and attempt.trajectory_ordinal == trajectory_ordinal
+        ]
+        current_kernel_id = epoch.starting_kernel_revision_id
+        for attempt in attempts:
+            if attempt.accepted_as_branch_best and attempt.output_kernel_revision_id is not None:
+                current_kernel_id = attempt.output_kernel_revision_id
+        current = self._registry.get_kernel_revision(current_kernel_id)
+        return {
+            "branch": label,
+            "trajectory_ordinal": trajectory_ordinal,
+            "attempt_capacity": workflow.attempts_per_trajectory,
+            "completed_attempts": sum(
+                attempt.status is AttemptStatus.COMPLETED for attempt in attempts
+            ),
+            "current_kernel_revision_id": current.id,
+            "current_latency_us": current.evaluation.latency_us,
+            "attempts": [self._workflow_attempt_projection(attempt) for attempt in attempts],
+        }
+
+    def _workflow_validate_plan(
+        self,
+        epoch: Epoch,
+        *,
+        optimizer_attempt_budget: int,
+        program_sha256: str,
+    ) -> None:
+        workflows = self._registry.list_epoch_branch_workflows(epoch.id)
+        identities = {(item.branch, item.challenger_ordinal) for item in workflows}
+        required = {
+            (BranchRole.ACTIVE, 0),
+            *(
+                (BranchRole.CHALLENGER, ordinal)
+                for ordinal in range(1, len(self._registry.list_epoch_challengers(epoch.id)) + 1)
+            ),
+        }
+        if identities != required:
+            raise ValueError(
+                "Workflow must register Active and every attached Challenger before Attempts"
+            )
+        if any(item.program_sha256 != program_sha256 for item in workflows):
+            raise InvalidTransitionError("Workflow Branch was frozen by another program")
+        planned = sum(item.attempt_budget for item in workflows)
+        if planned != optimizer_attempt_budget:
+            raise ValueError(
+                "Workflow must allocate the Runtime Optimizer Attempt budget exactly: "
+                f"allocated {planned}, required {optimizer_attempt_budget}"
+            )
+
+    def _workflow_validate_selection_ready(
+        self,
+        epoch_id: EpochId,
+        *,
+        optimizer_attempt_budget: int,
+        program_sha256: str,
+    ) -> None:
+        epoch = self._registry.get_epoch(epoch_id)
+        self._workflow_validate_plan(
+            epoch,
+            optimizer_attempt_budget=optimizer_attempt_budget,
+            program_sha256=program_sha256,
+        )
+        attempts = self._registry.list_attempts(epoch.id)
+        if len(attempts) != optimizer_attempt_budget:
+            raise InvalidTransitionError(
+                "Workflow cannot select before every allocated Attempt has run: "
+                f"completed or present {len(attempts)}, required {optimizer_attempt_budget}"
+            )
+        if any(attempt.status is not AttemptStatus.COMPLETED for attempt in attempts):
+            raise InvalidTransitionError("Workflow cannot select with unfinished Attempts")
+
+    def _workflow_validate_kernel_input(
+        self,
+        epoch: Epoch,
+        kernel_revision_id: KernelRevisionId,
+    ) -> None:
+        if kernel_revision_id == epoch.starting_kernel_revision_id:
+            return
+        for attempt in self._registry.list_attempts(epoch.id):
+            if (
+                attempt.status is AttemptStatus.COMPLETED
+                and attempt.accepted_as_branch_best
+                and attempt.output_kernel_revision_id == kernel_revision_id
+            ):
+                return
+        raise ValueError(
+            "input_kernel_revision_id must be the Epoch start or an accepted Kernel "
+            "from a completed Attempt in this Epoch"
+        )
+
+    def _workflow_attempt_projection(self, attempt: Attempt) -> Mapping[str, object]:
+        output = (
+            None
+            if attempt.output_kernel_revision_id is None
+            else self._registry.get_kernel_revision(attempt.output_kernel_revision_id)
+        )
+        trajectory_kernel_id = (
+            attempt.output_kernel_revision_id
+            if attempt.accepted_as_branch_best and attempt.output_kernel_revision_id is not None
+            else attempt.input_kernel_revision_id
+        )
+        return {
+            "attempt_id": attempt.id,
+            "branch": (
+                "active"
+                if attempt.branch is BranchRole.ACTIVE
+                else f"challenger-{attempt.challenger_ordinal}"
+            ),
+            "trajectory_ordinal": attempt.trajectory_ordinal,
+            "attempt_ordinal": attempt.ordinal,
+            "status": attempt.status.value,
+            "input_kernel_revision_id": attempt.input_kernel_revision_id,
+            "output_kernel_revision_id": attempt.output_kernel_revision_id,
+            "trajectory_kernel_revision_id": trajectory_kernel_id,
+            "accepted": attempt.accepted_as_branch_best,
+            "correct": None if output is None else output.evaluation.correct,
+            "latency_us": None if output is None else output.evaluation.latency_us,
+            "failure_reason": attempt.failure_reason,
+            "runtime_state_available": attempt.runtime_state_digest is not None,
+        }
+
+    @staticmethod
+    def _positive_workflow_int(arguments: Mapping[str, object], name: str) -> int:
+        value = arguments.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+        return value
+
+    def _workflow_select_best_kernel(self, epoch_id: EpochId) -> KernelRevision:
+        epoch = self._registry.get_epoch(epoch_id)
+        self._scores(epoch)
+        return select_best_kernel(self._retained_kernels(epoch))
+
+    async def _workflow_compare_agents(
+        self,
+        epoch_id: EpochId,
+    ) -> tuple[BranchScore, AgentSelectionReason | None]:
+        epoch = self._registry.get_epoch(epoch_id)
+        scores = self._scores(epoch)
+        return await self._select_kernel_agent(epoch, scores)
+
+    def _workflow_complete_epoch(
+        self,
+        epoch_id: EpochId,
+        kernel_revision_id: str,
+        agent_revision_id: str,
+        selection_reason: AgentSelectionReason | None,
+    ) -> Epoch:
+        epoch = self._registry.get_epoch(epoch_id)
+        kernel_id = parse_kernel_revision_id(kernel_revision_id)
+        agent_id = parse_kernel_agent_revision_id(agent_revision_id)
+        if epoch.status is EpochStatus.COMPLETED:
+            if (
+                epoch.best_kernel_revision_id != kernel_id
+                or epoch.winner_kernel_agent_revision_id != agent_id
+            ):
+                raise InvalidTransitionError(
+                    "Recovered Epoch was completed with different Workflow selections"
+                )
+            return epoch
+        trusted_kernel = select_best_kernel(self._retained_kernels(epoch))
+        if kernel_id != trusted_kernel.id:
+            raise InvalidTransitionError("Workflow selected a non-best Kernel")
+        valid_agents = {score.kernel_agent_revision_id for score in self._scores(epoch)}
+        if agent_id not in valid_agents:
+            raise InvalidTransitionError("Workflow selected an Agent outside completed Branches")
+        if epoch.status is EpochStatus.RUNNING:
+            self._registry.transition_epoch(
+                epoch.id,
+                EpochStatus.RUNNING,
+                EpochStatus.SELECTING,
+            )
+            epoch = self._registry.get_epoch(epoch.id)
+        if epoch.status is not EpochStatus.SELECTING:
+            raise InvalidTransitionError(f"Workflow cannot complete Epoch from {epoch.status}")
+        self._registry.complete_epoch(
+            epoch.id,
+            EpochSelection(
+                winner_kernel_agent_revision_id=agent_id,
+                best_kernel_revision_id=kernel_id,
+                selection_reason=selection_reason,
+            ),
+        )
+        return self._registry.get_epoch(epoch.id)
+
+    @staticmethod
+    def _workflow_branch_identity(label: str) -> tuple[BranchRole, int]:
+        if label == "active":
+            return BranchRole.ACTIVE, 0
+        prefix = "challenger-"
+        if not label.startswith(prefix):
+            raise ValueError(
+                "Workflow Branch label must be active or challenger-<positive ordinal>"
+            )
+        raw = label[len(prefix) :]
+        if not raw.isdigit() or int(raw) <= 0:
+            raise ValueError("Workflow Challenger label has an invalid ordinal")
+        return BranchRole.CHALLENGER, int(raw)
+
     async def _run_all_attempts(self, epoch: Epoch) -> None:
         if len(epoch.challenger_kernel_agent_revision_ids) != epoch.challenger_count:
             raise InvalidTransitionError(f"Epoch {epoch.id} has an incomplete Challenger pool")
@@ -329,6 +1295,20 @@ class EpochController:
                 )
             ),
         )
+        planned = tuple(
+            (
+                branch,
+                challenger_ordinal,
+                revision_id,
+                self._ensure_branch_workflow(
+                    epoch,
+                    branch,
+                    challenger_ordinal,
+                    revision_id,
+                ),
+            )
+            for branch, challenger_ordinal, revision_id in branches
+        )
         limiter = anyio.Semaphore(self._max_parallel_branches)
         failures: dict[int, Exception] = {}
 
@@ -336,6 +1316,7 @@ class EpochController:
             branch: BranchRole,
             challenger_ordinal: int,
             revision_id: KernelAgentRevisionId,
+            workflow: EpochBranchWorkflow,
         ) -> None:
             async with limiter:
                 try:
@@ -344,17 +1325,19 @@ class EpochController:
                         branch,
                         challenger_ordinal,
                         revision_id,
+                        workflow,
                     )
                 except Exception as error:
                     failures[challenger_ordinal] = error
 
         async with anyio.create_task_group() as tasks:
-            for branch, challenger_ordinal, revision_id in branches:
+            for branch, challenger_ordinal, revision_id, workflow in planned:
                 tasks.start_soon(
                     run_branch,
                     branch,
                     challenger_ordinal,
                     revision_id,
+                    workflow,
                 )
         if failures:
             first_ordinal = min(failures)
@@ -380,19 +1363,21 @@ class EpochController:
         branch: BranchRole,
         challenger_ordinal: int,
         revision_id: KernelAgentRevisionId,
+        workflow: EpochBranchWorkflow,
     ) -> None:
         """Run one isolated Branch while allowing sibling Branches to proceed."""
-        if epoch.trajectories_per_branch == 1:
+        if workflow.trajectories == 1:
             await self._run_trajectory(
                 epoch,
                 branch,
                 challenger_ordinal,
                 1,
                 revision_id,
+                workflow.attempts_per_trajectory,
             )
             return
         async with anyio.create_task_group() as tasks:
-            for trajectory_ordinal in range(1, epoch.trajectories_per_branch + 1):
+            for trajectory_ordinal in range(1, workflow.trajectories + 1):
                 tasks.start_soon(
                     self._run_trajectory,
                     epoch,
@@ -400,7 +1385,44 @@ class EpochController:
                     challenger_ordinal,
                     trajectory_ordinal,
                     revision_id,
+                    workflow.attempts_per_trajectory,
                 )
+
+    def _ensure_branch_workflow(
+        self,
+        epoch: Epoch,
+        branch: BranchRole,
+        challenger_ordinal: int,
+        revision_id: KernelAgentRevisionId,
+    ) -> EpochBranchWorkflow:
+        """Resolve once and durably freeze the Workflow carried by an Agent Revision."""
+        existing = self._registry.get_epoch_branch_workflow(
+            epoch.id,
+            branch,
+            challenger_ordinal,
+        )
+        if existing is not None:
+            if existing.kernel_agent_revision_id != revision_id:
+                raise InvalidTransitionError("Recovered Branch Workflow names a different Agent")
+            return existing
+        return self._registry.ensure_epoch_branch_workflow(
+            EpochBranchWorkflow(
+                epoch_id=epoch.id,
+                branch=branch,
+                challenger_ordinal=challenger_ordinal,
+                kernel_agent_revision_id=revision_id,
+                kind="campaign_topology",
+                program_sha256=None,
+                trajectories=epoch.trajectories_per_branch,
+                attempts_per_trajectory=epoch.attempts_per_trajectory,
+                runtime_state_policy=(
+                    RuntimeStatePolicy.RESET_EACH_ATTEMPT
+                    if self._registry.get_lineage(epoch.lineage_id).ephemeral_agent_state
+                    else RuntimeStatePolicy.RETAIN_ACROSS_ATTEMPTS
+                ),
+                created_at=self._clock(),
+            )
+        )
 
     @classmethod
     def _contains_infrastructure_error(cls, error: BaseException) -> bool:
@@ -427,9 +1449,10 @@ class EpochController:
         challenger_ordinal: int,
         trajectory_ordinal: int,
         agent_revision_id: KernelAgentRevisionId,
+        attempts_per_trajectory: int,
     ) -> None:
         input_kernel_id = epoch.starting_kernel_revision_id
-        for ordinal in range(1, epoch.attempts_per_trajectory + 1):
+        for ordinal in range(1, attempts_per_trajectory + 1):
             attempt = self._registry.find_attempt(
                 epoch.id,
                 branch,
@@ -666,7 +1689,16 @@ class EpochController:
             for attempt in self._registry.list_attempts(epoch.id)
             if attempt.branch is branch and attempt.challenger_ordinal == challenger_ordinal
         ]
-        expected_attempts = epoch.trajectories_per_branch * epoch.attempts_per_trajectory
+        workflow = self._registry.get_epoch_branch_workflow(
+            epoch.id,
+            branch,
+            challenger_ordinal,
+        )
+        expected_attempts = (
+            epoch.trajectories_per_branch * epoch.attempts_per_trajectory
+            if workflow is None
+            else workflow.attempt_budget
+        )
         if len(attempts) != expected_attempts:
             raise InvalidTransitionError(f"Branch {branch} has an incomplete Attempt set")
         for attempt in attempts:
@@ -685,9 +1717,11 @@ class EpochController:
                     raise InvalidTransitionError(f"Correct Kernel {output.id} has no latency")
                 if output.evaluation.latency_us < best_latency:
                     best_latency = output.evaluation.latency_us
-                    first_best = (
-                        attempt.trajectory_ordinal - 1
-                    ) * epoch.attempts_per_trajectory + attempt.ordinal
+                    first_best = (attempt.trajectory_ordinal - 1) * (
+                        epoch.attempts_per_trajectory
+                        if workflow is None
+                        else workflow.attempts_per_trajectory
+                    ) + attempt.ordinal
                 strict_improvements += 1
         return BranchScore(
             branch=branch,

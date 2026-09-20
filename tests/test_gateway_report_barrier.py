@@ -70,7 +70,7 @@ async def _post_report(service: Any, token: str, payload: bytes) -> tuple[int, d
 @pytest.mark.anyio
 @pytest.mark.parametrize("bootstrap", [False, True])
 @pytest.mark.parametrize("status", ["candidate_ready", "blocked", "pivot"])
-async def test_report_waits_for_all_three_measurements(
+async def test_report_waits_for_single_measurement(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     bootstrap: bool,
@@ -108,9 +108,8 @@ async def test_report_waits_for_all_three_measurements(
         original = adapter.execute
 
         async def delayed(request: Any) -> Any:
-            if len(adapter.requests) == 2:
-                started.set()
-                await release.wait()
+            started.set()
+            await release.wait()
             return await original(request)
 
         monkeypatch.setattr(adapter, "execute", delayed)
@@ -148,7 +147,7 @@ async def test_report_waits_for_all_three_measurements(
         code, accepted = await _post_report(service, capability.token, payload)
         assert code == 200
         assert accepted["result"]["status"] == "registered"
-        assert len(adapter.requests) == 3
+        assert len(adapter.requests) == 1
     finally:
         control.close()
         registry.close()

@@ -18,6 +18,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from atrex_runtime.ablation_plan import build_ablation_plan as _ablation_plan
+from atrex_runtime.config import DEFAULT_AGATE_GPU
+from atrex_runtime.gateway.configuration import agate_settings_from_environment
 
 SUPPORTED_BACKENDS = ("claude", "codex", "qodercli", "pi")
 SUPPORTED_DSLS = ("cuda", "triton", "cutedsl")
@@ -50,7 +52,9 @@ def _arguments() -> argparse.Namespace:
             "plane is shared by this task"
         ),
     )
-    parser.add_argument("--hardware-target", default=os.environ.get("AGATE_GPU"))
+    parser.add_argument(
+        "--hardware-target", default=os.environ.get("AGATE_GPU") or DEFAULT_AGATE_GPU
+    )
     parser.add_argument("--operator")
     parser.add_argument(
         "--seed-source",
@@ -690,15 +694,7 @@ def _runtime_config(
             },
             "candidate_diff_require_change": True,
         },
-        "agate": {
-            "base_url": os.environ.get("AGATE_URL", "http://127.0.0.1:9000"),
-            "auth_mode": "ak_sk",
-            "access_key_env": "AGATE_AK",
-            "secret_key_env": "AGATE_SK",
-            "http_timeout_s": int(os.environ.get("AGATE_HTTP_TIMEOUT", "1800")),
-            "wait_timeout_s": int(os.environ.get("AGATE_WAIT_TIMEOUT", "3900")),
-            "health_check_interval_s": int(os.environ.get("AGATE_HEALTH_CHECK_INTERVAL", "30")),
-        },
+        "agate": agate_settings_from_environment(os.environ).model_dump(exclude_none=True),
         "kernel_agent": {
             "max_bundle_files": 16384,
             "max_bundle_bytes": 134217728,
@@ -773,6 +769,7 @@ def _campaign(
         ),
         "problem_generalization_model": None,
         "base_revision": {"commit": core_commit},
+        "workflow_command": "workflow/evolve_3.py",
         "challenger_count": int(schedule["challenger_count"]),
         "challenger_start_epoch": int(schedule["challenger_start_epoch"]),
         "first_epoch_same_agent": bool(schedule.get("first_epoch_same_agent", False)),
@@ -792,8 +789,6 @@ def main() -> None:
     hardware_target = str(args.hardware_target or "").strip()
     if not hardware_target:
         raise SystemExit("--hardware-target or AGATE_GPU is required")
-    if not os.environ.get("AGATE_URL", "").strip():
-        raise SystemExit("AGATE_URL is required when preparing a production Runtime")
     if args.services_only:
         _prepare_service_workspace(
             args,

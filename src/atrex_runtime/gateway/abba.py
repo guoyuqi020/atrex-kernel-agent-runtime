@@ -37,7 +37,11 @@ from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContext
 from .correctness import merge_correctness_summaries
 from .execution import call_agate_json
 from .job_recovery import JobExecution, run_with_job_recovery
-from .stability import MEASUREMENT_REPETITIONS, median_latency_by_shape
+from .stability import (
+    MEASUREMENT_REPETITIONS,
+    measurement_aggregation_summary,
+    measurement_values_by_shape,
+)
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 # One transient Agate batch used to fail the whole Epoch selection, discarding every sibling
@@ -380,7 +384,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         comparison_id = str(
             canonical_json_digest(
                 {
-                    "policy": "authoritative_abba_per_shape_median",
+                    "policy": "authoritative_abba_single_measurement",
                     "measurement_repetitions": MEASUREMENT_REPETITIONS,
                     "incumbent_revision_id": incumbent.id,
                     "candidate_revision_id": candidate.id,
@@ -438,6 +442,11 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     except InfrastructureError as failure:
                         attempt += 1
                         if attempt > _ABBA_BATCH_RETRIES:
+                            if contract.validation_shape_ids is not None:
+                                raise InfrastructureError(
+                                    "Authoritative ABBA could not complete; "
+                                    "private evaluator details withheld"
+                                ) from failure
                             raise
                         failure_payload: dict[str, JsonValue]
                         if isinstance(failure, AbbaBatchFailure):
@@ -495,8 +504,8 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     ),
                 }
             )
-        incumbent_metrics = self._median_revision_metrics(repetitions, "incumbent", shape_ids)
-        candidate_metrics = self._median_revision_metrics(repetitions, "candidate", shape_ids)
+        incumbent_metrics = self._measurement_revision_metrics(repetitions, "incumbent", shape_ids)
+        candidate_metrics = self._measurement_revision_metrics(repetitions, "candidate", shape_ids)
         all_jobs = [
             job
             for repetition in repetitions
@@ -520,16 +529,15 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             ),
             "schedule": cast(list[JsonValue], schedule),
             "shape_batches": cast(list[JsonValue], [list(batch) for batch in batches]),
-            "measurement_aggregation": {
-                "repetitions": MEASUREMENT_REPETITIONS,
-                "method": "per_shape_median",
-            },
+            "measurement_aggregation": measurement_aggregation_summary(),
             "jobs": cast(list[JsonValue], all_jobs),
             "payloads": cast(list[JsonValue], all_payloads),
             "repetitions": cast(list[JsonValue], repetitions),
             "incumbent": cast(JsonValue, incumbent_metrics),
             "candidate": cast(JsonValue, candidate_metrics),
         }
+        if contract.validation_shape_ids is not None:
+            aggregate["validation_shape_ids"] = list(contract.validation_shape_ids)
         result_digest = self._artifacts.put_json(aggregate, ArtifactKind.GATEWAY_RESULT)
         all_incumbent_runs: list[KernelMeasurementRun] = []
         all_candidate_runs: list[KernelMeasurementRun] = []
@@ -703,7 +711,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         return job, payload, completed_at
 
     @staticmethod
-    def _median_revision_metrics(
+    def _measurement_revision_metrics(
         repetitions: list[dict[str, object]], revision: str, shape_ids: list[str]
     ) -> dict[str, object]:
         metrics = [cast(dict[str, object], item[revision]) for item in repetitions]
@@ -713,9 +721,9 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         latency_by_shape: dict[str, float] = {}
         if correct:
             maps = tuple(cast(dict[str, float], item["latency_us_by_shape"]) for item in metrics)
-            latency_by_shape = median_latency_by_shape(maps)
+            latency_by_shape = measurement_values_by_shape(maps)
             if set(latency_by_shape) != set(shape_ids):
-                raise InfrastructureError("ABBA repetitions have incomplete Shape coverage")
+                raise InfrastructureError("ABBA measurement has incomplete Shape coverage")
         latency = (
             math.exp(statistics.fmean(math.log(value) for value in latency_by_shape.values()))
             if latency_by_shape
@@ -723,7 +731,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         )
         sol_maps = tuple(cast(dict[str, float], item["sol_pct_by_shape"]) for item in metrics)
         sol_by_shape = (
-            median_latency_by_shape(sol_maps)
+            measurement_values_by_shape(sol_maps)
             if len(sol_maps) == MEASUREMENT_REPETITIONS
             and all(set(value) == set(shape_ids) for value in sol_maps)
             else {}

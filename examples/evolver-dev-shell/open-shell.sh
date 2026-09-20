@@ -23,8 +23,7 @@ for argument in "$@"; do
 done
 
 if [[ "${inputs_already_prepared}" == false ]]; then
-  export AGATE_URL="${AGATE_URL:-http://127.0.0.1:9}"
-  export AGATE_GPU="${AGATE_GPU:-nvidia-h100}"
+  atrex_default_agate_environment
   atrex_example_prepare_inputs
 elif [[ ! -f "${atrex_config_file}" || ! -f "${atrex_campaign_file}" ]]; then
   echo "prepared Runtime config or Campaign definition is missing" >&2

@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from atrex_runtime.bootstrap import CampaignSpecV3
-from atrex_runtime.config import RuntimeSettings
+from atrex_runtime.config import DEFAULT_AGATE_GPU, DEFAULT_AGATE_URL, RuntimeSettings
+from atrex_runtime.gateway.configuration import agate_settings_from_environment
 
 
 def _arguments() -> argparse.Namespace:
@@ -24,13 +25,6 @@ def _arguments() -> argparse.Namespace:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--campaign", type=Path, required=True)
     return parser.parse_args()
-
-
-def _required_environment(name: str) -> str:
-    value = os.environ.get(name, "").strip()
-    if not value:
-        raise SystemExit(f"{name} must be exported before preparing Bootstrap")
-    return value
 
 
 def _integer_environment(name: str, default: int) -> int:
@@ -92,18 +86,10 @@ def _runtime_config(
         "agate_jobs_database": str(runtime_state / "agate-jobs.sqlite"),
         "artifacts_root": str(runtime_state / "artifacts"),
     }
-    template["agate"] = {
-        "base_url": agate_url,
-        "auth_mode": "ak_sk",
-        "access_key_env": "AGATE_AK",
-        "secret_key_env": "AGATE_SK",
-        "http_timeout_s": _integer_environment("AGATE_HTTP_TIMEOUT", 1800),
-        "wait_timeout_s": _integer_environment("AGATE_WAIT_TIMEOUT", 3900),
-        "health_check_interval_s": _integer_environment("AGATE_HEALTH_CHECK_INTERVAL", 30),
-    }
-    template["kernel_agent"]["base_source"]["repository"] = str(
-        root / "src/kernel-design-agents"
+    template["agate"] = agate_settings_from_environment(os.environ, base_url=agate_url).model_dump(
+        exclude_none=True
     )
+    template["kernel_agent"]["base_source"]["repository"] = str(root / "src/kernel-design-agents")
     template["kernel_agent"]["base_source"]["git_executable"] = "/usr/bin/git"
 
     campaign = template["campaign"]
@@ -240,8 +226,8 @@ def main() -> None:
     arguments = _arguments()
     root = Path(__file__).resolve().parents[2]
     state = arguments.state_dir.resolve()
-    agate_url = _required_environment("AGATE_URL")
-    gpu = _required_environment("AGATE_GPU")
+    agate_url = os.environ.get("AGATE_URL") or DEFAULT_AGATE_URL
+    gpu = os.environ.get("AGATE_GPU") or DEFAULT_AGATE_GPU
     config_path = arguments.config.resolve()
     campaign_path = arguments.campaign.resolve()
     runtime_template = arguments.runtime_template.resolve()
@@ -289,7 +275,7 @@ def main() -> None:
         f"Evolver commit: {config['campaign']['evolver']['commit']}"
         + (" (pinned existing workspace config)" if pinned_evolver_commit else "")
     )
-    print(f"Remote Agate: {agate_url} ({gpu})")
+    print(f"Agate: {agate_url} ({gpu})")
     optimizer = config["campaign"]["optimizer"]
     if optimizer["agent_backend"] == "qodercli":
         print(f"Optimizer quota per Core session: {optimizer['max_session_credits']} Qoder credits")

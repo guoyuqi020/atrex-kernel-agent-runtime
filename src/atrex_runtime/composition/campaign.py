@@ -38,6 +38,7 @@ from ..gateway.control import (
 )
 from ..gateway.control_models import GatewayOperation
 from ..gateway.measurement import AgateKernelMeasurementRunner
+from ..kernel_agents.workflow import SandboxedAgentWorkflowRunner
 from ..ports import (
     BuildChallengerRequest,
     BuildChallengerResult,
@@ -303,6 +304,12 @@ def build_campaign_runtime(
             agent_promotion_comparator=agent_promotion_comparator,
             max_infrastructure_retries=campaign.max_infrastructure_retries,
             max_parallel_branches=campaign.max_parallel_branches,
+            workflow_runner=SandboxedAgentWorkflowRunner(
+                artifacts,
+                worker_launcher,
+                campaign.evolution_workspaces_root / ".workflow-programs",
+                command_prefix=campaign.optimizer.command_prefix,
+            ),
             agent_measurement_uncertainty_us=(
                 agent_settings.measurement_uncertainty_us
                 if isinstance(agent_settings, EvaluateComparisonSettings)

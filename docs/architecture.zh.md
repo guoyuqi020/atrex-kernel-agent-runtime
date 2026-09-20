@@ -34,7 +34,8 @@ flowchart LR
 | Session | 一次 Worker 执行；基础设施恢复创建新 Session，报告补交的 Provider 调用仍归属同一 Session 和 Attempt。 |
 | Kernel Trial | 一份精确测量的实验 Kernel，不消耗 `vN`。 |
 | Kernel Revision | Lineage 内被保留并标记为 `vN` 的 Kernel。 |
-| Agent Revision | Lineage 内标记为 `agent-vN` 的 Agent Bundle。 |
+| Agent Revision | Lineage 内标记为 `agent-vN` 的 Agent Bundle，包含其版本化搜索 Workflow 程序。 |
+| Agent Workflow | 不可信的版本化代码，在固定资源包络内调用一组受限的可信 Runtime 服务，编排一个完整 Epoch。 |
 | Runtime State | Agent 执行产生的自适应 `prompts/`、`insights/`、`skills/` 与 `tools/`，与版本化源码分开存储。 |
 | Artifact | Runtime 本地 CAS 中不可变的内容寻址数据。 |
 
@@ -45,7 +46,7 @@ flowchart LR
 
 - Runtime 持有身份、生命周期、Fencing、Capability、私有评测数据、策略、比较、晋升、恢复、
   Session 捕获、不可变 Artifact 与自适应 State 持久化。
-- Core 持有 Optimizer Prompt、Workflow、Backend Adapter、Runtime Tool Binding，以及 Agent 编写的
+- Core 持有 Optimizer Prompt、Agent Workflow 程序、Backend Adapter、Runtime Tool Binding，以及 Agent 编写的
   Direction、Experiment 与 Attempt Report。
 - Evolver 持有一个同 DSL Agent 修改假设，可以修改 Candidate Bundle；没有证据支持 Agent 可控改进时，
   也可以提交 `no_change`。它不评测 Kernel。
@@ -68,7 +69,8 @@ Attempt 相同的 Gateway、Direction、Experiment、Report、Session 与 Runtim
 更早 Lineage 历史或 Incumbent Kernel。成功后发布 `agent-v0`、Kernel `v0` 与 Epoch-0 Evidence。
 物理 Bootstrap 重试在一个稳定 Bootstrap Attempt 身份下追加 Generation。
 
-Session 永远使用全新进程，不复用模型上下文。Attempt Evidence 只包含同一 Trajectory 内较早的
+Session 永远使用全新进程。Optimizer 不复用模型上下文，Evolver 会恢复同一 Lineage/Backend 的
+对话。Attempt Evidence 只包含同一 Trajectory 内较早的
 Attempt。Optimizer View 按分支包含每个已完成 Active/Challenger 分支的 Attempt Report 与
 Conversation，且每个已完成 Epoch 都标明被选中的分支；Evolver View 还额外包含 Agent 选择结果、
 Attempt Outcome 与被引用的精确 Kernel Artifact。
@@ -93,18 +95,20 @@ Wiki 发送 Epoch 后数据。
 
 ### Epoch
 
-Runtime 冻结 Active Agent、起始 Kernel、公共 Runtime State 与 Evidence，然后串行调用 Evolver 构造
-最多 `K` 个 Challenger。每个提案可以从 Active 创建 Revision、复用历史 Revision、从历史创建新
-Revision，或用 `no_change` 停止继续构建。
-Revision 祖先关系仍是树；复用和 Epoch 参赛来源单独记录。
+Runtime 冻结 Active Agent、起始 Kernel、公共 Runtime State、Evidence 和固定资源包络，然后在隔离
+子进程中只运行一次 Active Agent Revision 的版本化 Workflow。Workflow 可以请求 Runtime 挂接 Active
+副本、串行调用 Evolver 构造最多 `K` 个 Challenger、把精确 Optimizer Attempt 预算分配到 Branch 与
+Trajectory、执行这些 Branch，并请求可信 Kernel/Agent 选择。Challenger 提案可以从 Active 创建
+Revision、复用可见历史 Revision、从历史创建新 Revision，或用 `no_change` 停止继续构建；Revision
+祖先关系仍是树，复用和 Epoch 参赛来源单独记录。
 
-Pool 冻结后，Active 与 Challenger Branch 在 `max_parallel_branches` 限制下并发。每个 Branch
-并发运行 `Y` 条 Trajectory，每条 Trajectory 串行运行 `X` 个全新 Session Attempt。所有参与者从
-同一个 Epoch Kernel 开始，不能看到兄弟分支的进行中工作。之后 Runtime 选择最佳 Kernel，并独立
-比较 Agent Revision。若实际接入 `C ≤ K` 个 Challenger，Epoch 包含 `(1 + C) × Y × X` 个
-Optimizer Attempt；Evolver 执行 `C` 次，若以 `no_change` 结束则再加一次。物理 Provider 调用还可能
-包含基础设施重试和有上限的报告补交，均不增加配置的
-Attempt 数量。
+Workflow 只实现一个 `run_epoch(epoch)` 函数。其公开 SDK 创建 Branch 内 Pool 并推进同步轮次，不向
+Workflow 暴露 Attempt 序号或底层协议。每轮结束后，代码可以检查可信结果、把已接受 Kernel 广播给
+兄弟 Trajectory，或通过产出 Attempt 复制兼容 Runtime State；SDK 在内部把轮次翻译成可重放的 Attempt
+操作。准确 Branch 容量、Runtime-State 策略、Challenger 集合与 Workflow 程序 Hash 仍会冻结，并且
+必须精确花完配置预算。Runtime 而非 Workflow 负责调度 Epoch、启动和恢复每个 Attempt、执行 Gateway
+评测与可信比较、校验跨 Trajectory 输入与选择身份并提交晋升。物理 Provider 调用可能包含基础设施
+重试和有上限的报告补交，均不增加 Attempt 数量。
 
 完成后的 Evidence 成为下一 Epoch Checkpoint。Optimizer 可以看到全部已完成 Epoch Branch，以及当前
 Trajectory 中更早的 Attempt；Evolver 可以看到上一完成 Epoch 的全部参赛者、所有可见历史 Agent 的
@@ -114,6 +118,20 @@ Source/State 与生涯汇总，以及更早的 Evolution Report。
 
 `seed-lineage` 从封存的 Agent/Kernel Artifact 或已注册 Revision ID 创建独立 Lineage。Runtime 会
 重新校验 Agent，并在目标 Campaign Contract 下重评 Kernel。
+
+生产 Bootstrap 在封存初始 Agent Revision 时选择 Runtime 持有的 `evolve_3.py` 构造模板。每条
+Ablation Lineage 从同一份 Optimizer Source 派生自己的不可变 `agent-v0`，分别选择受控的
+Isolated、Retained、Pool-3 或 Pool-Retained-3 模板。Runtime 只把被选中的程序物化为
+`workflow/main.py`；封存后的 Revision 不包含其他消融臂程序，因此 Optimizer 和 Evolver 只能看到
+实际执行的组织方式。重复对照实例即使选择相同 Workflow 内容，也保留独立 Revision 身份；各臂共享
+的是完全相同的 Bootstrap Kernel，而不是源 Lineage 的 Agent Artifact 身份。
+
+Workflow 程序属于不可变 Agent Revision，但 Workflow 执行进度不属于。每个 Epoch 只由当时的 Active
+Revision 编排；Challenger 修改后的 Workflow 只有在该 Agent 获胜、并在后续 Epoch 成为 Active 后才会
+生效。Registry 记录冻结的 Challenger 集合、Branch 拓扑、State 策略、程序 Hash 和全部 Attempt，
+因此重启可以幂等重放服务调用，而不会让变化后的代码重新解释已完成决策。Runtime 不会把 Workflow
+代码导入控制进程。Workflow 不能修改评测、隐藏 Shape、Gate Policy、Runtime 重试、晋升、回滚、
+Capability 或资源包络。
 
 `seed-ablation-arm` 从已有 Lineage 的冻结 Bootstrap Baseline 创建单独 Campaign 中的控制
 Lineage。`challenger_count` 默认 0，也可启用进化频率对照；`challenger_start_epoch` 默认 2。
@@ -131,6 +149,11 @@ Replica 来源记录不包含 Evolution Trace。
 存在于 Runtime。Agent 只能看到公开训练域 Contract 与不透明 Shape ID。Runtime 从封存 Contract
 构造 Agate 请求，并清理 Worker 响应。管理端可以读取有界精确 Artifact；Agent Tool 不能任意选择
 Campaign、Lineage 或 Attempt 历史。
+
+新 Campaign 使用固定种子 `42` 随机对半划分 Valid/Test（奇数多出的一个归 Valid，至少两个
+Shape），再从两边各随机抽取最多 15 个。私有 Contract 留档原始全集与选中 ID，多出的 Shape 不参与评测。
+Agent 操作与普通评测只使用 Valid，权威 Runtime ABBA 使用两者。Agent 可见历史测量剔除 Test
+条目，并按 Valid 重算延迟汇总；只有 Runtime 的接受/选择裁决反映全量 Gate。详见[评测](evaluation.zh.md)。
 
 ## Agent Source 与 Runtime State
 

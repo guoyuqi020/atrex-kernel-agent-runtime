@@ -68,10 +68,8 @@ if [[ "${action}" == "start" || "${action}" == "restart" ]]; then
       source "${env_file}"
       hardware_target="${hardware_target:-${AGATE_GPU:-}}"
     fi
-    if [[ -z "${hardware_target}" ]]; then
-      echo "--hardware-target or AGATE_GPU is required to initialize services" >&2
-      exit 64
-    fi
+    atrex_default_agate_environment
+    hardware_target="${hardware_target:-${AGATE_GPU}}"
     prepare_args=(
       --services-only
       --workspace "${atrex_prod_workspace}"

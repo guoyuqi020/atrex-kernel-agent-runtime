@@ -65,8 +65,8 @@ Bootstrap uses 1-Case then 5-Case stages; ordinary Evaluate uses 5 Cases, 100 Be
 one logical Evaluate. Retention and Agent Promotion use same-allocation ABBA. One Shape per
 batch, up to 16 concurrent batches, clocks locked by default. Agent/Evolver history and
 normal Runtime tools remain available. In eager mode `warmup_iters=10` and `bench_iters=100`
-are 10ms and 100ms budgets, not fixed run counts. ABBA takes three complete measurements
-and aggregates per-Shape medians.
+are 10ms and 100ms budgets, not fixed run counts. ABBA executes its complete schedule once,
+without an extra cross-job median.
 
 The **Production static source Gate is off for this task**. It scans every editable file;
 the complete upstream FA4 tree contains test/benchmark helpers and dependencies incompatible

@@ -20,6 +20,7 @@ import anyio
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, TypeAdapter, model_validator
 
 from ..artifacts.local import JsonValue
+from ..config import DEFAULT_AGATE_URL
 from ..domain.errors import (
     InfrastructureError,
     InvalidTransitionError,
@@ -164,7 +165,7 @@ class AgateConnectionConfig(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    base_url: str
+    base_url: str = DEFAULT_AGATE_URL
     auth_mode: Literal["none", "token", "ak_sk"]
     token: SecretStr | None = None
     access_key: SecretStr | None = None
@@ -528,6 +529,7 @@ class AgateGatewayAdapter:
                 idempotency_key="agate-recovery:" + hashlib.sha256(scope.encode()).hexdigest(),
             )
         context = self._contexts.resolve(request.attempt_id)
+        context = replace(context, contract=context.contract.for_agent())
         if request.operation is GatewayOperation.EVALUATE:
             context = self._evaluation_context(request, context)
         payload = self._build_request(request, context)
@@ -553,10 +555,7 @@ class AgateGatewayAdapter:
                 )
                 if mapped.status == "queued":
                     raise InfrastructureError("Agate correctness evaluation did not complete")
-            elif (
-                request.measurement_repetition is None
-                and self._optimizer_evaluate_repeats > 1
-            ):
+            elif request.measurement_repetition is None and self._optimizer_evaluate_repeats > 1:
                 mapped = await self._submit_repeated_evaluate(request, context)
             else:
                 mapped = await self._submit_batched_evaluate(

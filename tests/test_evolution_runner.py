@@ -822,6 +822,7 @@ def test_evolution_workspace_pools_the_last_completed_epoch_challenger_winner(
         "agent-v1",
         "journal",
         "latest-epoch-facts.json",
+        "review",
     ]
     assert not (prepared.root / "input/current-epoch-challengers").exists()
     assert not (prepared.root / "input/historical").exists()
@@ -912,6 +913,7 @@ def test_evolution_workspace_keys_same_ordinal_challengers_by_distinct_versions(
         "agent-v2",
         "journal",
         "latest-epoch-facts.json",
+        "review",
     ]
     assert not (prepared.root / "input/evidence/agent-v2/sessions").exists()
     assert not (prepared.root / "input/evidence/agent-v2/reports").exists()

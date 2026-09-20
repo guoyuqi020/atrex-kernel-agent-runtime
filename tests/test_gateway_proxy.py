@@ -433,8 +433,8 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
     assert response.evaluation == EvaluationV2(correct=True, latency_us=12.0)
     assert response.result == {
         "measurement_aggregation": {
-            "repetitions": 3,
-            "method": "per_shape_median",
+            "repetitions": 1,
+            "method": "single_measurement",
         },
         "correct": True,
         "correctness": {
@@ -449,7 +449,7 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
     }
     assert response.kernel_artifact_digest is not None
     assert response.kernel_artifact_digest is not None
-    assert len(adapter.requests) == 3
+    assert len(adapter.requests) == 1
     adapter_request = adapter.requests[0]
     assert adapter_request.candidate_path is not None
     assert (adapter_request.candidate_path / "kernel.py").read_text() == "def kernel(): pass\n"
@@ -463,7 +463,7 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
 
     replay = await service.execute(capability_value.token, _request(attempt))
     assert replay == response
-    assert len(adapter.requests) == 3
+    assert len(adapter.requests) == 1
     gateway_events = [
         event
         for event in registry.list_runtime_events(after_sequence=0, limit=100)
@@ -489,7 +489,7 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
 
 
 @pytest.mark.anyio
-async def test_exact_kernel_task_runs_three_times_then_rejects_a_duplicate(
+async def test_exact_kernel_task_runs_once_then_rejects_a_duplicate(
     tmp_path: Path,
 ) -> None:
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
@@ -514,13 +514,13 @@ async def test_exact_kernel_task_runs_three_times_then_rejects_a_duplicate(
 
     response = await service.execute(capability.token, _request(attempt))
 
-    assert len(adapter.requests) == 3
-    assert [request.measurement_repetition for request in adapter.requests] == [1, 2, 3]
+    assert len(adapter.requests) == 1
+    assert [request.measurement_repetition for request in adapter.requests] == [1]
     assert isinstance(response.result, dict)
-    assert response.result["latency_us_by_shape"] == {"0": 10.0, "1": 105.0}
+    assert response.result["latency_us_by_shape"] == {"0": 10.0, "1": 100.0}
     assert response.result["measurement_aggregation"] == {
-        "repetitions": 3,
-        "method": "per_shape_median",
+        "repetitions": 1,
+        "method": "single_measurement",
     }
     measurements = control.list_measurements(
         (attempt.id,), kernel_artifact_digest=response.kernel_artifact_digest
@@ -530,7 +530,7 @@ async def test_exact_kernel_task_runs_three_times_then_rejects_a_duplicate(
         for record in measurements
         if record.point.shape_id is not None
     }
-    assert shape_values == {"0": 10.0, "1": 105.0}
+    assert shape_values == {"0": 10.0, "1": 100.0}
 
     repeated_request = json.loads(_request(attempt))
     repeated_request["idempotency_key"] = "evaluate-candidate-2"
@@ -555,7 +555,7 @@ async def test_exact_kernel_task_runs_three_times_then_rejects_a_duplicate(
             ),
         }
     ]
-    assert len(adapter.requests) == 3
+    assert len(adapter.requests) == 1
     control.close()
     registry.close()
 
@@ -581,8 +581,8 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
 
     assert response.result == {
         "measurement_aggregation": {
-            "repetitions": 3,
-            "method": "per_shape_median",
+            "repetitions": 1,
+            "method": "single_measurement",
         },
         "correct": True,
         "correctness": {
@@ -940,7 +940,7 @@ async def test_runtime_queries_use_the_dedicated_http_endpoint(tmp_path: Path) -
     )
 
     assert response.operation == "result_artifact_read"
-    assert len(adapter.requests) == 3
+    assert len(adapter.requests) == 1
 
     app = GatewayProxyAsgiApp(service, GatewayProxyLimits(64 * 1024, 8, 16 * 1024))
     routed_payload = payload.replace(b"runtime-query-route", b"runtime-query-http")
@@ -1304,7 +1304,7 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
             "result_artifact_digest": profiled.result_artifact_digest,
         },
     ]
-    assert len(adapter.requests) == 4
+    assert len(adapter.requests) == 2
 
     control.close()
     reopened = SqliteGatewayControl(
@@ -1747,7 +1747,7 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
         ),
     )
 
-    assert len(adapter.requests) == 3
+    assert len(adapter.requests) == 1
     trial_id = evaluated.result_artifact_digest
     assert isinstance(trial_id, str)
 
@@ -1781,7 +1781,7 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
         ).encode(),
     )
 
-    assert len(adapter.requests) == 4
+    assert len(adapter.requests) == 2
     assert isinstance(shown.result, dict)
     assert shown.result["kernel_artifact_digest"] == evaluated.kernel_artifact_digest
     assert shown.result["result_artifact_digest"] == evaluated.result_artifact_digest
@@ -1841,8 +1841,8 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
             "latency_us_arith_mean": 12.0,
             "latency_us_by_shape": {"0": 10.0, "1": 14.0},
             "measurement_aggregation": {
-                "repetitions": 3,
-                "method": "per_shape_median",
+                "repetitions": 1,
+                "method": "single_measurement",
             },
         },
     }
@@ -1940,7 +1940,7 @@ async def test_attempt_report_api_seals_canonical_contributing_trials(tmp_path: 
             operation_scope="runtime",
         )
         assert repeated == accepted
-        assert len(adapter.requests) == 3
+        assert len(adapter.requests) == 1
     finally:
         control.close()
         registry.close()

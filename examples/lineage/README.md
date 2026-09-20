@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+Defaults connect to an already-running official localhost Gateway (`127.0.0.1:8000`, GPU `local`); explicit environment overrides remain supported. See [Agate localhost](../../docs/agate-localhost.md) for deployment.
+
 This example runs a complete single-DSL Lineage through exactly one Epoch. Its defaults are:
 
 - `challenger_count=0`: no Evolver session and no Challenger Branch;
@@ -44,13 +46,13 @@ writes terminal control sequences.
 This directory owns its `runtime.json` and one-Epoch `campaign.json`. They use only the canonical
 VecAdd inputs in `examples/shared/vecadd/`; no Bootstrap example scripts or configuration are reused.
 
-Export the remote Agate settings, then run:
+Export the Agate settings, then run:
 
 ```bash
-export AGATE_URL="https://your-agate-service"
-export AGATE_AK="..."
-export AGATE_SK="..."
-export AGATE_GPU="L20N"
+export AGATE_URL="http://127.0.0.1:8000"
+# export AGATE_AK="..."  # only if the Gateway requires authentication
+# export AGATE_SK="..."
+export AGATE_GPU="local"
 export QODER_PERSONAL_ACCESS_TOKEN="..."
 bash examples/lineage/run.sh
 ```

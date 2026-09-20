@@ -99,6 +99,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
         assert campaign.attempts_per_trajectory == 3
         assert campaign.challenger_count == 1
         assert campaign.challenger_start_epoch == 2
+        assert campaign.workflow_command == "workflow/evolve_3.py"
         assert campaign.lineages[campaign.selected_dsls()[0]].baseline_kernel == (
             dsl_workspace / "inputs/baseline-kernel"
         )
@@ -125,7 +126,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert secrets.stat().st_mode & 0o777 == 0o600
 
     plan = json.loads((workspace / "ablation.json").read_text(encoding="utf-8"))
-    assert plan["schema_version"] == 4
+    assert plan["schema_version"] == 5
     assert plan["enabled"] is True
     assert plan["optimizer_attempt_budget_per_trajectory"] == 15
     # Each Trajectory spends 15 Attempts after Bootstrap; every Pool runs two.
@@ -137,15 +138,24 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
             arm["attempts_per_trajectory"],
             arm["target_epoch_number"],
             arm["ephemeral_agent_state"],
+            arm["workflow_command"],
         )
         for arm in plan["arms"]
     ] == [
-        ("isolated", "ablation-isolated-01", 1, 3, 5, True),
-        ("isolated", "ablation-isolated-02", 1, 3, 5, True),
-        ("pooled", "ablation-pool-3", 2, 3, 5, True),
-        ("pool-retained", "ablation-pool-retained-3", 2, 3, 5, False),
-        ("retained", "ablation-retained-01", 1, 3, 5, False),
-        ("retained", "ablation-retained-02", 1, 3, 5, False),
+        ("isolated", "ablation-isolated-01", 1, 3, 5, True, "workflow/isolated.py"),
+        ("isolated", "ablation-isolated-02", 1, 3, 5, True, "workflow/isolated.py"),
+        ("pooled", "ablation-pool-3", 2, 3, 5, True, "workflow/pool_3.py"),
+        (
+            "pool-retained",
+            "ablation-pool-retained-3",
+            2,
+            3,
+            5,
+            False,
+            "workflow/pool_retained_3.py",
+        ),
+        ("retained", "ablation-retained-01", 1, 3, 5, False, "workflow/retained.py"),
+        ("retained", "ablation-retained-02", 1, 3, 5, False, "workflow/retained.py"),
     ]
 
     manifest_path = workspace / "production-manifest.json"
@@ -202,7 +212,7 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
     disabled = _ablation_plan({"schedule": {**schedule, "event_only": False}})
     omitted = _ablation_plan({"schedule": schedule})
 
-    assert enabled["schema_version"] == 4
+    assert enabled["schema_version"] == 5
     assert enabled["optimizer_attempt_budget_per_trajectory"] == 15
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for arm in enabled["arms"]:
@@ -250,6 +260,7 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
             "attempts_per_trajectory": 3,
             "target_epoch_number": 5,
             "ephemeral_agent_state": True,
+            "workflow_command": "workflow/pool_3.py",
         },
     ]
     # Pool-Retained pairs with Pool, differing only in state persistence.
@@ -259,6 +270,7 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
             "kind": "pool-retained",
             "label": pooled["label"].replace("pool-", "pool-retained-"),
             "ephemeral_agent_state": False,
+            "workflow_command": "workflow/pool_retained_3.py",
         }
         for pooled in by_kind["pooled"]
     ]
@@ -269,6 +281,7 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
             "kind": "retained",
             "label": isolated["label"].replace("isolated", "retained"),
             "ephemeral_agent_state": False,
+            "workflow_command": "workflow/retained.py",
         }
         for isolated in by_kind["isolated"]
     ]
@@ -396,6 +409,32 @@ def test_prepare_prefers_shape_train_and_keeps_shape_valid_private(tmp_path: Pat
         )
         assert contract["shapes"] == {"0": {"init_kwargs": None, "input_kwargs": {"n": 1024}}}
         assert "shape_valid" not in json.dumps(campaign.model_dump(mode="json"))
+
+
+def test_prepare_service_defaults_to_localhost_without_credentials(tmp_path: Path) -> None:
+    workspace = tmp_path / "service"
+    environment = {key: value for key, value in os.environ.items() if not key.startswith("AGATE_")}
+    subprocess.run(
+        (
+            sys.executable,
+            str(PRODUCTION / "prepare.py"),
+            "--services-only",
+            "--workspace",
+            str(workspace),
+        ),
+        check=True,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+
+    settings = RuntimeSettings.from_file(workspace / "runtime.json")
+    assert settings.agate.base_url == "http://127.0.0.1:8000"
+    assert settings.agate.auth_mode == "none"
+    manifest = json.loads(
+        workspace.joinpath("production-manifest.json").read_text(encoding="utf-8")
+    )
+    assert manifest["hardware_target"] == "local"
 
 
 def test_prepare_can_attach_task_to_existing_service_workspace(tmp_path: Path) -> None:
@@ -584,7 +623,7 @@ def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
     workspace.joinpath("ablation.json").write_text(
         json.dumps(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "enabled": False,
                 "optimizer_attempt_budget_per_trajectory": 15,
                 "arms": [],
@@ -678,7 +717,7 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
     workspace.joinpath("ablation.json").write_text(
         json.dumps(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "enabled": True,
                 "optimizer_attempt_budget_per_trajectory": 15,
                 "arms": [
@@ -790,7 +829,7 @@ def test_summarize_preserves_successful_dsl_results_when_one_is_missing(
     workspace.joinpath("ablation.json").write_text(
         json.dumps(
             {
-                "schema_version": 4,
+                "schema_version": 5,
                 "enabled": False,
                 "optimizer_attempt_budget_per_trajectory": 15,
                 "arms": [],

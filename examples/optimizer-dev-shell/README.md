@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+Defaults connect to an already-running official localhost Gateway (`127.0.0.1:8000`, GPU `local`); explicit environment overrides remain supported. See [Agate localhost](../../docs/agate-localhost.md) for deployment.
+
 This example opens one disposable Optimizer-compatible workspace. It does not run Bootstrap,
 create a durable Campaign or Lineage, or start an Agent backend.
 
@@ -18,13 +20,13 @@ login state remain available inside the sandbox.
 
 ## Run
 
-Export the remote Agate settings first:
+Export the Agate settings first:
 
 ```bash
-export AGATE_URL="https://your-agate.example"
-export AGATE_AK="..."
-export AGATE_SK="..."
-export AGATE_GPU="H100"
+export AGATE_URL="http://127.0.0.1:8000"
+# export AGATE_AK="..."  # only if the Gateway requires authentication
+# export AGATE_SK="..."
+export AGATE_GPU="local"
 bash examples/optimizer-dev-shell/run.sh zsh qodercli
 ```
 

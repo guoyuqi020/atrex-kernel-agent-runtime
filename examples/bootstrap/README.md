@@ -2,12 +2,14 @@
 
 English | [中文](README.zh.md)
 
+Defaults connect to an already-running official localhost Gateway (`127.0.0.1:8000`, GPU `local`); explicit environment overrides remain supported. See [Agate localhost](../../docs/agate-localhost.md) for deployment.
+
 This example bootstraps one real Triton VecAdd lineage. It starts the Runtime control service,
 launches the commit-pinned Core in `framework_baseline` mode, lets Core submit its candidate through
-the Runtime Gateway Tool to a real remote Agate service, and registers a ready Lineage only after a
+the Runtime Gateway Tool to a real Agate service, and registers a ready Lineage only after a
 correct authoritative evaluation.
 
-This is not a mock workflow. It invokes QoderCLI and consumes remote GPU resources. It does not start
+This is not a mock workflow. It invokes QoderCLI and consumes GPU resources. It does not start
 a Local Agate service. GPU Wiki is disabled unless `ATREX_WIKI_URL` is explicitly provided.
 
 This directory owns its [`runtime.json`](runtime.json) deployment template and
@@ -16,16 +18,16 @@ under [`../shared/vecadd`](../shared/vecadd); no other runnable example is used.
 
 ## Prerequisites
 
-Install the repository development environment and export the QoderCLI credential plus remote Agate
+Install the repository development environment and export the QoderCLI credential plus Agate
 connection. `AGATE_GPU` must exactly match one environment returned by `agate env`.
 
 ```bash
 # Optional when ~/.qoder and ~/.qodersec contain a valid login:
 # export QODER_PERSONAL_ACCESS_TOKEN="..."
-export AGATE_URL="https://your-agate-service.example.com"
-export AGATE_AK="..."
-export AGATE_SK="..."
-export AGATE_GPU="H20"
+export AGATE_URL="http://127.0.0.1:8000"
+# export AGATE_AK="..."  # only if the Gateway requires authentication
+# export AGATE_SK="..."
+export AGATE_GPU="local"
 ```
 
 The wrapper may pass `QODER_PERSONAL_ACCESS_TOKEN` through the configured Worker environment. When

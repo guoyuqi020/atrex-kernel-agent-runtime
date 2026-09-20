@@ -278,7 +278,7 @@ async def test_same_allocation_abba_requires_all_runs_and_strict_percent_gain() 
 
 
 @pytest.mark.anyio
-async def test_abba_comparator_uses_authoritative_per_shape_median() -> None:
+async def test_abba_comparator_uses_authoritative_pair_metrics() -> None:
     def kernel(label: str) -> KernelRevision:
         return KernelRevision(
             id=new_kernel_revision_id(),

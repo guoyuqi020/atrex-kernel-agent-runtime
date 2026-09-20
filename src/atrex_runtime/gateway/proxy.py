@@ -80,7 +80,7 @@ from .stability import (
     MEASUREMENT_REPETITIONS,
     latency_by_shape,
     measurement_aggregation_summary,
-    median_latency_by_shape,
+    measurement_values_by_shape,
     replace_shape_latencies,
 )
 
@@ -489,6 +489,7 @@ def _measurement_scope_digest(request: GatewayAdapterRequest) -> ArtifactDigest:
         {
             "method": "abba" if request.is_comparison else "evaluate",
             "parameters": parameters.model_dump(mode="json", exclude_none=True),
+            "measurement_aggregation": measurement_aggregation_summary(),
         }
     )
 
@@ -565,7 +566,7 @@ def _annotate_private_measurements(
     summary: Mapping[str, JsonValue],
     repetitions: tuple[GatewayAdapterResult, ...],
 ) -> JsonValue:
-    """Retain all three raw responses while exposing only their aggregate."""
+    """Retain raw measurement evidence alongside its public summary."""
     selected = result.result
     evidence: dict[str, JsonValue] = {
         "summary": cast(JsonValue, dict(summary)),
@@ -585,7 +586,7 @@ def _patch_unaggregated_result(
     *,
     repetitions: tuple[GatewayAdapterResult, ...],
 ) -> GatewayAdapterResult:
-    """Preserve three verdicts when correctness leaves no latency to aggregate."""
+    """Preserve the verdict when correctness leaves no latency to summarize."""
     payload = result.worker_result if result.worker_result is not None else result.result
     projected: dict[str, JsonValue] = (
         cast(dict[str, JsonValue], dict(payload))
@@ -742,11 +743,11 @@ class GatewayProxyService:
         self._clock = clock
         self._journals = RuntimeJournalService(control, artifacts)
 
-    async def _execute_repeated_measurement(
+    async def _execute_measurement(
         self,
         request: GatewayAdapterRequest,
     ) -> GatewayAdapterResult:
-        """Execute one full Evaluate task three times and aggregate per-Shape medians."""
+        """Execute one full Evaluate task once and summarize its Shape latencies."""
         if request.operation is not GatewayOperation.EVALUATE:
             return await self._adapter.execute(request)
         parameters = EvaluateParametersV2.model_validate(request.parameters)
@@ -782,37 +783,31 @@ class GatewayProxyService:
                 repetitions=repetitions,
             )
         if any(item.status != "completed" for item in repetitions):
-            raise InfrastructureError(
-                "one of three repeated Evaluate measurements did not complete"
-            )
+            raise InfrastructureError("Evaluate measurement did not complete")
         expected_sides = ("baseline", "candidate") if request.is_comparison else ("candidate",)
         views = tuple(_measurement_views(request, item) for item in repetitions)
         if any(set(view) != set(expected_sides) for view in views):
-            raise InfrastructureError(
-                "three repeated Evaluate measurements did not all return per-Shape latency"
-            )
+            raise InfrastructureError("Evaluate measurement did not return per-Shape latency")
         shape_ids = tuple(views[0][expected_sides[0]])
         if not shape_ids or any(
             set(view[side]) != set(shape_ids) for view in views for side in expected_sides
         ):
-            raise InfrastructureError(
-                "three repeated Evaluate measurements have inconsistent Shape coverage"
-            )
-        medians = {
-            side: median_latency_by_shape(tuple(view[side] for view in views))
+            raise InfrastructureError("Evaluate measurement has inconsistent Shape coverage")
+        shape_values = {
+            side: measurement_values_by_shape(tuple(view[side] for view in views))
             for side in expected_sides
         }
         if request.is_comparison:
             return _patch_comparison_result(
                 selected,
-                medians,
+                shape_values,
                 summary,
                 request=request,
                 repetitions=repetitions,
             )
         return _patch_evaluate_result(
             selected,
-            medians["candidate"],
+            shape_values["candidate"],
             summary,
             repetitions=repetitions,
         )
@@ -996,7 +991,7 @@ class GatewayProxyService:
                     cast(JsonValue, self._journals.execute(request, authorization)),
                 )
             else:
-                result = await self._execute_repeated_measurement(adapter_request)
+                result = await self._execute_measurement(adapter_request)
             agent_payload = result.result if result.worker_result is None else result.worker_result
             if production_violations:
                 agent_payload = _with_production_gate_advisory(agent_payload, production_violations)

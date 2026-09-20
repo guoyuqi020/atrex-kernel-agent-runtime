@@ -110,6 +110,17 @@ canonical Agent-visible `operation`/`status`/`result` projection as a Result Art
 receives its `result_artifact_digest`; initial execution and later reads expose the same canonical
 content and never expose the private Gateway Result identity.
 
+The sealed private Contract retains at most 30 selected Shapes; `validation_shape_ids` fixes
+its Valid subset, and the complement is Test. Each subset contains at most 15 Shapes. This
+controller-owned field is not an Agent request parameter.
+The private `shape_split` record stores seed `42`, algorithm, cap, original population IDs/count,
+and selected Valid/Test IDs. It is sealed with the Contract and stripped from Agent and per-batch
+contexts; use it only for administrative reproduction.
+Default Agent operations use Valid only; authoritative Runtime ABBA uses all Shapes. Historical
+Agent-visible ABBA projections include `measurement_domain: "valid"`, omit Test rows/error
+metrics, and recompute GeoMean and arithmetic mean over Valid only. Management catalogs retain
+full authoritative measurements. See [evaluation privacy](evaluation.md#evaluation-inputs-and-privacy).
+
 The `evaluate` wire request optionally accepts `mode: "full" | "correctness_only"` (default
 `full`), `input_py` (UTF-8 Python input-generator source, at most 128 KiB), and `shapes` (a non-empty
 object of Agate Shape records keyed by integer strings). Each Shape record is an object. Overrides
@@ -676,6 +687,35 @@ referenced evidence. There is no separate graph export or generated Evolver gene
 Relationships remain Agent-authored claims; measurements and Gate rules are unchanged. Simplified
 AKA implements the same validation vocabulary in its Supervisor without introducing Runtime's Pool
 scheduler. Semantic classification and causal Pool-benefit analysis remain separate analytical work.
+
+## Agent Workflow Runtime services
+
+The Active Agent Revision's sole `workflow/main.py` entry implements one
+`run_epoch(epoch: EpochRuntime)` function. Runtime-controlled construction templates select the
+initial organization but are not included beside `main.py` in the sealed Revision. `serve(run_epoch)`
+owns the private synchronous JSONL channel. These services are not Optimizer tools and are not
+exposed inside an Optimizer Session.
+
+| Public SDK method | Input | Safe result |
+|---|---|---|
+| `replicate_active(ordinal)` | permitted Challenger ordinal | attached Agent Revision ID |
+| `evolve_agent(ordinal)` | permitted Challenger ordinal | Challenger Revision ID or `None` |
+| `create_pool(...)` | Branch label, Trajectory count, round count, State policy | immutable Epoch Pool |
+| `run_pools(..., after_round=...)` | one or more Pools and optional callback | trusted results grouped by logical round |
+| `round.outcomes(pool)` | Pool in the completed round | normalized outcomes in Trajectory order |
+| `round.best_accepted_kernel(...)` | zero or more participating Pools | best accepted Kernel ID or `None` |
+| `round.route_kernel(...)` | Pool and accepted same-Epoch Kernel | next-round Kernel route |
+| `round.route_state(...)` | Pool and compatible completed Attempt | next-round State route |
+| `complete()` | none | Runtime-selected Kernel/Agent and committed Epoch status |
+
+Round outcomes include the Attempt identity, input/output/current Trajectory Kernel identities,
+acceptance, correctness, latency, failure reason, and whether a Runtime-State checkpoint exists.
+The private SDK assigns deterministic ordinals and replays completed rounds idempotently after a
+Workflow restart. Kernel routing accepts only the Epoch start or an accepted same-Epoch result; State routing
+accepts only a completed same-Agent Attempt under `retain_across_attempts`. Runtime requires all
+attached Branches, an exact capacity/budget match, and every planned Attempt completed before
+completion. It retains cross-Epoch scheduling, execution, Gateway, Gate, persistence, comparison,
+and promotion authority.
 
 ## External service contracts
 

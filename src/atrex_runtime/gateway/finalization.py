@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from functools import partial
 
@@ -145,6 +145,7 @@ class AgateAuthoritativeCandidateEvaluator:
             )
 
         context = self._contexts.resolve(attempt_id)
+        context = replace(context, contract=context.contract.for_agent())
         resolved = resolve_kernel_candidate(
             self._artifacts,
             candidate_digest,

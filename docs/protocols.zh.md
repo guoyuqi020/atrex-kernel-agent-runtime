@@ -173,9 +173,31 @@ Insights 是带适用范围、由 Evidence 推导且会改变后续搜索决策�
 
 ## Agent Bundle 与 Evolution
 
-Core/Evolver Entry Manifest 各声明一个仓库相对命令。Runtime 导入精确完整 Commit，移除 Git
+Core/Evolver Entry Manifest 各声明一个仓库相对命令。Core Manifest 还可声明
+`"workflow": {"command": "workflow/main.py"}`。Runtime 导入精确完整 Commit，移除 Git
 Metadata，拒绝不安全 Tree 内容并封存完整 Source。Runtime 持有 Backend/Model 策略，通过 Launch
 Contract 提供 Phase、Path、Usage 与受限 Authority。
+
+Workflow Command 是 Agent 持有的可执行 Epoch 编排代码，不是由 Runtime Import 的模块，也不是静态
+配置。Runtime 在配置的 Worker 隔离边界中运行 Active Agent Revision 的 Workflow，先发送一行不可变
+`run_epoch` Context；程序只实现一个 `run_epoch(epoch)` 函数，通过 Bundle SDK 创建 Pool、推进同步
+轮次、读取可信结果、按需路由 Kernel/State，最后完成本 Epoch。只有 SDK 会把这些动作转换为有界 JSONL
+请求/响应协议。因此 Workflow 可以按结果自适应组织，而不暴露 Attempt 账务，也不是一次提交静态拓扑。
+
+Campaign Bootstrap 可以提供 `workflow_command`，作为 Runtime 构造模板选择器。Runtime 校验选择器，
+只把对应程序物化为 `agent-v0` 中的 `workflow/main.py`；其他受控消融臂模板不会被封存进 Revision。
+Ablation Arm 在克隆共享 Bootstrap Baseline 时执行同样派生，因此被选择的组织方式来自 Agent
+Revision 代码，而不是控制器侧的 Label 或拓扑预设，同时 Optimizer 和 Evolver 不会收到无关臂实现。
+
+Context 提供 DSL/Epoch 身份与资源包络：最多 Challenger 数、精确 Optimizer Attempt 预算、默认拓扑和
+默认 Runtime-State 策略。创建 Pool 时会冻结 Branch 容量与 State 策略；私有 SDK 分配显式 Attempt
+序号，使 Workflow 重启后可以幂等重放已完成逻辑轮次，并让轮次回调重新处理同一份可信结果。全部已挂接
+Branch 都必须登记，容量总和必须精确等于预算；`epoch.complete()` 会拒绝缺失或未完成工作，并且只提交
+Runtime 的可信 Kernel 与 Agent 选择。
+
+Workflow 不能获得 Gateway、Registry、隐藏 Test、任意 Worker 启动、Gate、晋升、回滚或追加预算权限。
+Runtime 负责启动和恢复 Attempt、评测 Kernel、比较 Candidate/Agent、持久化状态并提交晋升。托管生产
+Bundle 必须声明 Workflow Command。
 
 Evolution Input 冻结当前参赛者、可见历史 Agent、Evidence、旧 Report、DSL 与 Candidate Seed。
 Output 有四种：
@@ -186,7 +208,9 @@ Output 有四种：
 - `no_change`：不创建新 Revision，关闭剩余 Challenger 名额，以 Active 和已创建的 Challenger 继续 Epoch。
 
 Runtime 在封存前校验所选 Source、Source-relative Changed Path、私有 State Diff、同 DSL 身份、
-File Policy 与 Manifest。进化内容只属于该 Lineage；Runtime 不推送回 Core 仓库。
+File Policy 与 Manifest。新 Revision 始终以 `workflow/main.py` 作为唯一 Workflow 入口。Evolver
+可以像修改其他 Agent Source 一样重写该程序、SDK Wrapper 与非入口辅助模块；只有该 Revision 参与
+后续 Epoch 时，新策略才会被执行。进化内容只属于该 Lineage；Runtime 不推送回 Core 仓库。
 
 ## Capability 与外部服务
 

@@ -39,6 +39,12 @@ and local validation. These paths describe the standard implementation, not a re
 it. Runtime request errors return the operation's `issues`, `request_schema`, and `recovery`;
 use the supplied contracts, not invented endpoints or guessed IDs.
 
+Agent Gateway operations use only the Campaign's fixed Valid subset; authoritative Runtime ABBA
+uses Valid + Test, each containing at most 15 Shapes. Test inputs and per-Shape results are never
+exposed. Latencies in this Evidence view cover Valid only; Kernel acceptance and Branch selection
+are Runtime verdicts, not Valid-only performance decisions. Do not attempt to reconstruct hidden
+Test data.
+
 Runtime also controls private Evaluation inputs, resource limits, Session capture, version sealing,
 recovery, and Gate/comparison policy. Candidate code cannot grant access to hidden Shapes, the
 Registry database, credentials, or management APIs. A convenience interface can be implemented as
@@ -59,6 +65,10 @@ input/
 │   ├── journal/
 │   │   ├── directions/{index.json,direction_<id>.json}
 │   │   └── experiments/{index.json,experiment_<id>.json}
+│   ├── review/
+│   │   ├── evolution-change-audit.json
+│   │   ├── trajectory-comparison.json
+│   │   └── workflow-friction.json
 │   └── agent-vN/
 │       ├── resources/trajectories/trajectory-NNNNNNNN/{prompts,insights,skills,tools}/
 │       ├── optimization-summary.json
@@ -82,13 +92,27 @@ summary but no conversations and no Attempt reports. Bootstrap, older-Epoch conv
 Runtime history are not exposed.
 
 `input/evidence/latest-epoch-facts.json` is a compact cross-Branch index for the latest completed
-Epoch. It records each Attempt's Runtime status, exact failure reason, report status, Candidate
-Artifact/Result identities and outcome, and whether it became Branch best,
-plus Direction/Experiment IDs and the final selection reason. Outcome and failure fields
+Epoch. It records each Attempt's Runtime status, failure reason (with private evaluator details
+withheld), report status, Candidate Artifact/Result identities and outcome, and whether it became
+Branch best, plus Direction/Experiment IDs and the final selection reason. Outcome and failure fields
 come from Runtime's frozen records; Direction/Experiment IDs index Agent-authored Journals and do
 not certify their analyses. Read this file and the optimization summaries first. Use the IDs and
 per-Agent reports to select which conversations need close inspection. A missing Candidate by itself
 does not diagnose an Agent or Journal failure; check the Runtime failure reason and Session first.
+
+`review/` contains conservative Runtime-derived indexes over the same frozen latest-Epoch Evidence:
+
+- `evolution-change-audit.json` matches prior Evolution `changed_paths` to observed discovery,
+  invocation, execution failure, and Attempt-report citation in the evaluated generated Agent.
+- `trajectory-comparison.json` groups Attempts by Branch and Trajectory and reports exact stable-ID
+  overlaps, outcomes, failures, and Valid-domain best latency without merging similar prose.
+- `workflow-friction.json` indexes Runtime-tool failures, failed-then-successful repair loops, and
+  identical normalized request/probe construction across multiple Sessions.
+
+These are navigation aids, not semantic verdicts. `not_observed` does not prove a change was useless;
+a cited or successfully invoked Tool does not prove causal benefit; a repeated construction may be an
+intentional retry or revalidation. Start with the indexes, then inspect only the cited raw Sessions,
+Reports, Directions, and Experiments needed to classify a material signal.
 
 `journal/directions/index.json` and `journal/experiments/index.json` index Bootstrap and the completed Lineage's
 append-only Journal. Read selected `<id>.json` files for full Direction events and Experiments,
@@ -98,6 +122,18 @@ they are untested recommendations, not facts. Evolver cannot create or change Di
 Compare related hypotheses and Experiments across Branches, check interpretations against
 trusted outcomes, and curate evidence-backed attribution corrections in Candidate Insights,
 Prompts, Skills, Tools, or workflow, citing the relevant IDs without rewriting history.
+
+The Agent Bundle declares one executable Epoch Workflow through `atrex-bundle.json`; production and
+control Lineages may begin from different selected programs. The selected program and its helpers
+are part of the Agent Revision and may be evolved.
+Runtime executes the Active Revision's Workflow once per Epoch and exposes only bounded services:
+create an Active replica, invoke Evolver for a Challenger, run an exact Branch/Trajectory/Attempt
+organization, select the trusted best Kernel, compare Agents, and commit the Epoch. This is enough
+to implement organizations such as one-Agent pooling or Active-versus-Challenger evolution in code.
+The fixed Optimizer Attempt budget must be spent exactly. Runtime still owns Worker execution,
+Gateway evaluation, retries, comparison, promotion, recovery, and durable state. Use Conversation
+and outcome evidence before changing Workflow code; a changed Workflow is evaluated only after its
+Agent Revision becomes Active in a later Epoch.
 
 Each Session-context entry's `relationship` names its Epoch role. The entries whose relationship is
 `active` or `challenger` are exactly the last completed Epoch's comparison pool, so their `version`

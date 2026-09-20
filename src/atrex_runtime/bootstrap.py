@@ -40,7 +40,7 @@ from .domain.models import (
 )
 from .gateway.contract import AgateEvaluationContractV1, RuntimeGateContractPolicy
 from .gateway.environment import ResolvedAgateEnvironment
-from .kernel_agents import GitOptimizerBaseLoader
+from .kernel_agents import GitOptimizerBaseLoader, KernelAgentBundleWorkflowV1
 from .ports import KernelAgentCandidate
 from .registry.base import Registry
 from .roofline import RooflineBuilder
@@ -202,6 +202,7 @@ class CampaignSpecV3(BaseModel):
         max_length=200,
     )
     base_revision: GitBaseRevisionV1
+    workflow_command: str | None = None
     challenger_count: int = Field(default=1, ge=0)
     challenger_start_epoch: int = Field(default=1, gt=0)
     first_epoch_same_agent: bool = False
@@ -218,6 +219,13 @@ class CampaignSpecV3(BaseModel):
         if not normalized or "\x00" in normalized:
             raise ValueError("Problem Generalization model cannot be empty or contain NUL")
         return normalized
+
+    @field_validator("workflow_command")
+    @classmethod
+    def _validate_workflow_command(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return KernelAgentBundleWorkflowV1(command=value).command
 
     @model_validator(mode="after")
     def _validate_campaign(self) -> CampaignSpecV3:
@@ -441,7 +449,7 @@ class CampaignBootstrapper:
             )
         input_contract = AgateEvaluationContractV1.model_validate(
             self._read_json(spec.evaluation_contract, "evaluation contract")
-        )
+        ).with_shape_holdout()
         # Import from exact Git revisions once, then use CAS paths for every worker.
         from .kernel_sources import import_source_tree
 
@@ -495,7 +503,11 @@ class CampaignBootstrapper:
             self._roofline_resolved(roofline_mode, roofline_detail)
         if self._base_loader is None:
             raise ValueError("Git Optimizer Base loader is not configured")
-        base = self._base_loader.build_candidate(selected[0], spec.base_revision.commit)
+        base = self._base_loader.build_candidate(
+            selected[0],
+            spec.base_revision.commit,
+            workflow_command=spec.workflow_command,
+        )
         shared_contract = self._artifacts.put_json(
             contract.model_dump(mode="json"),
             ArtifactKind.EVALUATION_CONTRACT,
@@ -604,6 +616,20 @@ class CampaignBootstrapper:
             stored_contract = AgateEvaluationContractV1.model_validate(
                 self._read_json(stored.payload_path / "value.json", "stored evaluation contract")
             )
+            if (
+                contract.validation_shape_ids is not None
+                and stored_contract.validation_shape_ids is None
+            ):
+                raise ValueError(
+                    "Existing Campaign predates the Valid/Test split; create a new Campaign "
+                    "creation_key and workspace. Its frozen evaluation Contract cannot be changed."
+                )
+            if contract.shape_split is not None and stored_contract.shape_split is None:
+                raise ValueError(
+                    "Existing Campaign has no fixed-seed Shape split archive; create a new "
+                    "Campaign creation_key and workspace. Its frozen evaluation Contract "
+                    "cannot be changed."
+                )
             without_roofline = {"roofline": None}
             comparable_contract = contract
             if stored_contract.accelerator_backend is None and stored_contract.device_slug is None:
@@ -629,7 +655,7 @@ class CampaignBootstrapper:
                 roofline = self._roofline_builder.build(
                     operator=operator,
                     hardware_target=hardware_target,
-                    contract=contract,
+                    contract=contract.for_agent(),
                 )
             except Exception as error:
                 detail = f"{type(error).__name__}: {error}"[:1000]

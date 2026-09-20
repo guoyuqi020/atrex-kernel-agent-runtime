@@ -6,6 +6,31 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Agent Revision 现在可携带可执行的 `workflow/main.py` Epoch 编排程序。Runtime 通过 Worker 隔离
+  边界运行 Active Revision 的程序。Agent 代码只实现一个 `run_epoch(epoch)` 函数，以 Pool 和同步轮次
+  组织工作；SDK 隐藏 Attempt 序号与底层协议，同时保留根据结果路由 Kernel/State 的能力。Runtime 强制
+  精确 Attempt 预算、保证轮次幂等恢复，并继续独占跨 Epoch 调度、评测、Gate、晋升、回滚与 Registry
+  权限。
+
+- 生产与消融 Lineage 现在使用 Runtime 持有的臂模板构造初始 Agent Revision。只有被选择的程序会被
+  封存为 `workflow/main.py`，无关臂程序不会暴露给 Optimizer 或 Evolver。`evolve-3`、Isolated、
+  Retained、Pool-3 与 Pool-Retained-3 仍分别执行独立版本化程序，同时共享受控的 Optimizer Source
+  与完全相同的 Bootstrap Kernel。
+
+- 默认通过 HTTP 接入官方 Agate localhost 后端（`127.0.0.1:8000`、GPU `local`）。配置生成和
+  CLI 示例保留显式地址覆盖与服务端 AK/SK 鉴权；无鉴权 loopback 部署可不设置凭据。
+  Runtime/Wiki 脚本不管理 Agate 服务。
+
+- Agent 完整 Evaluate 与权威 ABBA 改为每个 Shape 执行一次测量，不再额外执行三次完整调用并
+  逐 Shape 取中位数。单 Job 内 GPU Benchmark 采样及配置的 ABBA Schedule 不变；结果标记为
+  `single_measurement`、`repetitions=1`。
+
+- 新 Campaign 用固定种子 `42` 随机封存 50/50 Valid/Test Shape 划分：Agent 操作及普通评测只使用 Valid，
+  Runtime 权威 ABBA 使用 Valid + Test。Agent Evidence 隐藏 Test 明细、全量聚合延迟及 Test
+  误差指标；奇数多出的一个归 Valid，单 Shape 拒绝启动。两个集合各随机抽取最多 15 个 Shape，多出的
+  Shape 不参与评测，Metadata/Roofline 同步裁剪。私有 `shape_split` 留档种子、算法、原始全集与选中 ID。
+  VecAdd 示例新增第二个 Shape。
+
 - Evolver 按 Lineage/Backend 持续 resume 原生会话，跨进化、串行 Challenger 构建、基础设施重试和
   控制器重启保留历史；每次仍加载新的输入和 Candidate，Trace 与用量不重复计入历史内容。
 

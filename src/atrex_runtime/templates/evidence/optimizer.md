@@ -3,6 +3,12 @@
 The trusted controller generated this section from the current session. It is authoritative for
 filesystem roles, Evidence visibility, and measurement trust.
 
+Gateway measurements use only the Campaign's fixed Valid subset (at most 15 Shapes). Test inputs
+and results are private: Runtime alone measures Valid + Test for authoritative ABBA retention and
+promotion.
+Historical per-Shape results and latency aggregates shown here cover Valid only, not the hidden
+Test set. A Runtime acceptance verdict is distinct from an Agent's Valid-only experiment.
+
 ## Workspace
 
 ```text

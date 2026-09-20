@@ -14,6 +14,7 @@ from .domain.models import (
     AttemptStatus,
     BranchRole,
     Epoch,
+    EpochBranchWorkflow,
     EpochChallenger,
     KernelAgentCatalogEntry,
     KernelCatalogEntry,
@@ -273,6 +274,7 @@ def ablation_arm_result_value(result: AblationArmResult) -> dict[str, object]:
         "challenger_count": result.challenger_count,
         "challenger_start_epoch": result.challenger_start_epoch,
         "first_epoch_same_agent": result.first_epoch_same_agent,
+        "workflow_command": result.workflow_command,
         "lineage": lineage_seed_result_value(result.lineage),
     }
 
@@ -413,6 +415,7 @@ def lineage_epoch_values(registry: Registry, lineage_id: LineageId) -> list[dict
             agent_version,
             kernel_version,
             registry.list_epoch_challengers(epoch.id),
+            registry.list_epoch_branch_workflows(epoch.id),
         )
         for epoch in registry.list_epochs(lineage_id)
     ]
@@ -424,6 +427,7 @@ def _epoch_value(
     agent_version: Callable[[KernelAgentRevisionId], str],
     kernel_version: Callable[[KernelRevisionId], str],
     challenger_proposals: list[EpochChallenger],
+    branch_workflows: list[EpochBranchWorkflow],
 ) -> dict[str, object]:
     winner_id = epoch.winner_kernel_agent_revision_id
     winner_challenger_ordinal: int | None = None
@@ -467,6 +471,20 @@ def _epoch_value(
                 "evolution_trace_digest": item.evolution_trace_digest,
             }
             for item in challenger_proposals
+        ],
+        "branch_workflows": [
+            {
+                "branch": item.branch,
+                "challenger_ordinal": item.challenger_ordinal,
+                "kernel_agent_revision_id": item.kernel_agent_revision_id,
+                "kind": item.kind,
+                "program_sha256": item.program_sha256,
+                "trajectories": item.trajectories,
+                "attempts_per_trajectory": item.attempts_per_trajectory,
+                "runtime_state_policy": item.runtime_state_policy.value,
+                "attempt_budget": item.attempt_budget,
+            }
+            for item in branch_workflows
         ],
         "winner_kernel_agent_revision_id": winner_id,
         "winner_agent_version": None if winner_id is None else agent_version(winner_id),

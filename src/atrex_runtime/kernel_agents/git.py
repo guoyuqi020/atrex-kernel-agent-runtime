@@ -19,7 +19,7 @@ from ..domain.ids import ArtifactDigest, parse_artifact_digest
 from ..domain.models import Dsl
 from ..git_import import SafeGitImporter
 from ..ports import KernelAgentCandidate
-from .revision import KernelAgentRevisionBuilder
+from .revision import KernelAgentBundleWorkflowV1, KernelAgentRevisionBuilder
 
 _FULL_COMMIT = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 
@@ -46,6 +46,7 @@ class OptimizerSourceProvenanceV1(BaseModel):
     commit: str = Field(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
     tree: str = Field(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
     submodules: tuple[OptimizerSubmoduleProvenanceV1, ...] = ()
+    workflow_command: str | None = None
     optimizer_digest: ArtifactDigest
 
     @field_validator("optimizer_digest", mode="before")
@@ -54,6 +55,13 @@ class OptimizerSourceProvenanceV1(BaseModel):
         if not isinstance(value, str):
             raise ValueError("optimizer_digest must be a string")
         return parse_artifact_digest(value)
+
+    @field_validator("workflow_command")
+    @classmethod
+    def _validate_workflow_command(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return KernelAgentBundleWorkflowV1(command=value).command
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +101,13 @@ class GitOptimizerBaseLoader:
         )
         self._allowed_submodules = self._validate_allowed_submodules(allowed_submodules or {})
 
-    def build_candidate(self, dsl: Dsl, commit: str) -> GitOptimizerBaseResult:
+    def build_candidate(
+        self,
+        dsl: Dsl,
+        commit: str,
+        *,
+        workflow_command: str | None = None,
+    ) -> GitOptimizerBaseResult:
         """Import an exact locally available commit without network access or code execution."""
         if _FULL_COMMIT.fullmatch(commit) is None:
             raise ValueError("Optimizer Base revision must be a full lowercase commit SHA")
@@ -178,15 +192,22 @@ class GitOptimizerBaseLoader:
                     )
                 )
             candidate = self._builder.build_candidate(export, dsl)
+            if workflow_command is not None:
+                candidate = self._builder.select_workflow(
+                    candidate.optimizer_digest,
+                    dsl,
+                    workflow_command,
+                )
             provenance = OptimizerSourceProvenanceV1(
                 repository=self._repository,
                 commit=commit,
                 tree=tree,
                 submodules=tuple(submodule_provenance),
+                workflow_command=workflow_command,
                 optimizer_digest=candidate.optimizer_digest,
             )
             provenance_digest = self._artifacts.put_json(
-                provenance.model_dump(mode="json"),
+                provenance.model_dump(mode="json", exclude_none=True),
                 ArtifactKind.OPTIMIZER_SOURCE,
             )
             return GitOptimizerBaseResult(candidate, provenance_digest)

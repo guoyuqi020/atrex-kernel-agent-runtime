@@ -1,4 +1,4 @@
-"""Per-Shape repeated measurement aggregation tests."""
+"""Per-Shape single measurement summary tests."""
 
 from __future__ import annotations
 
@@ -6,30 +6,27 @@ import pytest
 
 from atrex_runtime.gateway.stability import (
     measurement_aggregation_summary,
-    median_latency_by_shape,
+    measurement_values_by_shape,
     replace_shape_latencies,
 )
 
 
-def test_three_measurements_are_aggregated_by_per_shape_median() -> None:
-    assert median_latency_by_shape(
-        (
-            {"0": 10.0, "1": 100.0},
-            {"0": 30.0, "1": 80.0},
-            {"0": 20.0, "1": 120.0},
-        )
-    ) == {"0": 20.0, "1": 100.0}
+def test_single_measurement_preserves_per_shape_values() -> None:
+    assert measurement_values_by_shape(({"0": 10.0, "1": 100.0},)) == {
+        "0": 10.0,
+        "1": 100.0,
+    }
     assert measurement_aggregation_summary() == {
-        "repetitions": 3,
-        "method": "per_shape_median",
+        "repetitions": 1,
+        "method": "single_measurement",
     }
 
 
-def test_measurement_aggregation_requires_exactly_three_complete_shape_maps() -> None:
-    with pytest.raises(ValueError, match="requires 3 samples"):
-        median_latency_by_shape(({"0": 10.0}, {"0": 11.0}))
-    with pytest.raises(ValueError, match="inconsistent Shape coverage"):
-        median_latency_by_shape(({"0": 10.0}, {"0": 11.0}, {"1": 12.0}))
+def test_measurement_summary_requires_exactly_one_nonempty_shape_map() -> None:
+    with pytest.raises(ValueError, match="requires exactly one sample"):
+        measurement_values_by_shape(({"0": 10.0}, {"0": 11.0}))
+    with pytest.raises(ValueError, match="empty Shape coverage"):
+        measurement_values_by_shape(({},))
 
 
 def test_replacing_shape_recomputes_aggregate_latencies() -> None:

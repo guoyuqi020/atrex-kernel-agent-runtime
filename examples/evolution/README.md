@@ -2,6 +2,8 @@
 
 English | [中文](README.zh.md)
 
+Defaults connect to an already-running official localhost Gateway (`127.0.0.1:8000`, GPU `local`); explicit environment overrides remain supported. See [Agate localhost](../../docs/agate-localhost.md) for deployment.
+
 This example runs one Triton Lineage through Epoch 3 and exercises two controlled Agent evolutions:
 
 - Epoch 1 has only Active and runs one Optimizer Attempt;
@@ -17,13 +19,13 @@ Active and Challenger independently and promotes a Challenger only when it wins.
 This directory owns its `runtime.json` and three-Epoch `campaign.json`. It uses only the canonical
 VecAdd inputs and generic helpers under `examples/shared/`, never another runnable example.
 
-Export the remote Agate and pinned Evolver Bundle requirements first:
+Export the Agate and pinned Evolver Bundle requirements first:
 
 ```bash
-export AGATE_URL="https://..."
-export AGATE_AK="..."
-export AGATE_SK="..."
-export AGATE_GPU="L20N"
+export AGATE_URL="http://127.0.0.1:8000"
+# export AGATE_AK="..."  # only if the Gateway requires authentication
+# export AGATE_SK="..."
+export AGATE_GPU="local"
 export QODER_PERSONAL_ACCESS_TOKEN="..."
 ```
 

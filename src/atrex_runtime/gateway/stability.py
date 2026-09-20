@@ -1,4 +1,4 @@
-"""Deterministic repeated measurement aggregation for performance results."""
+"""Single-measurement Shape values and mechanical latency summaries."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from typing import cast
 
 from ..artifacts.local import JsonValue
 
-MEASUREMENT_REPETITIONS = 3
+MEASUREMENT_REPETITIONS = 1
 
 
 def latency_by_shape(value: object) -> dict[str, float]:
@@ -30,15 +30,15 @@ def latency_by_shape(value: object) -> dict[str, float]:
     }
 
 
-def median_latency_by_shape(samples: tuple[Mapping[str, float], ...]) -> dict[str, float]:
-    """Return the per-Shape median from three complete, identically keyed samples."""
+def measurement_values_by_shape(samples: tuple[Mapping[str, float], ...]) -> dict[str, float]:
+    """Return the single measurement's Shape values without cross-job aggregation."""
     if len(samples) != MEASUREMENT_REPETITIONS:
-        raise ValueError(f"measurement aggregation requires {MEASUREMENT_REPETITIONS} samples")
+        raise ValueError("measurement summary requires exactly one sample")
     expected = set(samples[0])
-    if not expected or any(set(sample) != expected for sample in samples[1:]):
-        raise ValueError("repeated measurements have inconsistent Shape coverage")
+    if not expected:
+        raise ValueError("measurement has empty Shape coverage")
     return {
-        shape_id: statistics.median(sample[shape_id] for sample in samples)
+        shape_id: samples[0][shape_id]
         for shape_id in sorted(
             expected,
             key=lambda value: (0, int(value)) if value.isdigit() else (1, value),
@@ -81,10 +81,10 @@ def replace_shape_latencies(
 
 
 def measurement_aggregation_summary() -> dict[str, JsonValue]:
-    """Build the compact Agent-visible repeated measurement description."""
+    """Build the compact Agent-visible measurement description."""
     return {
         "repetitions": MEASUREMENT_REPETITIONS,
-        "method": "per_shape_median",
+        "method": "single_measurement",
     }
 
 
@@ -92,6 +92,6 @@ __all__ = [
     "MEASUREMENT_REPETITIONS",
     "latency_by_shape",
     "measurement_aggregation_summary",
-    "median_latency_by_shape",
+    "measurement_values_by_shape",
     "replace_shape_latencies",
 ]

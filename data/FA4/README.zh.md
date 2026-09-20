@@ -46,7 +46,7 @@ data/FA4/
 
 - 返回值及被修改的 `out` 都逐元素检查：`abs(candidate-reference) <= 0.06 + 0.04 * abs(reference)`。Evaluator 从 Metadata 加载策略，不允许通过旧的 L2 或 mismatch-rate 参数放宽。
 - `workspace_buffer` 被声明为 scratch 输入；`out` 被声明为允许修改的输入。其余输入仍按 Evaluator 的输入副作用策略检查。
-- Bootstrap 使用一轮 1 Case、再一轮 5 Cases 的分阶段验收。普通 Evaluate 使用 5 Cases、100 Bench Iters、一次逻辑 Evaluate；Retention 与 Agent Promotion 使用同 Allocation ABBA。这里采用 eager 模式，`warmup_iters=10` 与 `bench_iters=100` 分别是 10ms 和 100ms 预算，不是固定运行次数。每批一个 Shape，最多 16 批并发；默认锁频。ABBA 执行三次完整比较并逐 Shape 取中位数。
+- Bootstrap 使用一轮 1 Case、再一轮 5 Cases 的分阶段验收。普通 Evaluate 使用 5 Cases、100 Bench Iters、一次逻辑 Evaluate；Retention 与 Agent Promotion 使用同 Allocation ABBA。这里采用 eager 模式，`warmup_iters=10` 与 `bench_iters=100` 分别是 10ms 和 100ms 预算，不是固定运行次数。每批一个 Shape，最多 16 批并发；默认锁频。ABBA 执行一次完整比较，不再额外重复三次并逐 Shape 取中位数。
 - 本任务关闭 **Production 静态源码 Gate**：完整上游 CuTe 源码包含测试/Benchmark 辅助逻辑，现有对全部可编辑文件的单 DSL 扫描会拒绝这些已有代码。没有修改全局 Gate；严格正确性、源码锁、范围约束和 Runtime 比较保持开启。若需要这项静态 Gate，须先适配多文件库的检测范围，不能直接切回 `true` 后假定能够运行。
 - 提供的 `source-validation.json` 仅记录原始 P128 冒烟成功和目标 ABI 的预期失败。原始 `smoke.py` 的 L2 阈值不是本任务的 Gate；它不作为验收入口。
 - GPU 环境需要 `torch>=2.9.0`、`nvidia-cutlass-dsl==4.6.1`。Quack 随源码提供。准备阶段不测试 GPU 镜像、模型登录或远端连接，也不会安装 GPU 环境依赖。

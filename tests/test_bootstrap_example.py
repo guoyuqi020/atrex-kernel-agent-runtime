@@ -45,6 +45,32 @@ def test_all_bootstrap_shell_wrappers_parse() -> None:
     subprocess.run(("bash", "-n", *(str(path) for path in scripts)), check=True)
 
 
+def test_bootstrap_prepare_defaults_to_localhost_without_credentials(tmp_path: Path) -> None:
+    config_path = tmp_path / "runtime.json"
+    spec_path = tmp_path / "campaign.json"
+    environment = {
+        key: value
+        for key, value in os.environ.items()
+        if not key.startswith("AGATE_") and key != "ATREX_WIKI_URL"
+    }
+    subprocess.run(
+        _prepare_command(tmp_path, config_path, spec_path),
+        cwd=REPOSITORY,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+    settings = RuntimeSettings.from_file(config_path)
+    spec = CampaignSpecV3.from_file(spec_path)
+    assert settings.agate.base_url == "http://127.0.0.1:8000"
+    assert settings.agate.auth_mode == "none"
+    assert settings.agate.access_key_env is None
+    assert settings.agate.secret_key_env is None
+    assert spec.hardware_target == "local"
+
+
 def test_bootstrap_prepare_builds_valid_remote_agate_inputs(tmp_path: Path) -> None:
     config_path = tmp_path / "runtime.json"
     spec_path = tmp_path / "campaign.json"

@@ -2,7 +2,9 @@
 
 [English](README.md) | 中文
 
-本示例通过当前 `PATH` 解析到的官方 `agate` CLI 直接调用真实远端 Agate 服务，不会在本机
+默认连接已启动的官方 localhost 服务（`127.0.0.1:8000`、GPU `local`）；可显式覆盖环境变量。部署步骤见 [Agate localhost](../../docs/agate-localhost.zh.md)。
+
+本示例通过当前 `PATH` 解析到的官方 `agate` CLI 直接调用真实 Agate 服务，不会在本机
 启动或模拟 Agate。
 
 标准 Candidate、可信 PyTorch Reference、输入生成器和 Shape 元数据只保存在一份
@@ -10,21 +12,18 @@
 
 ## 配置连接
 
-设置真实服务地址；如果服务要求鉴权，再选择一种受支持的凭证形式：
+脚本默认连接 localhost，只有需要时才覆盖地址；如果服务要求鉴权，再设置该服务的 AK/SK：
 
 ```bash
-export AGATE_URL="https://your-agate-service.example.com"
+export AGATE_URL="http://127.0.0.1:8000"
 
-# Bearer Token 鉴权：
-export AGATE_TOKEN="..."
-
-# 或改用 AK/SK 鉴权：
+# 仅在此服务启用鉴权时设置：
 # export AGATE_AK="..."
 # export AGATE_SK="..."
 ```
 
 不要把凭证写入 `runtime.json`，也不要提交到仓库。官方 CLI 会从环境变量读取
-`AGATE_TOKEN` 或 `AGATE_AK`/`AGATE_SK`。如果服务采用无鉴权模式，则无需设置鉴权变量。
+`AGATE_AK`/`AGATE_SK`。如果服务采用无鉴权模式，则无需设置鉴权变量。
 
 脚本直接运行当前环境中的 `agate`，不会固定仓库虚拟环境路径。需要时可把 `AGATE_BIN` 设置为
 另一个命令或当前平台上的路径。macOS 创建的虚拟环境不能在 Linux 中复用；从 Linux 执行前应创建
@@ -34,14 +33,14 @@ export AGATE_TOKEN="..."
 
 ```bash
 bash examples/agate/check-service.sh
-export AGATE_GPU="H20"  # 替换成 env 命令返回的某个值
+export AGATE_GPU="local"
 ```
 
 `check-service.sh` 只查询服务，不会提交 GPU Job。
 
 ## 提交真实 GPU 工作
 
-下面每个命令都会向配置的远端服务提交任务，并可能消耗 GPU 资源：
+下面每个命令都会向配置的 Agate 服务提交任务，并可能消耗 GPU 资源：
 
 ```bash
 # 正确性和性能评测，并等待最终结果。
@@ -99,7 +98,7 @@ Optimizer Session 中，Agent 应调用 Runtime Gateway Tool：Runtime 会把请
 并确保 Agate 凭证不会进入 Agent 工作区。
 
 若要让 Runtime 连接同一个服务，只在 `runtime.json` 的 `agate` 段写入非敏感连接策略，
-选择 `auth_mode`（`none`、`token` 或 `ak_sk`），并指定相应凭证环境变量的名称。例如，
-Token 模式增加 `"token_env": "AGATE_TOKEN"`；AK/SK 模式增加
+选择 `auth_mode`（`none` 或 `ak_sk`）。AK/SK 模式需指定凭证环境变量的名称：
 `"access_key_env": "AGATE_AK"` 和 `"secret_key_env": "AGATE_SK"`。
-基于 Runtime 的示例应在自己的 `runtime.json` 中完成该配置，不导入其他示例的配置。
+示例准备脚本在本机地址且无凭证时选择无鉴权，否则选择 AK/SK。每个示例使用自己的
+`runtime.json`，不导入其他示例的配置。

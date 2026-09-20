@@ -1,4 +1,4 @@
-"""Static tests for examples that target a real remote Agate service."""
+"""Static tests for examples that target an official Agate HTTP service."""
 
 from __future__ import annotations
 
@@ -22,14 +22,20 @@ def test_all_agate_shell_wrappers_parse() -> None:
     subprocess.run(("bash", "-n", *(str(path) for path in scripts)), check=True)
 
 
-def test_agate_example_requires_an_explicit_real_service_url() -> None:
+def test_agate_example_defaults_to_the_official_localhost_service(tmp_path: Path) -> None:
+    executable = tmp_path / "agate"
+    executable.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
     environment = dict(os.environ)
     environment.pop("AGATE_URL", None)
+    environment.pop("AGATE_GPU", None)
+    environment["PATH"] = f"{tmp_path}{os.pathsep}{environment['PATH']}"
     result = subprocess.run(
         (
             "bash",
             "-c",
-            "source examples/agate/common.sh; agate_require_service",
+            "source examples/agate/common.sh; agate_require_service; "
+            'printf "%s %s" "$AGATE_URL" "$AGATE_GPU"',
         ),
         cwd=REPOSITORY,
         env=environment,
@@ -38,8 +44,8 @@ def test_agate_example_requires_an_explicit_real_service_url() -> None:
         text=True,
     )
 
-    assert result.returncode == 64
-    assert "real Agate service" in result.stderr
+    assert result.returncode == 0
+    assert result.stdout == "http://127.0.0.1:8000 local"
 
 
 def test_agate_example_resolves_the_cli_from_path(tmp_path: Path) -> None:
@@ -163,9 +169,8 @@ def test_custom_input_documentation_examples_match_and_build_without_network() -
 def test_agate_example_never_starts_a_local_gateway() -> None:
     contents = "\n".join(path.read_text(encoding="utf-8") for path in EXAMPLE.glob("*.sh"))
     assert "uvicorn" not in contents
-    assert "127.0.0.1" not in contents
-    assert "localhost" not in contents
-    assert "AGATE_URL must name the real Agate service" in contents
+    assert "python -m app.main" not in contents
+    assert "atrex_default_agate_environment" in contents
 
 
 def test_evaluate_and_profile_use_extended_overridable_timeouts() -> None:

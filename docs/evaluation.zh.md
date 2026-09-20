@@ -11,6 +11,49 @@ Runtime 持有评测策略与晋升权。Core 可以请求探索性操作，Agat
 Validation Shapes、Metadata、可选 Roofline、容差、采样策略、锁频策略与 Production Gate 开关。
 Runtime 会在封存前用部署策略覆盖所有 Gate 持有字段。
 
+封存前，Runtime 先按字典序排列完整 `shape_valid.json`（或 Contract 的 `shapes`）的 ID，
+再用独立的 `random.Random(42)` 打乱，并对半划分为 Valid/Test（奇数多出的一个归 Valid）。
+继续使用同一个 RNG，分别从两边随机抽取最多 15 个：Valid 取 `min(15, ceil(N/2))` 个，
+Test 取 `min(15, floor(N/2))` 个；少于两个 Shape 拒绝启动，多出的 Shape 不参与评测。
+此 RNG 不改变全局随机状态，也不改变 Correctness Gate 的输入随机种子。
+私有 Contract 只保留选中的 Valid + Test（合计最多 30 个），并封存 `validation_shape_ids`，
+其补集即 Test；逐 Shape Metadata 和 Roofline 也同步裁剪。所有 DSL、Attempt、重试和消融臂
+使用同一划分，不会在每次调用时重新抽样。
+
+私有 Contract 的 `shape_split` 会留档算法、种子、上限、原始全集数量与 ID，以及最终选中的
+Valid/Test ID。例如原始 ID 为 `"0"` 到 `"9"` 时：
+
+```json
+{
+  "algorithm": "python_random_shuffle_sample",
+  "seed": 42,
+  "max_shapes_per_set": 15,
+  "source_shape_count": 10,
+  "source_shape_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+  "valid_shape_ids": ["2", "3", "5", "7", "8"],
+  "test_shape_ids": ["0", "1", "4", "6", "9"]
+}
+```
+
+通过 Campaign 的 `evaluation_contract_digest`，可在
+`<artifacts_root>/sha256/<去掉 sha256: 前缀的 digest>/payload/value.json` 的 `shape_split` 中
+查看不可变档案。Contract 同时保留选中 Shape 的准确参数，可直接复用而无需重新抽样。
+这是管理端数据：Agent Context 与逐批请求都会移除该档案，不应复制到 Agent Workspace 或 Evidence。
+
+Agent 的普通 Evaluate、Agent ABBA、Profile、Check 等操作只使用 Valid。Bootstrap 终评、
+Lineage Seed 评测和普通 Evaluate Comparator 也只使用 Valid；只有 Runtime 权威 ABBA 使用
+Valid + Test。Agent 自定义探测仍使用自己提供的输入，不能通过编号选择或获取隐藏 Test。
+
+Agent 可见的历史报告、Evolver 效果汇总及逐 Attempt 事实索引只展示 Valid 逐 Shape 延迟，
+并据此重新计算聚合延迟。不展示包含 Test 的全量平均延迟、Test Profile 或 Test 误差指标；
+Kernel 接受/拒绝及分支胜负仍可见。完整权威结果保留在私有 Gateway Result 和 Registry 中，
+供管理端审计；Result Artifact 始终是 Agent 可见投影。公开 `shape_train` 描述合法参数域，
+不描述集合成员。自动生成问题上下文和补建 Roofline 也只使用 Valid 输入。
+
+此划分在新 Campaign 中封存，不改写旧 Campaign 的不可变 Contract。应用到旧实验时应新建
+Campaign/Workspace（旧 Contract 没有固定种子划分档案时），避免混用旧全量结果和新 Valid-only
+测量；公共 VecAdd 示例因此保留两个 Shape。
+
 Agent 不会看到精确 Validation Shapes、`reference.py`、`input.py`、Metadata 或 Roofline，只会得到
 描述合法参数域和非 Shape ABI 约束的公开 `shape_train` Contract。Gateway 响应只暴露聚合正确性、
 聚合延迟、按不透明数字 Shape ID 的延迟和清理后的 Profile 数据。
@@ -23,7 +66,8 @@ Optimizer Runtime Tools 通过 `gateway-execute` 暴露 `check`、`dev`、`evalu
 
 探索性 `evaluate` 会记录测量证据，但不会直接创建 `vN` Kernel Revision。Agent 可以在一个
 Attempt 中评测多个 Candidate，并写入 Experiment Journal。通过 `candidate_ready` 提名时，
-该精确 Candidate 仍须成功完成基于可信 Evaluation Contract 的完整评测。
+该精确 Candidate 仍须成功完成可信 Contract 的 Valid 子集评测；这只是预检，不是
+Valid + Test 的权威 ABBA Gate。
 这份预检证据可以来自本 Attempt，也可以通过 `adopt` Experiment 显式采纳可见历史中的兼容成功
 完整 Evaluate。Runtime 核验原始 Trial 和精确 Kernel/Result 绑定；采纳只记录当前决策，不新建
 测量，也不改变原测量归属。配置的独立 Retention 比较保持不变。不兼容的历史证据需要重新做完整
@@ -157,7 +201,7 @@ Kernel Artifact 身份属于 B。保留的 Result Artifact 包含 A 的
 `baseline_kernel_artifact_digest`、`baseline`/`candidate` 正确性及延迟摘要、所有 `measurements`
 及 `schedule`，以及 `mode`、`input_scope`。`speedup` 为 A/B 延迟比，
 `improvement_pct` 为 (A−B)/A × 100，聚合延迟使用几何平均。通过 `result-artifact-read` 查询这些证据；探索性 ABBA 不生成普通 Evaluate Record。Runtime 会为 A、B
-两侧保留归一化的逐 Shape 聚合结果，并将三次底层返回作为私有 Evidence 保存。
+两侧保留归一化的逐 Shape 聚合结果，并将底层返回作为私有 Evidence 保存。
 
 ## 普通 Evaluate 的 Shape 分批
 
@@ -166,24 +210,23 @@ Kernel Artifact 身份属于 B。保留的 Result Artifact 包含 A 的
 Comparator。Agent 仍只发起一个逻辑请求；Runtime 按批裁剪私有 Contract、对应 metadata 和
 Roofline，并在聚合 Artifact 中保留每批的 Job 与结果。
 
-全部 Shapes 必须通过正确性检查。Agent 发起完整 Evaluate 时，Runtime 固定执行三次完整的逻辑
-Agate 调用，对每个 Shape 的三个值取中位数，再对这些中位数取几何平均；三次调用内部不会再叠加
-配置的重复层。16 批限制分别作用于每次调用。Bootstrap、Lineage Seed 和可信 Comparator 仍使用
+全部 Shapes 必须通过正确性检查。Agent 发起完整 Evaluate 时，Runtime 执行一次完整的逻辑
+Agate 调用，对逐 Shape 延迟取几何平均，不再额外重复三次或跨 Job 取中位数。16 批限制作用于
+这次调用。Bootstrap、Lineage Seed 和可信 Comparator 仍使用
 各自配置的采样策略。ABBA 的比较配置不会改变普通 Evaluate 的上述聚合方式。
 
-## 单次提交与三次测量
+## 单次提交与单次测量
 
 在一条 Lineage 内，每个精确的完整普通 Evaluate 或探索性 ABBA 任务只允许 Agent 发起一次。任务
 身份包含精确 Candidate Kernel、ABBA 的 Baseline Kernel、测量方法与参数，以及封存的输入域。
 `correctness_only` Evaluate、Profile、Dev、Check 和 Disassemble 不属于这项规则，因为它们不共享
 同一种逐 Shape 性能聚合语义。
 
-- 第一次被接受的任务会执行三次独立、语义完全相同的逻辑 Agate 调用。
-- Runtime 要求三次 Shape 覆盖一致，逐 Shape 取中位数，再机械计算聚合延迟和 ABBA Speedup。
-  任一次明确的正确性失败都会被保留，不能被另一次成功结果掩盖。
+- 第一次被接受的任务执行一次逻辑 Agate 调用，内部按 Shape 分批。
+- Runtime 校验 Shape 覆盖，并机械计算聚合延迟和 ABBA Speedup；明确的正确性失败会被保留。
 - Runtime 只返回一个 Agent 可见 Result Artifact，并附带
-  `measurement_aggregation: {"repetitions": 3, "method": "per_shape_median"}`；三次原始返回只作为
-  私有 Evidence 保存。
+  `measurement_aggregation: {"repetitions": 1, "method": "single_measurement"}`；原始返回只作为
+  私有 Evidence 保存。单 Job 内 GPU Benchmark 采样及 ABBA 配置的 A/B Schedule 不变。
 - Agent 再次主动提交完全相同的任务时，Runtime 会在调用 Agate 前拒绝，并返回
   `previous_result_artifact_digest`，引导 Agent 使用 `result-artifact-read` 复用结果；同一次调用的
   网络重连仍保持幂等，并回放原响应。
@@ -219,13 +262,13 @@ Candidate 校验、编译和正确性失败、未分类错误及已取消的 Job
   的不确定性阈值。
 - `same_allocation_abba`：在每个 Shape Batch 的同一 Agate Allocation 内交错测量 A/B；每个
   Repeat 各测一次 A、B，并在 `A, B` 与 `B, A` 之间交替，因此两个 Repeat 形成
-  `A, B, B, A`。Runtime 独立执行三次完整 Schedule，校验 Shape 覆盖一致，对 A/B 分别逐
-  Shape 取延迟中位数，再计算权威几何平均延迟。任一轮明确的正确性失败都使比较失败；每次物理
+  `A, B, B, A`。Runtime 执行一次完整 Schedule，校验 Shape 覆盖，再计算权威几何平均延迟，
+  不再跨 Job 取中位数。明确的正确性失败使比较失败；每次物理
   测量仍分别记录。
 
 权威 ABBA 将每个已完成的物理 Shape Batch 按精确 Revision Pair、封存 Contract、Evaluator、
 用途、Schedule 和测量轮次登记。恢复相同的比较时，Runtime 从 Registry 和 Artifact Store 读取
-已完成的批次，不重复提交；三轮测量各有独立身份。Agate 瞬时错误会以新 Job 重试失败批次，
+已完成的批次，不重复提交。Agate 瞬时错误会以新 Job 重试失败批次，
 而不同 Revision Pair 会重新测量。
 
 所选 Comparator 的 B 聚合值就是 Candidate 的权威延迟，比较后不会再执行第二次独立 Attempt

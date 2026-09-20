@@ -63,8 +63,10 @@ class CapturingBuilder:
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("holdout", [False, True])
 async def test_lineage_seed_evaluation_uses_campaign_contract_and_profiles_sol(
     tmp_path: Path,
+    holdout: bool,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     contract = AgateEvaluationContractV1(
@@ -81,6 +83,8 @@ async def test_lineage_seed_evaluation_uses_campaign_contract_and_profiles_sol(
         ),
         lock_clocks=True,
     )
+    if holdout:
+        contract = contract.with_shape_holdout()
     contract_digest = artifacts.put_json(
         contract.model_dump(mode="json"),
         ArtifactKind.EVALUATION_CONTRACT,
@@ -112,11 +116,13 @@ async def test_lineage_seed_evaluation_uses_campaign_contract_and_profiles_sol(
 
         assert result.correct is True
         assert result.latency_us == 17.5
-        assert [kind for kind, _ in client.submissions] == ["eval"] * 5 + ["profile"]
+        shape_ids = set(contract.for_agent().shapes)
+        assert [kind for kind, _ in client.submissions] == ["eval"] * len(shape_ids) + ["profile"]
         references = [
             payload["reference"] for kind, payload in client.submissions if kind == "eval"
         ]
-        assert [len(reference["shapes"]) for reference in references] == [1] * 5  # type: ignore[index]
+        assert all(len(reference["shapes"]) == 1 for reference in references)  # type: ignore[index]
+        assert {sid for reference in references for sid in reference["shapes"]} == shape_ids
         assert builder.payloads[0]["candidate"] == "class Model: pass\n"
         assert builder.payloads[0]["gpu"] == "nvidia-h100"
         assert builder.payloads[0]["spec_fields"] == {"languages": ["triton"]}

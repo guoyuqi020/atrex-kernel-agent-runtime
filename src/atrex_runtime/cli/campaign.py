@@ -24,7 +24,7 @@ from ..config import RuntimeSettings
 from ..controller.campaign import CampaignScheduleResult
 from ..controller.tasks import CampaignTaskWorker
 from ..domain.ids import parse_campaign_id, parse_epoch_id, parse_lineage_id
-from ..domain.models import Attempt, CampaignTask
+from ..domain.models import Attempt, BranchRole, CampaignTask, Epoch
 from ..gateway.agate import load_agate_sdk
 from ..gateway.configuration import build_agate_connection
 from ..gateway.control import SqliteGatewayControl
@@ -202,7 +202,22 @@ def run_campaign(
                 )
             )
 
-        progress = AttemptProgressRenderer(sys.stderr, attempt_detail=attempt_detail)
+        def workflow_topology(epoch: Epoch, challenger_ordinal: int) -> tuple[int, int]:
+            branch = BranchRole.ACTIVE if challenger_ordinal == 0 else BranchRole.CHALLENGER
+            workflow = progress_registry.get_epoch_branch_workflow(
+                epoch.id,
+                branch,
+                challenger_ordinal,
+            )
+            if workflow is None:
+                return epoch.trajectories_per_branch, epoch.attempts_per_trajectory
+            return workflow.trajectories, workflow.attempts_per_trajectory
+
+        progress = AttemptProgressRenderer(
+            sys.stderr,
+            attempt_detail=attempt_detail,
+            workflow_topology=workflow_topology,
+        )
         with build_campaign_runtime(
             settings,
             os.environ,

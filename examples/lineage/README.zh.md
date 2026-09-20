@@ -2,6 +2,8 @@
 
 [English](README.md) | 中文
 
+默认连接已启动的官方 localhost 服务（`127.0.0.1:8000`、GPU `local`）；可显式覆盖环境变量。部署步骤见 [Agate localhost](../../docs/agate-localhost.zh.md)。
+
 这个示例让一个 DSL Lineage 完整运行且只运行 Epoch 1。默认配置为：
 
 - `challenger_count=0`：不启动 Evolver Session，也不创建 Challenger Branch；
@@ -42,13 +44,13 @@ stderr 被重定向时，Runtime 会自动退化为纯文本时间戳日志，�
 本目录自行持有 `runtime.json` 和单 Epoch `campaign.json`，只使用
 `examples/shared/vecadd/` 的标准输入，不复用 Bootstrap 示例的脚本或配置。
 
-导出远端 Agate 配置后运行：
+导出Agate 配置后运行：
 
 ```bash
-export AGATE_URL="https://your-agate-service"
-export AGATE_AK="..."
-export AGATE_SK="..."
-export AGATE_GPU="L20N"
+export AGATE_URL="http://127.0.0.1:8000"
+# export AGATE_AK="..."  # 仅在 Gateway 要求鉴权时设置
+# export AGATE_SK="..."
+export AGATE_GPU="local"
 export QODER_PERSONAL_ACCESS_TOKEN="..."
 bash examples/lineage/run.sh
 ```

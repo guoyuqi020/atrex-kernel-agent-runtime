@@ -34,7 +34,7 @@
     "candidate_diff_require_change": false
   },
   "agate": {
-    "base_url": "http://127.0.0.1:9000",
+    "base_url": "http://127.0.0.1:8000",
     "auth_mode": "none",
     "http_timeout_s": 600,
     "wait_timeout_s": 1200,

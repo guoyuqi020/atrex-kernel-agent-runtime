@@ -2,9 +2,11 @@
 
 [English](README.md) | 中文
 
+默认连接已启动的官方 localhost 服务（`127.0.0.1:8000`、GPU `local`）；可显式覆盖环境变量。部署步骤见 [Agate localhost](../../docs/agate-localhost.zh.md)。
+
 本示例会真实 Bootstrap 一条 Triton VecAdd Lineage：启动 Runtime 控制服务，以
 `framework_baseline` 模式运行固定 Commit 的 Core；Core 通过 Runtime Gateway Tool 把
-Candidate 提交到真实远端 Agate；只有权威评测正确后，Runtime 才会登记 Baseline Kernel
+Candidate 提交到真实Agate；只有权威评测正确后，Runtime 才会登记 Baseline Kernel
 并将 Lineage 置为 Ready。
 
 这不是 Mock 流程，会调用 QoderCLI 并消耗远端 GPU 资源。示例不会启动 Local Agate；除非
@@ -16,16 +18,16 @@ Candidate 提交到真实远端 Agate；只有权威评测正确后，Runtime �
 
 ## 前置条件
 
-安装本仓库开发环境，并导出 QoderCLI 凭据与远端 Agate 连接。`AGATE_GPU` 必须是
+安装本仓库开发环境，并导出 QoderCLI 凭据与Agate 连接。`AGATE_GPU` 必须是
 `agate env` 返回的准确环境名称。
 
 ```bash
 # ~/.qoder 与 ~/.qodersec 已有有效登录态时可省略：
 # export QODER_PERSONAL_ACCESS_TOKEN="..."
-export AGATE_URL="https://your-agate-service.example.com"
-export AGATE_AK="..."
-export AGATE_SK="..."
-export AGATE_GPU="H20"
+export AGATE_URL="http://127.0.0.1:8000"
+# export AGATE_AK="..."  # 仅在 Gateway 要求鉴权时设置
+# export AGATE_SK="..."
+export AGATE_GPU="local"
 ```
 
 Wrapper 可以通过配置的 Worker Environment 传递 `QODER_PERSONAL_ACCESS_TOKEN`；未提供时，

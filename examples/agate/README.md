@@ -2,7 +2,9 @@
 
 English | [中文](README.zh.md)
 
-This example calls a real remote Agate service through the official `agate` CLI resolved from the
+Defaults connect to an already-running official localhost Gateway (`127.0.0.1:8000`, GPU `local`); explicit environment overrides remain supported. See [Agate localhost](../../docs/agate-localhost.md) for deployment.
+
+This example calls a real Agate service through the official `agate` CLI resolved from the
 current `PATH`. It does not start or emulate Agate locally.
 
 The canonical candidate and matching trusted PyTorch reference, input generator, and shape metadata
@@ -10,23 +12,20 @@ live once under `examples/shared/vecadd/`. These scripts consume those shared re
 
 ## Configure the connection
 
-Set the real service URL and, when the service requires authentication, exactly one supported
-credential form:
+The scripts default to localhost. Set a different URL only when needed; if the service requires
+authentication, provide its AK/SK pair:
 
 ```bash
-export AGATE_URL="https://your-agate-service.example.com"
+export AGATE_URL="http://127.0.0.1:8000"
 
-# Bearer token authentication:
-export AGATE_TOKEN="..."
-
-# Or AK/SK authentication instead:
+# Only if authentication is enabled on this service:
 # export AGATE_AK="..."
 # export AGATE_SK="..."
 ```
 
 Do not put credentials in `runtime.json` or commit them to the repository. The official CLI reads
-`AGATE_TOKEN` or `AGATE_AK`/`AGATE_SK` from the environment. No authentication variable is needed
-for a service configured without authentication.
+`AGATE_AK`/`AGATE_SK` from the environment. No authentication variable is needed for a service
+configured without authentication.
 
 The scripts run `agate` from the active environment and never pin a repository virtual-environment
 path. Set `AGATE_BIN` to an explicit command or platform-local path when needed. A virtual
@@ -37,14 +36,14 @@ First inspect the service and its exact GPU environment names:
 
 ```bash
 bash examples/agate/check-service.sh
-export AGATE_GPU="H20"  # replace with one value returned by the env command
+export AGATE_GPU="local"
 ```
 
 `check-service.sh` performs service queries only; it does not submit a GPU job.
 
 ## Submit real GPU work
 
-Each command below submits work to the configured remote service and may consume GPU resources:
+Each command below submits work to the configured Agate service and may consume GPU resources:
 
 ```bash
 # Correctness plus performance evaluation; waits for the result.
@@ -104,8 +103,8 @@ sealed evaluation contract, records idempotency and evidence, and keeps Agate cr
 the Agent workspace.
 
 To connect Runtime itself to the same service, put the non-secret connection policy in the `agate`
-section of `runtime.json`, select `auth_mode` (`none`, `token`, or `ak_sk`), and name the
-corresponding credential environment variables. For example, token mode adds
-`"token_env": "AGATE_TOKEN"`; AK/SK mode adds `"access_key_env": "AGATE_AK"` and
-`"secret_key_env": "AGATE_SK"`. A Runtime-based example should make that change in its own
+section of `runtime.json`, select `auth_mode` (`none` or `ak_sk`), and name the credential
+environment variables when using AK/SK: `"access_key_env": "AGATE_AK"` and
+`"secret_key_env": "AGATE_SK"`. Example preparation selects unauthenticated localhost when
+neither credential is present, otherwise AK/SK. A Runtime-based example uses its own
 `runtime.json` rather than importing another example's configuration.

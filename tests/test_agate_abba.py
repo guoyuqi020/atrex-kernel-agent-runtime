@@ -191,7 +191,7 @@ def test_commit_pinned_evaluator_exports_only_required_runtime(tmp_path: Path) -
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("lock_clocks", (False, True))
-async def test_abba_runner_uses_three_independent_allocations_per_shape_batch_and_records_runs(
+async def test_abba_runner_uses_one_allocation_per_shape_batch_and_records_runs(
     tmp_path: Path,
     lock_clocks: bool,
 ) -> None:
@@ -267,8 +267,8 @@ async def test_abba_runner_uses_three_independent_allocations_per_shape_batch_an
         max_parallel_shape_batches=2,
     )
 
-    assert len(client.requests) == 6
-    assert len({request["idempotency_key"] for request in client.requests}) == 6
+    assert len(client.requests) == 2
+    assert len({request["idempotency_key"] for request in client.requests}) == 2
     assert all(
         request["command"] == "python3 __atrex_abba.py request.json" for request in client.requests
     )
@@ -281,19 +281,17 @@ async def test_abba_runner_uses_three_independent_allocations_per_shape_batch_an
         == ("external" if lock_clocks else "off")
         for request in client.requests
     )
-    assert [run.latency_us for run in result.incumbent_runs] == pytest.approx([100] * 6)
-    assert [run.latency_us for run in result.candidate_runs] == pytest.approx([90] * 6)
+    assert [run.latency_us for run in result.incumbent_runs] == pytest.approx([100] * 2)
+    assert [run.latency_us for run in result.candidate_runs] == pytest.approx([90] * 2)
     assert result.incumbent_latency_us == pytest.approx(100)
     assert result.candidate_latency_us == pytest.approx(90)
-    assert len(journal.measurements) == 12
+    assert len(journal.measurements) == 4
     assert len({measurement.gateway_result_digest for measurement in journal.measurements}) == 1
     assert result.gateway_result_digest == journal.measurements[0].gateway_result_digest
     assert {
         frozenset(str(measurement.agate_job_id).split(",")) for measurement in journal.measurements
     } == {
         frozenset(("dv_abba_0", "dv_abba_1")),
-        frozenset(("dv_abba_2", "dv_abba_3")),
-        frozenset(("dv_abba_4", "dv_abba_5")),
     }
     assert any(kind == "comparison.abba_completed" for kind, _, _ in journal.events)
     assert result.gateway_result_digest is not None
@@ -306,8 +304,11 @@ async def test_abba_runner_uses_three_independent_allocations_per_shape_batch_an
     assert aggregate["evaluation_contract_digest"] == str(contract_digest)
     assert aggregate["candidate"]["latency_us"] == pytest.approx(90.0)
     assert aggregate["candidate"]["sol_pct"] == pytest.approx(50.0)
-    assert aggregate["measurement_aggregation"] == {"repetitions": 3, "method": "per_shape_median"}
-    assert len(aggregate["repetitions"]) == 3
+    assert aggregate["measurement_aggregation"] == {
+        "repetitions": 1,
+        "method": "single_measurement",
+    }
+    assert len(aggregate["repetitions"]) == 1
     replay = await runner.run_pair(
         incumbent,
         candidate,
@@ -318,8 +319,8 @@ async def test_abba_runner_uses_three_independent_allocations_per_shape_batch_an
         shape_batch_size=3,
         max_parallel_shape_batches=2,
     )
-    assert len(client.requests) == 6
-    assert len(journal.measurements) == 12
+    assert len(client.requests) == 2
+    assert len(journal.measurements) == 4
     assert replay.gateway_result_digest == result.gateway_result_digest
     another_candidate = KernelRevision(
         new_kernel_revision_id(),
@@ -339,11 +340,13 @@ async def test_abba_runner_uses_three_independent_allocations_per_shape_batch_an
         shape_batch_size=3,
         max_parallel_shape_batches=2,
     )
-    assert len(client.requests) == 12  # The same bytes under a new revision are remeasured.
+    assert len(client.requests) == 4  # The same bytes under a new revision are remeasured.
 
 
 @pytest.mark.anyio
-async def test_authoritative_abba_median_ignores_one_shared_outlier(tmp_path: Path) -> None:
+async def test_authoritative_abba_uses_its_single_measurement_without_a_median(
+    tmp_path: Path,
+) -> None:
     class OutlierClient(FakeAgateClient):
         def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
             accepted = super().submit_job(kind, request)
@@ -368,19 +371,17 @@ async def test_authoritative_abba_median_ignores_one_shared_outlier(tmp_path: Pa
     client = OutlierClient()
     result, _ = await _run_pair(client, tmp_path, shape_batch_size=5)
 
-    assert len(client.requests) == 3
-    assert result.incumbent_latency_us == pytest.approx(100.0)
-    assert result.candidate_latency_us == pytest.approx(90.0)
+    assert len(client.requests) == 1
+    assert result.incumbent_latency_us == pytest.approx(200.0)
+    assert result.candidate_latency_us == pytest.approx(180.0)
     assert result.gateway_result_digest is not None
     stored = LocalArtifactStore(tmp_path / "artifacts").verify(result.gateway_result_digest)
     aggregate = json.loads((stored.payload_path / "value.json").read_text(encoding="utf-8"))
     assert [item["candidate"]["latency_us"] for item in aggregate["repetitions"]] == [
         pytest.approx(180),
-        pytest.approx(90),
-        pytest.approx(90),
     ]
     assert aggregate["candidate"]["latency_us_by_shape"] == {
-        f"shape-{index}": 90.0 for index in range(5)
+        f"shape-{index}": 180.0 for index in range(5)
     }
 
 
@@ -504,7 +505,7 @@ async def test_terminal_infra_abba_batch_recovers_inside_shared_job_boundary(
         payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
     ]
     assert retries == []  # The outer malformed-result retry budget is untouched.
-    assert len(client.requests) == 16  # Six measured batches plus ten replacements.
+    assert len(client.requests) == 12  # Two measured batches plus ten replacements.
     assert len(delays) == 10
     assert all(delay in {5, 10, 20, 40, 60} for delay in delays)
     assert any(kind == "comparison.abba_completed" for kind, _, _ in journal.events)
@@ -520,14 +521,18 @@ async def test_terminal_infra_abba_batch_does_not_exhaust_outer_retry_budget(
         return None
 
     monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
-    client = FlakyAgateClient(22, error={
-        "error_class": "infra", "reason": "exec_failed",
-        "message": "runtime_env setup failed: Could not create the actor",
-    })
+    client = FlakyAgateClient(
+        22,
+        error={
+            "error_class": "infra",
+            "reason": "exec_failed",
+            "message": "runtime_env setup failed: Could not create the actor",
+        },
+    )
     result, journal = await _run_pair(client, tmp_path)
 
     assert client.remaining_failures == 0
-    assert len(client.requests) == 28
+    assert len(client.requests) == 24
     assert all(run.correct for run in result.candidate_runs)
     assert not any(kind == "comparison.abba_batch_retried" for kind, _, _ in journal.events)
 
@@ -554,7 +559,7 @@ async def test_abba_negative_kernel_measurement_is_not_retried(tmp_path: Path) -
     client = IncorrectCandidateClient()
     result, journal = await _run_pair(client, tmp_path)
 
-    assert len(client.requests) == 6
+    assert len(client.requests) == 2
     assert all(run.correct is False for run in result.candidate_runs)
     assert not any(kind == "comparison.abba_batch_retried" for kind, _, _ in journal.events)
 
@@ -591,7 +596,7 @@ async def test_abba_poll_error_retries_with_a_fresh_job(
     client = MissingAcceptedJobClient()
     result, journal = await _run_pair(client, tmp_path)
 
-    assert len(client.requests) == 7
+    assert len(client.requests) == 3
     assert client.failed_job_id == "dv_abba_0"
     retries = [
         payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
@@ -644,12 +649,12 @@ async def test_abba_terminal_infra_resubmits_beyond_general_retry_ceiling(
 
     client = LostLogsClient()
     result, journal = await _run_pair(client, tmp_path)
-    assert len(client.requests) == 17  # Six successful batches and eleven lost executions.
-    assert len(polled) == len(set(polled)) == 17
+    assert len(client.requests) == 13  # Two successful batches and eleven lost executions.
+    assert len(polled) == len(set(polled)) == 13
     assert len(delays) == 11 and max(delays) == 60
     replacements = [r for r in client.requests if "idempotency_key" in r]
-    assert len({r["idempotency_key"] for r in replacements}) == 17
-    assert len([e for e in journal.events if e[0] == "comparison.abba_batch_submitted"]) == 17
+    assert len({r["idempotency_key"] for r in replacements}) == 13
+    assert len([e for e in journal.events if e[0] == "comparison.abba_batch_submitted"]) == 13
     assert not any(e[0] == "comparison.abba_batch_retried" for e in journal.events)
     assert all(run.correct for run in result.candidate_runs)
 
@@ -695,7 +700,7 @@ async def test_abba_batch_infrastructure_errors_are_retried(
     client = OneFailureClient()
     result, journal = await _run_pair(client, tmp_path)
 
-    assert len(client.requests) == 7
+    assert len(client.requests) == 3
     retries = [
         payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
     ]
@@ -756,7 +761,7 @@ async def test_failed_abba_command_is_retried(
     client = CommandFailureClient()
     result, journal = await _run_pair(client, tmp_path)
 
-    assert len(client.requests) == 7
+    assert len(client.requests) == 3
     retries = [
         payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
     ]

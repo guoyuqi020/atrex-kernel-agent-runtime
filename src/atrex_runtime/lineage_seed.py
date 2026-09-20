@@ -6,7 +6,7 @@ import hashlib
 import json
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Literal, Protocol, Self
@@ -35,7 +35,7 @@ from .domain.models import (
     Lineage,
     LineageStatus,
 )
-from .kernel_agents import KernelAgentRevisionBuilder
+from .kernel_agents import KernelAgentBundleWorkflowV1, KernelAgentRevisionBuilder
 from .ports import AttemptCandidateResult
 from .registry.base import Registry
 
@@ -142,6 +142,7 @@ class LineageSeedSpecV1(BaseModel):
     trajectories_per_branch: int = Field(default=1, gt=0)
     attempts_per_trajectory: int = Field(gt=0)
     ephemeral_agent_state: bool = False
+    workflow_command: str | None = None
 
     @field_validator("creation_key")
     @classmethod
@@ -150,6 +151,13 @@ class LineageSeedSpecV1(BaseModel):
         if not normalized or "\x00" in normalized:
             raise ValueError("Lineage seed creation_key is invalid")
         return normalized
+
+    @field_validator("workflow_command")
+    @classmethod
+    def _validate_workflow_command(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return KernelAgentBundleWorkflowV1(command=value).command
 
     @model_validator(mode="after")
     def _validate_seed_combination(self) -> Self:
@@ -269,6 +277,13 @@ class LineageSeeder:
         except KeyError:
             existing = None
         roots = self._resolve_roots(spec.seed, spec.dsl)
+        if spec.workflow_command is not None:
+            candidate = self._agent_builder.select_workflow(
+                roots.agent_artifact_digest,
+                spec.dsl,
+                spec.workflow_command,
+            )
+            roots = replace(roots, agent_artifact_digest=candidate.optimizer_digest)
         evidence = self._initial_evidence(
             lineage_id,
             spec.initial_evidence,
@@ -387,6 +402,7 @@ class LineageSeeder:
                 "agent_artifact_digest": roots.agent_artifact_digest,
                 "kernel_artifact_digest": roots.kernel_artifact_digest,
                 "source_provenance_digest": provenance_digest,
+                "workflow_command": spec.workflow_command,
             },
         )
         return self._result(lineage, agent, kernel, provenance_digest, roots, evidence)
@@ -496,7 +512,7 @@ class LineageSeeder:
         roots: _ResolvedSeedRoots,
         evidence_checkpoint: ArtifactDigest,
     ) -> ArtifactDigest:
-        value: JsonValue = {
+        value: dict[str, JsonValue] = {
             "schema_version": LINEAGE_SEED_PROVENANCE_VERSION,
             "source_type": "lineage_seed",
             "campaign_id": campaign_id,
@@ -511,6 +527,8 @@ class LineageSeeder:
             "ephemeral_agent_state": spec.ephemeral_agent_state,
             "initial_evidence_digest": evidence_checkpoint,
         }
+        if spec.workflow_command is not None:
+            value["workflow_command"] = spec.workflow_command
         return self._artifacts.put_json(value, ArtifactKind.OPTIMIZER_SOURCE)
 
     def _validate_existing(

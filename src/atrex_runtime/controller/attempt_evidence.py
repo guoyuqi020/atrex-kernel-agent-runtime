@@ -140,9 +140,22 @@ class LocalAttemptEvidenceAssembler:
             raise ValueError("Attempt Evidence disagrees with the epoch checkpoint")
         if request.challenger_ordinal > epoch.challenger_count:
             raise ValueError("Attempt Evidence Challenger exceeds the Epoch pool")
-        if request.trajectory_ordinal > epoch.trajectories_per_branch:
+        workflow = self._registry.get_epoch_branch_workflow(
+            epoch.id,
+            request.branch,
+            request.challenger_ordinal,
+        )
+        trajectories = (
+            epoch.trajectories_per_branch if workflow is None else workflow.trajectories
+        )
+        attempts_per_trajectory = (
+            epoch.attempts_per_trajectory
+            if workflow is None
+            else workflow.attempts_per_trajectory
+        )
+        if request.trajectory_ordinal > trajectories:
             raise ValueError("Attempt Evidence Trajectory exceeds the Branch budget")
-        if request.ordinal > epoch.attempts_per_trajectory:
+        if request.ordinal > attempts_per_trajectory:
             raise ValueError("Attempt Evidence ordinal exceeds the Trajectory budget")
         base = self._artifacts.verify(request.epoch_evidence_checkpoint)
         if base.kind is not ArtifactKind.EVIDENCE:

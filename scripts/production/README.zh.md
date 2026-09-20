@@ -62,6 +62,10 @@ Pool 的 Trajectory 在同一 Epoch 内独立运行，在下一 Epoch 共享已�
 Agent Revision 或 Evolution Report。两分支 State 独立，下一轮 Active 和 Evolver 从最佳 Kernel
 所属 Trajectory 的终态 State 开始。Bootstrap 和 Evolver Session 不计入 Optimizer Attempts。
 
+每个臂都持有 Lineage-local `agent-v0`，并在其中冻结自己的可执行 Workflow：`evolve_3.py`、
+`isolated.py`、`retained.py`、`pool_3.py` 或 `pool_retained_3.py`。Optimizer Source 与共享
+Bootstrap Kernel 仍受控；Runtime 不再根据臂 Label 推断组织拓扑。
+
 主臂位于 `dsls/DSL/`，对照臂文件位于 `dsls/DSL/ablation-*/`。生成的 `ablation.json` 冻结对照臂配置，
 每条 Trajectory 固定运行 15 次 Bootstrap 之后的 Attempt；`--target-epoch` 只修改主臂目标。
 任务级 `campaign-results.json` 汇总各臂结果和预算。已有 Workspace 保留冻结的 Plan，准备脚本拒绝
@@ -77,7 +81,9 @@ Worker 边界有两种选择：
   Namespace，Docker/Kubernetes 则提供共享的内存、CPU 与 PID 总限额。不要挂载 Docker Socket、
   Runtime Secret、私有评测数据或无关宿主路径。
 
-两种模式都需要受支持的 Agent CLI 和 Agate 凭据，并直接复用所在环境的 DNS 与公网连接。
+两种模式都需要受支持的 Agent CLI 和已经运行的官方 Agate 服务，并直接复用所在环境的 DNS 与公网连接。
+默认地址为 `http://127.0.0.1:8000`、GPU 为 `local`；本地服务启用鉴权时才需 AK/SK，显式非本机
+地址沿用 AK/SK。Agate 须单独部署，脚本仅管理 Runtime/Wiki，见 [Agate localhost](../../docs/agate-localhost.zh.md)。
 `sandbox` 模式下，服务脚本会让 Local Wiki 以配置的非 root Sandbox Worker 身份运行；
 `container` 模式沿用容器进程用户，建议直接以非 root 用户启动外层容器，并先验证 bwrap 能创建
 User/PID/IPC/UTS Namespace。
@@ -139,6 +145,14 @@ bash scripts/production/run.sh \
 `shape_valid.json` 作为精确 Evaluation Contract 封存。旧版 `agent_problem.json` 与
 `shapes.json` 仅用于迁移回退。`metadata.json` 会私下传给评测端，其中的 `mutates_inputs` 与
 `scratch_inputs` 会由远端 Correctness Gate 执行输入副作用检查。
+
+Bootstrap 用固定种子 `42` 随机将精确 Shape 按 50/50 划分为 Valid/Test，奇数多出的一个归
+Valid，至少需要两个 Shape；再从每一半各随机抽取最多 15 个，多出的 Shape 不参与评测。
+原始全集和选中 ID 留档在私有 Contract 的 `shape_split` 中。
+Agent 操作及 Bootstrap/Seed 的普通 Eval 只使用 Valid；权威 Runtime
+ABBA 使用 Valid + Test。Test 明细和全量平均延迟不会进入 Agent Evidence 或工具返回。
+旧 Campaign Contract 不可变，旧实验应用此划分需要新建任务 Workspace。
+详见[评测隐私](../../docs/evaluation.zh.md)。
 
 当 `--kernel` 指向算子目录时，默认使用 `reference.py` 作为三个 bootstrap 的语义 Seed；
 当它直接指向目录内的某个 Python 文件时，就使用该文件。若确定希望从 Atrex-Bench 的

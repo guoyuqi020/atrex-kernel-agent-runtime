@@ -4,7 +4,7 @@
 
 - [`shared/`](shared/README.zh.md)：多个可运行示例共同使用的标准只读 VecAdd Fixture 与通用
   Helper；该目录本身不是可运行流程。
-- [`bootstrap/`](bootstrap/README.zh.md)：通过 Core、Runtime Tools、配置选择的 Agent Backend 和远端 Agate
+- [`bootstrap/`](bootstrap/README.zh.md)：通过 Core、Runtime Tools、配置选择的 Agent Backend 和Agate
   真实运行单 DSL VecAdd Campaign Bootstrap。
 - [`source-tree/`](source-tree/README.zh.md)：用 GDN 风格 Source Manifest 和 ATREX 算子资料
   准备多文件源码 Campaign，固定适配器，并明确声明可编辑范围。
@@ -17,7 +17,7 @@
   的一次性 Optimizer 兼容工作区，不运行 Bootstrap、不持久化 Lineage，也不启动 Agent。
 - [`evolver-dev-shell/`](evolver-dev-shell/README.zh.md)：无需 Bootstrap、Runtime 服务或 Agent
   进程，打开一份用完即销毁的合成 Evolution Workspace。
-- [`agate/`](agate/README.zh.md)：使用官方 CLI 直接调用真实远端 Agate 服务，演示评测、
+- [`agate/`](agate/README.zh.md)：使用官方 CLI 直接调用真实Agate 服务，演示评测、
   Profiling、编译检查、反汇编、开发命令与任务管理。
 - [`local-wiki/`](local-wiki/README.zh.md)：启动独立本地 GPU Wiki，通过浏览器/API 查询。
   Agent Wiki 工具及对应 Shell 演示暂时不可用。

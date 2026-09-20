@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import random
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Final, Literal, Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, AttemptId
@@ -17,6 +18,8 @@ from .control import SqliteGatewayControl
 from .environment import AcceleratorBackend
 
 EVALUATION_CONTRACT_VERSION: Literal[1] = 1
+MAX_HOLDOUT_SHAPES: Final = 15
+SHAPE_SPLIT_SEED: Final = 42
 _GATE_OWNED_RUNNER_KEYS = frozenset(
     {
         "atol",
@@ -58,6 +61,39 @@ class AgateEvaluationOptionsV1(BaseModel):
     timeout_s: int = Field(gt=0)
 
 
+class ShapeSplitRecordV1(BaseModel):
+    """Private replay record for the exact fixed-seed split and capped sampling."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    algorithm: Literal["python_random_shuffle_sample"] = "python_random_shuffle_sample"
+    seed: int = Field(ge=0, strict=True)
+    max_shapes_per_set: Literal[15] = 15
+    source_shape_count: int = Field(ge=2, strict=True)
+    source_shape_ids: tuple[str, ...]
+    valid_shape_ids: tuple[str, ...]
+    test_shape_ids: tuple[str, ...]
+
+    @model_validator(mode="after")
+    def _validate_selection(self) -> Self:
+        source = set(self.source_shape_ids)
+        valid, test = set(self.valid_shape_ids), set(self.test_shape_ids)
+        if (
+            len(source) != self.source_shape_count
+            or len(self.source_shape_ids) != self.source_shape_count
+            or len(self.valid_shape_ids) != len(valid)
+            or len(self.test_shape_ids) != len(test)
+            or len(valid) != min(self.max_shapes_per_set, (self.source_shape_count + 1) // 2)
+            or len(test) != min(self.max_shapes_per_set, self.source_shape_count // 2)
+            or valid & test
+            or not (valid | test) <= source
+        ):
+            raise ValueError(
+                "shape_split must record unique, disjoint, capped Valid/Test selections"
+            )
+        return self
+
+
 class AgateEvaluationContractV1(BaseModel):
     """Complete trusted Agate request inputs shared by a Campaign's DSL lineages."""
 
@@ -71,6 +107,12 @@ class AgateEvaluationContractV1(BaseModel):
     reference_py: str = Field(min_length=1)
     input_py: str = Field(min_length=1)
     shapes: dict[str, JsonValue]
+    validation_shape_ids: tuple[str, ...] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
+    shape_split: ShapeSplitRecordV1 | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     metadata: dict[str, JsonValue] | None = None
     roofline: dict[str, JsonValue] | None = None
     options: AgateEvaluationOptionsV1
@@ -109,6 +151,96 @@ class AgateEvaluationContractV1(BaseModel):
         if any(not requirement.strip() for requirement in value):
             raise ValueError("requirements cannot contain empty entries")
         return value
+
+    @model_validator(mode="after")
+    def _validate_holdout(self) -> Self:
+        if self.validation_shape_ids is not None:
+            ids = self.validation_shape_ids
+            if (
+                not 2 <= len(self.shapes) <= 2 * MAX_HOLDOUT_SHAPES
+                or len(ids) != (len(self.shapes) + 1) // 2
+                or len(set(ids)) != len(ids)
+                or not set(ids) <= self.shapes.keys()
+            ):
+                raise ValueError(
+                    "validation_shape_ids must select half of retained shapes (odd extra: Valid); "
+                    f"Valid and Test must each contain at most {MAX_HOLDOUT_SHAPES} Shapes"
+                )
+        if self.shape_split is not None and (
+            self.validation_shape_ids is None
+            or set(self.shape_split.valid_shape_ids) != set(self.validation_shape_ids)
+            or set(self.shape_split.valid_shape_ids) | set(self.shape_split.test_shape_ids)
+            != self.shapes.keys()
+        ):
+            raise ValueError("shape_split selections must match the sealed evaluation Shapes")
+        return self
+
+    def with_shape_holdout(self) -> AgateEvaluationContractV1:
+        """Randomly split and sample with a fixed local RNG, then seal the replay record."""
+        if len(self.shapes) < 2:
+            raise ValueError(
+                "Valid/Test splitting requires at least 2 Shapes; "
+                "single-Shape tasks are not supported"
+            )
+        if self.validation_shape_ids is not None:
+            return self
+        source_ids = tuple(sorted(self.shapes))
+        ordered = list(source_ids)
+        rng = random.Random(SHAPE_SPLIT_SEED)
+        rng.shuffle(ordered)
+        midpoint = (len(ordered) + 1) // 2
+        valid_ids = tuple(sorted(rng.sample(ordered[:midpoint], min(midpoint, MAX_HOLDOUT_SHAPES))))
+        test_ids = tuple(
+            sorted(rng.sample(ordered[midpoint:], min(len(ordered) - midpoint, MAX_HOLDOUT_SHAPES)))
+        )
+        retained = self
+        if len(ordered) > 2 * MAX_HOLDOUT_SHAPES:
+            from .batched_evaluate import subset_evaluation_contract
+
+            retained = subset_evaluation_contract(self, tuple(sorted((*valid_ids, *test_ids))))
+        return retained.model_copy(
+            update={
+                "validation_shape_ids": valid_ids,
+                "shape_split": ShapeSplitRecordV1(
+                    seed=SHAPE_SPLIT_SEED,
+                    source_shape_count=len(source_ids),
+                    source_shape_ids=source_ids,
+                    valid_shape_ids=valid_ids,
+                    test_shape_ids=test_ids,
+                ),
+            }
+        )
+
+    def for_agent(self) -> AgateEvaluationContractV1:
+        """Materialize only Valid inputs; Test Shapes and per-Shape auxiliary data stay private."""
+        if self.validation_shape_ids is None:
+            return self
+        # Local import avoids the batching module's contract import cycle.
+        from .batched_evaluate import subset_evaluation_contract
+
+        valid = subset_evaluation_contract(self, self.validation_shape_ids)
+        if valid.metadata is not None:
+            # Dataset-wide traces can enumerate Test cases outside metadata.shapes.
+            # Preserve evaluator semantics and the filtered Valid map, not provenance.
+            valid = valid.model_copy(
+                update={
+                    "metadata": {
+                        key: value
+                        for key, value in valid.metadata.items()
+                        if key
+                        in {
+                            "benchmark_contract",
+                            "category",
+                            "dtype",
+                            "input_dtypes",
+                            "output_dtypes",
+                            "shapes",
+                            "num_shapes",
+                        }
+                    }
+                }
+            )
+        return valid
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +355,7 @@ class RegistryAgateEvaluationContextResolver:
             hardware_target = campaign.hardware_target
             dsl = lineage.dsl
             contract_digest = campaign.evaluation_contract_digest
-        contract = load_evaluation_contract(self._artifacts, contract_digest)
+        contract = load_evaluation_contract(self._artifacts, contract_digest).for_agent()
         return AgateEvaluationContext(
             operator=operator,
             hardware_target=hardware_target,

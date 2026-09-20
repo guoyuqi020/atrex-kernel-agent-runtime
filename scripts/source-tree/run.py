@@ -56,7 +56,10 @@ def run_json(cli: str, arguments: list[str], output: Path, log: Path) -> dict[st
     with temporary.open("w") as stdout, log.open("a") as stderr:
         command = [cli, *arguments]
         process = subprocess.Popen(
-            command, stdout=stdout, stderr=stderr, start_new_session=True,
+            command,
+            stdout=stdout,
+            stderr=stderr,
+            start_new_session=True,
         )
         try:
             code = process.wait()
@@ -82,8 +85,16 @@ def run_arms(cli: str, config: Path, workspace: Path, arms: list[dict[str, Any]]
                 output = root / "campaign-result.tmp"
                 log = root / "campaign.log"
                 process = subprocess.Popen(
-                    [cli, "run-campaign", "--config", str(config), "--campaign",
-                     arm["campaign_id"], "--target-epoch", str(arm["target_epoch_number"])],
+                    [
+                        cli,
+                        "run-campaign",
+                        "--config",
+                        str(config),
+                        "--campaign",
+                        arm["campaign_id"],
+                        "--target-epoch",
+                        str(arm["target_epoch_number"]),
+                    ],
                     stdout=streams.enter_context(output.open("w")),
                     stderr=streams.enter_context(log.open("a")),
                     start_new_session=True,
@@ -101,8 +112,10 @@ def run_arms(cli: str, config: Path, workspace: Path, arms: list[dict[str, Any]]
                     if code == 0:
                         try:
                             result = json.loads(output.read_text())
-                            if (result["campaign_id"] != arm["campaign_id"] or
-                                    result["target_epoch_number"] != arm["target_epoch_number"]):
+                            if (
+                                result["campaign_id"] != arm["campaign_id"]
+                                or result["target_epoch_number"] != arm["target_epoch_number"]
+                            ):
                                 raise ValueError("unexpected Campaign result identity/target")
                             destination = output.with_suffix(".json")
                             output.replace(destination)
@@ -153,7 +166,9 @@ def main() -> None:
     try:
         expected = build_ablation_plan(
             {"schedule": {**definition, "event_only": True}},
-            optimizer_attempt_budget_per_trajectory=plan.get("optimizer_attempt_budget_per_trajectory"),
+            optimizer_attempt_budget_per_trajectory=plan.get(
+                "optimizer_attempt_budget_per_trajectory"
+            ),
         )
     except ValueError as error:
         parser.error(str(error))
@@ -177,39 +192,62 @@ def main() -> None:
         write_json(launch_path, frozen)
         write_json(workspace / "ablation.json", plan)
         bootstrap = run_json(
-            cli, ["bootstrap", "--config", str(config), "--campaign", str(campaign_path)],
-            workspace / "bootstrap-result.json", workspace / "bootstrap.log",
+            cli,
+            ["bootstrap", "--config", str(config), "--campaign", str(campaign_path)],
+            workspace / "bootstrap-result.json",
+            workspace / "bootstrap.log",
         )
         if len(bootstrap["lineages"]) != 1:
             raise ValueError("Bootstrap returned more than one Lineage")
         source_id = parse_lineage_id(bootstrap["lineages"][0]["lineage_id"])
-        arms = [{
-            "label": f"evolve-{spec.attempts_per_trajectory}", "kind": "evolve",
-            "campaign_id": bootstrap["campaign_id"], "lineage_id": str(source_id),
-            "target_epoch_number": args.target_epoch,
-            "optimizer_attempt_budget_total": (
-                args.target_epoch * spec.attempts_per_trajectory * spec.trajectories_per_branch * 2
-            ),
-        }]
+        arms = [
+            {
+                "label": f"evolve-{spec.attempts_per_trajectory}",
+                "kind": "evolve",
+                "campaign_id": bootstrap["campaign_id"],
+                "lineage_id": str(source_id),
+                "target_epoch_number": args.target_epoch,
+                "optimizer_attempt_budget_total": (
+                    args.target_epoch
+                    * spec.attempts_per_trajectory
+                    * spec.trajectories_per_branch
+                    * 2
+                ),
+            }
+        ]
         for arm in plan["arms"]:
             root = workspace / arm["label"]
             root.mkdir(exist_ok=True)
             seed_spec = AblationArmSpecV1(
                 creation_key=f"{arm['label']}-{next(iter(spec.lineages)).value}",
                 source_lineage_id=source_id,
-                **{key: arm[key] for key in (
-                    "attempts_per_trajectory", "trajectories_per_branch", "ephemeral_agent_state",
-                    "challenger_count", "challenger_start_epoch", "first_epoch_same_agent",
-                )},
+                **{
+                    key: arm[key]
+                    for key in (
+                        "attempts_per_trajectory",
+                        "trajectories_per_branch",
+                        "ephemeral_agent_state",
+                        "challenger_count",
+                        "challenger_start_epoch",
+                        "first_epoch_same_agent",
+                        "workflow_command",
+                    )
+                },
             )
             write_json(root / "seed.json", seed_spec.model_dump(mode="json"))
             seeded = run_json(
-                cli, ["seed-ablation-arm", "--config", str(config),
-                      "--spec", str(root / "seed.json")],
-                root / "seed-result.json", root / "seed.log",
+                cli,
+                ["seed-ablation-arm", "--config", str(config), "--spec", str(root / "seed.json")],
+                root / "seed-result.json",
+                root / "seed.log",
             )
-            arms.append({**arm, "campaign_id": seeded["campaign_id"],
-                         "lineage_id": seeded["lineage"]["lineage_id"]})
+            arms.append(
+                {
+                    **arm,
+                    "campaign_id": seeded["campaign_id"],
+                    "lineage_id": seeded["lineage"]["lineage_id"],
+                }
+            )
         run_arms(cli, config, workspace, arms)
 
 

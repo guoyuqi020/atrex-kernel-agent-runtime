@@ -861,6 +861,7 @@ class EvolutionWorkspaceAssembler:
             artifacts=self._artifacts,
             agent_versions=agent_versions,
             pool_versions=frozenset(pool_versions),
+            evolution_reports_root=evolution_reports_root,
         )
         for version, revision_id in agent_versions.items():
             source_state = reusable_state_staging / revision_id

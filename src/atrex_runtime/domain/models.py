@@ -34,6 +34,13 @@ class BranchRole(StrEnum):
     CHALLENGER = "challenger"
 
 
+class RuntimeStatePolicy(StrEnum):
+    """How one Workflow Branch carries adaptive Agent state between Attempts."""
+
+    RESET_EACH_ATTEMPT = "reset_each_attempt"
+    RETAIN_ACROSS_ATTEMPTS = "retain_across_attempts"
+
+
 class AgentSelectionReason(StrEnum):
     """Which rule resolved the final Agent comparison of one completed Epoch."""
 
@@ -559,6 +566,43 @@ class EpochChallenger:
             and self.base_revision_id != self.kernel_agent_revision_id
         ):
             raise ValueError("reused Challenger base must be the reused revision")
+
+
+@dataclass(frozen=True, slots=True)
+class EpochBranchWorkflow:
+    """Frozen Agent-owned Workflow decision for one Epoch Branch."""
+
+    epoch_id: EpochId
+    branch: BranchRole
+    challenger_ordinal: int
+    kernel_agent_revision_id: KernelAgentRevisionId
+    kind: str
+    program_sha256: str | None
+    trajectories: int
+    attempts_per_trajectory: int
+    runtime_state_policy: RuntimeStatePolicy
+    created_at: str
+
+    def __post_init__(self) -> None:
+        if self.challenger_ordinal < 0:
+            raise ValueError("Workflow Challenger ordinal cannot be negative")
+        if self.branch is BranchRole.ACTIVE and self.challenger_ordinal != 0:
+            raise ValueError("Active Workflow must use Challenger ordinal zero")
+        if self.branch is BranchRole.CHALLENGER and self.challenger_ordinal <= 0:
+            raise ValueError("Challenger Workflow requires a positive ordinal")
+        if not self.kind:
+            raise ValueError("Workflow kind cannot be empty")
+        if self.program_sha256 is not None and (
+            len(self.program_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in self.program_sha256)
+        ):
+            raise ValueError("Workflow program SHA-256 is invalid")
+        if self.trajectories <= 0 or self.attempts_per_trajectory <= 0:
+            raise ValueError("Workflow topology dimensions must be positive")
+
+    @property
+    def attempt_budget(self) -> int:
+        return self.trajectories * self.attempts_per_trajectory
 
 
 @dataclass(frozen=True, slots=True)

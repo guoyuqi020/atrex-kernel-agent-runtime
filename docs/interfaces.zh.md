@@ -97,6 +97,15 @@ Candidate 操作上传完整 Base64 File Bundle，Runtime 在执行前封存。�
 Agent 可见 `operation`、`status`、`result` 独立封存为 Result Artifact。Agent 始终收到
 `result_artifact_digest`，初次执行和后续读取暴露同一份规范化内容，不暴露私有 Gateway Result 身份。
 
+私有 Contract 的 `shapes` 只保留最多 30 个选中 Shape，`validation_shape_ids` 固定选择其中的
+Valid 子集，其补集为 Test；两个集合各最多 15 个。这是控制器字段，不是 Agent 请求参数。
+私有 `shape_split` 记录种子 `42`、算法、上限、原始全集 ID/数量及选中的 Valid/Test ID，随
+Contract 一起封存，Agent 和逐批 Context 会移除它；仅供管理端复现。
+Agent 默认操作只使用 Valid；Runtime 权威 ABBA 使用
+全量 Shape。历史权威 ABBA 的 Agent 可见投影增加 `measurement_domain: "valid"`，隐藏 Test
+行及误差指标，并仅按 Valid 重算几何/算术平均延迟。管理端目录保留全量权威测量。
+详见[评测隐私](evaluation.zh.md#评测输入与隐私)。
+
 `evaluate` 的 Wire Request 可指定 `mode: "full" | "correctness_only"`（默认 `full`）、
 `input_py`（UTF-8 Python 输入生成器源码，上限 128 KiB）和 `shapes`（以整数字符串为键的非空
 Agate Shape Record Object，每条记录也是 Object）。两个输入组件可独立覆盖；未指定的源码或
@@ -560,6 +569,32 @@ Experiment；改变假设或重新探索已过期建议应使用 `refinement`。
 不提供独立关系图导出，也不为 Evolver 生成额外谱系文件。关系仍然是 Agent 的分析声明；测量和 Gate
 规则不变。简化 AKA 的 Supervisor 实现相同的关系校验，但不引入主 Runtime 的 Pool 调度。
 语义分类和 Pool 收益的因果归因仍是独立的分析工作。
+
+## Agent Workflow Runtime 服务
+
+Active Agent Revision 唯一的 `workflow/main.py` 入口只实现一个
+`run_epoch(epoch: EpochRuntime)` 函数。Runtime 持有的构造模板决定初始组织方式，但不会与
+`main.py` 一起进入封存 Revision。`serve(run_epoch)` 持有私有同步 JSONL Channel。这些服务不是
+Optimizer Tool，也不会暴露到 Optimizer Session 内。
+
+| 公开 SDK 方法 | 输入 | 安全返回 |
+|---|---|---|
+| `replicate_active(ordinal)` | 允许的 Challenger 序号 | 已挂接 Agent Revision ID |
+| `evolve_agent(ordinal)` | 允许的 Challenger 序号 | Challenger Revision ID 或 `None` |
+| `create_pool(...)` | Branch、Trajectory 数、轮次数、State 策略 | 不可变 Epoch Pool |
+| `run_pools(..., after_round=...)` | 一个或多个 Pool 与可选回调 | 按逻辑轮次分组的可信结果 |
+| `round.outcomes(pool)` | 本轮参与的 Pool | 按 Trajectory 排序的规范化结果 |
+| `round.best_accepted_kernel(...)` | 零个或多个本轮 Pool | 最佳已接受 Kernel ID 或 `None` |
+| `round.route_kernel(...)` | Pool 与本 Epoch 已接受 Kernel | 下一轮 Kernel 路由 |
+| `round.route_state(...)` | Pool 与兼容的已完成 Attempt | 下一轮 State 路由 |
+| `complete()` | 无 | Runtime 选择 Kernel/Agent 并提交后的 Epoch 状态 |
+
+轮次结果包含 Attempt 身份、输入/输出/当前 Trajectory Kernel 身份、是否接受、正确性、Latency、
+失败原因以及是否存在 Runtime-State Checkpoint。私有 SDK 分配确定性的序号，Workflow 重启后会幂等
+重放已完成轮次。Kernel 路由只接受 Epoch 起点或本 Epoch 已接受结果；State 路由只接受
+`retain_across_attempts` 下同一 Agent 的已完成 Attempt。Runtime 在选择前要求登记全部已挂接 Branch、
+容量与预算精确匹配，并完成全部计划 Attempt；跨 Epoch 调度、执行、Gateway、Gate、持久化、比较与
+晋升权威仍归 Runtime。
 
 ## 外部服务 Contract
 

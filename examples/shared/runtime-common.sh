@@ -16,6 +16,8 @@ atrex_managed_local_wiki_pid=""
 atrex_managed_local_wiki_log="${atrex_state_dir}/local-wiki.log"
 # shellcheck source=local-secrets.sh
 source "${atrex_runtime_root}/examples/shared/local-secrets.sh"
+# shellcheck source=../../scripts/shared/agate-service.sh
+source "${atrex_runtime_root}/scripts/shared/agate-service.sh"
 
 atrex_example_cleanup_managed_local_wiki() {
   local exit_status=$?
@@ -86,17 +88,8 @@ atrex_example_load_local_secrets() {
   atrex_shared_load_local_secrets "${atrex_env_file}" "Runtime"
 }
 
-atrex_example_require_remote_agate() {
-  local missing=()
-  for key in AGATE_URL AGATE_AK AGATE_SK AGATE_GPU; do
-    if [[ -z "${!key:-}" ]]; then
-      missing+=("${key}")
-    fi
-  done
-  if (( ${#missing[@]} > 0 )); then
-    echo "missing required remote Agate environment: ${missing[*]}" >&2
-    return 64
-  fi
+atrex_example_require_agate() {
+  atrex_require_agate_environment
 }
 
 atrex_example_agent_backend() {

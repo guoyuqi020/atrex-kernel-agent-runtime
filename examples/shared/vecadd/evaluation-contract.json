@@ -9,6 +9,12 @@
       "input_kwargs": {
         "num_elements": 1048576
       }
+    },
+    "1": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "num_elements": 2097152
+      }
     }
   },
   "metadata": {

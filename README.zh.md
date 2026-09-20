@@ -60,14 +60,17 @@ git submodule update --init --recursive
 python3 -m venv .venv
 .venv/bin/python -m pip install -e '.[dev]'
 
-export AGATE_URL='https://your-agate.example.com'
-export AGATE_AK='...'
-export AGATE_SK='...'
-export AGATE_GPU='H20'
+export AGATE_URL="http://127.0.0.1:8000"
+# export AGATE_AK='...'  # 仅在 Gateway 要求鉴权时设置
+# export AGATE_SK='...'
+export AGATE_GPU="local"
 export QODER_PERSONAL_ACCESS_TOKEN='...'
 
 bash examples/bootstrap/run.sh
 ```
+
+Agate 须先在 GPU 机器上部署并启用 `local` 后端；Runtime/Wiki 脚本不会启动它。
+部署和执行隔离要求见 [Agate localhost](docs/agate-localhost.zh.md)。
 
 每个 Example 都在 `workspaces/` 下生成独立配置和状态，不复用项目根目录的 `runtime.json`。真实
 部署请复制 `runtime.example.json`；只有可信本地调试才选择 `development`，生产环境应配置 Linux

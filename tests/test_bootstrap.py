@@ -34,6 +34,7 @@ from atrex_runtime.domain.models import (
     LineageStatus,
 )
 from atrex_runtime.gateway.contract import (
+    AgateEvaluationContractV1,
     AgateEvaluationOptionsV1,
     RuntimeGateContractPolicy,
 )
@@ -55,7 +56,7 @@ def _contract() -> dict[str, object]:
         "candidate_path": "kernel.py",
         "reference_py": "class Model:\n    pass\n",
         "input_py": "def get_inputs():\n    return ()\n",
-        "shapes": {"0": {}},
+        "shapes": {"0": {}, "1": {"input_kwargs": {"n": 32}}},
         "options": {
             "num_correctness_cases": 2,
             "bench_iters": 10,
@@ -157,7 +158,14 @@ class FakeGitLoader:
             ArtifactKind.OPTIMIZER_SOURCE,
         )
 
-    def build_candidate(self, dsl: Dsl, commit: str) -> GitOptimizerBaseResult:
+    def build_candidate(
+        self,
+        dsl: Dsl,
+        commit: str,
+        *,
+        workflow_command: str | None = None,
+    ) -> GitOptimizerBaseResult:
+        assert workflow_command is None
         self.calls.append((dsl, commit))
         return GitOptimizerBaseResult(
             KernelAgentCandidate(dsl, self.optimizer_digest),
@@ -229,8 +237,14 @@ def _bootstrapper(
     )
 
 
-def test_campaign_bootstrap_resolves_agent_arch_from_agate_environment(tmp_path: Path) -> None:
+@pytest.mark.parametrize("shape_count", [2, 40])
+def test_campaign_bootstrap_resolves_agent_arch_from_agate_environment(
+    tmp_path: Path, shape_count: int,
+) -> None:
     spec = CampaignSpecV3.from_file(_campaign_spec(tmp_path, lineage_dsls=(Dsl.TRITON,)))
+    contract_input = _contract()
+    contract_input["shapes"] = {str(i): {"input_kwargs": {"n": i + 11}} for i in range(shape_count)}
+    _write_json(tmp_path / "evaluation.json", contract_input)
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     baseline = FakeBaselineGenerator(artifacts)
 
@@ -261,6 +275,16 @@ def test_campaign_bootstrap_resolves_agent_arch_from_agate_environment(tmp_path:
     assert lineage.hardware_target == "sm_120"
     assert baseline.hardware_targets == ["sm_120"]
     assert contract["agate_gpu"] == "L20N"
+    assert len(contract["shapes"]) == min(30, shape_count)
+    assert len(contract["validation_shape_ids"]) == min(15, (shape_count + 1) // 2)
+    assert set(contract["validation_shape_ids"]) < set(contract["shapes"])
+    assert contract["shape_split"]["seed"] == 42
+    assert contract["shape_split"]["source_shape_count"] == shape_count
+    assert set(contract["shape_split"]["source_shape_ids"]) == set(contract_input["shapes"])
+    assert set(contract["shape_split"]["valid_shape_ids"]) == set(contract["validation_shape_ids"])
+    assert set(contract["shape_split"]["test_shape_ids"]) == (
+        set(contract["shapes"]) - set(contract["validation_shape_ids"])
+    )
 
 
 def test_campaign_bootstrap_accepts_shape_train_with_private_shape_valid_contract(
@@ -389,6 +413,51 @@ def test_campaign_bootstrap_resumes_contract_sealed_before_accelerator_metadata(
     )
 
 
+@pytest.mark.parametrize("archive_only", [False, True])
+def test_campaign_bootstrap_requires_new_identity_for_unarchived_campaign(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, archive_only: bool,
+) -> None:
+    spec = CampaignSpecV3.from_file(_campaign_spec(tmp_path, lineage_dsls=(Dsl.TRITON,)))
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    baseline = FakeBaselineGenerator(artifacts)
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        bootstrapper = _bootstrapper(registry, artifacts, FakeGitLoader(artifacts), baseline)
+        sampler = AgateEvaluationContractV1.with_shape_holdout
+        # Emulate an older Contract without rewriting CAS.
+        with monkeypatch.context() as patch:
+            patch.setattr(
+                AgateEvaluationContractV1, "with_shape_holdout",
+                lambda self: (
+                    sampler(self).model_copy(update={"shape_split": None}) if archive_only else self
+                ),
+            )
+            original = bootstrapper.bootstrap_campaign(spec)
+        error = (
+            "Existing Campaign has no fixed-seed Shape split archive" if archive_only
+            else "Existing Campaign predates the Valid/Test split"
+        )
+        with pytest.raises(ValueError, match=error):
+            bootstrapper.bootstrap_campaign(spec)
+        assert registry.get_campaign(original.campaign_id).evaluation_contract_digest == (
+            original.lineages[0].evaluation_contract_digest
+        )
+        assert baseline.calls == [Dsl.TRITON]
+
+
+def test_campaign_bootstrap_rejects_single_shape_before_running_agent(tmp_path: Path) -> None:
+    spec = CampaignSpecV3.from_file(_campaign_spec(tmp_path, lineage_dsls=(Dsl.TRITON,)))
+    contract = _contract()
+    contract["shapes"] = {"0": {}}
+    _write_json(tmp_path / "evaluation.json", contract)
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    baseline = FakeBaselineGenerator(artifacts)
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        bootstrapper = _bootstrapper(registry, artifacts, FakeGitLoader(artifacts), baseline)
+        with pytest.raises(ValueError, match="at least 2 Shapes"):
+            bootstrapper.bootstrap_campaign(spec)
+        assert baseline.calls == []
+
+
 class ConcurrentBaselineGenerator(FakeBaselineGenerator):
     def __init__(self, artifacts: LocalArtifactStore) -> None:
         super().__init__(artifacts)
@@ -511,14 +580,16 @@ def test_campaign_bootstrap_builds_and_recovers_one_shared_roofline(
     class Builder:
         def build(self, **values: object) -> dict[str, object]:
             calls.append((str(values["operator"]), str(values["hardware_target"])))
+            valid_contract = cast(AgateEvaluationContractV1, values["contract"])
             return {
                 "shapes": {
-                    "0": {
+                    sid: {
                         "semantic_W_flops": {"fp32": 1},
                         "semantic_Q_read_bytes": 4,
                         "semantic_Q_write_bytes": 4,
                         "SOL_time_ms": {"test-gpu": 0.001},
                     }
+                    for sid in valid_contract.shapes
                 }
             }
 
@@ -539,7 +610,9 @@ def test_campaign_bootstrap_builds_and_recovers_one_shared_roofline(
     assert calls == [("vector_add", "nvidia-h100")]
     contract_path = artifacts.verify(first.lineages[0].evaluation_contract_digest).payload_path
     contract = json.loads((contract_path / "value.json").read_text(encoding="utf-8"))
-    assert contract["roofline"]["shapes"]["0"]["SOL_time_ms"] == {"test-gpu": 0.001}
+    assert set(contract["roofline"]["shapes"]) == set(contract["validation_shape_ids"])
+    for metrics in contract["roofline"]["shapes"].values():
+        assert metrics["SOL_time_ms"] == {"test-gpu": 0.001}
 
 
 def test_campaign_bootstrap_falls_back_to_profile_when_roofline_build_fails(
@@ -578,7 +651,8 @@ def test_campaign_bootstrap_rejects_public_problem_that_copies_a_private_case(
         "opaque-0": {
             "init_kwargs": None,
             "input_kwargs": {"num_elements": 1048576},
-        }
+        },
+        "opaque-1": {"init_kwargs": None, "input_kwargs": {"num_elements": 2097152}},
     }
     _write_json(tmp_path / "evaluation.json", evaluation)
     problem = json.loads((tmp_path / "agent-problem.json").read_text(encoding="utf-8"))

@@ -85,7 +85,7 @@ for argument in "$@"; do
 done
 export ATREX_OPTIMIZER_AGENT_BACKEND="${backend}"
 
-atrex_example_require_remote_agate
+atrex_example_require_agate
 atrex_example_load_local_secrets
 # Secret creation intentionally restores 0700; the non-root Sandbox Worker
 # needs traverse-only access to reach its own nested workspace.

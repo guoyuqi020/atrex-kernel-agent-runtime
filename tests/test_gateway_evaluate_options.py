@@ -109,8 +109,7 @@ async def test_exploration_is_recorded_but_cannot_authorize_candidate_submission
         response = await service.execute(capability.token, payload)
         replay = await service.execute(capability.token, payload)
         assert replay == response
-        expected_adapter_calls = 1 if mode == "correctness_only" else 3
-        assert len(adapter.requests) == expected_adapter_calls
+        assert len(adapter.requests) == 1
         assert all(request.parameters == parameters for request in adapter.requests)
         assert response.evaluation is None
         assert control.list_evaluations(attempt.id) == ()

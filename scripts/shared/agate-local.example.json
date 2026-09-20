@@ -1,0 +1,15 @@
+{
+  "python_bin": "python3",
+  "store": {"backend": "sqlite", "path": "workspaces/agate-local/jobs.db"},
+  "clusters": [
+    {
+      "name": "localhost-gpu0",
+      "backend": "local",
+      "aliases": ["local"],
+      "gpu_model": "NVIDIA H20",
+      "vendor": "nvidia",
+      "local": {"device": 0},
+      "workdir": "workspaces/agate-local/jobs"
+    }
+  ]
+}

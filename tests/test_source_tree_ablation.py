@@ -14,10 +14,14 @@ from atrex_runtime.ablation_plan import build_ablation_plan
 from atrex_runtime.bootstrap import CampaignSpecV3
 
 
-@pytest.mark.parametrize("relative", [
-    "data/GDN/ablation.json", "data/GDN-full/ablation.json",
-    "examples/source-tree/ablation.example.json",
-])
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "data/GDN/ablation.json",
+        "data/GDN-full/ablation.json",
+        "examples/source-tree/ablation.example.json",
+    ],
+)
 def test_source_tree_arms_keep_topology_with_one_hundred_epochs(relative: str) -> None:
     policy = json.loads((REPOSITORY / "scripts/production/policy.json").read_text())
     plan = json.loads((REPOSITORY / relative).read_text())
@@ -29,8 +33,13 @@ def test_source_tree_arms_keep_topology_with_one_hundred_epochs(relative: str) -
     assert all(arm["target_epoch_number"] == 100 for arm in plan["arms"])
     assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 2400
     campaign = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/ablation-campaign.json")
-    for key in ("attempts_per_trajectory", "trajectories_per_branch", "challenger_count",
-                "challenger_start_epoch", "first_epoch_same_agent"):
+    for key in (
+        "attempts_per_trajectory",
+        "trajectories_per_branch",
+        "challenger_count",
+        "challenger_start_epoch",
+        "first_epoch_same_agent",
+    ):
         assert getattr(campaign, key) == policy["schedule"][key]
     old = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/campaign.json")
     assert campaign.creation_key != old.creation_key
@@ -46,16 +55,31 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
     campaign = json.loads((REPOSITORY / "data/GDN/ablation-campaign.json").read_text())
     campaign_path.write_text(json.dumps(campaign))
     plan_path = tmp_path / "plan.json"
-    plan_path.write_text(json.dumps(build_ablation_plan(
-        {"schedule": {**campaign, "event_only": True}},
-        optimizer_attempt_budget_per_trajectory=control_epochs * 3,
-    )))
+    plan_path.write_text(
+        json.dumps(
+            build_ablation_plan(
+                {"schedule": {**campaign, "event_only": True}},
+                optimizer_attempt_budget_per_trajectory=control_epochs * 3,
+            )
+        )
+    )
     workspace = tmp_path / "run"
-    monkeypatch.setattr(module.sys, "argv", [
-        "run.py", "--workspace", str(workspace), "--config", str(config),
-        "--campaign", str(campaign_path), "--plan", str(plan_path),
-        *([] if target is None else ["--target-epoch", str(target)]),
-    ])
+    monkeypatch.setattr(
+        module.sys,
+        "argv",
+        [
+            "run.py",
+            "--workspace",
+            str(workspace),
+            "--config",
+            str(config),
+            "--campaign",
+            str(campaign_path),
+            "--plan",
+            str(plan_path),
+            *([] if target is None else ["--target-epoch", str(target)]),
+        ],
+    )
     calls = []
     processes = []
     monkeypatch.setattr(module.shutil, "which", lambda _name: "/fake/runtime")
@@ -64,21 +88,26 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
         del stderr, check
         calls.append(command)
         if command[1] == "bootstrap":
-            result = {"campaign_id": "campaign_" + "0" * 32,
-                      "lineages": [{"lineage_id": "lineage_" + "0" * 32}]}
+            result = {
+                "campaign_id": "campaign_" + "0" * 32,
+                "lineages": [{"lineage_id": "lineage_" + "0" * 32}],
+            }
         else:
             assert command[1] == "seed-ablation-arm"
             seed = json.loads(Path(command[-1]).read_text())
             assert seed["source_lineage_id"] == "lineage_" + "0" * 32
             assert seed["challenger_count"] == 0
+            assert seed["workflow_command"].startswith("workflow/")
             if fail == "seed":
                 raise subprocess.CalledProcessError(1, command)
             # Deterministic arm identity across resumptions.
             label = Path(command[-1]).parent.name
             labels = [arm["label"] for arm in json.loads(plan_path.read_text())["arms"]]
-            suffix = f"{labels.index(label)+1:032x}"
-            result = {"campaign_id": "campaign_" + suffix,
-                      "lineage": {"lineage_id": "lineage_" + suffix}}
+            suffix = f"{labels.index(label) + 1:032x}"
+            result = {
+                "campaign_id": "campaign_" + suffix,
+                "lineage": {"lineage_id": "lineage_" + suffix},
+            }
         stdout.write(json.dumps(result))
         stdout.flush()
 
@@ -91,11 +120,15 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
             assert command[1] == "run-campaign"
             assert requested_target == (
                 (100 if target is None else target)
-                if self.campaign.endswith("0" * 32) else control_epochs
+                if self.campaign.endswith("0" * 32)
+                else control_epochs
             )
             if fail != "result":
-                stdout.write(json.dumps({"campaign_id": self.campaign,
-                                         "target_epoch_number": requested_target}))
+                stdout.write(
+                    json.dumps(
+                        {"campaign_id": self.campaign, "target_epoch_number": requested_target}
+                    )
+                )
             stdout.flush()
             stderr.write("attempt finished\n")
             stderr.flush()
@@ -113,8 +146,14 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
 
     monkeypatch.setattr(module, "run_json", run_json)
     monkeypatch.setattr(module.subprocess, "Popen", Process)
-    return SimpleNamespace(module=module, calls=calls, processes=processes,
-                           workspace=workspace, plan=plan_path, campaign=campaign_path)
+    return SimpleNamespace(
+        module=module,
+        calls=calls,
+        processes=processes,
+        workspace=workspace,
+        plan=plan_path,
+        campaign=campaign_path,
+    )
 
 
 def test_bootstrap_once_shared_seed_parallel_launch_and_resume(tmp_path, monkeypatch):
@@ -195,9 +234,14 @@ def test_gdn_ablation_role_uses_separate_definition_and_output(tmp_path, monkeyp
     root = tmp_path / "workspaces/GDN"
     root.mkdir(parents=True)
     (root / "runtime.json").write_text("{}")
-    (root / "runtime-secrets.json").write_text(json.dumps({
-        "ATREX_CAPABILITY_SIGNING_KEY": "test-signing", "ATREX_ADMIN_BEARER_TOKEN": "test-admin",
-    }))
+    (root / "runtime-secrets.json").write_text(
+        json.dumps(
+            {
+                "ATREX_CAPABILITY_SIGNING_KEY": "test-signing",
+                "ATREX_ADMIN_BEARER_TOKEN": "test-admin",
+            }
+        )
+    )
     monkeypatch.setattr(module, "__file__", str(tmp_path / "scripts/gdn/run.py"))
     monkeypatch.setattr(module.sys, "platform", "linux")
     monkeypatch.setattr(module.sys, "argv", ["run.py", "ablation"])

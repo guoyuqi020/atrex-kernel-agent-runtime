@@ -34,7 +34,8 @@ flowchart LR
 | Session | One Worker execution; infrastructure recovery starts another Session. Report-only provider continuations stay inside the same Session and Attempt. |
 | Kernel Trial | One exact measured experimental Kernel; it does not consume a `vN` label. |
 | Kernel Revision | A Lineage-local retained Kernel labeled `vN`. |
-| Agent Revision | A Lineage-local Agent Bundle labeled `agent-vN`. |
+| Agent Revision | A Lineage-local Agent Bundle labeled `agent-vN`, including its versioned search Workflow program. |
+| Agent Workflow | Untrusted versioned code that orchestrates one Epoch by calling a bounded set of trusted Runtime services within a fixed resource envelope. |
 | Runtime State | Adaptive `prompts/`, `insights/`, `skills/`, and `tools/` associated with Agent execution, stored separately from versioned source. |
 | Artifact | Immutable content-addressed data in Runtime's local CAS. |
 
@@ -47,7 +48,7 @@ the role matters.
 - Runtime owns identities, lifecycle transitions, fencing, capabilities, private evaluation data,
   policy, comparison, promotion, recovery, Session capture, immutable Artifacts, and adaptive State
   persistence.
-- Core owns Optimizer prompts, workflow, Backend adapters, Runtime Tool bindings, and Agent-authored
+- Core owns Optimizer prompts, the Agent Workflow program, Backend adapters, Runtime Tool bindings, and Agent-authored
   Direction/Experiment/Attempt reports.
 - Evolver owns one same-DSL Agent-change hypothesis and may modify the Candidate Bundle, or report
   `no_change` when evidence does not support an Agent-controllable improvement. It does not evaluate Kernels.
@@ -73,7 +74,8 @@ Lineage history or incumbent Kernel. Success publishes `agent-v0`, Kernel `v0`, 
 Evidence. Physical Bootstrap retries are append-only Generations under one stable Bootstrap
 Attempt identity.
 
-Each session is a fresh process. Model context is never reused. Attempt Evidence contains earlier
+Each session is a fresh process. Optimizer model context is never reused; Evolver resumes its
+Lineage/Backend conversation. Attempt Evidence contains earlier
 Attempts only from the same Trajectory. The Optimizer view contains every completed Active/Challenger
 branch's Attempt reports and conversations keyed by branch, and each completed Epoch names the
 selected branch, while the Evolver view adds Agent selection result, Attempt outcome, and exact
@@ -101,19 +103,25 @@ interaction but Core exposes only knowledge content. Runtime sends no post-Epoch
 
 ### Epoch
 
-Runtime snapshots the Active Agent, starting Kernel, common Runtime State, and Evidence. It invokes
-the Evolver serially to construct up to `K` Challengers. Each proposal may create a revision from Active,
-reuse a historical revision, create a revision from history, or decline further construction with
+Runtime snapshots the Active Agent, starting Kernel, common Runtime State, Evidence, and a fixed
+resource envelope. It then runs the Active Agent Revision's versioned Workflow program once in an
+isolated process. Workflow may ask Runtime to attach Active replicas, invoke Evolver serially for up
+to `K` Challengers, divide the exact Optimizer Attempt budget among Branches and Trajectories, execute
+those Branches, and request trusted Kernel and Agent selection. A Challenger proposal may create a
+revision from Active, reuse a visible historical revision, create one from history, or return
 `no_change`. Revision ancestry remains a tree; reuse and Epoch participation are separate provenance.
 
-After the pool is frozen, Active and Challenger Branches run concurrently up to
-`max_parallel_branches`. Each Branch runs `Y` Trajectories concurrently; each Trajectory runs `X`
-fresh-session Attempts serially. All participants start from the same Epoch Kernel and cannot see
-sibling in-progress work. Runtime then selects the best Kernel and independently compares Agent
-revisions. If `C ≤ K` Challengers are attached, the Epoch contains `(1 + C) × Y × X` Optimizer
-Attempts and `C` Evolver executions, plus one more when `no_change` closes the pool. Physical provider
-calls may also include infrastructure retries and bounded report-only
-continuations; neither increases the configured Attempt count.
+Workflow implements one `run_epoch(epoch)` function. Its public SDK creates Branch-local Pools and
+advances synchronized rounds without exposing Attempt ordinals or the wire protocol. After each
+round, code may inspect trusted outcomes, broadcast an accepted Kernel across sibling Trajectories,
+or copy compatible Runtime State by naming its producing Attempt. The SDK privately translates
+rounds into replay-safe Attempt operations. The exact Branch capacity, Runtime-State policy,
+Challenger set, and Workflow program hash remain frozen and the configured Attempt budget must still
+be spent exactly. Runtime—not Workflow—schedules Epochs, launches and recovers every Attempt,
+performs Gateway evaluation and trusted comparison, validates cross-Trajectory inputs and selection
+identities, and commits promotion. Physical provider calls may include
+infrastructure retries and bounded report-only continuations; neither increases the configured
+Attempt count.
 
 Completed Evidence becomes the next Epoch checkpoint. Optimizers see every completed Epoch Branch,
 plus only earlier Attempts in their own in-progress Trajectory. Evolver sees every participant in the
@@ -125,6 +133,24 @@ Evolution reports.
 `seed-lineage` creates an independent Lineage from sealed Agent/Kernel Artifacts or registered
 Revision IDs after Runtime revalidates the Agent and re-evaluates the Kernel under the destination
 Campaign Contract.
+
+Production Bootstrap selects the Runtime-owned `evolve_3.py` construction template when sealing its
+initial Agent Revision. Each ablation Lineage derives its own immutable `agent-v0` from the same
+Optimizer source while selecting the controlled Isolated, Retained, Pool-3, or Pool-Retained-3
+template. Runtime materializes only the selected program as `workflow/main.py`; the sealed Revision
+does not contain the alternative arm programs, so Optimizer and Evolver see only the organization
+that actually runs. Repeated control instances keep independent Revision identities even when their
+selected Workflow content is identical. They share the exact Bootstrap Kernel, not the source
+Lineage's Agent Artifact identity.
+
+The Workflow program belongs to the immutable Agent Revision, but its execution state does not.
+Only the Epoch's Active Revision orchestrates that Epoch; a Challenger's changed Workflow takes
+effect only after that Agent wins and becomes Active in a later Epoch. Registry records the frozen
+Challenger set, Branch topology, State policy, program hash, and every resulting Attempt, so a
+restart can replay idempotent service calls without letting changed code reinterpret completed
+decisions. Runtime never imports Workflow code into its control process. Workflow cannot alter
+evaluation, hidden Shapes, Gate policy, Runtime retries, promotion, rollback, capabilities, or the
+resource envelope.
 
 `seed-ablation-arm` creates a control Lineage in a separate Campaign from another Lineage's frozen
 Bootstrap baseline. `challenger_count` defaults to 0 but can enable evolution-frequency controls;
@@ -144,6 +170,13 @@ launcher modes. Agents receive only a public train-domain contract and opaque Sh
 constructs Agate requests from the sealed Contract and sanitizes Worker responses. Administration
 may retrieve bounded exact Artifacts; Agent tools cannot select arbitrary Campaign, Lineage, or
 Attempt history.
+
+New Campaigns seal a fixed-seed (`42`) randomized 50/50 Valid/Test partition (odd extra: Valid;
+at least two Shapes), then randomly sample at most 15 Shapes per subset. The private Contract
+archives the source population and selected IDs; extra Shapes do not participate in evaluation.
+Agent operations and ordinary evaluation use Valid only; authoritative Runtime ABBA uses both.
+Agent-facing historical measurements omit Test rows and recompute latency aggregates over Valid;
+only Runtime acceptance/selection verdicts reflect the full Gate. See [evaluation](evaluation.md).
 
 ## Agent source and Runtime State
 

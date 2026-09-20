@@ -114,8 +114,8 @@ class EvolutionConversation:
         if self.backend == "codex" and not session_id:
             for path in (source_home / ".codex/sessions").rglob("rollout-*.jsonl"):
                 _no_links(path, source_home)
-                with path.open(encoding="utf-8") as source:
-                    first = json.loads(source.readline())
+                with path.open(encoding="utf-8") as transcript:
+                    first = json.loads(transcript.readline())
                 if first.get("type") == "session_meta":
                     session_id = first.get("payload", {}).get("id")
                     break
@@ -123,8 +123,8 @@ class EvolutionConversation:
             path = source_home / ".atrex-pi/evolver.jsonl"
             _no_links(path, source_home)
             if path.is_file():
-                with path.open(encoding="utf-8") as source:
-                    first = json.loads(source.readline())
+                with path.open(encoding="utf-8") as transcript:
+                    first = json.loads(transcript.readline())
                 if first.get("type") == "session":
                     session_id = first.get("id")
         if not isinstance(session_id, str) or not session_id:
@@ -134,8 +134,8 @@ class EvolutionConversation:
         if not _has_native(native):
             return None  # CLI setup failed before writing any conversation.
         if source_home.resolve() != home.resolve():
-            for source in native:
-                _copy_native(source, home / source.relative_to(source_home))
+            for native_path in native:
+                _copy_native(native_path, home / native_path.relative_to(source_home))
         return session_id
 
     def remember(self, workspace: Path) -> None:

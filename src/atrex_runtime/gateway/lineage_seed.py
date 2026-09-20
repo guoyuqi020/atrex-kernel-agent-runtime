@@ -73,7 +73,7 @@ class AgateLineageSeedEvaluator:
         contract = load_evaluation_contract(
             self._artifacts,
             campaign.evaluation_contract_digest,
-        )
+        ).for_agent()
         resolved = resolve_kernel_candidate(
             self._artifacts,
             kernel_artifact_digest,

@@ -2,6 +2,8 @@
 
 atrex_prod_script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 atrex_prod_root="$(cd -- "${atrex_prod_script_dir}/../.." && pwd)"
+# shellcheck source=../shared/agate-service.sh
+source "${atrex_prod_root}/scripts/shared/agate-service.sh"
 
 if [[ -n "${ATREX_PYTHON:-}" ]]; then
   atrex_prod_python="${ATREX_PYTHON}"
@@ -121,17 +123,7 @@ atrex_prod_load_environment() {
 }
 
 atrex_prod_require_agate() {
-  local missing=()
-  local name
-  for name in AGATE_URL AGATE_AK AGATE_SK AGATE_GPU; do
-    if [[ -z "${!name:-}" ]]; then
-      missing+=("${name}")
-    fi
-  done
-  if (( ${#missing[@]} > 0 )); then
-    echo "Missing required Agate environment: ${missing[*]}" >&2
-    return 64
-  fi
+  atrex_require_agate_environment
 }
 
 atrex_prod_backend() {

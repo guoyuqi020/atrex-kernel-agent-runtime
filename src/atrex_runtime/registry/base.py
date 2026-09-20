@@ -24,6 +24,7 @@ from ..domain.models import (
     Campaign,
     CampaignTask,
     Epoch,
+    EpochBranchWorkflow,
     EpochChallenger,
     EpochRecovery,
     EpochSelection,
@@ -224,7 +225,29 @@ class Registry(Protocol):
         evolution_trace_digest: ArtifactDigest,
     ) -> None: ...
 
+    def freeze_epoch_workflow_challengers(
+        self,
+        epoch_id: EpochId,
+        attached_count: int,
+        program_sha256: str,
+    ) -> None: ...
+
     def list_epoch_challengers(self, epoch_id: EpochId) -> list[EpochChallenger]: ...
+
+    def ensure_epoch_branch_workflow(
+        self, workflow: EpochBranchWorkflow
+    ) -> EpochBranchWorkflow: ...
+
+    def get_epoch_branch_workflow(
+        self,
+        epoch_id: EpochId,
+        branch: BranchRole,
+        challenger_ordinal: int,
+    ) -> EpochBranchWorkflow | None: ...
+
+    def list_epoch_branch_workflows(
+        self, epoch_id: EpochId
+    ) -> list[EpochBranchWorkflow]: ...
 
     def record_epoch_suggested_directions(
         self,

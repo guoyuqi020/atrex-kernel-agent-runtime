@@ -11,6 +11,7 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
+from ..domain.ids import ArtifactDigest
 from ..domain.models import Dsl, KernelAgentRevision
 from ..ports import KernelAgentCandidate
 
@@ -22,6 +23,11 @@ KERNEL_AGENT_IGNORED_DIRECTORY_NAMES = frozenset(
 )
 KERNEL_AGENT_IGNORED_FILE_NAMES = frozenset({".coverage", ".DS_Store"})
 KERNEL_AGENT_IGNORED_FILE_SUFFIXES = frozenset({".pyc", ".pyo"})
+KERNEL_AGENT_WORKFLOW_MAIN = "workflow/main.py"
+KERNEL_AGENT_WORKFLOW_TEMPLATE_NAMES = frozenset(
+    {"evolve_3.py", "isolated.py", "pool_3.py", "pool_retained_3.py", "retained.py"}
+)
+KERNEL_AGENT_WORKFLOW_TEMPLATES = Path(__file__).resolve().parents[1] / "workflow_templates"
 
 
 def is_ignored_kernel_agent_path(relative: PurePosixPath, *, directory: bool) -> bool:
@@ -57,6 +63,24 @@ class KernelAgentBundleEntrypointV1(BaseModel):
         return _safe_relative_file(value)
 
 
+class KernelAgentBundleWorkflowV1(BaseModel):
+    """Agent-owned Workflow program launched only through the trusted Runtime."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    command: str
+
+    @field_validator("command", mode="before")
+    @classmethod
+    def _validate_command(cls, value: object) -> str:
+        if not isinstance(value, str):
+            raise ValueError("Workflow command must be a repository-relative path")
+        normalized = _safe_relative_file(value)
+        if PurePosixPath(normalized).parts[0] != "workflow":
+            raise ValueError("Workflow command must be contained under workflow/")
+        return normalized
+
+
 class KernelAgentBundleManifestV1(BaseModel):
     """Strict Runtime entry manifest embedded in one complete Core repository."""
 
@@ -65,6 +89,7 @@ class KernelAgentBundleManifestV1(BaseModel):
     schema_version: Literal[1] = KERNEL_AGENT_BUNDLE_MANIFEST_VERSION
     bundle_format: Literal["atrex-kernel-agent-bundle-v1"] = KERNEL_AGENT_BUNDLE_FORMAT
     entrypoint: KernelAgentBundleEntrypointV1
+    workflow: KernelAgentBundleWorkflowV1 | None = None
 
     @classmethod
     def from_file(cls, path: str | Path) -> Self:
@@ -126,17 +151,114 @@ class KernelAgentRevisionBuilder:
             normalized = Path(temporary) / "repository"
             normalized.mkdir(mode=0o700)
             self._copy_validated_tree(root, normalized)
+            self._validate_no_workflow_alternatives(normalized)
             manifest = KernelAgentBundleManifestV1.from_file(
                 normalized / KERNEL_AGENT_BUNDLE_MANIFEST
             )
+            if (
+                manifest.workflow is not None
+                and manifest.workflow.command != KERNEL_AGENT_WORKFLOW_MAIN
+            ):
+                raise ValueError(
+                    "New Optimizer Bundles must use workflow/main.py as their sole Workflow entry"
+                )
             self._validate_entry_file(
                 normalized,
                 manifest.entrypoint.command,
                 max_bytes=self._limits.max_entrypoint_bytes,
                 label="Optimizer command",
             )
+            if manifest.workflow is not None:
+                self._validate_entry_file(
+                    normalized,
+                    manifest.workflow.command,
+                    max_bytes=self._limits.max_entrypoint_bytes,
+                    label="Agent Workflow command",
+                )
             digest = self._artifacts.put_directory(normalized, ArtifactKind.KERNEL_AGENT)
         return KernelAgentCandidate(dsl=dsl, optimizer_digest=digest)
+
+    def select_workflow(
+        self,
+        optimizer_digest: ArtifactDigest,
+        dsl: Dsl,
+        command: str,
+    ) -> KernelAgentCandidate:
+        """Derive a Bundle whose sole Workflow entry is materialized as ``main.py``.
+
+        Controlled-arm templates are Runtime construction inputs, not Candidate Agent
+        evidence.  The selected program replaces ``workflow/main.py`` and known
+        alternative entry files are removed before sealing.  Supporting Workflow
+        modules remain available, while Evolver sees only the program actually run.
+        """
+        selected_path = PurePosixPath(_safe_relative_file(command))
+        if selected_path.parts[0] != "workflow":
+            raise ValueError("Workflow command must be contained under workflow/")
+        stored = self._artifacts.verify(optimizer_digest)
+        if stored.kind is not ArtifactKind.KERNEL_AGENT:
+            raise ValueError("Workflow can be selected only from a Kernel Agent Artifact")
+        with tempfile.TemporaryDirectory(prefix="atrex-kernel-agent-workflow-") as temporary:
+            root = Path(temporary) / "repository"
+            self._artifacts.materialize(optimizer_digest, root)
+            selected_source = root.joinpath(*selected_path.parts)
+            if (
+                not selected_source.is_file()
+                and selected_path.name in KERNEL_AGENT_WORKFLOW_TEMPLATE_NAMES
+            ):
+                selected_source = KERNEL_AGENT_WORKFLOW_TEMPLATES / selected_path.name
+            self._validate_entry_file(
+                selected_source.parent,
+                selected_source.name,
+                max_bytes=self._limits.max_entrypoint_bytes,
+                label="Selected Agent Workflow command",
+            )
+            selected_bytes = selected_source.read_bytes()
+            workflow_main = root / KERNEL_AGENT_WORKFLOW_MAIN
+            workflow_main.parent.mkdir(mode=0o700, exist_ok=True)
+            if workflow_main.exists():
+                workflow_main.chmod(0o600)
+            workflow_main.write_bytes(selected_bytes)
+            workflow_main.chmod(0o600)
+            selected_in_bundle = root.joinpath(*selected_path.parts)
+            if (
+                selected_path.as_posix() != KERNEL_AGENT_WORKFLOW_MAIN
+                and selected_in_bundle.is_file()
+            ):
+                selected_in_bundle.unlink()
+            self._remove_workflow_alternatives(root)
+            manifest_path = root / KERNEL_AGENT_BUNDLE_MANIFEST
+            manifest = KernelAgentBundleManifestV1.from_file(manifest_path)
+            updated = manifest.model_copy(
+                update={"workflow": KernelAgentBundleWorkflowV1(command=KERNEL_AGENT_WORKFLOW_MAIN)}
+            )
+            manifest_path.chmod(0o600)
+            manifest_path.write_text(
+                updated.model_dump_json(indent=2) + "\n",
+                encoding="utf-8",
+            )
+            return self.build_candidate(root, dsl)
+
+    @staticmethod
+    def _remove_workflow_alternatives(root: Path) -> None:
+        workflow = root / "workflow"
+        if not workflow.is_dir():
+            return
+        for name in KERNEL_AGENT_WORKFLOW_TEMPLATE_NAMES:
+            path = workflow / name
+            if path.is_file():
+                path.unlink()
+
+    @staticmethod
+    def _validate_no_workflow_alternatives(root: Path) -> None:
+        workflow = root / "workflow"
+        alternatives = sorted(
+            name for name in KERNEL_AGENT_WORKFLOW_TEMPLATE_NAMES if (workflow / name).is_file()
+        )
+        if alternatives:
+            raise ValueError(
+                "Optimizer Bundle must expose only workflow/main.py; "
+                f"alternative Workflow entries are not allowed: {alternatives}"
+            )
 
     @staticmethod
     def validate_challenger(

@@ -21,7 +21,7 @@ bash examples/evolver-dev-shell/run.sh bash codex
 ```
 
 Backend 参数只决定合成输入里的 Evolver 元数据，不会启动 Backend 进程。示例不需要 Agate
-凭据；如果设置了 `AGATE_GPU`，它会被用作硬件标签，否则使用 `nvidia-h100`。
+凭据；如果设置了 `AGATE_GPU`，它会被用作硬件标签，否则使用 `local`。此 Shell 不访问 Agate。
 
 进入 Shell 后可以检查 `input/agents/agent-vN/` 中每个可见 Agent 版本的源码与状态、
 `input/evidence/agent-vN/` 中 Runtime 对它的派生结论，以及可写的

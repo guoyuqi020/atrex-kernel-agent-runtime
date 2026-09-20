@@ -12,6 +12,54 @@ generator, validation Shapes, metadata, optional Roofline, tolerances, sampling 
 policy, and Production Gate flag. Runtime replaces Gate-owned fields with deployment policy before
 sealing the Contract.
 
+Before sealing, Runtime lexicographically sorts the IDs from complete `shape_valid.json` (or
+Contract `shapes`), then shuffles them with a local `random.Random(42)` and divides the shuffled
+population into halves (odd extra: Valid). Using that same RNG, it independently samples up to
+15 Shapes from each half. Valid gets `min(15, ceil(N/2))` Shapes and Test gets
+`min(15, floor(N/2))`; fewer than two Shapes is an error. Extra Shapes do not participate in
+evaluation. This RNG does not modify global random state or evaluator correctness seeds. The private Contract
+retains only the selected Valid + Test Shapes (at most 30) and seals `validation_shape_ids`;
+Test is its complement. Per-Shape metadata and Roofline are reduced to the selected population.
+The same partition is used across DSLs, Attempts, retries, and ablation arms.
+
+The private Contract's `shape_split` archives the algorithm, seed, cap, original population count
+and IDs, and final Valid/Test IDs. For an original population `"0"` through `"9"`, the record is:
+
+```json
+{
+  "algorithm": "python_random_shuffle_sample",
+  "seed": 42,
+  "max_shapes_per_set": 15,
+  "source_shape_count": 10,
+  "source_shape_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+  "valid_shape_ids": ["2", "3", "5", "7", "8"],
+  "test_shape_ids": ["0", "1", "4", "6", "9"]
+}
+```
+
+The Campaign's `evaluation_contract_digest` locates the immutable archive at
+`<artifacts_root>/sha256/<digest_without_prefix>/payload/value.json`, under `shape_split`.
+That Contract also contains the exact selected Shape records, enabling replay without resampling.
+This archive is administrative data: it is removed from Agent contexts and per-batch requests,
+and must not be copied into Agent workspaces or Evidence.
+
+Agent operations, including ordinary Evaluate, Agent ABBA, Profile, and Check, use Valid only.
+Bootstrap final Evaluate, Lineage seed Evaluate, and ordinary Evaluate comparisons also use
+Valid. Only authoritative Runtime ABBA executes Valid + Test. Custom Agent probes still use
+Agent-supplied inputs; they cannot select or reveal hidden Test cases.
+
+Agent-facing historical reports, Evolver summaries, and Attempt fact indexes expose only Valid
+per-Shape timings and recompute their latency aggregates from Valid. They never expose full-set
+aggregate latencies, Test profiler data, or Test error metrics. Acceptance/selection verdicts
+remain visible. Private Gateway Results and Registry measurements retain complete authoritative
+evidence for administration/audit; Result Artifacts remain Agent-visible projections.
+Public `shape_train` describes the legal domain, not the holdout membership. Auto-generated
+problem context and missing Roofline construction use Valid inputs only.
+
+New Campaigns seal this partition. A pre-change Campaign's immutable Contract is not rewritten:
+create a new Campaign/workspace if its Contract has no fixed-seed split archive; do not mix its old full-set results
+with new Valid-only measurements. The shared VecAdd example has two Shapes for this reason.
+
 Agents never receive exact validation Shapes, `reference.py`, `input.py`, metadata, or Roofline.
 They receive a public `shape_train` contract describing the legal parameter domain and non-Shape
 ABI constraints. Gateway responses expose only aggregate correctness, aggregate latency, latency
@@ -27,7 +75,8 @@ returned to the Agent.
 An exploratory `evaluate` records measurement evidence, but it does not create a `vN` Kernel
 revision. The Agent may evaluate several Candidates in one Attempt and record them in the
 Experiment Journal. A `candidate_ready` nomination still requires a successful full evaluation of
-the exact Candidate against the trusted Evaluation Contract.
+the exact Candidate against the trusted Contract's Valid subset. This precheck is not the
+authoritative Valid + Test ABBA Gate.
 That precheck may come from this Attempt or from an explicit `adopt` Experiment referencing a
 compatible successful full Evaluate in visible history. Runtime verifies the original Trial and
 exact Kernel/Result binding; adoption neither creates a new measurement nor changes its ownership.
@@ -174,7 +223,7 @@ summaries, all `measurements` and the `schedule`, `mode`, and `input_scope`. `sp
 A/B latency and `improvement_pct` is (A−B)/A × 100; aggregate latency uses a geometric mean.
 Use `result-artifact-read` to retrieve this evidence. Exploratory ABBA does
 not create an ordinary Evaluate record. Runtime retains the normalized per-Shape aggregate for both
-A and B and keeps all three underlying responses as private evidence.
+A and B and keeps underlying responses as private evidence.
 
 ## Ordinary Evaluate Shape batches
 
@@ -184,14 +233,13 @@ requests, Bootstrap stages, Lineage seeding, and the ordinary Evaluate comparato
 one logical request; Runtime partitions the sealed contract, including matching metadata and Roofline,
 and preserves every batch's Job and result in the aggregate Artifact.
 
-All Shapes must pass. For an Agent full Evaluate, Runtime performs exactly three complete logical
-Agate calls, takes the median of the three values independently for every Shape, and combines those
-medians using the geometric mean. No configured repeat layer is nested inside these calls. The
-sixteen-batch cap applies independently to each call. Bootstrap, Lineage seeding, and trusted
+All Shapes must pass. For an Agent full Evaluate, Runtime performs one complete logical Agate call
+and combines its per-Shape latencies using the geometric mean. There is no extra cross-job repeat or
+median layer. The sixteen-batch cap applies to this call. Bootstrap, Lineage seeding, and trusted
 comparators retain their own configured sampling policies. ABBA's comparison settings do not change
 the ordinary-Evaluate aggregation.
 
-## Single submission and repeated measurement
+## Single submission and single measurement
 
 Runtime accepts each exact full ordinary Evaluate or exploratory ABBA task only once within a
 Lineage. Task identity covers the exact Candidate Kernel, the Baseline Kernel for ABBA, the
@@ -199,13 +247,12 @@ measurement method and parameters, and the sealed input domain. Correctness-only
 Dev, Check, and Disassemble are outside this rule because they do not share the same per-Shape timing
 contract.
 
-- The first accepted task executes three independent, semantically identical logical Agate calls.
-- Runtime requires matching Shape coverage, takes the median latency per Shape, then mechanically
-  recomputes aggregate latency and ABBA speedup. Any explicit correctness failure is retained rather
-  than being hidden by a successful repetition.
+- The first accepted task executes one logical Agate call, partitioned into Shape batches.
+- Runtime validates Shape coverage and mechanically computes aggregate latency and ABBA speedup.
+  Explicit correctness failures are retained.
 - Runtime returns one Agent-visible Result Artifact with
-  `measurement_aggregation: {"repetitions": 3, "method": "per_shape_median"}`. The three raw
-  responses remain private evidence.
+  `measurement_aggregation: {"repetitions": 1, "method": "single_measurement"}`. Raw responses
+  remain private evidence. Inner GPU benchmark sampling and ABBA's configured A/B schedule are unchanged.
 - A later Agent invocation of the identical task is rejected before Agate execution. The error names
   `previous_result_artifact_digest` and directs the Agent to `result-artifact-read`; transport retry
   of the original invocation remains idempotent and replays the same response.
@@ -250,16 +297,15 @@ An ordinary Attempt uses `kernel_retention_comparison`:
   repeats; the Candidate must be correct and exceed the configured uncertainty threshold.
 - `same_allocation_abba`: runs interleaved A/B measurements inside one Agate allocation per Shape
   batch. Each repeat measures both revisions; pair order alternates between `A, B` and `B, A`, so
-  two repeats produce `A, B, B, A`. Runtime executes that complete schedule three independent
-  times, validates matching Shape coverage, takes the median latency for each Shape and side, then
-  computes the authoritative geomean. An explicit correctness failure in any round fails the
-  comparison. Every physical run remains recorded.
+  two repeats produce `A, B, B, A`. Runtime executes that complete schedule once, validates Shape
+  coverage, and computes the authoritative geomean without a cross-job median. An explicit
+  correctness failure fails the comparison. Every physical run remains recorded.
 
 For authoritative ABBA, Runtime records each completed physical Shape batch under an identity
 covering the exact revision pair, sealed Contract, evaluator, purpose, schedule, and repetition.
 Resuming the same comparison reads completed batches from the Registry and Artifact Store instead
-of submitting them again. The three repetitions have distinct identities; transient Agate failures
-retry the affected batch with a fresh Job, and a different revision pair starts fresh measurements.
+of submitting them again. Transient Agate failures retry the affected batch with a fresh Job, and a
+different revision pair starts fresh measurements.
 
 The selected comparator's B aggregate is the Candidate's authoritative latency. There is no second
 independent Attempt-final evaluation after comparison. An Attempt that produces no valid

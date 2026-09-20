@@ -18,7 +18,7 @@ if (( $# == 1 )); then
   inputs_already_prepared=true
 fi
 
-atrex_example_require_remote_agate
+atrex_example_require_agate
 atrex_example_require_agent_backend optimizer
 atrex_example_load_local_secrets
 if [[ "${inputs_already_prepared}" == false ]]; then

@@ -1,8 +1,8 @@
 {
   "schema_version": 3,
-  "creation_key": "vector-add-local-wiki-h100",
+  "creation_key": "vector-add-local-wiki-local",
   "operator": "vector_add",
-  "hardware_target": "nvidia-h100",
+  "hardware_target": "local",
   "evaluation_contract": "../shared/vecadd/evaluation-contract.json",
   "agent_problem": "../shared/vecadd/agent-problem.json",
   "base_revision": {

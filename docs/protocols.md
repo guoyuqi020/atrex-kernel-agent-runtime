@@ -204,10 +204,39 @@ the role-scoped files required for that Session.
 
 ## Agent Bundle and Evolution
 
-Core and Evolver entry manifests each declare one repository-relative command. Runtime imports an
-exact full commit, strips Git metadata, rejects unsafe tree content, and seals the complete source.
-Runtime owns Backend/model policy and supplies phase, paths, usage, and scoped authority through the
-launch contract.
+Core and Evolver entry manifests each declare one repository-relative command. A Core manifest may
+also declare `"workflow": {"command": "workflow/main.py"}`. Runtime imports an exact full commit,
+strips Git metadata, rejects unsafe tree content, and seals the complete source. Runtime owns
+Backend/model policy and supplies phase, paths, usage, and scoped authority through the launch
+contract.
+
+The Workflow command is Agent-owned executable Epoch orchestration, not a Runtime-imported module or
+static configuration. Runtime runs the Active Agent Revision's Workflow in the configured Worker
+isolation boundary and sends one immutable `run_epoch` context line. The program implements one
+`run_epoch(epoch)` function against the Bundle SDK: create Pools, run synchronized rounds, inspect
+trusted results, optionally route Kernel/State, then complete the Epoch. The SDK alone translates
+these actions to the bounded JSONL request/response protocol. This permits adaptive code-defined
+organizations without exposing Attempt bookkeeping or submitting one static topology.
+
+Campaign Bootstrap may provide `workflow_command` as a Runtime construction-template selector.
+Runtime validates the selector and materializes only that program as `workflow/main.py` in
+`agent-v0`; controlled alternative arm templates are not sealed into the Revision. Ablation Arm
+specifications do the same when cloning a shared Bootstrap baseline, so the selected organization is
+Agent Revision code rather than a controller-side label or topology preset, while Optimizer and
+Evolver never receive unrelated arm implementations.
+
+The context provides DSL/Epoch identity and a resource envelope: maximum Challenger slots, exact
+Optimizer Attempt budget, default topology, and default Runtime-State policy. Pool creation freezes
+each Branch capacity and State policy. The private SDK assigns explicit Attempt ordinals, so a
+Workflow restart replays completed logical rounds idempotently; round callbacks run again over the
+same trusted outcomes. All attached Branches must be registered and their capacities must spend the
+budget exactly. `epoch.complete()` rejects missing or unfinished work and commits only Runtime's
+trusted Kernel and Agent selections.
+
+Workflow code has no Gateway, Registry, hidden-Test, arbitrary Worker-launch, Gate, promotion,
+rollback, or additional-budget authority. Runtime launches and recovers Attempts, evaluates Kernels,
+compares candidates and Agents, persists state, and commits promotion. Managed production Bundles
+must declare a Workflow command.
 
 Evolution input freezes current participants, visible historical Agents, Evidence, prior reports,
 DSL, and Candidate seed. One output uses:
@@ -219,8 +248,11 @@ DSL, and Candidate seed. One output uses:
   Active and any already attached Challengers.
 
 Runtime validates selected source, source-relative changed paths, private State diff, same-DSL
-identity, file policy, and manifest before sealing. Evolved content is Lineage-local; Runtime never
-pushes it to the Core repository.
+identity, file policy, and manifest before sealing. New Revisions keep `workflow/main.py` as their
+sole Workflow entry. Evolver may rewrite that program, the SDK wrapper, and supporting non-entry
+modules just like other Agent Source; the resulting policy is exercised only when that Revision
+participates in a later Epoch. Evolved content is Lineage-local; Runtime never pushes it to the Core
+repository.
 
 ## Capabilities and external services
 

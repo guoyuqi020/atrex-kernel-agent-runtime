@@ -32,8 +32,8 @@ fresh Agate evaluation with Runtime-owned credentials and a stable Runtime-final
 An optimization Attempt instead provisionally registers the exact nominated Artifact and delegates
 final authority to Kernel retention. Ordinary Evaluate measures A and B independently for its
 configured repetition count and writes B's arithmetic mean plus aggregate Result; same-allocation
-ABBA independently repeats the paired schedule three times, takes the per-Shape median for B, and
-writes its geometric mean plus the paired aggregate Result. Completed physical batches are
+ABBA executes the paired schedule once and writes B's geometric mean plus the paired aggregate
+Result, without an extra cross-job median. Completed physical batches are
 persistently keyed so an interrupted comparison can reuse them. Both replacements happen before
 the Attempt completes. Failed infrastructure never fabricates an outcome.
 

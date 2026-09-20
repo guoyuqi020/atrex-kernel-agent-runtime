@@ -14,7 +14,7 @@ usage:
 start options:
   --target-epoch N
   --workspace DIR
-  --hardware-target GPU
+  --hardware-target GPU       defaults to AGATE_GPU or local
   --seed-source FILE
   --dsl-seed-source DSL=PATH   repeatable; seeds one DSL from its own kernel
   --optimizer-model MODEL
@@ -263,6 +263,8 @@ prepare_start() {
     hardware_target="${hardware_target:-${AGATE_GPU:-}}"
     env_file="$(atrex_prod_absolute_path "${env_file}")"
   fi
+  atrex_default_agate_environment
+  hardware_target="${hardware_target:-${AGATE_GPU}}"
   service_workspace="$(atrex_prod_absolute_path "${service_workspace}")"
   local workspace_output
   workspace_output="$(mktemp "${TMPDIR:-/tmp}/atrex-production-workspace.XXXXXX")"

@@ -50,6 +50,7 @@ from ..domain.models import (
     ChallengerProposalType,
     Dsl,
     Epoch,
+    EpochBranchWorkflow,
     EpochChallenger,
     EpochRecovery,
     EpochSelection,
@@ -65,6 +66,7 @@ from ..domain.models import (
     LineageStatus,
     RuntimeEvent,
     RuntimeMetrics,
+    RuntimeStatePolicy,
     TokenUsage,
     WorkerSession,
     WorkerSessionRole,
@@ -73,7 +75,7 @@ from ..domain.models import (
 from ..sqlite_support import configure_durable_sqlite
 from .stop_migration import migrate_stops
 
-SCHEMA_VERSION = 36
+SCHEMA_VERSION = 39
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -609,6 +611,68 @@ class SqliteRegistry:
                     )
                 self._connection.execute("DROP TABLE epoch_direction_proposals")
                 self._connection.execute("PRAGMA user_version = 36")
+            self._migrate()
+            return
+        if version == 36:
+            with self._transaction(migration=True):
+                self._connection.execute(
+                    """CREATE TABLE IF NOT EXISTS epoch_branch_workflows (
+                           epoch_id TEXT NOT NULL REFERENCES epochs(id),
+                           branch TEXT NOT NULL CHECK (branch IN ('active', 'challenger')),
+                           challenger_ordinal INTEGER NOT NULL CHECK (challenger_ordinal >= 0),
+                           kernel_agent_revision_id TEXT NOT NULL
+                               REFERENCES kernel_agent_revisions(id),
+                           kind TEXT NOT NULL,
+                           definition_sha256 TEXT,
+                           trajectories INTEGER NOT NULL CHECK (trajectories > 0),
+                           attempts_per_trajectory INTEGER NOT NULL
+                               CHECK (attempts_per_trajectory > 0),
+                           created_at TEXT NOT NULL,
+                           PRIMARY KEY (epoch_id, branch, challenger_ordinal),
+                           CHECK ((branch = 'active' AND challenger_ordinal = 0) OR
+                                  (branch = 'challenger' AND challenger_ordinal > 0))
+                       )"""
+                )
+                self._connection.execute(
+                    "CREATE INDEX IF NOT EXISTS epoch_branch_workflows_by_revision "
+                    "ON epoch_branch_workflows(kernel_agent_revision_id, epoch_id)"
+                )
+                self._connection.execute("PRAGMA user_version = 37")
+            self._migrate()
+            return
+        if version == 37:
+            with self._transaction(migration=True):
+                workflow_columns = {
+                    str(row["name"])
+                    for row in self._connection.execute(
+                        "PRAGMA table_info(epoch_branch_workflows)"
+                    ).fetchall()
+                }
+                if (
+                    "definition_sha256" in workflow_columns
+                    and "program_sha256" not in workflow_columns
+                ):
+                    self._connection.execute(
+                        "ALTER TABLE epoch_branch_workflows "
+                        "RENAME COLUMN definition_sha256 TO program_sha256"
+                    )
+                elif "program_sha256" not in workflow_columns:
+                    raise RuntimeError(
+                        "epoch_branch_workflows has neither the legacy "
+                        "definition_sha256 column nor the current program_sha256 column"
+                    )
+                self._connection.execute("PRAGMA user_version = 38")
+            self._migrate()
+            return
+        if version == 38:
+            with self._transaction(migration=True):
+                workflow_columns_v38 = self._table_columns("epoch_branch_workflows")
+                if "runtime_state_policy" not in workflow_columns_v38:
+                    self._connection.execute(
+                        "ALTER TABLE epoch_branch_workflows ADD COLUMN "
+                        "runtime_state_policy TEXT NOT NULL DEFAULT 'retain_across_attempts'"
+                    )
+                self._connection.execute("PRAGMA user_version = 39")
             return
         if version == 23:
             with self._lock:
@@ -3708,6 +3772,128 @@ class SqliteRegistry:
             ).fetchall()
         return [self._map_epoch_challenger(row) for row in rows]
 
+    def ensure_epoch_branch_workflow(
+        self, workflow: EpochBranchWorkflow
+    ) -> EpochBranchWorkflow:
+        """Freeze one Agent Revision's validated Workflow for an Epoch Branch."""
+        with self._transaction():
+            # A deliberately suppressed v32 stop-migration is used by the compatibility
+            # probe. It can execute only the inherited Workflow and has no v37 table.
+            persist = self._has_tables("epoch_branch_workflows")
+            epoch = self.get_epoch(workflow.epoch_id)
+            expected_revision: KernelAgentRevisionId
+            if workflow.branch is BranchRole.ACTIVE:
+                expected_revision = epoch.active_kernel_agent_revision_id
+            else:
+                if workflow.challenger_ordinal > len(
+                    epoch.challenger_kernel_agent_revision_ids
+                ):
+                    raise InvalidTransitionError("Workflow Challenger is not attached")
+                expected_revision = epoch.challenger_kernel_agent_revision_ids[
+                    workflow.challenger_ordinal - 1
+                ]
+            if workflow.kernel_agent_revision_id != expected_revision:
+                raise InvalidTransitionError("Workflow Agent disagrees with the Epoch Branch")
+            if not persist:
+                return workflow
+            existing = self._connection.execute(
+                """SELECT * FROM epoch_branch_workflows
+                   WHERE epoch_id = ? AND branch = ? AND challenger_ordinal = ?""",
+                (workflow.epoch_id, workflow.branch, workflow.challenger_ordinal),
+            ).fetchone()
+            if existing is not None:
+                persisted = self._map_epoch_branch_workflow(existing)
+                if persisted != workflow:
+                    raise InvalidTransitionError(
+                        "Epoch Branch Workflow is already frozen differently"
+                    )
+                return persisted
+            self._connection.execute(
+                """INSERT INTO epoch_branch_workflows(
+                       epoch_id, branch, challenger_ordinal, kernel_agent_revision_id,
+                       kind, program_sha256, trajectories,
+                       attempts_per_trajectory, runtime_state_policy, created_at
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    workflow.epoch_id,
+                    workflow.branch,
+                    workflow.challenger_ordinal,
+                    workflow.kernel_agent_revision_id,
+                    workflow.kind,
+                    workflow.program_sha256,
+                    workflow.trajectories,
+                    workflow.attempts_per_trajectory,
+                    workflow.runtime_state_policy,
+                    workflow.created_at,
+                ),
+            )
+            self._event(
+                "epoch.branch_workflow_frozen",
+                workflow.epoch_id,
+                {
+                    "branch": workflow.branch,
+                    "challenger_ordinal": workflow.challenger_ordinal,
+                    "kernel_agent_revision_id": workflow.kernel_agent_revision_id,
+                    "kind": workflow.kind,
+                    "program_sha256": workflow.program_sha256,
+                    "trajectories": workflow.trajectories,
+                    "attempts_per_trajectory": workflow.attempts_per_trajectory,
+                    "runtime_state_policy": workflow.runtime_state_policy,
+                },
+            )
+        return workflow
+
+    def get_epoch_branch_workflow(
+        self,
+        epoch_id: EpochId,
+        branch: BranchRole,
+        challenger_ordinal: int,
+    ) -> EpochBranchWorkflow | None:
+        """Return one frozen Branch Workflow, if scheduling has reached that Branch."""
+        with self._lock:
+            if not self._has_tables("epoch_branch_workflows"):
+                return None
+            row = self._connection.execute(
+                """SELECT * FROM epoch_branch_workflows
+                   WHERE epoch_id = ? AND branch = ? AND challenger_ordinal = ?""",
+                (epoch_id, branch, challenger_ordinal),
+            ).fetchone()
+        return None if row is None else self._map_epoch_branch_workflow(row)
+
+    def list_epoch_branch_workflows(
+        self, epoch_id: EpochId
+    ) -> list[EpochBranchWorkflow]:
+        """Return frozen Branch Workflows in Active/Challenger order."""
+        with self._lock:
+            if not self._has_tables("epoch_branch_workflows"):
+                return []
+            rows = self._connection.execute(
+                """SELECT * FROM epoch_branch_workflows WHERE epoch_id = ?
+                   ORDER BY CASE branch WHEN 'active' THEN 0 ELSE 1 END,
+                            challenger_ordinal""",
+                (epoch_id,),
+            ).fetchall()
+        return [self._map_epoch_branch_workflow(row) for row in rows]
+
+    @staticmethod
+    def _map_epoch_branch_workflow(row: sqlite3.Row) -> EpochBranchWorkflow:
+        return EpochBranchWorkflow(
+            epoch_id=parse_epoch_id(_required_text(row, "epoch_id")),
+            branch=BranchRole(_required_text(row, "branch")),
+            challenger_ordinal=_required_int(row, "challenger_ordinal"),
+            kernel_agent_revision_id=parse_kernel_agent_revision_id(
+                _required_text(row, "kernel_agent_revision_id")
+            ),
+            kind=_required_text(row, "kind"),
+            program_sha256=_optional_text(row, "program_sha256"),
+            trajectories=_required_int(row, "trajectories"),
+            attempts_per_trajectory=_required_int(row, "attempts_per_trajectory"),
+            runtime_state_policy=RuntimeStatePolicy(
+                _required_text(row, "runtime_state_policy")
+            ),
+            created_at=_required_text(row, "created_at"),
+        )
+
     def record_epoch_suggested_directions(
         self,
         epoch_id: EpochId,
@@ -3839,6 +4025,55 @@ class SqliteRegistry:
                     "attached_count": attached_count,
                     "proposal_type": "no_change",
                     "evolution_trace_digest": trace,
+                },
+            )
+
+    def freeze_epoch_workflow_challengers(
+        self,
+        epoch_id: EpochId,
+        attached_count: int,
+        program_sha256: str,
+    ) -> None:
+        """Freeze the Challenger set selected by executable Workflow code."""
+        if (
+            len(program_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in program_sha256)
+        ):
+            raise ValueError("Workflow program SHA-256 is invalid")
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT * FROM epochs WHERE id = ?", (epoch_id,)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Epoch not found: {epoch_id}")
+            epoch = self._map_epoch(row)
+            attached = len(epoch.challenger_kernel_agent_revision_ids)
+            if attached_count != attached:
+                raise InvalidTransitionError(
+                    "Workflow must freeze exactly its attached Challenger set"
+                )
+            if epoch.status is not EpochStatus.BUILDING_CHALLENGER:
+                if epoch.challenger_count == attached_count and epoch.status in {
+                    EpochStatus.READY,
+                    EpochStatus.RUNNING,
+                    EpochStatus.SELECTING,
+                    EpochStatus.COMPLETED,
+                }:
+                    return
+                raise InvalidTransitionError("Epoch Challenger set is already frozen differently")
+            if attached_count > epoch.challenger_count:
+                raise InvalidTransitionError("Workflow Challenger set exceeds its Runtime limit")
+            self._connection.execute(
+                """UPDATE epochs SET challenger_count = ?, status = 'ready'
+                   WHERE id = ? AND status = 'building_challenger'""",
+                (attached_count, epoch_id),
+            )
+            self._event(
+                "epoch.workflow_challengers_frozen",
+                epoch_id,
+                {
+                    "attached_count": attached_count,
+                    "program_sha256": program_sha256,
                 },
             )
 
@@ -4177,16 +4412,35 @@ class SqliteRegistry:
         """Persist an Attempt before launching its external Optimizer session."""
         with self._transaction():
             epoch = self.get_epoch(attempt.epoch_id)
-            if attempt.trajectory_ordinal > epoch.trajectories_per_branch:
+            workflow = self.get_epoch_branch_workflow(
+                attempt.epoch_id,
+                attempt.branch,
+                attempt.challenger_ordinal,
+            )
+            trajectories = (
+                epoch.trajectories_per_branch
+                if workflow is None
+                else workflow.trajectories
+            )
+            attempts_per_trajectory = (
+                epoch.attempts_per_trajectory
+                if workflow is None
+                else workflow.attempts_per_trajectory
+            )
+            if attempt.trajectory_ordinal > trajectories:
                 raise InvalidTransitionError("Attempt Trajectory exceeds the Epoch budget")
-            if attempt.ordinal > epoch.attempts_per_trajectory:
+            if attempt.ordinal > attempts_per_trajectory:
                 raise InvalidTransitionError("Attempt iteration exceeds the Trajectory budget")
             if (
                 attempt.branch is BranchRole.CHALLENGER
                 and attempt.challenger_ordinal > epoch.challenger_count
             ):
                 raise InvalidTransitionError("Attempt Challenger exceeds the Epoch pool")
-            storage_ordinal = self._attempt_storage_ordinal(epoch, attempt)
+            storage_ordinal = self._attempt_storage_ordinal(
+                epoch,
+                attempt,
+                attempts_per_trajectory=attempts_per_trajectory,
+            )
             self._connection.execute(
                 """INSERT INTO attempts(
                        id, epoch_id, branch, ordinal, kernel_agent_revision_id,
@@ -4534,15 +4788,19 @@ class SqliteRegistry:
         )
 
     @staticmethod
-    def _attempt_storage_ordinal(epoch: Epoch, attempt: Attempt) -> int:
+    def _attempt_storage_ordinal(
+        epoch: Epoch,
+        attempt: Attempt,
+        *,
+        attempts_per_trajectory: int,
+    ) -> int:
         """Encode a legacy branch-wide unique ordinal without exposing it as semantics."""
+        branch_budget = epoch.trajectories_per_branch * epoch.attempts_per_trajectory
         branch_offset = (
-            0
-            if attempt.branch is BranchRole.ACTIVE
-            else (attempt.challenger_ordinal - 1) * epoch.trajectories_per_branch
-        )
-        trajectory_offset = branch_offset + attempt.trajectory_ordinal - 1
-        return trajectory_offset * epoch.attempts_per_trajectory + attempt.ordinal
+            0 if attempt.branch is BranchRole.ACTIVE else attempt.challenger_ordinal
+        ) * branch_budget
+        trajectory_offset = (attempt.trajectory_ordinal - 1) * attempts_per_trajectory
+        return branch_offset + trajectory_offset + attempt.ordinal
 
     @staticmethod
     def _map_campaign_task(row: sqlite3.Row) -> CampaignTask:

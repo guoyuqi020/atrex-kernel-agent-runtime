@@ -22,7 +22,7 @@ from typing import Any
 import uvicorn
 
 from atrex_runtime.artifacts import LocalArtifactStore
-from atrex_runtime.config import RuntimeSettings
+from atrex_runtime.config import DEFAULT_AGATE_GPU, RuntimeSettings
 from atrex_runtime.domain.ids import (
     new_attempt_id,
     new_campaign_id,
@@ -53,7 +53,7 @@ def _arguments(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--shell", choices=("zsh", "bash"), default="zsh")
     parser.add_argument("--dsl", choices=tuple(item.value for item in Dsl), default="triton")
     parser.add_argument("--operator", default="wiki_debug")
-    parser.add_argument("--hardware-target", default="nvidia-h100")
+    parser.add_argument("--hardware-target", default=DEFAULT_AGATE_GPU)
     return parser.parse_args(argv)
 
 

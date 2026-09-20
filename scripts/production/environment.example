@@ -1,9 +1,10 @@
 # Copy this file outside Git, chmod it to 0600, fill the values, and pass it
 # with --env-file. Do not commit real credentials.
-export AGATE_URL="https://atrex-gateway.example.com"
-export AGATE_AK="replace-me"
-export AGATE_SK="replace-me"
-export AGATE_GPU="L20N"
+export AGATE_URL="http://127.0.0.1:8000"
+export AGATE_GPU="local"
+# If the localhost Gateway requires authentication, export its matching AK/SK:
+# export AGATE_AK="replace-me"
+# export AGATE_SK="replace-me"
 
 # Optional when the selected backend uses an environment credential instead
 # of its normal host login directory.

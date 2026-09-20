@@ -5,10 +5,12 @@ from __future__ import annotations
 from typing import Any, cast
 
 ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY = 15
+ABLATION_PLAN_SCHEMA_VERSION = 5
 
 
 def build_ablation_plan(
-    policy: dict[str, Any], *,
+    policy: dict[str, Any],
+    *,
     optimizer_attempt_budget_per_trajectory: int = ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY,
 ) -> dict[str, Any]:
     """Derive control arms; single-file production retains its 15-Attempt default."""
@@ -32,6 +34,7 @@ def build_ablation_plan(
         label: str,
         attempts_per_trajectory: int,
         ephemeral_agent_state: bool,
+        workflow_command: str,
         trajectories_per_branch: int = 1,
     ) -> dict[str, Any]:
         if attempt_budget % attempts_per_trajectory:
@@ -48,6 +51,7 @@ def build_ablation_plan(
             "attempts_per_trajectory": attempts_per_trajectory,
             "target_epoch_number": target_epoch,
             "ephemeral_agent_state": ephemeral_agent_state,
+            "workflow_command": workflow_command,
             "challenger_count": 0,
             "challenger_start_epoch": 2,
             "first_epoch_same_agent": False,
@@ -63,6 +67,7 @@ def build_ablation_plan(
                 label=f"ablation-isolated-{ordinal:02d}",
                 attempts_per_trajectory=default_attempts,
                 ephemeral_agent_state=True,
+                workflow_command="workflow/isolated.py",
             )
             for ordinal in range(1, total + 1)
         )
@@ -75,6 +80,7 @@ def build_ablation_plan(
                     label="ablation-pool-3",
                     attempts_per_trajectory=3,
                     ephemeral_agent_state=True,
+                    workflow_command="workflow/pool_3.py",
                     trajectories_per_branch=2,
                 ),
                 arm(
@@ -82,6 +88,7 @@ def build_ablation_plan(
                     label="ablation-pool-retained-3",
                     attempts_per_trajectory=3,
                     ephemeral_agent_state=False,
+                    workflow_command="workflow/pool_retained_3.py",
                     trajectories_per_branch=2,
                 ),
             )
@@ -93,11 +100,12 @@ def build_ablation_plan(
                 label=f"ablation-retained-{ordinal:02d}",
                 attempts_per_trajectory=default_attempts,
                 ephemeral_agent_state=False,
+                workflow_command="workflow/retained.py",
             )
             for ordinal in range(1, total + 1)
         )
     return {
-        "schema_version": 4,
+        "schema_version": ABLATION_PLAN_SCHEMA_VERSION,
         "enabled": enabled,
         "optimizer_attempt_budget_per_trajectory": attempt_budget,
         "arms": arms,

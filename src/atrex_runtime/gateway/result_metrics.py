@@ -36,15 +36,33 @@ def gateway_result_projection(
     operation = value.get("operation")
     status = value.get("status")
     by_shape = _latency_by_shape_value(artifacts, value, seen={digest})
-    return {
+    validation_ids = value.get("validation_shape_ids")
+    holdout = isinstance(validation_ids, list)
+    if isinstance(validation_ids, list):
+        by_shape = {key: number for key, number in by_shape.items() if key in validation_ids}
+        # The all-Shape aggregate also encodes Test performance. Never project it
+        # alongside Valid measurements, even though the Gate verdict is visible.
+        latency_us = (
+            math.exp(statistics.fmean(math.log(number) for number in by_shape.values()))
+            if by_shape and correct
+            else None
+        )
+    projected: dict[str, JsonValue] = {
         "operation": operation if isinstance(operation, str) and operation else "evaluate",
         "status": status if isinstance(status, str) and status else "completed",
         "correct": correct,
-        "correctness": _correctness_projection(artifacts, digest, passed=correct, seen=set()),
+        "correctness": (
+            correctness_summary(None, passed=correct)
+            if holdout
+            else _correctness_projection(artifacts, digest, passed=correct, seen=set())
+        ),
         "latency_us_geomean": latency_us,
         "latency_us_arith_mean": statistics.fmean(by_shape.values()) if by_shape else None,
         "latency_us_by_shape": cast(dict[str, JsonValue], by_shape),
     }
+    if holdout:
+        projected["measurement_domain"] = "valid"
+    return projected
 
 
 def _gateway_result_value(

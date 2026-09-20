@@ -363,7 +363,7 @@ class ProblemGeneralizationWorkspaceAssembler:
             raise ValueError("problem generalization requires a Kernel Agent revision")
         contract = AgateEvaluationContractV1.model_validate_json(
             (contract_artifact.payload_path / "value.json").read_bytes()
-        )
+        ).for_agent()
         root = self._root / manifest.generalization_id / f"run-{uuid4().hex}"
         private = root / manifest.paths.private_inputs
         output = root / manifest.paths.output

@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import cast
 from uuid import uuid4
@@ -78,6 +79,7 @@ class AgateKernelMeasurementRunner(KernelMeasurementRunner):
         if repeat < 0:
             raise ValueError("Kernel measurement repeat cannot be negative")
         context = self._contexts.resolve(revision)
+        context = replace(context, contract=context.contract.for_agent())
         candidate = resolve_kernel_candidate(
             self._artifacts,
             revision.artifact_digest,

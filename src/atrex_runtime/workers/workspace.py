@@ -17,7 +17,14 @@ from uuid import uuid4
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, parse_artifact_digest
-from ..domain.models import BranchRole, Epoch, EpochStatus, KernelAgentRevision, Lineage
+from ..domain.models import (
+    BranchRole,
+    Epoch,
+    EpochStatus,
+    KernelAgentRevision,
+    Lineage,
+    RuntimeStatePolicy,
+)
 from ..filesystem import make_tree_owner_writable, make_tree_read_only
 from ..ports import RunAttemptRequest
 from ..registry.base import Registry
@@ -507,13 +514,24 @@ class LocalAttemptWorkspaceAssembler:
             raise ValueError("Attempt request disagrees with its Epoch Evidence")
         lineage = self._registry.get_lineage(epoch.lineage_id)
         campaign = self._registry.get_campaign(lineage.campaign_id)
+        branch_workflow = self._registry.get_epoch_branch_workflow(
+            attempt.epoch_id,
+            attempt.branch,
+            attempt.challenger_ordinal,
+        )
+        retain_runtime_state = (
+            not lineage.ephemeral_agent_state
+            if branch_workflow is None
+            else branch_workflow.runtime_state_policy
+            is RuntimeStatePolicy.RETAIN_ACROSS_ATTEMPTS
+        )
         # An ephemeral-state Lineage is an ablation control arm, so every Attempt starts from the
         # same Core seed. That has to be decided before reading any prior digest:
         # attempt.runtime_state_digest is sealed after the Session, so a physical retry would
         # otherwise inherit the first run's Skills.
         previous_runtime_state_digest: ArtifactDigest | None = None
         reset_persistent_scope = False
-        if not lineage.ephemeral_agent_state:
+        if retain_runtime_state:
             # A physical retry of the same logical Attempt resumes from its latest
             # sealed Session state. A new serial Attempt resumes from its predecessor.
             previous_runtime_state_digest = (
@@ -546,7 +564,7 @@ class LocalAttemptWorkspaceAssembler:
 
         persistent_state: Path | None = None
         persistent_lock: Path | None = None
-        if lineage.ephemeral_agent_state:
+        if not retain_runtime_state:
             initialize_reusable_agent_state(
                 root, self._artifacts.verify(revision.optimizer_digest).payload_path
             )
@@ -554,12 +572,22 @@ class LocalAttemptWorkspaceAssembler:
             state_trajectory = attempt.trajectory_ordinal
             if (
                 epoch.number == 1
-                and lineage.first_epoch_same_agent
                 and attempt.branch is BranchRole.CHALLENGER
+                and attempt.kernel_agent_revision_id
+                == epoch.active_kernel_agent_revision_id
             ):
                 # One Agent ID owns two independent Branches in this Epoch. Reserve
                 # the second range of its state slots for the replica, not Active's cache.
-                state_trajectory += epoch.trajectories_per_branch
+                active_workflow = self._registry.get_epoch_branch_workflow(
+                    epoch.id,
+                    BranchRole.ACTIVE,
+                    0,
+                )
+                state_trajectory += (
+                    epoch.trajectories_per_branch
+                    if active_workflow is None
+                    else active_workflow.trajectories
+                )
             persistent_state, persistent_lock = self._persistent_root(
                 lineage_id=lineage.id,
                 revision=revision,

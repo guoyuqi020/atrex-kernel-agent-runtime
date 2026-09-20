@@ -199,6 +199,8 @@ def subset_evaluation_contract(
     return contract.model_copy(
         update={
             "shapes": {shape_id: contract.shapes[shape_id] for shape_id in shape_ids},
+            "validation_shape_ids": None,
+            "shape_split": None,
             "metadata": subset_shape_document(contract.metadata, shape_ids, metadata=True),
             "roofline": subset_shape_document(contract.roofline, shape_ids, metadata=False),
         }

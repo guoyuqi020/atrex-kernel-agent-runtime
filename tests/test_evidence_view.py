@@ -28,6 +28,7 @@ from atrex_runtime.workers.evidence_view import (
     assemble_optimizer_evidence_view,
     evolver_agent_optimization_summary,
 )
+from atrex_runtime.workers.evolver_review import materialize_evolver_review
 
 
 def test_optimizer_prompt_enforces_evolver_owned_agent_content() -> None:
@@ -97,6 +98,188 @@ def test_evolver_prior_report_guidance_limits_audit_to_observed_agent_changes() 
 def _write(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value), encoding="utf-8")
+
+
+def _review_session(path: Path, calls: list[tuple[str, str, bool, str]]) -> None:
+    records: list[dict[str, object]] = []
+    for index, (name, command, failed, result) in enumerate(calls, start=1):
+        identifier = f"tool-{index}"
+        records.extend(
+            [
+                {
+                    "event": {
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_use",
+                                    "id": identifier,
+                                    "name": name,
+                                    "input": {"command": command},
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "event": {
+                        "message": {
+                            "content": [
+                                {
+                                    "type": "tool_result",
+                                    "tool_use_id": identifier,
+                                    "is_error": failed,
+                                    "content": result,
+                                }
+                            ]
+                        }
+                    }
+                },
+            ]
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(json.dumps(item) + "\n" for item in records), encoding="utf-8")
+
+
+def test_evolver_review_indexes_observed_change_effects_trajectories_and_friction(
+    tmp_path: Path,
+) -> None:
+    evidence = tmp_path / "evidence"
+    shared_direction = "direction_" + "a" * 32
+    _write(
+        evidence / "latest-epoch-facts.json",
+        {
+            "epoch_number": 2,
+            "selection_reason": "authoritative_comparison",
+            "attempts": [
+                {
+                    "attempt_id": "attempt_active",
+                    "kernel_agent_revision_id": "agent_active",
+                    "branch": "active",
+                    "challenger_ordinal": 0,
+                    "trajectory_ordinal": 1,
+                    "attempt_ordinal": 1,
+                    "status": "completed",
+                    "accepted_as_branch_best": True,
+                    "failure_reason": None,
+                    "candidate": {"correct": True, "latency_us": 12.0},
+                    "direction_ids": [shared_direction],
+                    "experiment_ids": ["experiment_" + "b" * 32],
+                },
+                {
+                    "attempt_id": "attempt_challenger",
+                    "kernel_agent_revision_id": "agent_challenger",
+                    "branch": "challenger",
+                    "challenger_ordinal": 1,
+                    "trajectory_ordinal": 2,
+                    "attempt_ordinal": 1,
+                    "status": "failed",
+                    "accepted_as_branch_best": False,
+                    "failure_reason": "process-exit-1",
+                    "candidate": None,
+                    "direction_ids": [shared_direction],
+                    "experiment_ids": [],
+                },
+            ],
+        },
+    )
+    common_probe = "print('probe')"
+    _review_session(
+        evidence / "agent-v1/sessions/trajectory-00000002/attempt-00000001.conversation.jsonl",
+        [
+            ("Bash", "python3 tools/helper.py --mode screen", False, "ok"),
+            (
+                "Bash",
+                "cat > scratch/probe-one.py <<'PY'\n" + common_probe + "\nPY",
+                False,
+                "",
+            ),
+            (
+                "Bash",
+                "python3 agent/optimizer/src/runtime_tools.py gateway-execute "
+                "--request scratch/request-one.json",
+                True,
+                "validation failed",
+            ),
+            (
+                "Bash",
+                "python3 agent/optimizer/src/runtime_tools.py gateway-execute "
+                "--request scratch/request-two.json",
+                False,
+                "completed",
+            ),
+        ],
+    )
+    _review_session(
+        evidence / "agent-v1/sessions/trajectory-00000003/attempt-00000001.conversation.jsonl",
+        [
+            (
+                "Bash",
+                "cat > scratch/probe-two.py <<'PY'\n" + common_probe + "\nPY",
+                False,
+                "",
+            )
+        ],
+    )
+    _write(
+        evidence / "agent-v1/reports/trajectory-00000002/attempt-00000001.report.json",
+        {"analysis": "tools/helper.py supplied the screening result"},
+    )
+    reports = tmp_path / "evolution-reports"
+    _write(
+        reports / "evo-1.json",
+        {
+            "evolution_number": 1,
+            "generated_agent": {"path": "input/agents/agent-v1"},
+            "report": {
+                "hypothesis": "A helper avoids repeated manual screening.",
+                "expected_effect": "The Optimizer invokes the helper.",
+                "changed_paths": [
+                    "tools/helper.py",
+                    "skills/screening/SKILL.md",
+                    "prompts/episode.md",
+                ],
+            },
+        },
+    )
+
+    materialize_evolver_review(
+        evidence,
+        evolution_reports_root=reports,
+        agent_versions={"agent-v0": "agent_active", "agent-v1": "agent_challenger"},
+        pool_versions=frozenset({"agent-v0", "agent-v1"}),
+    )
+
+    audit = json.loads((evidence / "review/evolution-change-audit.json").read_text())
+    observations = {item["path"]: item for item in audit["evaluated_changes"][0]["observations"]}
+    assert observations["tools/helper.py"]["status"] == "report_cited"
+    assert observations["tools/helper.py"]["successful_in_sessions"]
+    assert observations["skills/screening/SKILL.md"]["status"] == "not_observed"
+    assert observations["prompts/episode.md"]["status"] == "not_observed"
+
+    comparison = json.loads((evidence / "review/trajectory-comparison.json").read_text())
+    assert len(comparison["trajectories"]) == 2
+    assert comparison["exact_cross_trajectory_overlaps"]["direction_ids"] == [
+        {
+            "id": shared_direction,
+            "trajectories": [
+                "agent-v0:active:0:trajectory-00000001",
+                "agent-v1:challenger:1:trajectory-00000002",
+            ],
+        }
+    ]
+
+    friction = json.loads((evidence / "review/workflow-friction.json").read_text())
+    assert friction["runtime_operations"] == [
+        {
+            "operation": "gateway-execute",
+            "call_count": 2,
+            "failed_call_count": 1,
+            "failed_then_later_succeeded_session_count": 1,
+        }
+    ]
+    assert len(friction["tool_failures"]) == 1
+    assert friction["repeated_construction_candidates"][0]["kind"] == ("probe_or_helper_script")
+    assert friction["repeated_construction_candidates"][0]["occurrence_count"] == 2
 
 
 def _raw_trace(
@@ -804,6 +987,14 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert manifest.visibility.current_trajectory_ordinal is None
     assert not (destination / "epochs").exists()
     assert not (destination / "bootstrap").exists()
+    assert {path.name for path in (destination / "review").iterdir()} == {
+        "evolution-change-audit.json",
+        "trajectory-comparison.json",
+        "workflow-friction.json",
+    }
+    assert json.loads(
+        (destination / "review/evolution-change-audit.json").read_text()
+    )["status"] == "no_evolution_reports"
     facts = json.loads((destination / "latest-epoch-facts.json").read_text())
     assert facts["epoch_number"] == 1
     assert facts["selection_reason"] == "authoritative_comparison"
@@ -910,7 +1101,7 @@ def test_latest_evolver_facts_preserve_runtime_failure_diagnosis(tmp_path: Path)
         },
     )
 
-    facts = _latest_evolver_epoch_facts(lineage, 1)
+    facts = _latest_evolver_epoch_facts(lineage, 1, LocalArtifactStore(tmp_path / "artifacts"))
 
     attempts = facts["attempts"]
     assert isinstance(attempts, list)
@@ -963,7 +1154,7 @@ def test_evolver_reads_live_journal_from_attempt_without_terminal_report(tmp_pat
         },
     )
 
-    facts = _latest_evolver_epoch_facts(lineage, 1)
+    facts = _latest_evolver_epoch_facts(lineage, 1, LocalArtifactStore(tmp_path / "artifacts"))
     assert facts["attempts"][0]["direction_ids"] == [direction_id]
     assert facts["attempts"][0]["experiment_ids"] == [experiment_id]
     destination = tmp_path / "evolver-journal"
@@ -1000,12 +1191,14 @@ def test_evolver_journal_includes_bootstrap_direction_records(tmp_path: Path) ->
     destination = tmp_path / "evolver-journal"
     _materialize_evolver_journal(destination, lineage, 0)
 
-    assert json.loads((destination / "directions/index.json").read_text())[0][
-        "direction_id"
-    ] == direction_id
-    assert json.loads((destination / "experiments/index.json").read_text())[0][
-        "experiment_id"
-    ] == experiment_id
+    assert (
+        json.loads((destination / "directions/index.json").read_text())[0]["direction_id"]
+        == direction_id
+    )
+    assert (
+        json.loads((destination / "experiments/index.json").read_text())[0]["experiment_id"]
+        == experiment_id
+    )
 
 
 def test_evolver_journal_includes_prior_suggested_directions(tmp_path: Path) -> None:

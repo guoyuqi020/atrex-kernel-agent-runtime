@@ -22,6 +22,7 @@ from atrex_runtime.composition.bootstrap import build_optimizer_base_loader
 from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.domain.models import Dsl
 from atrex_runtime.gateway.abba import CommitPinnedAtrexBenchEvaluator
+from atrex_runtime.gateway.configuration import agate_settings_from_environment
 from atrex_runtime.gateway.contract import AgateEvaluationContractV1
 from atrex_runtime.gateway.production_policy import ProductionKernelPolicy
 from atrex_runtime.kernel_sources import SourceManifest, import_source_tree, source_path
@@ -93,7 +94,9 @@ def prepare(inputs: Path, workspace: Path, backend: str | None, port: int | None
     if port is not None:
         template["server"]["port"] = port
         campaign["gateway_proxy_url"] = f"http://127.0.0.1:{port}"
-    template["agate"]["base_url"] = os.environ.get("AGATE_URL") or template["agate"]["base_url"]
+    template["agate"] = agate_settings_from_environment(
+        os.environ, base_url=os.environ.get("AGATE_URL") or template["agate"]["base_url"]
+    ).model_dump(exclude_none=True)
     for role in ("optimizer", "evolver"):
         if backend is not None:
             campaign[role]["agent_backend"] = backend

@@ -75,6 +75,7 @@ def _ablation_arms(
         str(arm["label"]): {
             "first_epoch_same_agent": bool(arm["first_epoch_same_agent"]),
             "ephemeral_agent_state": bool(arm["ephemeral_agent_state"]),
+            "workflow_command": str(arm["workflow_command"]),
             **{
                 key: int(arm[key])
                 for key in (
@@ -116,7 +117,15 @@ def _ablation_arms(
             )
             continue
         value = _load(path)
-        _validate(value, dsl=dsl, phase="campaign", target_epoch=schedule["target_epoch_number"])
+        target_epoch = schedule["target_epoch_number"]
+        if not isinstance(target_epoch, int):
+            raise SystemExit(f"{dsl} ablation schedule has an invalid target Epoch")
+        _validate(
+            value,
+            dsl=dsl,
+            phase="campaign",
+            target_epoch=target_epoch,
+        )
         arms.append(
             {
                 "arm": arm_workspace.name,
@@ -134,8 +143,8 @@ def main() -> None:
     arguments = _arguments()
     workspace = arguments.workspace.expanduser().resolve()
     ablation_plan = _load(workspace / "ablation.json") if arguments.phase == "campaign" else {}
-    if arguments.phase == "campaign" and ablation_plan.get("schema_version") != 4:
-        raise SystemExit("campaign summary requires Ablation Plan schema 4")
+    if arguments.phase == "campaign" and ablation_plan.get("schema_version") != 5:
+        raise SystemExit("campaign summary requires Ablation Plan schema 5")
     results: dict[str, Any] = {}
     for dsl in DSLS:
         dsl_workspace = workspace / "dsls" / dsl
@@ -159,6 +168,7 @@ def main() -> None:
             bootstrap_path = dsl_workspace / "bootstrap-result.json"
             results[dsl] = {
                 "arm": f"evolve-{campaign['attempts_per_trajectory']}",
+                "workflow_command": campaign.get("workflow_command"),
                 "result": None,
                 "result_path": str(path),
                 "status": "missing",
@@ -177,6 +187,7 @@ def main() -> None:
         )
         results[dsl] = {
             "arm": f"evolve-{campaign['attempts_per_trajectory']}",
+            "workflow_command": campaign.get("workflow_command"),
             "campaign_id": value["campaign_id"],
             "result": value,
             "result_path": str(path),

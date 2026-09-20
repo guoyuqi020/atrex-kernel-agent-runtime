@@ -87,7 +87,6 @@ export ATREX_EVOLVER_AGENT_BACKEND="${backend}"
 
 # These labels are needed only to materialize the general Campaign schema.
 # The temporary Evolver shell does not contact Agate.
-export AGATE_URL="${AGATE_URL:-http://127.0.0.1:9}"
-export AGATE_GPU="${AGATE_GPU:-nvidia-h100}"
+atrex_default_agate_environment
 atrex_example_prepare_inputs
 bash "${script_dir}/open-shell.sh" --inputs-already-prepared "${shell_name}"

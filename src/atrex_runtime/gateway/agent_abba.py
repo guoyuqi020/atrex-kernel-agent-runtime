@@ -206,6 +206,7 @@ class AgentAbbaGatewayAdapter:
         self, request: GatewayAdapterRequest, parameters: EvaluateParametersV2
     ) -> AgateEvaluationContext:
         context = self._contexts.resolve(request.attempt_id)
+        context = replace(context, contract=context.contract.for_agent())
         overrides = EvaluateParametersV2(
             input_py=parameters.input_py, shapes=parameters.shapes, mode="full"
         )

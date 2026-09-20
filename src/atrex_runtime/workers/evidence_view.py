@@ -24,6 +24,7 @@ from ..domain.models import BranchRole
 from ..filesystem import make_tree_read_only
 from ..gateway.result_metrics import gateway_result_projection
 from ..serialization import canonical_json_bytes, write_canonical_json
+from .evolver_review import materialize_evolver_review
 from .session_trace import enforce_session_trace_retention, retained_session_file
 
 EVIDENCE_VIEW_VERSION: Literal[1] = 1
@@ -123,6 +124,7 @@ def assemble_evolver_evidence_view(
     artifacts: LocalArtifactStore,
     agent_versions: dict[str, str] | None = None,
     pool_versions: frozenset[str] = frozenset(),
+    evolution_reports_root: Path | None = None,
 ) -> EvidenceViewManifestV1:
     """Expose completed Lineage history and per-Agent runtime state to an Evolver."""
     through_epoch = _lineage_through_epoch(lineage_payload)
@@ -162,9 +164,15 @@ def assemble_evolver_evidence_view(
         _materialize_evolver_agent_reports(destination, revision_id, entry / "reports")
     write_canonical_json(
         destination / "latest-epoch-facts.json",
-        _latest_evolver_epoch_facts(lineage_payload, through_epoch),
+        _latest_evolver_epoch_facts(lineage_payload, through_epoch, artifacts),
     )
     _materialize_evolver_journal(destination / "journal", lineage_payload, through_epoch)
+    materialize_evolver_review(
+        destination,
+        evolution_reports_root=evolution_reports_root,
+        agent_versions=versions,
+        pool_versions=pool_versions,
+    )
     shutil.rmtree(destination / "bootstrap")
     shutil.rmtree(destination / "epochs")
     make_tree_read_only(destination)
@@ -174,6 +182,7 @@ def assemble_evolver_evidence_view(
 def _latest_evolver_epoch_facts(
     lineage_payload: Path,
     through_epoch: int,
+    artifacts: LocalArtifactStore,
 ) -> dict[str, JsonValue]:
     """Index trusted outcomes across the last completed Epoch's Branches.
 
@@ -186,6 +195,7 @@ def _latest_evolver_epoch_facts(
             "epoch_number": None,
             "selection_reason": None,
             "winner_kernel_agent_revision_id": None,
+            "branch_workflows": [],
             "attempts": [],
         }
     epoch = _json_object(
@@ -195,6 +205,11 @@ def _latest_evolver_epoch_facts(
     raw_attempts = epoch.get("attempts")
     if not isinstance(raw_attempts, list):
         raise ValueError("Evolver latest Epoch has no Attempt facts")
+    raw_workflows = epoch.get("branch_workflows", [])
+    if not isinstance(raw_workflows, list) or any(
+        not isinstance(item, dict) for item in raw_workflows
+    ):
+        raise ValueError("Evolver latest Epoch Branch Workflows are invalid")
     attempts: list[JsonValue] = []
     for raw in raw_attempts:
         if not isinstance(raw, dict):
@@ -208,6 +223,14 @@ def _latest_evolver_epoch_facts(
         output = raw.get("output")
         if output is not None and not isinstance(output, dict):
             raise ValueError("Evolver latest Epoch Attempt output is invalid")
+        public_result = None if output is None else _evolver_candidate_result(output, artifacts)
+        if (
+            public_result is not None
+            and public_result.get("measurement_domain") == "valid"
+            and isinstance(failure_reason, str)
+            and failure_reason.startswith("candidate ABBA improvement")
+        ):
+            failure_reason = "Candidate improvement did not pass the authoritative ABBA gate"
         journal_path = lineage_payload / "journals" / f"{through_epoch:08d}" / f"{attempt_id}.json"
         report_path = lineage_payload / "reports" / f"{through_epoch:08d}" / f"{attempt_id}.json"
         direction_ids: list[str] = []
@@ -249,7 +272,9 @@ def _latest_evolver_epoch_facts(
                         "kernel_revision_id": output.get("kernel_revision_id"),
                         "kernel_artifact_digest": output.get("artifact_digest"),
                         "correct": output.get("correct"),
-                        "latency_us": output.get("latency_us"),
+                        "latency_us": (
+                            None if public_result is None else public_result["latency_us_geomean"]
+                        ),
                         "gateway_result_digest": output.get("gateway_result_digest"),
                     }
                 ),
@@ -261,8 +286,24 @@ def _latest_evolver_epoch_facts(
         "epoch_number": through_epoch,
         "selection_reason": epoch.get("selection_reason"),
         "winner_kernel_agent_revision_id": epoch.get("winner_kernel_agent_revision_id"),
+        "branch_workflows": cast(JsonValue, raw_workflows),
         "attempts": attempts,
     }
+
+
+def _evolver_candidate_result(
+    output: dict[str, JsonValue], artifacts: LocalArtifactStore
+) -> dict[str, JsonValue] | None:
+    digest = output.get("gateway_result_digest")
+    latency = output.get("latency_us")
+    if not isinstance(digest, str):
+        return None
+    return gateway_result_projection(
+        artifacts,
+        parse_artifact_digest(digest),
+        correct=output.get("correct") is True,
+        latency_us=float(latency) if isinstance(latency, (int, float)) else None,
+    )
 
 
 def _materialize_evolver_journal(
@@ -278,7 +319,10 @@ def _materialize_evolver_journal(
             lineage_payload / "epochs" / f"{number:08d}.json",
             "Evolver historical Epoch",
         )
-        for suggested in epoch.get("suggested_directions", []):
+        suggested_directions = epoch.get("suggested_directions", [])
+        if not isinstance(suggested_directions, list):
+            raise ValueError("Evolver suggested Directions must be a JSON array")
+        for suggested in suggested_directions:
             if not isinstance(suggested, dict):
                 raise ValueError("Evolver suggested Direction is invalid")
             direction_id = suggested.get("direction_id")
@@ -288,11 +332,14 @@ def _materialize_evolver_journal(
             ):
                 raise ValueError("Evolver suggested Direction ID is invalid")
             directions.setdefault(direction_id, []).append(
-                cast(dict[str, JsonValue], {
-                    **suggested,
-                    "action": "suggest",
-                    "recorded_at": suggested.get("created_at"),
-                })
+                cast(
+                    dict[str, JsonValue],
+                    {
+                        **suggested,
+                        "action": "suggest",
+                        "recorded_at": suggested.get("created_at"),
+                    },
+                )
             )
         journal_root = lineage_payload / "journals" / f"{number:08d}"
         sources.extend(
@@ -302,7 +349,10 @@ def _materialize_evolver_journal(
         )
     for source in sources:
         journal = _json_object(source, "Evolver historical Journal")
-        for raw in journal.get("direction_events", []):
+        direction_events = journal.get("direction_events", [])
+        if not isinstance(direction_events, list):
+            raise ValueError("Evolver Direction Events must be a JSON array")
+        for raw in direction_events:
             if not isinstance(raw, dict):
                 raise ValueError("Evolver Direction Event is invalid")
             direction_id = raw.get("direction_id")
@@ -311,8 +361,11 @@ def _materialize_evolver_journal(
                 or re.fullmatch(r"direction_[0-9a-f]{32}", direction_id) is None
             ):
                 raise ValueError("Evolver Direction ID is invalid")
-            directions.setdefault(direction_id, []).append(cast(dict[str, JsonValue], raw))
-        for raw in journal.get("experiments", []):
+            directions.setdefault(direction_id, []).append(raw)
+        journal_experiments = journal.get("experiments", [])
+        if not isinstance(journal_experiments, list):
+            raise ValueError("Evolver Experiments must be a JSON array")
+        for raw in journal_experiments:
             if not isinstance(raw, dict):
                 raise ValueError("Evolver Experiment is invalid")
             experiment_id = raw.get("experiment_id")
@@ -324,7 +377,7 @@ def _materialize_evolver_journal(
             previous = experiments.get(experiment_id)
             if previous is not None and previous != raw:
                 raise ValueError("Evolver Experiment ID has conflicting records")
-            experiments[experiment_id] = cast(dict[str, JsonValue], raw)
+            experiments[experiment_id] = raw
     destination.mkdir(mode=0o700)
     direction_root = destination / "directions"
     experiment_root = destination / "experiments"
@@ -332,9 +385,7 @@ def _materialize_evolver_journal(
     experiment_root.mkdir(mode=0o700)
     for direction_id, events in sorted(directions.items()):
         events.sort(
-            key=lambda event: (
-                str(event.get("recorded_at")), str(event.get("direction_event_id"))
-            )
+            key=lambda event: (str(event.get("recorded_at")), str(event.get("direction_event_id")))
         )
         write_canonical_json(
             direction_root / f"{direction_id}.json",

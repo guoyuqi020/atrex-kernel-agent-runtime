@@ -7,7 +7,7 @@ import shutil
 import stat
 import tempfile
 from pathlib import Path
-from typing import Literal, Protocol, Self
+from typing import Literal, Protocol, Self, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -386,9 +386,7 @@ class LocalEvidenceAssembler:
                     "hypothesis": evolution.output.hypothesis,
                     "expected_effect": evolution.output.expected_effect,
                     "changed_paths": list(getattr(evolution.output, "changed_paths", ())),
-                    "contributing_paths": list(
-                        getattr(evolution.output, "contributing_paths", ())
-                    ),
+                    "contributing_paths": list(getattr(evolution.output, "contributing_paths", ())),
                     "unimplemented_capabilities": [
                         item.model_dump(mode="json")
                         for item in evolution.output.unimplemented_capabilities
@@ -667,7 +665,24 @@ class LocalEvidenceAssembler:
                 }
                 for item in self._registry.list_epoch_challengers(epoch.id)
             ],
-            "suggested_directions": list(self._registry.list_epoch_suggested_directions(epoch.id)),
+            "branch_workflows": [
+                {
+                    "branch": item.branch.value,
+                    "challenger_ordinal": item.challenger_ordinal,
+                    "kernel_agent_revision_id": item.kernel_agent_revision_id,
+                    "kind": item.kind,
+                    "program_sha256": item.program_sha256,
+                    "trajectories": item.trajectories,
+                    "attempts_per_trajectory": item.attempts_per_trajectory,
+                    "runtime_state_policy": item.runtime_state_policy.value,
+                    "attempt_budget": item.attempt_budget,
+                }
+                for item in self._registry.list_epoch_branch_workflows(epoch.id)
+            ],
+            "suggested_directions": cast(
+                list[JsonValue],
+                list(self._registry.list_epoch_suggested_directions(epoch.id)),
+            ),
             "challenger_count": epoch.challenger_count,
             "trajectories_per_branch": epoch.trajectories_per_branch,
             "attempts_per_trajectory": epoch.attempts_per_trajectory,

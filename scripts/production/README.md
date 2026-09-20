@@ -55,6 +55,10 @@ replica without creating a new Agent revision or Evolution Report. Branch States
 the next Active and Evolver inherit the best-Kernel Trajectory's terminal State. Bootstrap and Evolver
 Sessions are excluded from Optimizer Attempt counts.
 
+Each arm owns a Lineage-local `agent-v0` that freezes its executable Workflow: `evolve_3.py`,
+`isolated.py`, `retained.py`, `pool_3.py`, or `pool_retained_3.py`. The Optimizer source and shared
+Bootstrap Kernel remain controlled; Runtime no longer infers arm organization from its label.
+
 The main arm lives at `dsls/DSL/`; control files are under `dsls/DSL/ablation-*/`.
 The generated `ablation.json` freezes the control schedules with 15 post-Bootstrap Attempts per
 Trajectory. `--target-epoch` changes only the main arm's target. Task-level `campaign-results.json`
@@ -74,7 +78,10 @@ Choose one Worker boundary:
   Worker filesystem/namespace; the outer container supplies their shared memory, CPU, and PID total
   limits. Do not mount the Docker socket, Runtime secrets, private evaluator data, or unrelated paths.
 
-Both modes require one supported Agent CLI and Agate credentials.
+Both modes require one supported Agent CLI and an already-running official Agate service.
+The default is `http://127.0.0.1:8000`, GPU `local`; AK/SK is required only when the localhost server
+enables authentication. Explicit non-loopback endpoints retain AK/SK authentication. Agate must be
+deployed separately; these scripts manage Runtime/Wiki only. See [Agate localhost](../../docs/agate-localhost.md).
 In `container` mode, run the outer container as a non-root user when practical and verify that bwrap
 can create its user/PID/IPC/UTS namespaces; managed Runtime and Local Wiki processes retain that
 container identity.
@@ -173,6 +180,14 @@ For current Atrex-Bench layouts, preparation exposes `shape_train.json` to the A
 `shape_valid.json` as the exact Evaluation Contract. Legacy `agent_problem.json` and `shapes.json`
 remain fallback-only. `metadata.json` is forwarded privately, including `mutates_inputs` and
 `scratch_inputs`, so the remote correctness gate enforces declared input side effects.
+
+Bootstrap uses fixed seed `42` to randomly split those exact Shapes 50/50 (odd extra: Valid;
+at least two Shapes required), then randomly samples at most 15 from each half. The private
+Contract's `shape_split` archives the population and selected IDs; extra Shapes are excluded from evaluation.
+Agent operations and Bootstrap/seed ordinary Eval use Valid only;
+authoritative Runtime ABBA uses Valid + Test. Test rows and full-set aggregates never enter
+Agent Evidence or tool responses. Existing Campaign Contracts are immutable: use a new task
+workspace to apply the split to a pre-change experiment. See [evaluation privacy](../../docs/evaluation.md).
 
 ## Per-DSL inspection
 

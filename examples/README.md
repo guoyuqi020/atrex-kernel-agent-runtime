@@ -5,7 +5,7 @@ English | [中文](README.zh.md)
 - [`shared/`](shared/README.md): canonical read-only VecAdd fixtures and generic helpers used by
   multiple runnable examples; it is not itself a runnable workflow.
 - [`bootstrap/`](bootstrap/README.md): run a real single-DSL VecAdd Campaign Bootstrap through
-  Core, Runtime Tools, the configured Agent Backend, and a remote Agate service.
+  Core, Runtime Tools, the configured Agent Backend, and a Agate service.
 - [`source-tree/`](source-tree/README.md): prepare a multi-file source Campaign from a GDN-style
   source manifest and an ATREX task, with an immutable adapter and explicit editable roots.
   Includes the same seven Campaign instances as the single-file production ablation suite.
@@ -17,7 +17,7 @@ English | [中文](README.zh.md)
   workspace with live Gateway authority, without Bootstrap, durable lineage state, or an Agent.
 - [`evolver-dev-shell/`](evolver-dev-shell/README.md): open a disposable synthetic Evolution
   workspace without Bootstrap, Runtime service, or an Agent process.
-- [`agate/`](agate/README.md): call a real remote Agate service with the official CLI for
+- [`agate/`](agate/README.md): call a real Agate service with the official CLI for
   evaluation, profiling, compilation checks, disassembly, development commands, and job control.
 - [`local-wiki/`](local-wiki/README.md): start the standalone Local GPU Wiki for browser/API queries.
   The Agent-facing Wiki tool and its shell walkthroughs are temporarily unavailable.

@@ -8,6 +8,7 @@
   "base_revision": {
     "commit": "41af4a45ca4155254f3c2e8d501ae28a5fb5bb62"
   },
+  "workflow_command": "workflow/evolve_3.py",
   "challenger_count": 1,
   "challenger_start_epoch": 2,
   "first_epoch_same_agent": true,

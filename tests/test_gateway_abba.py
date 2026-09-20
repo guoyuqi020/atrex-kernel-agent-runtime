@@ -133,7 +133,7 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
         assert response.operation == "evaluate"
         assert response.status == "completed"
         assert response.evaluation is None
-        assert len(adapter.requests) == 3
+        assert len(adapter.requests) == 1
         forwarded = adapter.requests[0]
         assert forwarded.operation is GatewayOperation.EVALUATE
         assert forwarded.attempt_id == attempt.id
@@ -178,8 +178,8 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
             "latency_us_by_shape": {"0": 10.0},
         }
         assert response.result["measurement_aggregation"] == {
-            "repetitions": 3,
-            "method": "per_shape_median",
+            "repetitions": 1,
+            "method": "single_measurement",
         }
         assert response.result["baseline_kernel_artifact_digest"] == (
             forwarded.baseline_candidate_digest
@@ -199,14 +199,14 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
         }
         assert json.loads((public.payload_path / "metadata.json").read_text())["evaluation"] is None
         assert await service.execute(capability.token, payload) == response
-        assert len(adapter.requests) == 3
+        assert len(adapter.requests) == 1
         assert len(policy.calls) == 2
 
         changed = deepcopy(request)
         changed["baseline"] = _bundle("def kernel(): return 'changed baseline'\n")
         with pytest.raises(InvalidTransitionError, match="different request"):
             await service.execute(capability.token, json.dumps(changed).encode())
-        assert len(adapter.requests) == 3
+        assert len(adapter.requests) == 1
         assert control.list_evaluations(attempt.id) == ()
         assert len(control.list_measurements((attempt.id,))) == 2
         assert await control.get_outcome(attempt.id) is None
@@ -286,7 +286,7 @@ async def test_abba_result_exposes_both_sources_but_not_unrelated_artifacts(tmp_
             assert isinstance(source_read.result, dict)
             assert source_read.result["content"] == source
             assert source_read.result["kernel_artifact_digest"] == public[digest_field]
-        assert len(adapter.requests) == 3
+        assert len(adapter.requests) == 1
 
         unrelated = tmp_path / "unrelated-kernel"
         unrelated.mkdir()
@@ -307,14 +307,14 @@ async def test_abba_result_exposes_both_sources_but_not_unrelated_artifacts(tmp_
                 ).encode(),
                 operation_scope="runtime",
             )
-        assert len(adapter.requests) == 3
+        assert len(adapter.requests) == 1
     finally:
         control.close()
         registry.close()
 
 
 @pytest.mark.anyio
-async def test_abba_aggregates_three_measurements_per_shape(tmp_path: Path) -> None:
+async def test_abba_uses_one_measurement_per_shape(tmp_path: Path) -> None:
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
 
     def result(baseline: dict[str, float], candidate: dict[str, float]) -> GatewayAdapterResult:
@@ -350,22 +350,22 @@ async def test_abba_aggregates_three_measurements_per_shape(tmp_path: Path) -> N
         response = await service.execute(
             capability.token, json.dumps(_abba_value(attempt)).encode()
         )
-        assert len(adapter.requests) == 3
-        assert [request.measurement_repetition for request in adapter.requests] == [1, 2, 3]
+        assert len(adapter.requests) == 1
+        assert [request.measurement_repetition for request in adapter.requests] == [1]
         assert isinstance(response.result, dict)
         assert response.result["baseline"]["latency_us_by_shape"] == {
             "0": 10.0,
-            "1": 105.0,
+            "1": 100.0,
         }
         assert response.result["candidate"]["latency_us_by_shape"] == {
             "0": 8.0,
-            "1": 84.0,
+            "1": 80.0,
         }
         assert response.result["measurement_aggregation"] == {
-            "repetitions": 3,
-            "method": "per_shape_median",
+            "repetitions": 1,
+            "method": "single_measurement",
         }
-        assert len(response.result["measurements"]) == 3
+        assert len(response.result["measurements"]) == 1
         records = control.list_measurements((attempt.id,), limit=50)
         assert len(records) == 4
         assert {record.point.shape_id for record in records} == {"0", "1"}
@@ -408,7 +408,7 @@ async def test_failed_abba_with_a_false_verdict_is_persisted_and_replayed(tmp_pa
             == response.result_artifact_digest
         )
         assert await service.execute(capability.token, payload) == response
-        assert len(adapter.requests) == 3
+        assert len(adapter.requests) == 1
         assert control.list_evaluations(attempt.id) == ()
         assert control.list_measurements((attempt.id,)) == ()
         assert await control.get_outcome(attempt.id) is None
@@ -453,7 +453,7 @@ async def test_completed_abba_is_not_reexecuted_after_attempt_recovery(tmp_path:
         )
         with pytest.raises(DuplicateGatewayTaskError):
             await service.execute(recovered.token, payload)
-        assert [request.recovery_generation for request in adapter.requests] == [0, 0, 0]
+        assert [request.recovery_generation for request in adapter.requests] == [0]
         assert control.list_evaluations(attempt.id) == ()
     finally:
         control.close()
@@ -480,7 +480,7 @@ async def test_abba_rejects_incomplete_or_authoritative_results_without_poisonin
         payload = json.dumps(_abba_value(attempt)).encode()
         with pytest.raises(
             InfrastructureError,
-            match=r"terminal exploratory comparison|repeated Evaluate measurements",
+            match=r"terminal exploratory comparison|Evaluate measurement",
         ):
             await service.execute(capability.token, payload)
         assert (
@@ -492,7 +492,7 @@ async def test_abba_rejects_incomplete_or_authoritative_results_without_poisonin
         adapter.result = _result()
         response = await service.execute(capability.token, payload)
         assert response.status == "completed"
-        assert len(adapter.requests) == 6
+        assert len(adapter.requests) == 2
         assert control.list_evaluations(attempt.id) == ()
     finally:
         control.close()

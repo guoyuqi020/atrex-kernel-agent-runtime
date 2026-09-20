@@ -127,7 +127,7 @@ async def test_profile_without_experiment_can_be_handed_off(tmp_path: Path) -> N
         stored = json.loads((sealed.payload_path / "value.json").read_text())
         assert stored["profile_evidence"]["supporting_results"] == [reference]
         assert stored["experiments"] == []
-        assert len(adapter.requests) == 4
+        assert len(adapter.requests) == 2
     finally:
         control.close()
         registry.close()

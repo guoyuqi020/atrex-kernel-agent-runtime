@@ -6,6 +6,8 @@ agate_bin="${AGATE_BIN:-agate}"
 agate_vecadd_root="${agate_runtime_root}/examples/shared/vecadd"
 agate_vecadd_candidate="${agate_vecadd_root}/triton/agate-candidate/kernel.py"
 agate_vecadd_reference="${agate_vecadd_root}/reference"
+# shellcheck source=../../scripts/shared/agate-service.sh
+source "${agate_runtime_root}/scripts/shared/agate-service.sh"
 
 agate_require_service() {
   if ! command -v "${agate_bin}" >/dev/null 2>&1; then
@@ -13,10 +15,7 @@ agate_require_service() {
     echo "Activate a platform-local environment containing agate or set AGATE_BIN." >&2
     return 69
   fi
-  if [[ -z "${AGATE_URL:-}" ]]; then
-    echo "AGATE_URL must name the real Agate service for this example." >&2
-    return 64
-  fi
+  atrex_default_agate_environment
 }
 
 agate_require_gpu() {

@@ -46,7 +46,7 @@
 | 正确性 Case | 每 Shape 1 个 | Bootstrap 先 1 后 5；Optimizer 5；Retention 1 |
 | Candidate / Performance 超时 | 60s / 600s | Candidate 120s；普通源码树 Evaluate 的实际 Performance 与外层单次运行预算均为 600s；ABBA 每个 A/B 运行预算为 120s |
 | 锁频 | 默认 off，支持调用方管理 | 默认锁频；ABBA 外层锁定，评测器验证 external 标记 |
-| 分批与重复 | 单次调用内执行给定 Shape | 每批 1 Shape，最多 16 批并发；普通 Evaluate 一次逻辑调用；ABBA 三次完整比较逐 Shape 取中位数，每次 repeats=2，即 A/B/B/A |
+| 分批与重复 | 单次调用内执行给定 Shape | 每批 1 Shape，最多 16 批并发；普通 Evaluate 一次逻辑调用；ABBA 一次完整比较，repeats=2，即 A/B/B/A；不额外重复取中位数 |
 
 这不是逐字复现原始 CLI 的完整执行条件，但仍使用同一份正式评测实现及正确性定义。SHA256 核对不能证明不同测量策略或不同运行窗口产生相同 Latency。
 

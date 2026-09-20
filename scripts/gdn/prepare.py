@@ -22,6 +22,7 @@ from atrex_runtime.composition.bootstrap import build_optimizer_base_loader, bui
 from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.domain.models import Dsl
 from atrex_runtime.gateway.abba import CommitPinnedAtrexBenchEvaluator
+from atrex_runtime.gateway.configuration import agate_settings_from_environment
 from atrex_runtime.gateway.contract import AgateEvaluationContractV1
 from atrex_runtime.gateway.production_policy import ProductionKernelPolicy
 from atrex_runtime.kernel_sources import import_source_tree
@@ -371,7 +372,9 @@ def configure_runtime(root: Path, workspace: Path, args: argparse.Namespace) -> 
     if launcher["mode"] == "sandbox":
         launcher["sandbox"]["worker_user"] = worker.pw_name
     launcher["backend_credentials"]["host_home"] = worker.pw_dir
-    template["agate"]["base_url"] = os.environ.get("AGATE_URL") or template["agate"]["base_url"]
+    template["agate"] = agate_settings_from_environment(
+        os.environ, base_url=os.environ.get("AGATE_URL") or template["agate"]["base_url"]
+    ).model_dump(exclude_none=True)
     if args.port is not None:
         template["server"]["port"] = args.port
         template["campaign"]["gateway_proxy_url"] = f"http://127.0.0.1:{args.port}"
