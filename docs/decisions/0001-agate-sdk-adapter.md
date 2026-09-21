@@ -8,7 +8,7 @@ Accepted on 2026-08-15.
 
 ## Context
 
-The trusted Gateway Proxy must expose Agate's remote command surface without exposing Gateway credentials to a Worker. The installed `atrex-gateway-client` 0.12.1 package provides a zero-runtime-dependency synchronous `Client`, pluggable authentication, a stable eval request builder, typed job submission, bounded long polling, cancellation, job and environment queries, liveness, and structured `GatewayError` fields.
+The trusted Gateway Proxy must expose Agate's remote command surface without exposing Gateway credentials to a Worker. The installed `atrex-gateway-client` 0.13.18-or-newer package provides a zero-runtime-dependency synchronous `Client`, pluggable authentication, a stable eval request builder including native ABBA, typed job submission, bounded long polling, cancellation, job and environment queries, liveness, and structured `GatewayError` fields.
 
 ## Decision
 

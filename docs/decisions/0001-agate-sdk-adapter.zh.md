@@ -8,7 +8,7 @@
 
 ## 背景
 
-可信 Gateway Proxy 必须暴露 Agate 远程命令接口，同时不能向 Worker 暴露 Gateway 凭据。已安装的 `atrex-gateway-client` 0.12.1 提供零运行时依赖的同步 `Client`、可插拔认证、稳定 Eval Request Builder、Typed Job 提交、分段长轮询、取消、Job 与环境查询、存活检查和结构化 `GatewayError` 字段。
+可信 Gateway Proxy 必须暴露 Agate 远程命令接口，同时不能向 Worker 暴露 Gateway 凭据。已安装的 `atrex-gateway-client` 0.13.18 或更高版本提供零运行时依赖的同步 `Client`、可插拔认证、包含原生 ABBA 的稳定 Eval Request Builder、Typed Job 提交、分段长轮询、取消、Job 与环境查询、存活检查和结构化 `GatewayError` 字段。
 
 ## 决策
 

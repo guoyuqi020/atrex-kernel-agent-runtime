@@ -85,9 +85,10 @@ identity, Gate inputs and same-allocation ABBA semantics do not change. No addit
 OSS credentials or configuration is required; the Agate service must support the SDK upload API.
 
 Supported: full Evaluate, `correctness_only`, custom input/shape overrides, ordinary repeated
-measurement, Agent exploratory ABBA, and Runtime authoritative ABBA. In ABBA every step gets a
-fresh source directory, a fresh process and independent JIT caches within the same allocation.
-The complete A/B schedule shares the existing Runtime clock-lock policy.
+measurement, Agent exploratory ABBA, and Runtime authoritative ABBA. Source-tree ABBA uses the Dev
+driver, while single-file ABBA uses Agate's native Eval ABBA API. In either path every step gets a
+fresh process and independent JIT caches within the same allocation, and the complete A/B schedule
+shares the existing Runtime clock-lock policy.
 
 Source-tree Bootstrap launches the configured Optimizer backend for a complete framework-baseline
 Session (Claude in the GDN kit). Runtime adds the source scope to a session-local copy of the

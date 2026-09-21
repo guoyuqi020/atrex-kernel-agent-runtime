@@ -64,8 +64,9 @@ Agent 工具接口不变，Core/KDA 原有目录 Bundle 提交能力可直接使
 OSS 凭证或配置项，但 Agate 服务必须支持 SDK 上传接口。
 
 已支持 full、`correctness_only`、自定义输入/Shape、普通重复评测、Agent 探索 ABBA，以及
-Runtime 权威 ABBA。ABBA 各步在同一 allocation 中使用不同的源码副本、独立进程和独立 JIT
-缓存，沿用整段测量的锁频策略，防止 A/B 模块与缓存混用。
+Runtime 权威 ABBA。源码树 ABBA 使用 Dev Driver，单文件 ABBA 使用 Agate 原生 Eval ABBA
+API；两条路径各步都在同一 Allocation 中使用独立进程和独立 JIT Cache，并沿用整段测量的
+锁频策略，防止 A/B 模块与缓存混用。
 
 源码树 Bootstrap 使用配置的 Optimizer backend 启动完整 framework-baseline Session
 （GDN 输入包使用 Claude）。Runtime 将源码范围追加到本次 Session 的 Bootstrap Prompt

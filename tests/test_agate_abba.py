@@ -144,6 +144,84 @@ class FakeAgateClient:
         return self.jobs[job_id]
 
 
+def _native_request_builder(
+    candidate: str,
+    reference: dict[str, object],
+    gpu: str,
+    **fields: object,
+) -> dict[str, object]:
+    return {"candidate": candidate, "reference": reference, "gpu": gpu, **fields}
+
+
+def _native_evaluation(shape_ids: list[str], latency_us: float) -> dict[str, object]:
+    return {
+        "error": None,
+        "passed": {
+            "compile": {"status": "passed"},
+            "correctness": {shape_id: {"status": "passed"} for shape_id in shape_ids},
+        },
+        "correctness": {"shapes": {shape_id: {} for shape_id in shape_ids}},
+        "performance": {
+            "shapes": {
+                shape_id: {
+                    "error": None,
+                    "samples": [{"end_to_end_time_ms": latency_us / 1000}],
+                    "sol": {"pct": 50.0 if latency_us == 90 else 25.0},
+                }
+                for shape_id in shape_ids
+            }
+        },
+    }
+
+
+class NativeAgateClient(FakeAgateClient):
+    def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+        assert kind == "eval"
+        reference = request["reference"]
+        abba = request["abba"]
+        assert isinstance(reference, dict) and isinstance(abba, dict)
+        shapes = reference["shapes"]
+        assert isinstance(shapes, dict)
+        shape_ids = list(shapes)
+        repeats = abba["repeats"]
+        assert type(repeats) is int
+        expected = [
+            {"index": 0, "revision": "baseline", "label": "A", "repeat": 0},
+            {"index": 1, "revision": "candidate", "label": "B", "repeat": 0},
+            {"index": 2, "revision": "candidate", "label": "B", "repeat": 1},
+            {"index": 3, "revision": "baseline", "label": "A", "repeat": 1},
+        ]
+        blocks = []
+        for _ in range(repeats):
+            runs = [
+                {
+                    **step,
+                    "result": _native_evaluation(
+                        shape_ids, 100.0 if step["revision"] == "baseline" else 90.0
+                    ),
+                }
+                for step in expected
+            ]
+            blocks.append(
+                {
+                    "eval_mode": "abba",
+                    "error": None,
+                    "passed": {"abba": {"status": "passed"}},
+                    "abba": {"schedule": expected, "runs": runs, "comparison": {}},
+                }
+            )
+        with self._lock:
+            job_id = f"ev_native_abba_{len(self.requests)}"
+            self.requests.append(request)
+        self.jobs[job_id] = {
+            "job_id": job_id,
+            "status": "succeeded",
+            "command_ok": True,
+            "result": {"abba": {"sdk_results": blocks, "valid": True}},
+        }
+        return {"job_id": job_id, "status": "queued"}
+
+
 def test_commit_pinned_evaluator_exports_only_required_runtime(tmp_path: Path) -> None:
     repository = tmp_path / "atrex-bench"
     (repository / "scripts").mkdir(parents=True)
@@ -427,6 +505,8 @@ async def _run_pair(
     tmp_path: Path,
     *,
     shape_batch_size: int = 3,
+    repeats: int = 1,
+    request_builder: object | None = None,
 ) -> tuple[object, FakeJournal]:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     incumbent_dir = tmp_path / "incumbent"
@@ -470,12 +550,13 @@ async def _run_pair(
         artifacts,
         journal,  # type: ignore[arg-type]
         FakeEvaluator(),  # type: ignore[arg-type]
+        request_builder,  # type: ignore[arg-type]
         wait_timeout_s=90,
     )
     result = await runner.run_pair(
         incumbent,
         candidate,
-        repeats=1,
+        repeats=repeats,
         purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
         per_run_timeout_seconds=100,
         allocation_timeout_seconds=500,
@@ -483,6 +564,75 @@ async def _run_pair(
         max_parallel_shape_batches=2,
     )
     return result, journal
+
+
+@pytest.mark.anyio
+async def test_authoritative_single_file_abba_uses_native_agate_eval(tmp_path: Path) -> None:
+    client = NativeAgateClient()
+
+    result, journal = await _run_pair(
+        client,
+        tmp_path,
+        shape_batch_size=5,
+        repeats=2,
+        request_builder=_native_request_builder,
+    )
+
+    assert len(client.requests) == 1
+    request = client.requests[0]
+    assert request["abba"] == {"baseline": "INCUMBENT = True\n", "repeats": 1}
+    assert request["candidate"] == "CANDIDATE = True\n"
+    assert request["lock_clocks"] is True
+    assert request["options"]["timeout_s"] == 500
+    assert [run.latency_us for run in result.incumbent_runs] == pytest.approx([100, 100])
+    assert [run.latency_us for run in result.candidate_runs] == pytest.approx([90, 90])
+    assert result.gateway_result_digest is not None
+    aggregate = json.loads(
+        (
+            LocalArtifactStore(tmp_path / "artifacts")
+            .verify(result.gateway_result_digest)
+            .payload_path
+            / "value.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert aggregate["execution_transport"] == "agate_native_eval_abba"
+    assert aggregate["atrex_bench_commit"] is None
+    assert any(kind == "comparison.abba_completed" for kind, _, _ in journal.events)
+
+
+@pytest.mark.anyio
+async def test_native_agate_abba_preserves_candidate_correctness_failure(tmp_path: Path) -> None:
+    class IncorrectNativeClient(NativeAgateClient):
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            accepted = super().submit_job(kind, request)
+            job = self.jobs[str(accepted["job_id"])]
+            result = job["result"]
+            assert isinstance(result, dict)
+            comparison = result["abba"]
+            assert isinstance(comparison, dict)
+            comparison["valid"] = False
+            for block in comparison["sdk_results"]:
+                for row in block["abba"]["runs"]:
+                    if row["revision"] == "candidate":
+                        shape_id = next(iter(row["result"]["passed"]["correctness"]))
+                        row["result"]["passed"]["correctness"][shape_id] = {
+                            "status": "failed"
+                        }
+            return accepted
+
+    client = IncorrectNativeClient()
+    result, journal = await _run_pair(
+        client,
+        tmp_path,
+        shape_batch_size=5,
+        repeats=2,
+        request_builder=_native_request_builder,
+    )
+
+    assert len(client.requests) == 1
+    assert all(run.correct for run in result.incumbent_runs)
+    assert all(not run.correct for run in result.candidate_runs)
+    assert not any(kind == "comparison.abba_batch_retried" for kind, _, _ in journal.events)
 
 
 @pytest.mark.anyio

@@ -183,6 +183,7 @@ def build_campaign_runtime(
                     max_bundle_files=evaluator_settings.max_bundle_files,
                     max_bundle_bytes=evaluator_settings.max_bundle_bytes,
                 ),
+                request_builder,
                 wait_timeout_s=agate.wait_timeout_s,
             )
         control = SqliteGatewayControl(

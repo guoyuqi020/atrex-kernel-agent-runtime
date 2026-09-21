@@ -154,6 +154,7 @@ class AgateRequestBuilder(Protocol):
         harness: str | None = None,
         atrex_bench_version: str | None = None,
         runner_overrides: Mapping[str, object] | None = None,
+        abba: Mapping[str, object] | None = None,
         idempotency_key: str | None = None,
     ) -> dict[str, object]:
         """Build a JSON-ready eval or profile request."""

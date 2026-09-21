@@ -264,10 +264,12 @@ Candidate 校验、编译和正确性失败、未分类错误及已取消的 Job
   Repeat 各测一次 A、B，并在 `A, B` 与 `B, A` 之间交替，因此两个 Repeat 形成
   `A, B, B, A`。Runtime 执行一次完整 Schedule，校验 Shape 覆盖，再计算权威几何平均延迟，
   不再跨 Job 取中位数。明确的正确性失败使比较失败；每次物理
-  测量仍分别记录。
+  测量仍分别记录。单文件 Kernel 使用 Agate 原生 Eval ABBA API，Runtime 根据返回的原始 SDK
+  Runs 重建权威账本；多文件源码树继续使用 Commit 固定的 Dev Driver，因为原生 Wire Schema
+  每侧只携带一个源码文件。
 
-权威 ABBA 将每个已完成的物理 Shape Batch 按精确 Revision Pair、封存 Contract、Evaluator、
-用途、Schedule 和测量轮次登记。恢复相同的比较时，Runtime 从 Registry 和 Artifact Store 读取
+权威 ABBA 将每个已完成的物理 Shape Batch 按精确 Revision Pair、封存 Contract、执行传输、
+适用时的 Evaluator、用途、Schedule 和测量轮次登记。恢复相同的比较时，Runtime 从 Registry 和 Artifact Store 读取
 已完成的批次，不重复提交。Agate 瞬时错误会以新 Job 重试失败批次，
 而不同 Revision Pair 会重新测量。
 

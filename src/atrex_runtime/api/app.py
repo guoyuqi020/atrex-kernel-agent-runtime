@@ -242,6 +242,7 @@ def build_runtime_application(
             contexts,
             artifacts,
             evaluator,
+            request_builder,
             wait_timeout_s=connection.wait_timeout_s,
             correctness_cases=5 if gate_policy is None else gate_policy.optimizer.correctness_cases,
             bench_iters=100 if gate_policy is None else gate_policy.optimizer.bench_iters,

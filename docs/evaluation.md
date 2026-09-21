@@ -299,10 +299,14 @@ An ordinary Attempt uses `kernel_retention_comparison`:
   batch. Each repeat measures both revisions; pair order alternates between `A, B` and `B, A`, so
   two repeats produce `A, B, B, A`. Runtime executes that complete schedule once, validates Shape
   coverage, and computes the authoritative geomean without a cross-job median. An explicit
-  correctness failure fails the comparison. Every physical run remains recorded.
+  correctness failure fails the comparison. Every physical run remains recorded. Single-file
+  Kernels use Agate's native Eval ABBA API; Runtime reconstructs its authoritative ledger from the
+  returned raw SDK runs. Multi-file source trees retain the commit-pinned Dev driver because the
+  native wire schema carries one source file per side.
 
 For authoritative ABBA, Runtime records each completed physical Shape batch under an identity
-covering the exact revision pair, sealed Contract, evaluator, purpose, schedule, and repetition.
+covering the exact revision pair, sealed Contract, execution transport, evaluator where applicable,
+purpose, schedule, and repetition.
 Resuming the same comparison reads completed batches from the Registry and Artifact Store instead
 of submitting them again. Transient Agate failures retry the affected batch with a fresh Job, and a
 different revision pair starts fresh measurements.

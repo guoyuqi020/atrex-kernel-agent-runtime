@@ -155,6 +155,80 @@ class FakeAgate:
                 self.active -= 1
 
 
+def _native_request_builder(
+    candidate: str,
+    reference: dict[str, object],
+    gpu: str,
+    **fields: object,
+) -> dict[str, object]:
+    return {"candidate": candidate, "reference": reference, "gpu": gpu, **fields}
+
+
+class NativeFakeAgate(FakeAgate):
+    def submit_job(self, kind: str, request: dict[str, Any]) -> dict[str, Any]:
+        assert kind == "eval"
+        reference = request["reference"]
+        abba = request["abba"]
+        shape_ids = list(reference["shapes"])
+        expected = [
+            {"index": 0, "revision": "baseline", "label": "A", "repeat": 0},
+            {"index": 1, "revision": "candidate", "label": "B", "repeat": 0},
+            {"index": 2, "revision": "candidate", "label": "B", "repeat": 1},
+            {"index": 3, "revision": "baseline", "label": "A", "repeat": 1},
+        ]
+        blocks = []
+        for _ in range(abba["repeats"]):
+            runs = []
+            for step in expected:
+                latency = 100.0 if step["revision"] == "baseline" else 50.0
+                raw = {
+                    "error": None,
+                    "passed": {
+                        "compile": {"status": "passed"},
+                        "correctness": {
+                            shape_id: {"status": "passed"} for shape_id in shape_ids
+                        },
+                    },
+                    "correctness": {
+                        "shapes": {
+                            shape_id: {
+                                "max_elementwise_abs_diff": 0.001,
+                                "max_elementwise_rel_diff": 0.002,
+                            }
+                            for shape_id in shape_ids
+                        }
+                    },
+                    "performance": {
+                        "shapes": {
+                            shape_id: {
+                                "error": None,
+                                "samples": [{"end_to_end_time_ms": latency / 1000}],
+                            }
+                            for shape_id in shape_ids
+                        }
+                    },
+                }
+                runs.append({**step, "result": raw})
+            blocks.append(
+                {
+                    "eval_mode": "abba",
+                    "error": None,
+                    "passed": {"abba": {"status": "passed"}},
+                    "abba": {"schedule": expected, "runs": runs, "comparison": {}},
+                }
+            )
+        with self._lock:
+            job_id = f"ev_agent_abba_{len(self.requests)}"
+            self.requests.append(deepcopy(request))
+            self.jobs[job_id] = {
+                "job_id": job_id,
+                "status": "succeeded",
+                "command_ok": True,
+                "result": {"abba": {"sdk_results": blocks, "valid": True}},
+            }
+        return {"job_id": job_id, "status": "queued"}
+
+
 @dataclass
 class Case:
     adapter: AgentAbbaGatewayAdapter
@@ -263,6 +337,33 @@ async def test_agent_abba_uses_exact_sources_schedule_and_gate_policy(
     assert "stdout" not in encoded and "reference_py" not in encoded
     assert "baseline_kernel_trial_id" not in public
     assert contract.model_dump(mode="json") == original
+
+
+@pytest.mark.anyio
+async def test_agent_single_file_abba_uses_native_agate_eval(case: Case) -> None:
+    client = NativeFakeAgate()
+    adapter = AgentAbbaGatewayAdapter(
+        case.delegate,
+        client,
+        case.contexts,
+        case.artifacts,
+        case.evaluator,
+        _native_request_builder,  # type: ignore[arg-type]
+        wait_timeout_s=90,
+        correctness_cases=3,
+        bench_iters=17,
+    )
+
+    result = await adapter.execute(case.request)
+
+    assert result.status == "completed"
+    assert len(client.requests) == 2
+    assert case.evaluator.calls == 0
+    assert all(request["abba"]["repeats"] == 1 for request in client.requests)
+    assert all(request["options"]["timeout_s"] == 600 for request in client.requests)
+    assert result.worker_result["baseline"]["latency_us_geomean"] == pytest.approx(100)
+    assert result.worker_result["candidate"]["latency_us_geomean"] == pytest.approx(50)
+    assert result.result["execution_transport"] == "agate_native_eval_abba"
 
 
 @pytest.mark.anyio

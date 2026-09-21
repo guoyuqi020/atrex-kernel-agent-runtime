@@ -6,6 +6,10 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- 单文件 Agent ABBA 与权威 ABBA 改用 Agate 原生 Eval ABBA API。Runtime 将每侧两次测量精确
+  映射为一个完整 A/B/B/A Block，并根据返回的原始 SDK Runs 重建既有权威聚合；Shape 分批、
+  重试、缓存、Registry 与晋升语义保持不变。多文件源码树继续使用 Dev ABBA Driver。
+
 - Agent Revision 现在可携带可执行的 `workflow/main.py` Epoch 编排程序。Runtime 通过 Worker 隔离
   边界运行 Active Revision 的程序。Agent 代码只实现一个 `run_epoch(epoch)` 函数，以 Pool 和同步轮次
   组织工作；SDK 隐藏 Attempt 序号与底层协议，同时保留根据结果路由 Kernel/State 的能力。Runtime 强制
@@ -54,7 +58,7 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
   还原精确文件；上传各阶段独立重试，不改变逻辑请求身份和测量策略。
 
 - 新增 Agent `evaluate.comparison`（`method="abba"`）：Core 与 KDA 从工作区文件或目录上传
-  A/B 两份 Kernel。Runtime 封存源码，并通过 Agate `dev` 使用固定版本评测器及相同输入运行
+  A/B 两份 Kernel。Runtime 封存源码，并使用相同输入运行
   测试；记录逐侧测量与相对
   加速，不改变 Kernel 保留与 Agent 晋升的权威决策。不再提供独立的 `abba` 操作。
 - Agent `evaluate` 支持自定义输入生成器与 Shapes，并新增不测性能、不自动 Profile 的

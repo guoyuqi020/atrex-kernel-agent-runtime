@@ -6,6 +6,11 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Single-file Agent and authoritative ABBA now use Agate's native Eval ABBA API. Runtime maps two
+  side measurements to one complete A/B/B/A block, rebuilds its existing authoritative aggregate
+  from the returned raw SDK runs, and keeps Shape batching, retry, cache, Registry and promotion
+  semantics unchanged. Multi-file source trees continue to use the Dev ABBA driver.
+
 - Agent Revisions may now carry executable `workflow/main.py` Epoch orchestration. Runtime runs the
   Active Revision's program through the Worker isolation boundary. Agent code implements exactly one
   `run_epoch(epoch)` function over Pools and synchronized rounds; the SDK hides Attempt ordinals and
@@ -65,7 +70,7 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   retry independently without changing logical request identity or measurement policy.
 
 - Added Agent `evaluate.comparison` with `method="abba"`, using two workspace Kernel files
-  (or directories) through Agate `dev`. Core and KDA upload A/B sources; Runtime seals both,
+  (or directories). Core and KDA upload A/B sources; Runtime seals both,
   uses its pinned evaluator and shared input contract, and records per-side measurements and
   relative speedup without
   changing Kernel-retention or Agent-promotion authority. There is no standalone `abba` operation.

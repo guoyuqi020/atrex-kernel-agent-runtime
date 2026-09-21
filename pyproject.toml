@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 license = "Apache-2.0"
 dependencies = [
-  "atrex-gateway-client>=0.12.1,<0.13",
+  "atrex-gateway-client>=0.13.18,<0.14",
   "anyio>=4.8,<5",
   "httpx>=0.28,<1",
   "pydantic>=2.12,<3",
