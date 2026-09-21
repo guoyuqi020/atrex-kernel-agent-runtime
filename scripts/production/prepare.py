@@ -532,7 +532,6 @@ def _runtime_config(
                 "resolv_conf": _resolver_source(),
                 "read_only_bind_paths": [],
                 "hidden_host_paths": [],
-                "reference_projects_root": str(root / "third_party/reference-projects"),
             },
         }
     else:
@@ -556,7 +555,6 @@ def _runtime_config(
                 "resolv_conf": _resolver_source(),
                 "read_only_bind_paths": [],
                 "hidden_host_paths": [],
-                "reference_projects_root": str(root / "third_party/reference-projects"),
                 "resources": {
                     "memory_max_bytes": int(sandbox["memory_max_bytes"]),
                     "memory_swap_max_bytes": int(sandbox["memory_swap_max_bytes"]),

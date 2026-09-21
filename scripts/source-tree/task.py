@@ -107,10 +107,6 @@ def prepare(inputs: Path, workspace: Path, backend: str | None, port: int | None
         section["repository"] = "./" + os.path.relpath(
             (inputs / section["repository"]).resolve(), workspace
         )
-    reference_root = campaign["launcher"]["container"]["reference_projects_root"]
-    campaign["launcher"]["container"]["reference_projects_root"] = "./" + os.path.relpath(
-        (inputs / reference_root).resolve(), workspace
-    )
     # Credentials are copied into isolated per-Session homes by the normal Runtime launcher.
     campaign["launcher"]["backend_credentials"]["host_home"] = None
 

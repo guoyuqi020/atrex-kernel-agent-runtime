@@ -6,6 +6,10 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Bootstrap 沙箱不再挂载仓库内固定版本的上游 Reference Projects。Bootstrap 工作区与 Prompt
+  现在只暴露任务 Seed、Agent Revision 状态、Runtime 工具和 Scratch。新生成的 Runtime 配置不再
+  写入 `reference_projects_root`；旧字段只用于兼容恢复已有冻结 Campaign，不再产生任何效果。
+
 - 单文件 Agent ABBA 与权威 ABBA 改用 Agate 原生 Eval ABBA API。Runtime 将每侧两次测量精确
   映射为一个完整 A/B/B/A Block，并根据返回的原始 SDK Runs 重建既有权威聚合；Shape 分批、
   重试、缓存、Registry 与晋升语义保持不变。多文件源码树继续使用 Dev ABBA Driver。

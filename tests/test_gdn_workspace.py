@@ -164,9 +164,9 @@ def test_prepare_snapshots_inputs_without_writing_to_data(
     )
     assert settings.campaign.launcher.mode == "container"
     assert settings.campaign.launcher.sandbox is None
-    assert settings.campaign.launcher.container.reference_projects_root == (
-        tmp_path / "third_party/reference-projects"
-    )
+    assert settings.campaign.launcher.container.reference_projects_root is None
+    runtime_document = json.loads((workspace / "runtime.json").read_text(encoding="utf-8"))
+    assert "reference_projects_root" not in runtime_document["campaign"]["launcher"]["container"]
     for name in ("campaign.json", "ablation-campaign.json"):
         spec = CampaignSpecV3.from_file(workspace / name)
         assert spec.evaluation_contract == workspace / "evaluation-contract.json"

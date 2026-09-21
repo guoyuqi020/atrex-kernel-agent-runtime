@@ -225,8 +225,7 @@
         "workspace_mount": "/home/agent/workspace",
         "resolv_conf": "/etc/resolv.conf",
         "read_only_bind_paths": [],
-        "hidden_host_paths": [],
-        "reference_projects_root": "../../third_party/reference-projects"
+        "hidden_host_paths": []
       }
     }
   }

@@ -61,13 +61,11 @@ def write_inputs(workspace: Path, files: dict[str, bytes]) -> None:
 def rebase_repositories(template: dict, inputs: Path, workspace: Path) -> None:
     """Keep repository references relative even with a custom workspace depth."""
     campaign = template["campaign"]
-    launcher = campaign["launcher"]
     for section, key in (
         (template["kernel_agent"]["base_source"], "repository"),
         (campaign["evolver"], "repository"),
         (campaign["gate_policy"]["evaluator"], "repository"),
         (campaign["roofline_builder"], "repository"),
-        (launcher[launcher["mode"]], "reference_projects_root"),
     ):
         value = section[key]
         if value and (key != "repository" or value.startswith(("./", "../", "/"))):

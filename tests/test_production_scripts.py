@@ -89,6 +89,10 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     )
     subprocess.run(command, check=True, env=environment, capture_output=True, text=True)
 
+    runtime_document = json.loads((workspace / "runtime.json").read_text(encoding="utf-8"))
+    launcher_document = runtime_document["campaign"]["launcher"]
+    boundary_document = launcher_document[launcher_document["mode"]]
+    assert "reference_projects_root" not in boundary_document
     settings = RuntimeSettings.from_file(workspace / "runtime.json")
     creation_keys: set[str] = set()
     for dsl in ("cuda", "triton", "cutedsl"):

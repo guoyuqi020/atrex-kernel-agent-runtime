@@ -503,7 +503,7 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
     assert bwrap[-1] == "/home/agent/workspace/agent/optimizer/run.py"
 
 
-def test_bwrap_launcher_binds_reference_projects_read_only_over_the_workspace(
+def test_bwrap_launcher_does_not_bind_legacy_reference_projects(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "attempt-workspaces"
@@ -525,18 +525,17 @@ def test_bwrap_launcher_binds_reference_projects_read_only_over_the_workspace(
         ),
     )
     launcher = BwrapSandboxLauncher(Path("/usr/bin/env"), settings, (root,))
+    assert "reference_projects_root" not in settings.model_dump(mode="json")
 
     argv = launcher.wrap(("/bin/true",), workspace=workspace, environment={"PATH": "/bin"})
 
     bwrap = argv[argv.index("/usr/bin/bwrap") :]
-    destination = bwrap.index("/home/agent/workspace/reference")
-    assert bwrap[destination - 2 : destination + 1] == (
+    assert str(reference) not in bwrap
+    assert (
         "--ro-bind",
         str(reference),
         "/home/agent/workspace/reference",
-    )
-    workspace_index = bwrap.index("/home/agent/workspace")
-    assert bwrap[workspace_index - 2] == "--bind"
+    ) not in set(zip(bwrap, bwrap[1:], bwrap[2:], strict=False))
 
     without_mountpoint = root / "attempt-1/run-2"
     without_mountpoint.mkdir(parents=True)
