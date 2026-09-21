@@ -25,7 +25,7 @@ from ..domain.ids import (
     parse_lineage_id,
 )
 from ..domain.models import Dsl, TokenUsage
-from ..filesystem import make_tree_owner_writable
+from ..filesystem import make_tree_owner_writable, make_tree_read_only
 from ..gateway.contract import load_agent_correctness_policy
 from ..kernel_sources import inject_bootstrap_source_instructions, load_kernel_source_contract
 from ..serialization import canonical_json_bytes
@@ -43,6 +43,7 @@ from .workspace import (
 )
 
 LINEAGE_BOOTSTRAP_MANIFEST_VERSION: Literal[2] = 2
+MAX_BOOTSTRAP_HINT_BYTES = 256 * 1024
 _RUNTIME_KEYS = {
     "ATREX_AGENT_BACKEND",
     "ATREX_AGENT_MODEL",
@@ -171,7 +172,12 @@ class LineageBootstrapWorkspaceAssembler:
         )
         self._root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
-    def prepare(self, manifest: LineageBootstrapManifestV2) -> PreparedLineageBootstrap:
+    def prepare(
+        self,
+        manifest: LineageBootstrapManifestV2,
+        *,
+        initial_evidence_digest: ArtifactDigest,
+    ) -> PreparedLineageBootstrap:
         root = self._root / str(manifest.bootstrap_attempt_id) / f"run-{uuid4().hex}"
         root.mkdir(parents=True, mode=0o700)
         artifacts = (
@@ -192,6 +198,7 @@ class LineageBootstrapWorkspaceAssembler:
         self._artifacts.materialize(manifest.optimizer_digest, root / paths.optimizer)
         shutil.copytree(root / paths.input_kernel, root / paths.working_kernel)
         make_tree_owner_writable(root / paths.working_kernel)
+        self._materialize_initial_evidence(root, initial_evidence_digest)
         source_contract = load_kernel_source_contract(
             self._artifacts, manifest.evaluation_contract_digest, manifest.dsl
         )
@@ -243,6 +250,46 @@ class LineageBootstrapWorkspaceAssembler:
             persistent_state,
             persistent_lock,
         )
+
+    def _materialize_initial_evidence(
+        self,
+        root: Path,
+        digest: ArtifactDigest,
+    ) -> None:
+        """Expose trusted task evidence and inject its primary Hint into Bootstrap."""
+        artifact = self._artifacts.verify(digest)
+        if artifact.kind is not ArtifactKind.EVIDENCE:
+            raise ValueError("lineage bootstrap initial evidence has the wrong Artifact kind")
+        source = artifact.payload_path / "bootstrap-input"
+        if source.is_symlink() or not source.is_dir():
+            raise ValueError("lineage bootstrap initial evidence has no bootstrap-input directory")
+        destination = root / "input/evidence"
+        shutil.copytree(source, destination)
+        make_tree_read_only(destination)
+
+        readme = destination / "README.md"
+        if readme.is_symlink() or not readme.is_file():
+            raise ValueError("lineage bootstrap initial evidence requires README.md")
+        if readme.stat().st_size > MAX_BOOTSTRAP_HINT_BYTES:
+            raise ValueError("lineage bootstrap initial evidence README.md exceeds the size limit")
+        try:
+            hint = readme.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            raise ValueError(
+                "lineage bootstrap initial evidence README.md must be UTF-8"
+            ) from error
+        if not hint.strip():
+            raise ValueError("lineage bootstrap initial evidence README.md cannot be empty")
+        fragment = root / ".runtime/initial-evidence-instructions.md"
+        fragment.write_text(
+            "## Task-provided Bootstrap instructions\n\n"
+            "The following task-owned instructions are authoritative for this Bootstrap. "
+            "The complete read-only evidence directory is available at `input/evidence/`.\n\n"
+            + hint.rstrip()
+            + "\n",
+            encoding="utf-8",
+        )
+        fragment.chmod(0o400)
 
 
 @dataclass(frozen=True, slots=True)

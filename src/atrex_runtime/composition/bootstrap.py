@@ -452,7 +452,8 @@ class CoreLineageBaselineGenerator:
                         dsl=dsl,
                         operator=operator,
                         hardware_target=hardware_target,
-                    )
+                    ),
+                    initial_evidence_digest=evidence_digest,
                 )
                 self._control.begin_bootstrap_run(
                     bootstrap_attempt_id,

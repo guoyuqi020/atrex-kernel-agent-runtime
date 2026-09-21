@@ -206,13 +206,19 @@ class CapturingWorkspaces:
         self._root = root
         self._calls = 0
 
-    def prepare(self, manifest: LineageBootstrapManifestV2) -> SimpleNamespace:
+    def prepare(
+        self,
+        manifest: LineageBootstrapManifestV2,
+        *,
+        initial_evidence_digest: ArtifactDigest,
+    ) -> SimpleNamespace:
         self._calls += 1
         root = self._root / f"run-test-{self._calls}"
         root.mkdir()
         return SimpleNamespace(
             root=root,
             bootstrap_attempt_id=manifest.bootstrap_attempt_id,
+            initial_evidence_digest=initial_evidence_digest,
         )
 
 

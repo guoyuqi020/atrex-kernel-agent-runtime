@@ -15,6 +15,9 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 - Worker startup failures that occur before Session capture or provider-usage reporting now preserve
   the bounded process exit status and stderr/stdout diagnostic in the Runtime error instead of being
   obscured by the secondary missing-usage-report validation failure.
+- Bootstrap now materializes the configured initial-evidence Artifact at read-only
+  `input/evidence/` and injects its bounded UTF-8 `README.md` into the framework-baseline prompt.
+  Task hints are therefore visible to the model rather than serving only as a Registry identity.
 
 - Single-file Agent and authoritative ABBA now use Agate's native Eval ABBA API. Runtime maps two
   side measurements to one complete A/B/B/A block, rebuilds its existing authoritative aggregate

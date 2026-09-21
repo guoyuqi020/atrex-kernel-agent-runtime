@@ -13,6 +13,9 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
   启动，但其中不会挂载任何 Reference Project 内容。
 - Worker 如果在 Session 捕获或 Provider Usage Report 产生前启动失败，Runtime 现在会在错误中
   保留有界的进程退出码及 stderr/stdout 诊断，不再被后续“缺少 Usage Report”校验覆盖。
+- Bootstrap 现在会把配置的 Initial Evidence Artifact 只读物化到 `input/evidence/`，并把其中
+  有界的 UTF-8 `README.md` 注入 Framework Baseline Prompt。任务 Hint 因而会真正进入模型
+  上下文，而不再只充当 Registry 身份信息。
 
 - 单文件 Agent ABBA 与权威 ABBA 改用 Agate 原生 Eval ABBA API。Runtime 将每侧两次测量精确
   映射为一个完整 A/B/B/A Block，并根据返回的原始 SDK Runs 重建既有权威聚合；Shape 分批、

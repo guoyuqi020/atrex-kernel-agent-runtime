@@ -210,9 +210,16 @@ class CorePhaseRunner:
         temporary: Path | None = None
         try:
             repository.chmod(mode | stat.S_IWUSR)
-            source_instructions = prepared.root / ".runtime/source-instructions.md"
-            if phase == "framework_baseline" and source_instructions.is_file():
-                self._project_bootstrap_prompts(prepared, value, source_instructions)
+            bootstrap_instructions = tuple(
+                path
+                for path in (
+                    prepared.root / ".runtime/initial-evidence-instructions.md",
+                    prepared.root / ".runtime/source-instructions.md",
+                )
+                if path.is_file()
+            )
+            if phase == "framework_baseline" and bootstrap_instructions:
+                self._project_bootstrap_prompts(prepared, value, bootstrap_instructions)
             with tempfile.NamedTemporaryFile(
                 mode="w", encoding="utf-8", dir=repository, prefix=".agent-config-", delete=False
             ) as stream:
@@ -227,13 +234,15 @@ class CorePhaseRunner:
 
     @staticmethod
     def _project_bootstrap_prompts(
-        prepared: PreparedCorePhase, value: dict[str, object], source_instructions: Path
+        prepared: PreparedCorePhase,
+        value: dict[str, object],
+        bootstrap_instructions: tuple[Path, ...],
     ) -> None:
         """Append task rules without modifying the Bundle or inherited prompt State.
 
         Core/KDA use one prompt_root for both phase prompts and tool fragments,
         so project all referenced files into a read-only session-local directory.
-        Only the framework-baseline prompt receives the Runtime source rules.
+        Only the framework-baseline prompt receives the Runtime task rules.
         """
         projected = Path(tempfile.mkdtemp(prefix=".bootstrap-prompts-", dir=prepared.repository))
         for section in ("prompts", "prompt_fragments"):
@@ -252,7 +261,10 @@ class CorePhaseRunner:
                     raise InfrastructureError("Core prompt must be a workspace-local regular file")
                 text = source.read_text(encoding="utf-8")
                 if section == "prompts" and name == "framework_baseline":
-                    text = text.rstrip() + "\n\n" + source_instructions.read_text(encoding="utf-8")
+                    text = text.rstrip() + "\n\n" + "\n\n".join(
+                        path.read_text(encoding="utf-8").rstrip()
+                        for path in bootstrap_instructions
+                    ) + "\n"
                 target = projected / f"{section}-{index}.md"
                 target.write_text(text, encoding="utf-8")
                 target.chmod(0o400)

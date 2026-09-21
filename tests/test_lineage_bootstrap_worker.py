@@ -189,6 +189,13 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
         {"schema_version": "atrex.agent_problem.v1", "objective": "vector add"},
         ArtifactKind.AGENT_PROBLEM,
     )
+    evidence = tmp_path / "bootstrap-evidence"
+    (evidence / "bootstrap-input").mkdir(parents=True)
+    (evidence / "bootstrap-input/README.md").write_text(
+        "Use a native FP8 matrix-multiply path.\n",
+        encoding="utf-8",
+    )
+    evidence_digest = artifacts.put_directory(evidence, ArtifactKind.EVIDENCE)
     manifest = LineageBootstrapManifestV2(
         bootstrap_attempt_id="attempt_" + "1" * 32,
         lineage_id="lineage_" + "2" * 32,
@@ -207,13 +214,19 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
         artifacts,
         attempt_workspaces_root=attempt_workspaces,
     )
-    prepared = assembler.prepare(manifest)
+    prepared = assembler.prepare(manifest, initial_evidence_digest=evidence_digest)
     assert (prepared.root / "input/kernel/kernel.py").is_file()
     assert (prepared.root / ".runtime/agent-problem.json").is_file()
     assert prepared.manifest_path == prepared.root / ".runtime/lineage-bootstrap.json"
     assert not (prepared.root / "input/agent-problem").exists()
     assert not (prepared.root / "input/evaluation-contract").exists()
     assert (prepared.root / "work/kernel/kernel.py").is_file()
+    assert (prepared.root / "input/evidence/README.md").read_text() == (
+        "Use a native FP8 matrix-multiply path.\n"
+    )
+    assert "native FP8" in (
+        prepared.root / ".runtime/initial-evidence-instructions.md"
+    ).read_text()
     assert (prepared.root / "reference").is_dir()
     assert not list((prepared.root / "reference").iterdir())
     (prepared.root / "tools/probe.py").write_text("print('probe')\n")
@@ -264,7 +277,7 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert result.session_trace_digest is not None
     assert artifacts.verify(result.report_digest).kind is ArtifactKind.ATTEMPT_REPORT
     assert artifacts.verify(result.session_trace_digest).kind is ArtifactKind.SESSION_LOG
-    resumed = assembler.prepare(manifest)
+    resumed = assembler.prepare(manifest, initial_evidence_digest=evidence_digest)
     assert (resumed.root / "tools/probe.py").read_text() == "print('probe')\n"
     assert (resumed.root / "tools/entry.txt").read_text() == "bootstrap tools"
     assert (resumed.root / "tools/README.md").read_text() == "tools: entry.txt"

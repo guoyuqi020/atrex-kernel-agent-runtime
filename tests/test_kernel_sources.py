@@ -380,6 +380,16 @@ def test_source_bootstrap_runs_agent_journal_then_trusted_stages(
         context.contract.model_dump(mode="json"), ArtifactKind.EVALUATION_CONTRACT
     )
     problem_digest = seed.artifacts.put_json({"objective": "example"}, ArtifactKind.AGENT_PROBLEM)
+    initial_evidence = tmp_path / "initial-evidence-artifact/bootstrap-input"
+    initial_evidence.mkdir(parents=True)
+    (initial_evidence / "README.md").write_text(
+        "Prefer the task-native matrix-multiply path.\n",
+        encoding="utf-8",
+    )
+    initial_evidence_digest = seed.artifacts.put_directory(
+        initial_evidence.parent,
+        ArtifactKind.EVIDENCE,
+    )
     driver = CoreLineageBootstrapSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
         CoreOptimizerProcessConfig(
@@ -406,6 +416,12 @@ def test_source_bootstrap_runs_agent_journal_then_trusted_stages(
         assert "Source-tree Bootstrap" in instructions
         assert "example_kernel/impl" in instructions
         assert "exactly one baseline Experiment" in instructions
+        assert (phase.root / "input/evidence/README.md").read_text() == (
+            "Prefer the task-native matrix-multiply path.\n"
+        )
+        assert "task-native matrix-multiply" in (
+            phase.root / ".runtime/initial-evidence-instructions.md"
+        ).read_text()
         # Exercise both real Bundle renderers in fresh interpreters: the Runtime
         # projection must reach the model, not just exist as an unread file.
         for bundle_name in ("kernel-design-agents", "atrex-kernel-agent-core"):
@@ -431,6 +447,7 @@ def test_source_bootstrap_runs_agent_journal_then_trusted_stages(
                     "text=render_prompt(context, config)+render_system_prompt(context, config); "
                     "assert 'Source-tree Bootstrap' in text; "
                     "assert 'example_kernel/impl' in text; "
+                    "assert 'task-native matrix-multiply' in text; "
                     "assert 'record-experiment' in text",
                     str(bundle / "src"),
                     str(phase.repository),
@@ -501,7 +518,7 @@ def test_source_bootstrap_runs_agent_journal_then_trusted_stages(
         input_kernel_digest=seed.contract.seed_digest,
         evaluation_contract_digest=contract_digest,
         agent_problem_digest=problem_digest,
-        evidence_digest=subject.evidence_digest,
+        evidence_digest=initial_evidence_digest,
         dsl=Dsl.CUTEDSL,
         operator="example",
         hardware_target="cpu-test",
@@ -516,6 +533,7 @@ def test_source_bootstrap_runs_agent_journal_then_trusted_stages(
                 dsl=Dsl.CUTEDSL,
                 operator="example",
                 hardware_target="cpu-test",
+                evidence_digest=initial_evidence_digest,
             ),
             GatewayCapabilityPolicy(
                 frozenset({GatewayOperation.EVALUATE}), 100, NOW + timedelta(hours=1)
