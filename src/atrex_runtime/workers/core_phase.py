@@ -302,6 +302,12 @@ class CorePhaseRunner:
                 allow_claude_accounting_gap=self._policy.agent_backend == "claude",
             )
         except ValueError as error:
+            if process.returncode != 0:
+                diagnostic = process.stderr.strip() or process.stdout.strip() or "no diagnostics"
+                raise InfrastructureError(
+                    f"{label} process exited with {process.returncode} before producing a valid "
+                    f"provider usage report: {error}; worker diagnostic: {diagnostic[:4096]}"
+                ) from error
             raise InfrastructureError(f"Invalid {label} provider usage report: {error}") from error
         return CorePhaseResult(process, usage, self._seal_trace(prepared.root, label))
 

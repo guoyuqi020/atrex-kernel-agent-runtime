@@ -75,6 +75,10 @@ class LineageBootstrapPathsV2(BaseModel):
     working_kernel: Literal["work/kernel"] = "work/kernel"
     agent_problem: Literal[".runtime/agent-problem.json"] = ".runtime/agent-problem.json"
     optimizer: Literal["agent/optimizer"] = "agent/optimizer"
+    # Retain the historical Bundle protocol without mounting or exposing any
+    # host Reference Project. Older pinned Agent Revisions validate this path
+    # before they can start their provider session.
+    reference: Literal["reference"] = "reference"
 
 
 class LineageBootstrapManifestV2(BaseModel):
@@ -194,6 +198,11 @@ class LineageBootstrapWorkspaceAssembler:
         if source_contract is not None:
             source_contract.validate_tree(root / paths.working_kernel)
             inject_bootstrap_source_instructions(root, source_contract)
+        # This is an intentionally empty compatibility path, not a host
+        # Reference Project mount. It keeps commit-pinned Agent Bundles using
+        # the v2 Bootstrap manifest launchable while exposing no source tree.
+        reference = root / paths.reference
+        reference.mkdir(mode=0o500)
         manifest_path = root / ".runtime/lineage-bootstrap.json"
         manifest_path.write_bytes(manifest.canonical_json_bytes())
         os.chmod(manifest_path, 0o400)

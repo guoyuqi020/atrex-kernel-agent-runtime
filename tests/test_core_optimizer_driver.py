@@ -869,3 +869,48 @@ sys.exit(124)
 
     with pytest.raises(InfrastructureError, match="test Core timed out"):
         runner.run(prepared, environment, label="test Core")
+
+
+def test_pre_session_worker_failure_preserves_process_diagnostic(tmp_path: Path) -> None:
+    root = tmp_path / "phase"
+    repository = root / "agent/optimizer"
+    repository.mkdir(parents=True)
+    (root / "sessions").mkdir()
+    (repository / "atrex-bundle.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "bundle_format": "atrex-kernel-agent-bundle-v1",
+                "entrypoint": {"command": "run.py"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (repository / "run.py").write_text(
+        "import sys\nprint('bootstrap manifest paths disagree', file=sys.stderr)\nsys.exit(1)\n",
+        encoding="utf-8",
+    )
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    policy = CoreOptimizerProcessConfig(
+        agent_backend="claude",
+        command_prefix=(sys.executable,),
+        isolated_home_environment_keys=(),
+        session_trace_relative_path=None,
+        token_usage_report_relative_path="scratch/token-usage.json",
+        max_attempt_report_bytes=65_536,
+        timeout_seconds=30,
+        terminate_grace_seconds=1,
+        max_diagnostic_bytes=4096,
+        max_session_tokens=1000,
+    )
+    runner = CorePhaseRunner(CleanEnvironmentLauncher(Path("/usr/bin/env")), policy, artifacts)
+    prepared = runner.prepare(root, root / "sessions")
+    environment = runner.runtime_environment(prepared, phase="framework_baseline")
+
+    with pytest.raises(InfrastructureError) as captured:
+        runner.run(prepared, environment, label="Core lineage bootstrap")
+
+    message = str(captured.value)
+    assert "process exited with 1" in message
+    assert "before producing a valid provider usage report" in message
+    assert "bootstrap manifest paths disagree" in message

@@ -214,7 +214,8 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert not (prepared.root / "input/agent-problem").exists()
     assert not (prepared.root / "input/evaluation-contract").exists()
     assert (prepared.root / "work/kernel/kernel.py").is_file()
-    assert not (prepared.root / "reference").exists()
+    assert (prepared.root / "reference").is_dir()
+    assert not list((prepared.root / "reference").iterdir())
     (prepared.root / "tools/probe.py").write_text("print('probe')\n")
     for name in ("prompts", "insights", "skills", "tools"):
         assert (prepared.root / name / "README.md").read_text() == f"Initial {name} index"
