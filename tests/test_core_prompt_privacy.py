@@ -38,6 +38,15 @@ _INTERNAL_CONTEXT_FIELDS = {
     "optimizer_digest",
     "generalization_id",
 }
+_CORRECTNESS_POLICY = {
+    "comparison": "elementwise",
+    "formula": "abs(candidate - reference) <= atol + rtol * abs(reference)",
+    "default_tolerance": {"atol": 0.06, "rtol": 0.04},
+    "output_tolerances": {
+        "output": {"atol": 0.06, "rtol": 0.04},
+        "mutated_inputs.out": {"atol": 0.06, "rtol": 0.04},
+    },
+}
 
 
 def _rendered_documents() -> dict[str, tuple[str, str]]:
@@ -45,6 +54,7 @@ def _rendered_documents() -> dict[str, tuple[str, str]]:
     config = AgentConfig.load(CORE_ROOT)
     attempt_context = SimpleNamespace(
         evidence_prompt=RUNTIME_OPTIMIZER_EVIDENCE,
+        correctness_policy=_CORRECTNESS_POLICY,
         agent_problem={
             "schema_version": "atrex.agent_problem.v1",
             "generator": {"name": "private-generator-provenance", "version": 2},
@@ -62,6 +72,7 @@ def _rendered_documents() -> dict[str, tuple[str, str]]:
         },
     )
     baseline_context = SimpleNamespace(
+        correctness_policy=_CORRECTNESS_POLICY,
         agent_problem={
             "schema_version": "atrex.agent_problem.v1",
             "generator": {"name": "private-generator-provenance", "version": 2},
@@ -137,6 +148,15 @@ def test_execution_prompts_embed_the_public_operator_contract() -> None:
         assert '"objective": "implement example while exact cases remain private"' in prompts[phase]
         assert "private-generator-provenance" not in prompts[phase]
         assert "input/agent-problem" not in prompts[phase]
+
+
+def test_execution_prompts_embed_the_exact_correctness_policy() -> None:
+    prompts = _rendered_prompts()
+    for phase in ("optimization_attempt", "framework_baseline"):
+        assert '"correctness_policy"' in prompts[phase]
+        assert '"atol": 0.06' in prompts[phase]
+        assert '"rtol": 0.04' in prompts[phase]
+        assert '"mutated_inputs.out"' in prompts[phase]
 
 
 def test_rendered_prompts_use_exact_cli_subcommands_and_valid_json_examples() -> None:
@@ -391,14 +411,12 @@ def test_problem_schema_metadata_is_added_after_generation(tmp_path: Path) -> No
 
 
 def test_tool_prompt_states_the_gate_policy_tolerance() -> None:
-    """The Agent cannot judge its own margin unless the prompt matches the real thresholds."""
-    policy = json.loads(
-        (Path(__file__).resolve().parents[1] / "scripts/production/policy.json").read_text(
-            encoding="utf-8"
-        )
-    )["gate_policy"]
+    """The Agent receives task-specific thresholds, never a production-config default."""
     prompts = _rendered_prompts()
 
     for phase in ("optimization_attempt", "framework_baseline"):
-        assert f"atol={policy['atol']}" in prompts[phase], phase
-        assert f"rtol={policy['rtol']}" in prompts[phase], phase
+        assert '"atol": 0.06' in prompts[phase], phase
+        assert '"rtol": 0.04' in prompts[phase], phase
+        assert "abs(candidate - reference) <= atol + rtol * abs(reference)" in prompts[phase]
+        assert "atol=0.01" not in prompts[phase]
+        assert "rtol=0.05" not in prompts[phase]

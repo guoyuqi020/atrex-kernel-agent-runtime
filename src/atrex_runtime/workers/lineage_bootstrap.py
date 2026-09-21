@@ -26,6 +26,7 @@ from ..domain.ids import (
 )
 from ..domain.models import Dsl, TokenUsage
 from ..filesystem import make_tree_owner_writable
+from ..gateway.contract import load_agent_correctness_policy
 from ..kernel_sources import inject_bootstrap_source_instructions, load_kernel_source_contract
 from ..serialization import canonical_json_bytes
 from .attempt_report import AttemptReportV12
@@ -50,6 +51,7 @@ _RUNTIME_KEYS = {
     "ATREX_REPORT_COMPLETION_RETRIES",
     "ATREX_ATTEMPT_REPORT_MAX_BYTES",
     "ATREX_CORE_PHASE",
+    "ATREX_CORRECTNESS_POLICY_JSON",
     "ATREX_GATEWAY_CAPABILITY",
     "ATREX_GATEWAY_PROXY_URL",
     "ATREX_LINEAGE_BOOTSTRAP_MANIFEST",
@@ -136,6 +138,7 @@ class PreparedLineageBootstrap:
     root: Path
     manifest_path: Path
     session_root: Path
+    correctness_policy_json: str
     persistent_state_root: Path | None = None
     persistent_lock_path: Path | None = None
 
@@ -227,6 +230,10 @@ class LineageBootstrapWorkspaceAssembler:
             root,
             manifest_path,
             session_root,
+            load_agent_correctness_policy(
+                self._artifacts,
+                manifest.evaluation_contract_digest,
+            ).model_dump_json(),
             persistent_state,
             persistent_lock,
         )
@@ -390,6 +397,7 @@ class CoreLineageBootstrapSessionDriver:
                 "ATREX_ATTEMPT_REPORT_PATH": str(report_path),
                 "ATREX_GATEWAY_PROXY_URL": config.gateway_endpoint,
                 "ATREX_GATEWAY_CAPABILITY": config.gateway_capability,
+                "ATREX_CORRECTNESS_POLICY_JSON": prepared.correctness_policy_json,
             }
         )
         if config.wiki_endpoint is not None and config.wiki_capability is not None:

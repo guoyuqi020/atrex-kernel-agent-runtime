@@ -203,7 +203,20 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     optimizer = _put_text_artifact(store, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT)
     kernel_digest = _put_text_artifact(store, tmp_path, "kernel", ArtifactKind.KERNEL)
     contract = store.put_json(
-        {"schema_version": 1, "candidate_path": "kernel.txt"},
+        {
+            "schema_version": 1,
+            "candidate_path": "kernel.txt",
+            "reference_py": "def reference(): pass\n",
+            "input_py": "def _make_inputs(): return {}\n",
+            "shapes": {"0": {"input_kwargs": {}}},
+            "options": {
+                "num_correctness_cases": 1,
+                "bench_iters": 1,
+                "atol": 0.01,
+                "rtol": 0.05,
+                "timeout_s": 60,
+            },
+        },
         ArtifactKind.EVALUATION_CONTRACT,
     )
     problem = store.put_json(
@@ -443,7 +456,20 @@ def _single_trajectory_workspace(
         optimizer = store.put_directory(source, ArtifactKind.KERNEL_AGENT)
     kernel_digest = _put_text_artifact(store, tmp_path, "kernel", ArtifactKind.KERNEL)
     contract = store.put_json(
-        {"schema_version": 1, "candidate_path": "kernel.txt"},
+        {
+            "schema_version": 1,
+            "candidate_path": "kernel.txt",
+            "reference_py": "def reference(): pass\n",
+            "input_py": "def _make_inputs(): return {}\n",
+            "shapes": {"0": {"input_kwargs": {}}},
+            "options": {
+                "num_correctness_cases": 1,
+                "bench_iters": 1,
+                "atol": 0.01,
+                "rtol": 0.05,
+                "timeout_s": 60,
+            },
+        },
         ArtifactKind.EVALUATION_CONTRACT,
     )
     problem = store.put_json(

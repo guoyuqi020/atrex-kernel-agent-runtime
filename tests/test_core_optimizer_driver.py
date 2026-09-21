@@ -37,6 +37,15 @@ from atrex_runtime.workers.manifest import AttemptInputManifestV9, AttemptTaskCo
 from atrex_runtime.workers.optimizer import OptimizerSessionConfig
 from atrex_runtime.workers.workspace import PreparedAttempt
 
+_CORRECTNESS_POLICY_JSON = json.dumps(
+    {
+        "comparison": "elementwise",
+        "formula": "abs(candidate - reference) <= atol + rtol * abs(reference)",
+        "default_tolerance": {"atol": 0.01, "rtol": 0.05},
+        "output_tolerances": {},
+    }
+)
+
 
 @pytest.mark.parametrize(
     "phase", ("problem_generalization", "framework_baseline", "optimization_attempt")
@@ -372,7 +381,13 @@ print("core-owned optimizer finished")
     )
 
     result = await driver.run(
-        PreparedAttempt(root, manifest_path, session_root, "session-id"),
+        PreparedAttempt(
+            root,
+            manifest_path,
+            session_root,
+            "session-id",
+            correctness_policy_json=_CORRECTNESS_POLICY_JSON,
+        ),
         OptimizerSessionConfig(
             environment=(),
             gateway_endpoint="http://gateway-proxy",
@@ -717,7 +732,13 @@ print(json.dumps({
         thread.start()
         try:
             result = await driver.run(
-                PreparedAttempt(root, manifest_path, root / "sessions", "real-core"),
+                PreparedAttempt(
+                    root,
+                    manifest_path,
+                    root / "sessions",
+                    "real-core",
+                    correctness_policy_json=_CORRECTNESS_POLICY_JSON,
+                ),
                 OptimizerSessionConfig(
                     environment=(("PATH", f"{provider_bin}{os.pathsep}{os.environ['PATH']}"),),
                     gateway_endpoint=f"http://127.0.0.1:{server.server_port}",

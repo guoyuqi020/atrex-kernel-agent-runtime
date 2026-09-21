@@ -28,6 +28,102 @@ from atrex_runtime.kernel_sources import KernelSourceBundle, SourceManifest, imp
 from atrex_runtime.workers.problem_generalization import validate_public_operator_contract
 
 INPUTS = REPOSITORY / "data/FA4"
+SM120_INPUTS = REPOSITORY / "data/FA4-SM120"
+
+
+def test_fa4_sm120_retargets_vendor_and_hardware_without_changing_workload(
+    tmp_path: Path,
+) -> None:
+    spec = CampaignSpecV3.from_file(SM120_INPUTS / "campaign.json")
+    assert spec.hardware_target == "L20N"
+    assert set(spec.lineages) == {Dsl.CUTEDSL}
+    assert (SM120_INPUTS / "task/adapter.py").read_bytes() == (
+        INPUTS / "task/adapter.py"
+    ).read_bytes()
+    assert (SM120_INPUTS / "task/reference.py").read_bytes() == (
+        INPUTS / "task/reference.py"
+    ).read_bytes()
+    assert (SM120_INPUTS / "task/input.py").read_bytes() == (
+        INPUTS / "task/input.py"
+    ).read_bytes()
+    assert (SM120_INPUTS / "task/shape_valid.json").read_bytes() == (
+        INPUTS / "task/shape_valid.json"
+    ).read_bytes()
+
+    metadata = json.loads((SM120_INPUTS / "task/metadata.json").read_text())
+    assert metadata["id"] == "qwen38_max_l20n_prefill_flashinfer_trtllm_attention_fp8"
+    assert metadata["target_hardware"] == "L20N"
+    assert metadata["target_arch"] == "sm_120"
+    roofline = json.loads((SM120_INPUTS / "task/roofline.json").read_text())
+    assert len(roofline["shapes"]) == 30
+    assert all(
+        set(shape["SOL_time_ms"])
+        == {"NVIDIA RTX PRO 5000 72GB Blackwell (SM120)"}
+        for shape in roofline["shapes"].values()
+    )
+
+    manifest = SourceManifest.model_validate_json(
+        (SM120_INPUTS / "task/source_manifest.json").read_bytes()
+    )
+    source = tmp_path / "sm120-source"
+    subprocess.run(
+        ["git", "clone", "--quiet", str(SM120_INPUTS / "source.bundle"), str(source)],
+        check=True,
+    )
+    assert subprocess.check_output(
+        ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
+    ).strip() == manifest.source.revision
+    interface = (
+        source / "vendor/flash_attention/flash_attn/cute/interface.py"
+    ).read_text()
+    assert "_sm120_fp8_paged_bf16_fallback" in interface
+    assert "tile_mn=(64, 64)" in interface
+    hint = (SM120_INPUTS / "initial-evidence/README.md").read_text()
+    assert "correctness-first SM120 bridge" in hint
+    assert "SM100 HD256 2CTA" in hint and "not a valid" in hint
+
+
+def test_fa4_sm120_preparation_is_self_contained(tmp_path: Path, runner) -> None:
+    workspace = tmp_path / "FA4-SM120"
+    runner.prepare(SM120_INPUTS, workspace, None, None)
+    settings = RuntimeSettings.from_file(workspace / "runtime.json")
+    assert settings.server.port == 8771
+    spec = CampaignSpecV3.from_file(workspace / "campaign.json")
+    assert spec.hardware_target == "L20N"
+    assert spec.lineages[Dsl.CUTEDSL].source_repository == workspace / "source"
+    assert (workspace / "source/PROVENANCE.json").is_file()
+    prepared = json.loads((workspace / "prepared.json").read_text())
+    assert prepared["hardware_target"] == "L20N"
+    assert prepared["source_commit"] == "b6bfe3d177aab2b930f4d6485227002b65cbb2de"
+    contract = AgateEvaluationContractV1.model_validate_json(
+        (workspace / "evaluation-contract.json").read_bytes()
+    )
+    assert contract.agent_correctness_policy().model_dump(mode="json") == {
+        "comparison": "elementwise",
+        "formula": "abs(candidate - reference) <= atol + rtol * abs(reference)",
+        "default_tolerance": {"atol": 0.06, "rtol": 0.04},
+        "output_tolerances": {
+            "output": {"atol": 0.06, "rtol": 0.04},
+            "mutated_inputs.out": {"atol": 0.06, "rtol": 0.04},
+        },
+    }
+    smoke = (SM120_INPUTS / "smoke/smoke.py").read_text()
+    assert "torch.isclose" in smoke
+    assert "relative_l2" not in smoke
+
+    malformed = contract.model_copy(
+        update={
+            "metadata": {
+                "benchmark_contract": {
+                    "correctness_tolerances": {
+                        "output": {"atol": -1.0, "rtol": 0.04}
+                    }
+                }
+            }
+        }
+    )
+    with pytest.raises(ValueError, match="greater than or equal to 0"):
+        malformed.agent_correctness_policy()
 
 
 def test_real_fa4_abba_uses_oss_and_restores_both_complete_snapshots(

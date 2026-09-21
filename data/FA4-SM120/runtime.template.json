@@ -1,0 +1,233 @@
+{
+  "schema_version": 1,
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8771
+  },
+  "administration": {
+    "bearer_token_env": "ATREX_ADMIN_BEARER_TOKEN",
+    "max_request_bytes": 65536,
+    "event_page_limit": 500,
+    "event_export_limit": 10000,
+    "event_prune_limit": 1000,
+    "task_lease_seconds": 7200,
+    "task_heartbeat_seconds": 60,
+    "task_poll_seconds": 2,
+    "max_error_bytes": 8192
+  },
+  "storage": {
+    "registry_database": "state/registry.sqlite",
+    "gateway_database": "state/gateway.sqlite",
+    "agate_jobs_database": "state/agate-jobs.sqlite",
+    "artifacts_root": "state/artifacts"
+  },
+  "gateway_proxy": {
+    "max_request_bytes": 8388608,
+    "max_candidate_files": 256,
+    "max_candidate_bytes": 4194304,
+    "capability_signing_key_env": "ATREX_CAPABILITY_SIGNING_KEY",
+    "candidate_diff_allowed_paths": {
+      "cuda": ["**/*.cu", "**/*.cuh", "*.cu", "*.cuh"],
+      "triton": ["**/*.py", "*.py"],
+      "cutedsl": ["**/*.py", "*.py"]
+    },
+    "candidate_diff_require_change": true
+  },
+  "agate": {
+    "base_url": "https://atrex-gateway.alibaba-inc.com",
+    "auth_mode": "ak_sk",
+    "access_key_env": "AGATE_AK",
+    "secret_key_env": "AGATE_SK",
+    "http_timeout_s": 1800,
+    "wait_timeout_s": 3900,
+    "health_check_interval_s": 30
+  },
+  "kernel_agent": {
+    "max_bundle_files": 16384,
+    "max_bundle_bytes": 134217728,
+    "max_entrypoint_bytes": 524288,
+    "max_agent_problem_bytes": 262144,
+    "base_source": {
+      "repository": "../../src/kernel-design-agents",
+      "git_executable": "/usr/bin/git",
+      "fetch_timeout_seconds": 600,
+      "max_archive_bytes": 268435456,
+      "allowed_submodules": {}
+    }
+  },
+  "gpu_wiki": null,
+  "campaign": {
+    "attempt_workspaces_root": "state/attempt-workspaces",
+    "evolution_workspaces_root": "state/evolution-workspaces",
+    "problem_generalization_workspaces_root": "state/problem-generalization-workspaces",
+    "lineage_bootstrap_workspaces_root": "state/lineage-bootstrap-workspaces",
+    "fencing_lease_seconds": 120,
+    "fencing_heartbeat_seconds": 30,
+    "gateway_proxy_url": "http://127.0.0.1:8771",
+    "gateway_operations": [
+      "evaluate",
+      "profile",
+      "dev",
+      "check",
+      "disassemble",
+      "env"
+    ],
+    "gateway_max_calls": 1000,
+    "gateway_capability_lifetime_seconds": 86400,
+    "gate_policy": {
+      "optimizer": {
+        "correctness_cases": 5,
+        "bench_iters": 100,
+        "evaluate_repeats": 1
+      },
+      "bootstrap": {
+        "stages": [
+          {"correctness_cases": 1, "evaluate_repeats": 1},
+          {"correctness_cases": 5, "evaluate_repeats": 1}
+        ],
+        "bench_iters": 100
+      },
+      "retention": {
+        "correctness_cases": 1,
+        "bench_iters": 100
+      },
+      "production_gate": false,
+      "warmup_iters": 10,
+      "atol": 0.06,
+      "rtol": 0.04,
+      "evaluation_timeout_seconds": 600,
+      "candidate_timeout_seconds": 120,
+      "performance_timeout_seconds": 120,
+      "lock_clocks": true,
+      "evaluator": {
+        "repository": "./evaluator",
+        "commit": "ed449b63ecd8aeff4db23be0d9f658d7d50b1cfa",
+        "git_executable": "/usr/bin/git",
+        "fetch_timeout_seconds": 120,
+        "max_archive_bytes": 8388608,
+        "max_bundle_files": 128,
+        "max_bundle_bytes": 4194304
+      }
+    },
+    "max_infrastructure_retries": 2,
+    "max_parallel_branches": 2,
+    "roofline_builder": null,
+    "kernel_retention_comparison": {
+      "method": "same_allocation_abba",
+      "repeats": 2,
+      "minimum_improvement_percent": 0.0,
+      "allocation_timeout_seconds": 600,
+      "shape_batch_size": 1,
+      "max_parallel_shape_batches": 16
+    },
+    "agent_promotion_comparison": {
+      "method": "same_allocation_abba",
+      "repeats": 2,
+      "minimum_improvement_percent": 0.0,
+      "allocation_timeout_seconds": 600,
+      "shape_batch_size": 1,
+      "max_parallel_shape_batches": 16
+    },
+    "evidence": {
+      "max_trace_files": 8,
+      "max_trace_bytes": 67108864,
+      "max_trace_events": 100000,
+      "max_projection_text_bytes": 1048576,
+      "max_diff_files": 128,
+      "max_diff_bytes": 2097152,
+      "redaction_patterns": []
+    },
+    "optimizer": {
+      "agent_backend": "claude",
+      "reasoning_effort": "max",
+      "session_settings": "",
+      "command_prefix": [
+        "python3"
+      ],
+      "environment": {
+        "values": {},
+        "inherit": [
+          "PATH"
+        ],
+        "inherit_optional": [
+          "ANTHROPIC_AUTH_TOKEN",
+          "ANTHROPIC_API_KEY",
+          "ANTHROPIC_BASE_URL",
+          "ANTHROPIC_MODEL",
+          "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+          "ANTHROPIC_DEFAULT_OPUS_MODEL",
+          "ANTHROPIC_DEFAULT_SONNET_MODEL",
+          "QODER_PERSONAL_ACCESS_TOKEN"
+        ]
+      },
+      "isolated_home_environment_keys": [
+        "HOME"
+      ],
+      "session_trace_relative_path": "sessions/core",
+      "token_usage_report_relative_path": "scratch/token-usage.json",
+      "max_attempt_report_bytes": 1048576,
+      "report_completion_retries": 2,
+      "timeout_seconds": 28800,
+      "bootstrap_timeout_seconds": 10800,
+      "terminate_grace_seconds": 10,
+      "max_diagnostic_bytes": 131072,
+      "max_session_tokens": 100000000,
+      "max_session_credits": 1000000
+    },
+    "evolver": {
+      "agent_backend": "claude",
+      "reasoning_effort": "max",
+      "session_settings": "",
+      "repository": "../../src/atrex-kernel-agent-evolver",
+      "commit": "42fb56874985d73d2f24500a9d2add2dc5fa31c6",
+      "git_executable": "/usr/bin/git",
+      "fetch_timeout_seconds": 120,
+      "max_archive_bytes": 16777216,
+      "command_prefix": [
+        "python3"
+      ],
+      "max_bundle_files": 1024,
+      "max_bundle_bytes": 8388608,
+      "isolated_home_environment_keys": [
+        "HOME"
+      ],
+      "session_trace_relative_path": "scratch/evolver-session",
+      "token_usage_report_relative_path": "scratch/token-usage.json",
+      "environment": {
+        "values": {},
+        "inherit": [
+          "PATH"
+        ],
+        "inherit_optional": [
+          "ANTHROPIC_AUTH_TOKEN",
+          "ANTHROPIC_API_KEY",
+          "ANTHROPIC_BASE_URL",
+          "ANTHROPIC_MODEL",
+          "QODER_PERSONAL_ACCESS_TOKEN"
+        ]
+      },
+      "timeout_seconds": 10800,
+      "terminate_grace_seconds": 10,
+      "max_diagnostic_bytes": 131072,
+      "max_output_manifest_bytes": 16384
+    },
+    "launcher": {
+      "mode": "container",
+      "env_executable": "/usr/bin/env",
+      "backend_credentials": {
+        "enabled": true,
+        "host_home": null,
+        "development_bwrap_executable": "/usr/bin/bwrap"
+      },
+      "container": {
+        "bwrap_executable": "/usr/bin/bwrap",
+        "sandbox_home": "/home/agent",
+        "workspace_mount": "/home/agent/workspace",
+        "resolv_conf": "/etc/resolv.conf",
+        "read_only_bind_paths": [],
+        "hidden_host_paths": [],
+        "reference_projects_root": "../../third_party/reference-projects"
+      }
+    }
+  }
+}

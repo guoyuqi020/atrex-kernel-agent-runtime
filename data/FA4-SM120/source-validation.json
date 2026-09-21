@@ -1,0 +1,18 @@
+{
+  "validated_at": "2026-09-21 Asia/Shanghai",
+  "gateway": "not_run",
+  "gpu": "L20N / SM120",
+  "static_validation": {
+    "status": "passed",
+    "checks": [
+      "Source Bundle verifies and clones at the pinned Commit",
+      "SM120 Vendor overlay parses as Python",
+      "fixed production ABI and 30 private Shapes are unchanged",
+      "L20N Roofline was recomputed from the pinned 549 TFLOP/s FP8 and 1344 GB/s peaks"
+    ]
+  },
+  "target_abi": {
+    "status": "gpu_validation_pending",
+    "meaning": "The SM120 R0 is designed as a measurable correctness-first bridge; run the target smoke or Runtime Bootstrap on L20N before treating it as GPU-validated."
+  }
+}

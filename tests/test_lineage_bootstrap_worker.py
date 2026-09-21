@@ -170,7 +170,20 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     kernel_digest = artifacts.put_directory(kernel, ArtifactKind.KERNEL)
     agent_digest = artifacts.put_directory(agent, ArtifactKind.KERNEL_AGENT)
     contract_digest = artifacts.put_json(
-        {"schema_version": 1, "candidate_path": "kernel.py"},
+        {
+            "schema_version": 1,
+            "candidate_path": "kernel.py",
+            "reference_py": "def reference(): pass\n",
+            "input_py": "def _make_inputs(): return {}\n",
+            "shapes": {"0": {"input_kwargs": {}}},
+            "options": {
+                "num_correctness_cases": 1,
+                "bench_iters": 1,
+                "atol": 0.01,
+                "rtol": 0.05,
+                "timeout_s": 60,
+            },
+        },
         ArtifactKind.EVALUATION_CONTRACT,
     )
     problem_digest = artifacts.put_json(

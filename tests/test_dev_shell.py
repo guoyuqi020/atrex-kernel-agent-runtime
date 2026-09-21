@@ -276,7 +276,23 @@ def test_temporary_dev_shell_skips_registry_and_destroys_workspace(tmp_path: Pat
     (optimizer / "atrex-bundle.json").write_text("{}", encoding="utf-8")
     optimizer_digest = artifacts.put_directory(optimizer, ArtifactKind.KERNEL_AGENT)
     problem_digest = artifacts.put_json({}, ArtifactKind.AGENT_PROBLEM)
-    contract_digest = artifacts.put_json({}, ArtifactKind.EVALUATION_CONTRACT)
+    contract_digest = artifacts.put_json(
+        {
+            "schema_version": 1,
+            "candidate_path": "kernel.py",
+            "reference_py": "def reference(): pass\n",
+            "input_py": "def _make_inputs(): return {}\n",
+            "shapes": {"0": {"input_kwargs": {}}},
+            "options": {
+                "num_correctness_cases": 1,
+                "bench_iters": 1,
+                "atol": 0.01,
+                "rtol": 0.05,
+                "timeout_s": 60,
+            },
+        },
+        ArtifactKind.EVALUATION_CONTRACT,
+    )
 
     checkpoint_root = tmp_path / "checkpoint"
     (checkpoint_root / "bootstrap").mkdir(parents=True)

@@ -11,7 +11,10 @@ import anyio
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, AttemptId
-from ..gateway.contract import AgateEvaluationContextResolver, candidate_path_for_attempt
+from ..gateway.contract import (
+    AgateEvaluationContextResolver,
+    candidate_path_for_attempt,
+)
 from ..kernel_agents import is_ignored_kernel_agent_path
 from .attempt_report import AttemptReportV12
 from .core_phase import CorePhaseRunner, PreparedCorePhase
@@ -33,6 +36,7 @@ _RUNTIME_KEYS = {
     "ATREX_CORE_PHASE",
     "ATREX_ATTEMPT_MANIFEST",
     "ATREX_ATTEMPT_REPORT_PATH",
+    "ATREX_CORRECTNESS_POLICY_JSON",
     "ATREX_EVIDENCE_PROMPT_PATH",
     "ATREX_GATEWAY_CAPABILITY",
     "ATREX_GATEWAY_PROXY_URL",
@@ -291,6 +295,8 @@ class CoreOptimizerSessionDriver:
     ) -> Mapping[str, str]:
         if config.gateway_endpoint is None or config.gateway_capability is None:
             raise ValueError("Optimizer launch requires Attempt-scoped Gateway authority")
+        if prepared.correctness_policy_json is None:
+            raise ValueError("Optimizer launch requires a trusted correctness policy")
         environment = dict(config.environment)
         overlap = _RUNTIME_KEYS.intersection(environment)
         if overlap:
@@ -311,6 +317,7 @@ class CoreOptimizerSessionDriver:
                 ),
                 "ATREX_GATEWAY_CAPABILITY": config.gateway_capability,
                 "ATREX_GATEWAY_PROXY_URL": config.gateway_endpoint,
+                "ATREX_CORRECTNESS_POLICY_JSON": prepared.correctness_policy_json,
             }
         )
         if config.wiki_endpoint is not None and config.wiki_capability is not None:

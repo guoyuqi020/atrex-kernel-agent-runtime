@@ -37,6 +37,7 @@ from .domain.models import (
     EpochStatus,
 )
 from .filesystem import make_tree_owner_writable
+from .gateway.contract import load_agent_correctness_policy
 from .gateway.control import AttemptTimedWorkerGatewayAuthorityProvider, SqliteGatewayControl
 from .gateway.control_models import (
     BootstrapGatewaySubject,
@@ -379,6 +380,10 @@ class TemporaryOptimizerDevShell:
             manifest_path=manifest_path,
             session_root=session_root,
             session_id=f"temporary-dev-shell-{request.attempt_id}",
+            correctness_policy_json=load_agent_correctness_policy(
+                self._artifacts,
+                request.evaluation_contract_digest,
+            ).model_dump_json(),
         )
 
 

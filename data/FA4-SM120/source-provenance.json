@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "name": "fa4-prefill-sm120-r0-startpoint",
+  "purpose": "SM120 FA4 source start point for the production FP8 paged-KV Atrex-bench ABI",
+  "source": {
+    "repository": "Dao-AILab/flash-attention",
+    "revision": "b54df166ebb69b896892826014759d09b9c3c9c6",
+    "archive_path": "flash_attn/cute",
+    "upstream_source_tree_sha256": "23a4bf671626c4cc1f4ec19df98609622390677ed3ef595f9a70dae36b12fb32",
+    "source_file_count": 57
+  },
+  "packaged_revision": "b6bfe3d177aab2b930f4d6485227002b65cbb2de",
+  "sm120_overlay": {
+    "name": "fp8-paged-to-bf16-correctness-bridge",
+    "file": "vendor/flash_attention/flash_attn/cute/interface.py",
+    "policy": "Gather paged KV and convert Q/K/V inside the editable Vendor before launching the upstream SM120 FA4 BF16 kernel."
+  },
+  "runtime": {
+    "nvidia_cutlass_dsl": "4.6.1",
+    "quack_kernels": "0.5.3",
+    "gpu": "NVIDIA L20N / SM120"
+  },
+  "target_contract": {
+    "operator_id": "qwen38_max_l20n_prefill_flashinfer_trtllm_attention_fp8",
+    "shape_count": 30,
+    "page_size": 64,
+    "kv_layout": "NHD",
+    "query_heads": 16,
+    "kv_heads": 1,
+    "head_dim": 256,
+    "causal": true
+  },
+  "r0_status": {
+    "target_contract": "correctness_first_bridge",
+    "known_gaps": [
+      "Host-visible seqused_k synchronization",
+      "Paged KV is materialized as dense K/V",
+      "Q/K/V are converted from FP8 to BF16 before the SM120 FA4 kernel",
+      "The native SM120 FP8 paged-KV mainloop remains optimization work"
+    ]
+  }
+}

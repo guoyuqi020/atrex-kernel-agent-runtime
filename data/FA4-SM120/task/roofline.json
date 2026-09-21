@@ -1,0 +1,334 @@
+{
+  "shapes": {
+    "0": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 0.051023178142076506
+      },
+      "semantic_Q_read_bytes": 5246976,
+      "semantic_Q_write_bytes": 1638400,
+      "semantic_W_flops": {
+        "fp8_e4m3": 28011724800
+      },
+      "bottleneck": "compute"
+    },
+    "1": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 1.0650667198251367
+      },
+      "semantic_Q_read_bytes": 38928384,
+      "semantic_Q_write_bytes": 69206016,
+      "semantic_W_flops": {
+        "fp8_e4m3": 584721629184
+      },
+      "bottleneck": "compute"
+    },
+    "10": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 16.533454400349726
+      },
+      "semantic_Q_read_bytes": 121367040,
+      "semantic_Q_write_bytes": 131178496,
+      "semantic_W_flops": {
+        "fp8_e4m3": 9076866465792
+      },
+      "bottleneck": "compute"
+    },
+    "11": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 32.74711442885246
+      },
+      "semantic_Q_read_bytes": 99483648,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 17978165821440
+      },
+      "bottleneck": "compute"
+    },
+    "12": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 1.0111562571074681
+      },
+      "semantic_Q_read_bytes": 79822848,
+      "semantic_Q_write_bytes": 134217728,
+      "semantic_W_flops": {
+        "fp8_e4m3": 555124785152
+      },
+      "bottleneck": "compute"
+    },
+    "13": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 14.24719892890346
+      },
+      "semantic_Q_read_bytes": 134662656,
+      "semantic_Q_write_bytes": 127901696,
+      "semantic_W_flops": {
+        "fp8_e4m3": 7821712211968
+      },
+      "bottleneck": "compute"
+    },
+    "14": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 7.1885385526557375
+      },
+      "semantic_Q_read_bytes": 77856768,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 3946507665408
+      },
+      "bottleneck": "compute"
+    },
+    "15": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 9.073861995715847
+      },
+      "semantic_Q_read_bytes": 93281280,
+      "semantic_Q_write_bytes": 115851264,
+      "semantic_W_flops": {
+        "fp8_e4m3": 4981550235648
+      },
+      "bottleneck": "compute"
+    },
+    "16": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 42.33158038242623
+      },
+      "semantic_Q_read_bytes": 112459776,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 23240037629952
+      },
+      "bottleneck": "compute"
+    },
+    "17": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 13.578182521704917
+      },
+      "semantic_Q_read_bytes": 73531392,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 7454422204416
+      },
+      "bottleneck": "compute"
+    },
+    "18": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 9.31841987567213
+      },
+      "semantic_Q_read_bytes": 86507520,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 5115812511744
+      },
+      "bottleneck": "compute"
+    },
+    "19": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 10.632137610491803
+      },
+      "semantic_Q_read_bytes": 90528768,
+      "semantic_Q_write_bytes": 126337024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 5837043548160
+      },
+      "bottleneck": "compute"
+    },
+    "2": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 10.93359040769399
+      },
+      "semantic_Q_read_bytes": 128294400,
+      "semantic_Q_write_bytes": 116580352,
+      "semantic_W_flops": {
+        "fp8_e4m3": 6002541133824
+      },
+      "bottleneck": "compute"
+    },
+    "20": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 1.5604651916357013
+      },
+      "semantic_Q_read_bytes": 84702720,
+      "semantic_Q_write_bytes": 134217728,
+      "semantic_W_flops": {
+        "fp8_e4m3": 856695390208
+      },
+      "bottleneck": "compute"
+    },
+    "21": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 6.926445883220401
+      },
+      "semantic_Q_read_bytes": 93846528,
+      "semantic_Q_write_bytes": 109166592,
+      "semantic_W_flops": {
+        "fp8_e4m3": 3802618789888
+      },
+      "bottleneck": "compute"
+    },
+    "22": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 27.954881452065575
+      },
+      "semantic_Q_read_bytes": 92995584,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 15347229917184
+      },
+      "bottleneck": "compute"
+    },
+    "23": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 12.51324186019672
+      },
+      "semantic_Q_read_bytes": 99483648,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 6869769781248
+      },
+      "bottleneck": "compute"
+    },
+    "24": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 37.53934740563934
+      },
+      "semantic_Q_read_bytes": 105971712,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 20609101725696
+      },
+      "bottleneck": "compute"
+    },
+    "25": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 1.4427369001967212
+      },
+      "semantic_Q_read_bytes": 83110400,
+      "semantic_Q_write_bytes": 134217728,
+      "semantic_W_flops": {
+        "fp8_e4m3": 792062558208
+      },
+      "bottleneck": "compute"
+    },
+    "26": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 0.2662981945355191
+      },
+      "semantic_Q_read_bytes": 19464192,
+      "semantic_Q_write_bytes": 34603008,
+      "semantic_W_flops": {
+        "fp8_e4m3": 146197708800
+      },
+      "bottleneck": "compute"
+    },
+    "27": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 11.425707215038251
+      },
+      "semantic_Q_read_bytes": 100902912,
+      "semantic_Q_write_bytes": 117866496,
+      "semantic_W_flops": {
+        "fp8_e4m3": 6272713261056
+      },
+      "bottleneck": "compute"
+    },
+    "28": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 14.895559976568306
+      },
+      "semantic_Q_read_bytes": 110317056,
+      "semantic_Q_write_bytes": 99999744,
+      "semantic_W_flops": {
+        "fp8_e4m3": 8177662427136
+      },
+      "bottleneck": "compute"
+    },
+    "29": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 10.282775878411657
+      },
+      "semantic_Q_read_bytes": 91040256,
+      "semantic_Q_write_bytes": 115712000,
+      "semantic_W_flops": {
+        "fp8_e4m3": 5645243957248
+      },
+      "bottleneck": "compute"
+    },
+    "3": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 2.351485517406193
+      },
+      "semantic_Q_read_bytes": 91626496,
+      "semantic_Q_write_bytes": 134217728,
+      "semantic_W_flops": {
+        "fp8_e4m3": 1290965549056
+      },
+      "bottleneck": "compute"
+    },
+    "4": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 9.592490711431694
+      },
+      "semantic_Q_read_bytes": 101346816,
+      "semantic_Q_write_bytes": 126345216,
+      "semantic_W_flops": {
+        "fp8_e4m3": 5266277400576
+      },
+      "bottleneck": "compute"
+    },
+    "5": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 21.565237483016393
+      },
+      "semantic_Q_read_bytes": 84344832,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 11839315378176
+      },
+      "bottleneck": "compute"
+    },
+    "6": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 0.6793074393296903
+      },
+      "semantic_Q_read_bytes": 36318208,
+      "semantic_Q_write_bytes": 55730176,
+      "semantic_W_flops": {
+        "fp8_e4m3": 372939784192
+      },
+      "bottleneck": "compute"
+    },
+    "7": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 22.630178144524592
+      },
+      "semantic_Q_read_bytes": 103809024,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 12423967801344
+      },
+      "bottleneck": "compute"
+    },
+    "8": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 5.591127560393443
+      },
+      "semantic_Q_read_bytes": 62717952,
+      "semantic_Q_write_bytes": 103809024,
+      "semantic_W_flops": {
+        "fp8_e4m3": 3069529030656
+      },
+      "bottleneck": "compute"
+    },
+    "9": {
+      "SOL_time_ms": {
+        "NVIDIA RTX PRO 5000 72GB Blackwell (SM120)": 0.6132451518251366
+      },
+      "semantic_Q_read_bytes": 18074112,
+      "semantic_Q_write_bytes": 28286976,
+      "semantic_W_flops": {
+        "fp8_e4m3": 336671588352
+      },
+      "bottleneck": "compute"
+    }
+  }
+}

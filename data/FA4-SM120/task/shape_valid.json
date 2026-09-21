@@ -1,0 +1,696 @@
+{
+  "0": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        200
+      ],
+      "seq_lens_values": [
+        8648
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "1": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        8448
+      ],
+      "seq_lens_values": [
+        8448
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "10": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        3341,
+        16013
+      ],
+      "seq_lens_values": [
+        79373,
+        29568
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "11": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        12672
+      ],
+      "seq_lens_values": [
+        92928
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "12": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        730,
+        2393,
+        6033,
+        7158,
+        10366,
+        14187,
+        16384
+      ],
+      "seq_lens_values": [
+        4954,
+        5887,
+        3640,
+        1125,
+        3208,
+        3821,
+        2197
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "13": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        2941,
+        7165,
+        15613
+      ],
+      "seq_lens_values": [
+        100093,
+        21120,
+        16896
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "14": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        4224,
+        12672
+      ],
+      "seq_lens_values": [
+        33792,
+        16896
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "15": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        1470,
+        14142
+      ],
+      "seq_lens_values": [
+        43710,
+        25344
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "16": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        12672
+      ],
+      "seq_lens_values": [
+        118272
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "17": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        12672
+      ],
+      "seq_lens_values": [
+        42240
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "18": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        4224,
+        12672
+      ],
+      "seq_lens_values": [
+        50688,
+        16896
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "19": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        12672,
+        15422
+      ],
+      "seq_lens_values": [
+        29568,
+        23870
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "2": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        1559,
+        14231
+      ],
+      "seq_lens_values": [
+        115607,
+        21120
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "20": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        2347,
+        5081,
+        7563,
+        7832,
+        9657,
+        12195,
+        14450,
+        16384
+      ],
+      "seq_lens_values": [
+        6571,
+        6958,
+        6706,
+        5576,
+        1825,
+        2538,
+        2255,
+        1934
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "21": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        1711,
+        4878,
+        13326
+      ],
+      "seq_lens_values": [
+        39727,
+        20063,
+        16896
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "22": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        12672
+      ],
+      "seq_lens_values": [
+        80256
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "23": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        4224,
+        12672
+      ],
+      "seq_lens_values": [
+        76032,
+        16896
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "24": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        12672
+      ],
+      "seq_lens_values": [
+        105600
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "25": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        3827,
+        4354,
+        4855,
+        5938,
+        7339,
+        8959,
+        12939,
+        16384
+      ],
+      "seq_lens_values": [
+        8051,
+        2724,
+        4725,
+        5307,
+        1401,
+        1620,
+        3980,
+        3445
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "26": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        4224
+      ],
+      "seq_lens_values": [
+        4224
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "27": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        1716,
+        14388
+      ],
+      "seq_lens_values": [
+        52404,
+        29568
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "28": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        3759,
+        12207
+      ],
+      "seq_lens_values": [
+        96687,
+        21120
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "29": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        1453,
+        14125
+      ],
+      "seq_lens_values": [
+        35245,
+        29568
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "3": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        3152,
+        4411,
+        7995,
+        8900,
+        10113,
+        13085,
+        13421,
+        13523,
+        16384
+      ],
+      "seq_lens_values": [
+        7376,
+        5483,
+        7808,
+        5129,
+        5437,
+        7196,
+        4560,
+        2036,
+        2861
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "4": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        4224,
+        12672,
+        15423
+      ],
+      "seq_lens_values": [
+        46464,
+        16896,
+        11199
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "5": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        12672
+      ],
+      "seq_lens_values": [
+        63360
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "6": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        2019,
+        2603,
+        6803
+      ],
+      "seq_lens_values": [
+        6243,
+        6067,
+        4200
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "7": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        8448,
+        12672
+      ],
+      "seq_lens_values": [
+        88704,
+        12672
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "8": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        12672
+      ],
+      "seq_lens_values": [
+        21120
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  },
+  "9": {
+    "init_kwargs": null,
+    "input_kwargs": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "query_start_loc_values": [
+        0,
+        3453
+      ],
+      "seq_lens_values": [
+        7677
+      ],
+      "workspace_size_bytes": 413138944
+    }
+  }
+}

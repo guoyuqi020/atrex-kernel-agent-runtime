@@ -61,6 +61,28 @@ class AgateEvaluationOptionsV1(BaseModel):
     timeout_s: int = Field(gt=0)
 
 
+class AgentOutputToleranceV1(BaseModel):
+    """One evaluator-owned elementwise tolerance safe to disclose to the Agent."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    atol: float = Field(ge=0)
+    rtol: float = Field(ge=0)
+
+
+class AgentCorrectnessPolicyV1(BaseModel):
+    """Trusted Agent-facing projection of the sealed correctness policy."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    comparison: Literal["elementwise"] = "elementwise"
+    formula: Literal[
+        "abs(candidate - reference) <= atol + rtol * abs(reference)"
+    ] = "abs(candidate - reference) <= atol + rtol * abs(reference)"
+    default_tolerance: AgentOutputToleranceV1
+    output_tolerances: dict[str, AgentOutputToleranceV1] = Field(default_factory=dict)
+
+
 class ShapeSplitRecordV1(BaseModel):
     """Private replay record for the exact fixed-seed split and capped sampling."""
 
@@ -241,6 +263,46 @@ class AgateEvaluationContractV1(BaseModel):
                 }
             )
         return valid
+
+    def agent_correctness_policy(self) -> AgentCorrectnessPolicyV1:
+        """Project exact Gate tolerances without exposing evaluator cases or inputs."""
+        output_tolerances: dict[str, AgentOutputToleranceV1] = {}
+        metadata = self.metadata
+        benchmark = metadata.get("benchmark_contract") if isinstance(metadata, dict) else None
+        raw_tolerances = (
+            benchmark.get("correctness_tolerances")
+            if isinstance(benchmark, dict)
+            else None
+        )
+        if isinstance(raw_tolerances, dict):
+            for output, value in raw_tolerances.items():
+                if not isinstance(output, str) or not output.strip():
+                    raise ValueError(
+                        "benchmark_contract.correctness_tolerances keys must be "
+                        "non-empty output names"
+                    )
+                output_tolerances[output] = AgentOutputToleranceV1.model_validate(value)
+        return AgentCorrectnessPolicyV1(
+            default_tolerance=AgentOutputToleranceV1(
+                atol=self.options.atol,
+                rtol=self.options.rtol,
+            ),
+            output_tolerances=output_tolerances,
+        )
+
+
+def load_agent_correctness_policy(
+    artifacts: LocalArtifactStore,
+    digest: ArtifactDigest,
+) -> AgentCorrectnessPolicyV1:
+    """Load the sealed contract and return only its Agent-safe correctness projection."""
+    artifact = artifacts.verify(digest)
+    if artifact.kind is not ArtifactKind.EVALUATION_CONTRACT:
+        raise ValueError("Agent correctness policy requires an Evaluation Contract")
+    contract = AgateEvaluationContractV1.model_validate_json(
+        (artifact.payload_path / "value.json").read_bytes()
+    )
+    return contract.agent_correctness_policy()
 
 
 @dataclass(frozen=True, slots=True)

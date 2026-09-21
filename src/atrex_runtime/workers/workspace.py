@@ -26,6 +26,7 @@ from ..domain.models import (
     RuntimeStatePolicy,
 )
 from ..filesystem import make_tree_owner_writable, make_tree_read_only
+from ..gateway.contract import load_agent_correctness_policy
 from ..ports import RunAttemptRequest
 from ..registry.base import Registry
 from .evidence_view import assemble_optimizer_evidence_view
@@ -422,6 +423,7 @@ class PreparedAttempt:
     manifest_path: Path
     session_root: Path
     session_id: str
+    correctness_policy_json: str | None = None
     persistent_state_root: Path | None = None
     persistent_lock_path: Path | None = None
 
@@ -678,6 +680,10 @@ class LocalAttemptWorkspaceAssembler:
             manifest_path=manifest_path,
             session_root=session_root,
             session_id=f"attempt-session-{uuid4().hex}",
+            correctness_policy_json=load_agent_correctness_policy(
+                self._artifacts,
+                campaign.evaluation_contract_digest,
+            ).model_dump_json(),
             persistent_state_root=persistent_state,
             persistent_lock_path=persistent_lock,
         )

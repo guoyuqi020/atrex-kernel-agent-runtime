@@ -354,7 +354,7 @@ def main() -> None:
         help="absolute main-arm target; defaults to 1 for campaign and 5 for ablation",
     )
     parser.add_argument(
-        "--smoke-mode", choices=("upstream-p128", "target"), default="upstream-p128"
+        "--smoke-mode", choices=("upstream-p128", "sm120-bf16", "target")
     )
     parser.add_argument("--shape-id", default="0")
     args = parser.parse_args()
@@ -375,7 +375,11 @@ def main() -> None:
         parser.error("Prepare this workspace first")
     RuntimeSettings.from_file(config)
     if args.role == "smoke":
-        run_smoke(workspace, args.smoke_mode, args.shape_id)
+        mode = args.smoke_mode
+        if mode is None:
+            target = CampaignSpecV3.from_file(workspace / "campaign.json").hardware_target
+            mode = "sm120-bf16" if target == "L20N" else "upstream-p128"
+        run_smoke(workspace, mode, args.shape_id)
         return
     os.environ.update(service_secrets(workspace))
     if args.role == "serve":

@@ -1,0 +1,293 @@
+{
+  "coverage_regimes": [
+    {
+      "name": "small",
+      "requirement": "support the lower end of every dynamic public dimension"
+    },
+    {
+      "name": "interior",
+      "requirement": "support non-boundary combinations inside the public domain"
+    },
+    {
+      "name": "boundary",
+      "requirement": "support the upper end of every dynamic public dimension"
+    }
+  ],
+  "development_cases": [],
+  "generator": {
+    "domain_policy": "widened_non_enumerating",
+    "name": "benchmark-converter-shape-train",
+    "version": 1
+  },
+  "invariants": [
+    "len(query_start_loc_values) == len(seq_lens_values) + 1",
+    "query_start_loc_values[0] == 0",
+    "query_start_loc_values[-1] <= 16384",
+    "max(seq_lens_values) <= 131072"
+  ],
+  "objective": "Implement one correct and fast flashinfer trtllm prefill attention fp8 candidate across the public domain; exact evaluator cases are hidden.",
+  "operator_contract": {
+    "category": "ATTENTION",
+    "fixed_init_kwargs": null,
+    "fixed_parameters": {
+      "block_table_columns": 16434,
+      "bmm1_scale": 0.0625,
+      "bmm2_scale": 1.0,
+      "head_dim": 256,
+      "num_kv_heads": 1,
+      "num_q_heads": 16,
+      "page_size": 64,
+      "workspace_size_bytes": 413138944
+    },
+    "operation": "flashinfer trtllm prefill attention fp8"
+  },
+  "schema_version": "atrex.shape_train.v1",
+  "shape_domain": {
+    "block_table_columns": {
+      "type": "integer",
+      "value_evidence": {
+        "artifact": "data/production_qwen38_max_l20d_nvfp4_fp8kv_tp4_dp2_ep8_prefill_c32_20260827/_provenance/attention_selection.json",
+        "evidence": "Bound is admitted by the pinned runtime callable contract.",
+        "kind": "runtime_probe",
+        "locator": "block_table_columns",
+        "regimes": [
+          "trace_backed_domain"
+        ],
+        "scope": "per_call"
+      },
+      "values": [
+        16434
+      ]
+    },
+    "bmm1_scale": {
+      "type": "number",
+      "value_evidence": {
+        "artifact": "data/production_qwen38_max_l20d_nvfp4_fp8kv_tp4_dp2_ep8_prefill_c32_20260827/_provenance/attention_selection.json",
+        "evidence": "Bound is admitted by the pinned runtime callable contract.",
+        "kind": "runtime_probe",
+        "locator": "bmm1_scale",
+        "regimes": [
+          "trace_backed_domain"
+        ],
+        "scope": "per_call"
+      },
+      "values": [
+        0.0625
+      ]
+    },
+    "bmm2_scale": {
+      "type": "number",
+      "value_evidence": {
+        "artifact": "data/production_qwen38_max_l20d_nvfp4_fp8kv_tp4_dp2_ep8_prefill_c32_20260827/_provenance/attention_selection.json",
+        "evidence": "Bound is admitted by the pinned runtime callable contract.",
+        "kind": "runtime_probe",
+        "locator": "bmm2_scale",
+        "regimes": [
+          "trace_backed_domain"
+        ],
+        "scope": "per_call"
+      },
+      "values": [
+        1.0
+      ]
+    },
+    "head_dim": {
+      "type": "integer",
+      "value_evidence": {
+        "artifact": "data/production_qwen38_max_l20d_nvfp4_fp8kv_tp4_dp2_ep8_prefill_c32_20260827/_provenance/attention_selection.json",
+        "evidence": "Bound is admitted by the pinned runtime callable contract.",
+        "kind": "runtime_probe",
+        "locator": "head_dim",
+        "regimes": [
+          "trace_backed_domain"
+        ],
+        "scope": "per_call"
+      },
+      "values": [
+        256
+      ]
+    },
+    "num_kv_heads": {
+      "type": "integer",
+      "value_evidence": {
+        "artifact": "data/production_qwen38_max_l20d_nvfp4_fp8kv_tp4_dp2_ep8_prefill_c32_20260827/_provenance/attention_selection.json",
+        "evidence": "Bound is admitted by the pinned runtime callable contract.",
+        "kind": "runtime_probe",
+        "locator": "num_kv_heads",
+        "regimes": [
+          "trace_backed_domain"
+        ],
+        "scope": "per_call"
+      },
+      "values": [
+        1
+      ]
+    },
+    "num_q_heads": {
+      "type": "integer",
+      "value_evidence": {
+        "artifact": "data/production_qwen38_max_l20d_nvfp4_fp8kv_tp4_dp2_ep8_prefill_c32_20260827/_provenance/attention_selection.json",
+        "evidence": "Bound is admitted by the pinned runtime callable contract.",
+        "kind": "runtime_probe",
+        "locator": "num_q_heads",
+        "regimes": [
+          "trace_backed_domain"
+        ],
+        "scope": "per_call"
+      },
+      "values": [
+        16
+      ]
+    },
+    "page_size": {
+      "type": "integer",
+      "value_evidence": {
+        "artifact": "data/production_qwen38_max_l20d_nvfp4_fp8kv_tp4_dp2_ep8_prefill_c32_20260827/_provenance/attention_selection.json",
+        "evidence": "Bound is admitted by the pinned runtime callable contract.",
+        "kind": "runtime_probe",
+        "locator": "page_size",
+        "regimes": [
+          "trace_backed_domain"
+        ],
+        "scope": "per_call"
+      },
+      "values": [
+        64
+      ]
+    },
+    "query_start_loc_values": {
+      "items": {
+        "max": 16384,
+        "min": 0,
+        "range_evidence": {
+          "lower": {
+            "artifact": "source://vllm@d8beb9ce35040ab709370757aec1dacc92cc2c39/flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+            "evidence": "Bound is admitted by the pinned runtime callable contract.",
+            "kind": "source_constraint",
+            "locator": "query_start_loc.items.lower",
+            "regimes": [
+              "trace_backed_domain"
+            ],
+            "scope": "per_call"
+          },
+          "upper": {
+            "artifact": "source://vllm@d8beb9ce35040ab709370757aec1dacc92cc2c39/flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+            "evidence": "Bound is admitted by the pinned runtime callable contract.",
+            "kind": "source_constraint",
+            "locator": "query_start_loc.items.upper",
+            "regimes": [
+              "trace_backed_domain"
+            ],
+            "scope": "per_call"
+          }
+        },
+        "type": "integer"
+      },
+      "length": {
+        "max": 17,
+        "min": 2,
+        "range_evidence": {
+          "lower": {
+            "artifact": "source://vllm@d8beb9ce35040ab709370757aec1dacc92cc2c39/flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+            "evidence": "Bound is admitted by the pinned runtime callable contract.",
+            "kind": "source_constraint",
+            "locator": "query_start_loc.length.lower",
+            "regimes": [
+              "trace_backed_domain"
+            ],
+            "scope": "per_call"
+          },
+          "upper": {
+            "artifact": "source://vllm@d8beb9ce35040ab709370757aec1dacc92cc2c39/flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+            "evidence": "Bound is admitted by the pinned runtime callable contract.",
+            "kind": "source_constraint",
+            "locator": "query_start_loc.length.upper",
+            "regimes": [
+              "trace_backed_domain"
+            ],
+            "scope": "per_call"
+          }
+        },
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "seq_lens_values": {
+      "items": {
+        "max": 131072,
+        "min": 1,
+        "range_evidence": {
+          "lower": {
+            "artifact": "source://vllm@d8beb9ce35040ab709370757aec1dacc92cc2c39/flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+            "evidence": "Bound is admitted by the pinned runtime callable contract.",
+            "kind": "source_constraint",
+            "locator": "seq_lens.items.lower",
+            "regimes": [
+              "trace_backed_domain"
+            ],
+            "scope": "per_call"
+          },
+          "upper": {
+            "artifact": "source://vllm@d8beb9ce35040ab709370757aec1dacc92cc2c39/flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+            "evidence": "Bound is admitted by the pinned runtime callable contract.",
+            "kind": "source_constraint",
+            "locator": "seq_lens.items.upper",
+            "regimes": [
+              "trace_backed_domain"
+            ],
+            "scope": "per_call"
+          }
+        },
+        "type": "integer"
+      },
+      "length": {
+        "max": 16,
+        "min": 1,
+        "range_evidence": {
+          "lower": {
+            "artifact": "source://vllm@d8beb9ce35040ab709370757aec1dacc92cc2c39/flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+            "evidence": "Bound is admitted by the pinned runtime callable contract.",
+            "kind": "source_constraint",
+            "locator": "seq_lens.length.lower",
+            "regimes": [
+              "trace_backed_domain"
+            ],
+            "scope": "per_call"
+          },
+          "upper": {
+            "artifact": "source://vllm@d8beb9ce35040ab709370757aec1dacc92cc2c39/flashinfer.prefill.trtllm_batch_context_with_kv_cache",
+            "evidence": "Bound is admitted by the pinned runtime callable contract.",
+            "kind": "source_constraint",
+            "locator": "seq_lens.length.upper",
+            "regimes": [
+              "trace_backed_domain"
+            ],
+            "scope": "per_call"
+          }
+        },
+        "type": "integer"
+      },
+      "type": "array"
+    },
+    "workspace_size_bytes": {
+      "type": "integer",
+      "value_evidence": {
+        "artifact": "data/production_qwen38_max_l20d_nvfp4_fp8kv_tp4_dp2_ep8_prefill_c32_20260827/_provenance/attention_selection.json",
+        "evidence": "Bound is admitted by the pinned runtime callable contract.",
+        "kind": "runtime_probe",
+        "locator": "workspace_size_bytes",
+        "regimes": [
+          "trace_backed_domain"
+        ],
+        "scope": "per_call"
+      },
+      "values": [
+        413138944
+      ]
+    }
+  },
+  "workload_profile": {
+    "note": "This is a widened public envelope derived from private evaluator cases; it is not an exact-case list.",
+    "phase": "prefill"
+  }
+}
