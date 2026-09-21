@@ -6,6 +6,8 @@ filesystem roles, Evidence visibility, and measurement trust.
 Gateway measurements use only the Campaign's fixed Valid subset (at most 15 Shapes). Test inputs
 and results are private: Runtime alone measures Valid + Test for authoritative ABBA retention and
 promotion.
+Valid Shapes use stable contiguous opaque IDs `0..V-1`; they are not source-dataset IDs, and gaps
+or values cannot be used to infer Test membership.
 Historical per-Shape results and latency aggregates shown here cover Valid only, not the hidden
 Test set. A Runtime acceptance verdict is distinct from an Agent's Valid-only experiment.
 

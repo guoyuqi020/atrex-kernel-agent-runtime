@@ -95,11 +95,16 @@ class ShapeSplitRecordV1(BaseModel):
     source_shape_ids: tuple[str, ...]
     valid_shape_ids: tuple[str, ...]
     test_shape_ids: tuple[str, ...]
+    agent_shape_id_map: dict[str, str] | None = Field(
+        default=None,
+        description="Private Agent Shape ID to evaluator Shape ID mapping",
+    )
 
     @model_validator(mode="after")
     def _validate_selection(self) -> Self:
         source = set(self.source_shape_ids)
         valid, test = set(self.valid_shape_ids), set(self.test_shape_ids)
+        aliases = self.agent_shape_id_map
         if (
             len(source) != self.source_shape_count
             or len(self.source_shape_ids) != self.source_shape_count
@@ -112,6 +117,15 @@ class ShapeSplitRecordV1(BaseModel):
         ):
             raise ValueError(
                 "shape_split must record unique, disjoint, capped Valid/Test selections"
+            )
+        if aliases is not None and (
+            set(aliases) != {str(index) for index in range(len(valid))}
+            or len(set(aliases.values())) != len(aliases)
+            or set(aliases.values()) != valid
+        ):
+            raise ValueError(
+                "shape_split.agent_shape_id_map must map contiguous opaque Agent IDs "
+                "exactly once onto every Valid Shape"
             )
         return self
 
@@ -215,6 +229,10 @@ class AgateEvaluationContractV1(BaseModel):
         test_ids = tuple(
             sorted(rng.sample(ordered[midpoint:], min(len(ordered) - midpoint, MAX_HOLDOUT_SHAPES)))
         )
+        agent_shape_id_map = {
+            str(index): shape_id
+            for index, shape_id in enumerate(sorted(valid_ids, key=_shape_id_sort_key))
+        }
         retained = self
         if len(ordered) > 2 * MAX_HOLDOUT_SHAPES:
             from .batched_evaluate import subset_evaluation_contract
@@ -229,6 +247,7 @@ class AgateEvaluationContractV1(BaseModel):
                     source_shape_ids=source_ids,
                     valid_shape_ids=valid_ids,
                     test_shape_ids=test_ids,
+                    agent_shape_id_map=agent_shape_id_map,
                 ),
             }
         )
@@ -238,9 +257,14 @@ class AgateEvaluationContractV1(BaseModel):
         if self.validation_shape_ids is None:
             return self
         # Local import avoids the batching module's contract import cycle.
-        from .batched_evaluate import subset_evaluation_contract
+        from .batched_evaluate import remap_evaluation_contract, subset_evaluation_contract
 
-        valid = subset_evaluation_contract(self, self.validation_shape_ids)
+        aliases = None if self.shape_split is None else self.shape_split.agent_shape_id_map
+        valid = (
+            subset_evaluation_contract(self, self.validation_shape_ids)
+            if aliases is None
+            else remap_evaluation_contract(self, aliases)
+        )
         if valid.metadata is not None:
             # Dataset-wide traces can enumerate Test cases outside metadata.shapes.
             # Preserve evaluator semantics and the filtered Valid map, not provenance.
@@ -263,6 +287,12 @@ class AgateEvaluationContractV1(BaseModel):
                 }
             )
         return valid
+
+    def agent_shape_id_map(self) -> dict[str, str] | None:
+        """Return the sealed private Agent-ID to evaluator-ID map, if this Campaign has one."""
+        if self.shape_split is None or self.shape_split.agent_shape_id_map is None:
+            return None
+        return dict(self.shape_split.agent_shape_id_map)
 
     def agent_correctness_policy(self) -> AgentCorrectnessPolicyV1:
         """Project exact Gate tolerances without exposing evaluator cases or inputs."""
@@ -303,6 +333,10 @@ def load_agent_correctness_policy(
         (artifact.payload_path / "value.json").read_bytes()
     )
     return contract.agent_correctness_policy()
+
+
+def _shape_id_sort_key(value: str) -> tuple[int, int | str]:
+    return (0, int(value)) if value.isdigit() else (1, value)
 
 
 @dataclass(frozen=True, slots=True)

@@ -1,14 +1,14 @@
 {
   "schema_version": 1,
-  "name": "fa4_prefill_hd256_sm120_r0",
+  "name": "fa4_prefill_hd256_sm120_from_sm103_reference",
   "adapter": "adapter.py",
   "source": {
-    "name": "fa4_b54df166_sm120_fp8_paged_bridge_with_quack_053",
-    "revision": "b6bfe3d177aab2b930f4d6485227002b65cbb2de",
-    "archive_paths": ["vendor", "vendor_support", "PROVENANCE.json"],
+    "name": "fa4_sm103_reference_with_empty_sm120_implementation",
+    "revision": "acd55c80e66d4885a066c6b281b7fd98c9100e02",
+    "archive_paths": ["implementation", "reference_sm103", "PROVENANCE.json"],
     "package_root": "."
   },
-  "editable_roots": ["vendor/flash_attention/flash_attn/cute"],
+  "editable_roots": ["implementation"],
   "runtime_requirements": [
     {"distribution": "torch", "import": "torch", "version": ">=2.9.0"},
     {"distribution": "nvidia-cutlass-dsl", "import": "cutlass", "version": "==4.6.1"}

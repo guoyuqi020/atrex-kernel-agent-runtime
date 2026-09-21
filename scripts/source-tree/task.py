@@ -261,7 +261,7 @@ def prepare(inputs: Path, workspace: Path, backend: str | None, port: int | None
     print(f"Prepared: {workspace}\nSource, Optimizer, Evolver and evaluator preflight passed.")
     print(
         f"Target: {definition['hardware_target']} / {next(iter(definition['lineages']))}; "
-        f"{len(shapes)} private Shapes. R0 still requires Bootstrap bring-up."
+        f"{len(shapes)} private Shapes. The Seed still requires Bootstrap bring-up."
     )
     print("No services, model sessions or GPU jobs were started.")
 

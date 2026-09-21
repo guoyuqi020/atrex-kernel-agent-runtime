@@ -6,13 +6,14 @@
     "status": "passed",
     "checks": [
       "Source Bundle verifies and clones at the pinned Commit",
-      "SM120 Vendor overlay parses as Python",
+      "the original SM103-family FlashAttention path and Quack helpers are preserved under the immutable reference tree while SM120 source and the mixed-arch interface are excluded",
+      "the editable implementation is separate and contains no Vendor or SM120 fallback",
       "fixed production ABI and 30 private Shapes are unchanged",
-      "L20N Roofline was recomputed from the pinned 549 TFLOP/s FP8 and 1344 GB/s peaks"
+      "L20N Roofline uses the pinned 549 TFLOP/s FP8 and 1344 GB/s peaks"
     ]
   },
-  "target_abi": {
-    "status": "gpu_validation_pending",
-    "meaning": "The SM120 R0 is designed as a measurable correctness-first bridge; run the target smoke or Runtime Bootstrap on L20N before treating it as GPU-validated."
+  "candidate_seed": {
+    "status": "intentionally_unimplemented",
+    "meaning": "Bootstrap must author and validate the first correct SM120 CuTe implementation before v0 can be registered."
   }
 }

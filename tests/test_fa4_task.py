@@ -31,15 +31,15 @@ INPUTS = REPOSITORY / "data/FA4"
 SM120_INPUTS = REPOSITORY / "data/FA4-SM120"
 
 
-def test_fa4_sm120_retargets_vendor_and_hardware_without_changing_workload(
+def test_fa4_sm120_exposes_only_sm103_reference_and_empty_target_implementation(
     tmp_path: Path,
 ) -> None:
     spec = CampaignSpecV3.from_file(SM120_INPUTS / "campaign.json")
     assert spec.hardware_target == "L20N"
     assert set(spec.lineages) == {Dsl.CUTEDSL}
-    assert (SM120_INPUTS / "task/adapter.py").read_bytes() == (
-        INPUTS / "task/adapter.py"
-    ).read_bytes()
+    adapter = (SM120_INPUTS / "task/adapter.py").read_text()
+    assert "from implementation.sm120 import flash_attention_sm120" in adapter
+    assert "vendor" not in adapter.lower()
     assert (SM120_INPUTS / "task/reference.py").read_bytes() == (
         INPUTS / "task/reference.py"
     ).read_bytes()
@@ -65,6 +65,7 @@ def test_fa4_sm120_retargets_vendor_and_hardware_without_changing_workload(
     manifest = SourceManifest.model_validate_json(
         (SM120_INPUTS / "task/source_manifest.json").read_bytes()
     )
+    assert manifest.editable_roots == ("implementation",)
     source = tmp_path / "sm120-source"
     subprocess.run(
         ["git", "clone", "--quiet", str(SM120_INPUTS / "source.bundle"), str(source)],
@@ -73,14 +74,30 @@ def test_fa4_sm120_retargets_vendor_and_hardware_without_changing_workload(
     assert subprocess.check_output(
         ["git", "-C", str(source), "rev-parse", "HEAD"], text=True
     ).strip() == manifest.source.revision
-    interface = (
-        source / "vendor/flash_attention/flash_attn/cute/interface.py"
-    ).read_text()
-    assert "_sm120_fp8_paged_bf16_fallback" in interface
-    assert "tile_mn=(64, 64)" in interface
+    assert not (source / "vendor").exists()
+    assert not (source / "vendor_support").exists()
+    implementation = (source / "implementation/sm120.py").read_text()
+    assert "raise NotImplementedError" in implementation
+    assert "import cutlass.cute as cute" in implementation
+    reference = source / "reference_sm103/flash_attention/flash_attn/cute"
+    assert (reference / "sm100_hd256_2cta_fmha_forward.py").is_file()
+    assert not (reference / "interface.py").exists()
+    assert not list(reference.glob("*sm120*"))
+
+    original = tmp_path / "sm103-source"
+    subprocess.run(
+        ["git", "clone", "--quiet", str(INPUTS / "source.bundle"), str(original)],
+        check=True,
+    )
+    assert (
+        reference / "sm100_hd256_2cta_fmha_forward.py"
+    ).read_bytes() == (
+        original
+        / "vendor/flash_attention/flash_attn/cute/sm100_hd256_2cta_fmha_forward.py"
+    ).read_bytes()
     hint = (SM120_INPUTS / "initial-evidence/README.md").read_text()
-    assert "correctness-first SM120 bridge" in hint
-    assert "SM100 HD256 2CTA" in hint and "not a valid" in hint
+    assert "SM120 source" in hint and "deliberately absent" in hint
+    assert "not a runtime dependency" in hint
 
 
 def test_fa4_sm120_preparation_is_self_contained(tmp_path: Path, runner) -> None:
@@ -94,7 +111,10 @@ def test_fa4_sm120_preparation_is_self_contained(tmp_path: Path, runner) -> None
     assert (workspace / "source/PROVENANCE.json").is_file()
     prepared = json.loads((workspace / "prepared.json").read_text())
     assert prepared["hardware_target"] == "L20N"
-    assert prepared["source_commit"] == "b6bfe3d177aab2b930f4d6485227002b65cbb2de"
+    assert prepared["source_commit"] == "acd55c80e66d4885a066c6b281b7fd98c9100e02"
+    assert prepared["source_file_count"] == 71
+    assert prepared["production_gate"] is True
+    assert prepared["seed_static_policy_violations"] == []
     contract = AgateEvaluationContractV1.model_validate_json(
         (workspace / "evaluation-contract.json").read_bytes()
     )
@@ -107,9 +127,8 @@ def test_fa4_sm120_preparation_is_self_contained(tmp_path: Path, runner) -> None
             "mutated_inputs.out": {"atol": 0.06, "rtol": 0.04},
         },
     }
-    smoke = (SM120_INPUTS / "smoke/smoke.py").read_text()
-    assert "torch.isclose" in smoke
-    assert "relative_l2" not in smoke
+    assert not (SM120_INPUTS / "smoke").exists()
+    assert not (workspace / "smoke").exists()
 
     malformed = contract.model_copy(
         update={

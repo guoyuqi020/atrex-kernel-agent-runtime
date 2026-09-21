@@ -5,13 +5,14 @@ from __future__ import annotations
 import json
 import math
 import statistics
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, parse_artifact_digest
+from .contract import load_evaluation_contract
 from .correctness import correctness_summary, merge_correctness_summaries
 
 
@@ -39,7 +40,16 @@ def gateway_result_projection(
     validation_ids = value.get("validation_shape_ids")
     holdout = isinstance(validation_ids, list)
     if isinstance(validation_ids, list):
-        by_shape = {key: number for key, number in by_shape.items() if key in validation_ids}
+        shape_id_map = _sealed_agent_shape_id_map(artifacts, value, validation_ids)
+        by_shape = (
+            {}
+            if shape_id_map is None
+            else {
+                agent_id: by_shape[source_id]
+                for agent_id, source_id in shape_id_map.items()
+                if source_id in by_shape
+            }
+        )
         # The all-Shape aggregate also encodes Test performance. Never project it
         # alongside Valid measurements, even though the Gate verdict is visible.
         latency_us = (
@@ -62,7 +72,29 @@ def gateway_result_projection(
     }
     if holdout:
         projected["measurement_domain"] = "valid"
+        projected["shape_ids_are_opaque"] = True
     return projected
+
+
+def _sealed_agent_shape_id_map(
+    artifacts: LocalArtifactStore,
+    value: Mapping[str, object],
+    validation_ids: Sequence[object],
+) -> dict[str, str] | None:
+    """Resolve the private alias map without ever falling back to source Shape IDs."""
+    raw_digest = value.get("evaluation_contract_digest")
+    if not isinstance(raw_digest, str):
+        return None
+    try:
+        contract = load_evaluation_contract(artifacts, parse_artifact_digest(raw_digest))
+    except (OSError, ValueError):
+        return None
+    aliases = contract.agent_shape_id_map()
+    if aliases is None or set(aliases.values()) != {
+        shape_id for shape_id in validation_ids if isinstance(shape_id, str)
+    }:
+        return None
+    return aliases
 
 
 def _gateway_result_value(

@@ -194,10 +194,12 @@ remain fallback-only. `metadata.json` is forwarded privately, including `mutates
 Bootstrap uses fixed seed `42` to randomly split those exact Shapes 50/50 (odd extra: Valid;
 at least two Shapes required), then randomly samples at most 15 from each half. The private
 Contract's `shape_split` archives the population and selected IDs; extra Shapes are excluded from evaluation.
+Valid Shapes are exposed to the Agent only through stable contiguous IDs `0..V-1`; the private
+Contract retains the mapping to evaluator IDs, so gaps cannot reveal Test membership.
 Agent operations and Bootstrap/seed ordinary Eval use Valid only;
 authoritative Runtime ABBA uses Valid + Test. Test rows and full-set aggregates never enter
 Agent Evidence or tool responses. Existing Campaign Contracts are immutable: use a new task
-workspace to apply the split to a pre-change experiment. See [evaluation privacy](../../docs/evaluation.md).
+workspace to apply the split or opaque-ID map to a pre-change experiment. See [evaluation privacy](../../docs/evaluation.md).
 
 ## Per-DSL inspection
 

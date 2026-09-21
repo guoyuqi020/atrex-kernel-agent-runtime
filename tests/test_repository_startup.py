@@ -72,6 +72,8 @@ def _environment() -> dict[str, str]:
         "ATREX_CAPABILITY_SIGNING_KEY": base64.urlsafe_b64encode(b"k" * 32).decode(),
         "ATREX_ADMIN_BEARER_TOKEN": "a" * 32,
         "ANTHROPIC_AUTH_TOKEN": "repository-startup-smoke-only",
+        "AGATE_AK": "repository-startup-ak",
+        "AGATE_SK": "repository-startup-sk",
         "PATH": os.environ["PATH"],
     }
 

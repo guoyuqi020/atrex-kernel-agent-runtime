@@ -103,9 +103,12 @@ def test_holdout_is_balanced_stable_and_preserved_in_sealed_contract(count: int)
     assert split.metadata["num_shapes"] == valid_count + test_count
     assert set(split.metadata["shapes"]) == set(split.shapes)
     assert set(split.roofline["shapes"]) == set(split.shapes)
+    assert record.agent_shape_id_map is not None
+    assert set(record.agent_shape_id_map) == {str(index) for index in range(valid_count)}
+    assert set(record.agent_shape_id_map.values()) == set(record.valid_shape_ids)
     valid = split.for_agent()
     assert len(valid.shapes) == valid_count
-    assert set(valid.shapes) < set(original.shapes)
+    assert set(valid.shapes) == set(record.agent_shape_id_map)
     assert valid.metadata is not None and valid.roofline is not None
     assert valid.metadata["num_shapes"] == valid_count
     assert set(valid.metadata["shapes"]) == set(valid.shapes)
@@ -145,6 +148,16 @@ def test_archived_selection_must_match_the_sealed_contract() -> None:
     excluded = next(iter(set(split.shape_split.source_shape_ids) - set(split.shapes)))
     value["shape_split"]["test_shape_ids"][0] = excluded
     with pytest.raises(ValidationError, match="selections must match"):
+        AgateEvaluationContractV1.model_validate(value)
+
+
+def test_archived_agent_shape_id_map_must_be_contiguous_and_exact() -> None:
+    split = _contract(40).with_shape_holdout()
+    value = split.model_dump(mode="json")
+    value["shape_split"]["agent_shape_id_map"]["0"] = value["shape_split"][
+        "test_shape_ids"
+    ][0]
+    with pytest.raises(ValidationError, match="contiguous opaque Agent IDs"):
         AgateEvaluationContractV1.model_validate(value)
 
 
@@ -193,10 +206,12 @@ async def test_agent_eval_sends_and_returns_only_valid_shapes(tmp_path: Path) ->
         result = await adapter.execute(request)
         assert result.evaluation is not None and result.evaluation.correct
         sent = [payload["reference"]["shapes"] for _, payload in client.submitted]
-        assert len(sent) == 1 and set(sent[0]) == set(contract.validation_shape_ids or ())
+        aliases = contract.agent_shape_id_map()
+        assert aliases is not None
+        assert len(sent) == 1 and set(sent[0]) == set(aliases)
         assert "private-shape-trace" not in json.dumps(client.submitted)
         assert set(result.worker_result["latency_us_by_shape"]) == set(sent[0])
-        test_id = next(iter(set(contract.shapes) - set(sent[0])))
+        test_id = "not-an-agent-shape"
         with pytest.raises(ValueError, match="not an evaluator-owned"):
             await adapter.execute(
                 replace(
@@ -213,6 +228,68 @@ async def test_agent_eval_sends_and_returns_only_valid_shapes(tmp_path: Path) ->
 
 
 @pytest.mark.anyio
+async def test_agent_profile_uses_opaque_valid_shape_id_end_to_end(tmp_path: Path) -> None:
+    contract = _contract(40).with_shape_holdout()
+    aliases = contract.agent_shape_id_map()
+    assert aliases is not None
+    alias, source_id = next(
+        (alias, source_id)
+        for alias, source_id in aliases.items()
+        if alias != source_id
+    )
+    contexts = StaticContexts(AgateEvaluationContext("vecadd", "H20", Dsl.TRITON, contract))
+    client = FakeAgateClient(
+        {
+            "job_id": "pf_opaque",
+            "status": "succeeded",
+            "spec": {
+                "reference": {
+                    "shapes": {
+                        alias: {"input_kwargs": {"private_source_shape_id": source_id}}
+                    }
+                }
+            },
+            "result": {"kernels": [{"name": "vector_add", "duration": 4.0}]},
+        }
+    )
+    builder = CapturingBuilder()
+    jobs = SqliteAgateJobStore(tmp_path / "jobs.sqlite")
+    candidate = tmp_path / "candidate"
+    candidate.mkdir()
+    candidate.joinpath("kernel.py").write_text("class Model: pass\n")
+    adapter = AgateGatewayAdapter(client, builder, contexts, jobs, wait_timeout_s=90)
+    request = GatewayAdapterRequest(
+        new_attempt_id(),
+        GatewayOperation.PROFILE,
+        "profile-opaque-valid-shape",
+        digest("kernel"),
+        candidate,
+        "survey",
+        None,
+        None,
+        {"shape_id": alias},
+    )
+    try:
+        result = await adapter.execute(request)
+        reference = builder.calls[0]["reference"]
+        assert isinstance(reference, dict)
+        assert reference["shapes"] == {alias: contract.shapes[source_id]}
+        assert source_id not in reference["shapes"]
+        assert result.worker_result == {
+            "job_id": "pf_opaque",
+            "status": "succeeded",
+            "result": {
+                "shape_id": alias,
+                "kernels": [{"name": "vector_add", "duration": 4.0}],
+            },
+        }
+        assert source_id not in json.dumps(result.worker_result)
+        assert "private_source_shape_id" not in json.dumps(result.worker_result)
+    finally:
+        jobs.close()
+
+
+@pytest.mark.anyio
 async def test_agent_abba_uses_only_valid_inputs(case: Case) -> None:
     contract = case.contexts.context.contract.with_shape_holdout()
     case.contexts.context = replace(case.contexts.context, contract=contract)
@@ -220,9 +297,11 @@ async def test_agent_abba_uses_only_valid_inputs(case: Case) -> None:
     assert result.status == "completed"
     assert len(case.client.requests) == 1
     files = case.client.requests[0]["files"]
-    assert set(json.loads(files["reference/shapes.json"])) == set(contract.validation_shape_ids)
+    aliases = contract.agent_shape_id_map()
+    assert aliases is not None
+    assert set(json.loads(files["reference/shapes.json"])) == set(aliases)
     assert set(result.worker_result["candidate"]["latency_us_by_shape"]) == set(
-        contract.validation_shape_ids
+        aliases
     )
 
 
@@ -249,7 +328,16 @@ async def test_authoritative_abba_measures_all_shapes_but_evidence_hides_test(
             )
         )
     contract = _contract(shape_count).with_shape_holdout()
-    context = AgateEvaluationContext("vecadd", "H20", Dsl.TRITON, contract)
+    contract_digest = artifacts.put_json(
+        contract.model_dump(mode="json"), ArtifactKind.EVALUATION_CONTRACT
+    )
+    context = AgateEvaluationContext(
+        "vecadd",
+        "H20",
+        Dsl.TRITON,
+        contract,
+        evaluation_contract_digest=contract_digest,
+    )
     client = AbbaClient()
     journal = FakeJournal()
     runner = AgateSameAllocationAbbaRunner(
@@ -288,11 +376,15 @@ async def test_authoritative_abba_measures_all_shapes_but_evidence_hides_test(
     raw["candidate"]["correctness"]["max_abs_err"] = 123456789
     private_result = artifacts.put_json(raw, ArtifactKind.GATEWAY_RESULT)
     public = gateway_result_projection(artifacts, private_result, correct=True, latency_us=900)
-    assert set(public["latency_us_by_shape"]) == valid_ids
+    aliases = contract.agent_shape_id_map()
+    assert aliases is not None
+    assert set(public["latency_us_by_shape"]) == set(aliases)
     assert public["latency_us_geomean"] == pytest.approx(90)
     assert public["latency_us_arith_mean"] == pytest.approx(90)
     assert public["correctness"]["max_abs_err"] is None
     assert public["measurement_domain"] == "valid"
+    assert public["shape_ids_are_opaque"] is True
+    assert not set(public["latency_us_by_shape"]).intersection(valid_ids - set(aliases))
     assert "9000" not in json.dumps(public) and "123456789" not in json.dumps(public)
 
     lineage = tmp_path / "lineage"
@@ -343,11 +435,13 @@ def test_problem_generalizer_cannot_read_test_inputs(tmp_path: Path, shape_count
         manifest
     )
     root = prepared.root / manifest.paths.private_inputs
-    assert set(json.loads((root / "shapes.json").read_text())) == set(contract.validation_shape_ids)
+    aliases = contract.agent_shape_id_map()
+    assert aliases is not None
+    assert set(json.loads((root / "shapes.json").read_text())) == set(aliases)
     assert set(json.loads((root / "metadata.json").read_text())["shapes"]) == set(
-        contract.validation_shape_ids
+        aliases
     )
     assert "private-shape-trace" not in (root / "metadata.json").read_text()
     assert set(json.loads((root / "roofline.json").read_text())["shapes"]) == set(
-        contract.validation_shape_ids
+        aliases
     )

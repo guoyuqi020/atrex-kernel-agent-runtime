@@ -285,6 +285,12 @@ def test_campaign_bootstrap_resolves_agent_arch_from_agate_environment(
     assert set(contract["shape_split"]["test_shape_ids"]) == (
         set(contract["shapes"]) - set(contract["validation_shape_ids"])
     )
+    assert set(contract["shape_split"]["agent_shape_id_map"]) == {
+        str(index) for index in range(len(contract["validation_shape_ids"]))
+    }
+    assert set(contract["shape_split"]["agent_shape_id_map"].values()) == set(
+        contract["validation_shape_ids"]
+    )
 
 
 def test_campaign_bootstrap_accepts_shape_train_with_private_shape_valid_contract(

@@ -23,7 +23,8 @@ Test is its complement. Per-Shape metadata and Roofline are reduced to the selec
 The same partition is used across DSLs, Attempts, retries, and ablation arms.
 
 The private Contract's `shape_split` archives the algorithm, seed, cap, original population count
-and IDs, and final Valid/Test IDs. For an original population `"0"` through `"9"`, the record is:
+and IDs, final Valid/Test IDs, and the stable opaque Agent-ID mapping. For an original population
+`"0"` through `"9"`, the record is:
 
 ```json
 {
@@ -33,7 +34,8 @@ and IDs, and final Valid/Test IDs. For an original population `"0"` through `"9"
   "source_shape_count": 10,
   "source_shape_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
   "valid_shape_ids": ["2", "3", "5", "7", "8"],
-  "test_shape_ids": ["0", "1", "4", "6", "9"]
+  "test_shape_ids": ["0", "1", "4", "6", "9"],
+  "agent_shape_id_map": {"0": "2", "1": "3", "2": "5", "3": "7", "4": "8"}
 }
 ```
 
@@ -42,6 +44,11 @@ The Campaign's `evaluation_contract_digest` locates the immutable archive at
 That Contract also contains the exact selected Shape records, enabling replay without resampling.
 This archive is administrative data: it is removed from Agent contexts and per-batch requests,
 and must not be copied into Agent workspaces or Evidence.
+
+Agent-facing Valid Shapes are re-keyed to contiguous opaque IDs `"0"` through `"V-1"`. Runtime
+uses the private map when building Agent Evaluate/Profile requests and when projecting authoritative
+results back into historical Evidence. Original Valid IDs therefore cannot reveal Test membership
+through gaps in a dense source-ID sequence. The aliases remain stable for the Campaign.
 
 Agent operations, including ordinary Evaluate, Agent ABBA, Profile, and Check, use Valid only.
 Bootstrap final Evaluate, Lineage seed Evaluate, and ordinary Evaluate comparisons also use
@@ -57,8 +64,9 @@ Public `shape_train` describes the legal domain, not the holdout membership. Aut
 problem context and missing Roofline construction use Valid inputs only.
 
 New Campaigns seal this partition. A pre-change Campaign's immutable Contract is not rewritten:
-create a new Campaign/workspace if its Contract has no fixed-seed split archive; do not mix its old full-set results
-with new Valid-only measurements. The shared VecAdd example has two Shapes for this reason.
+create a new Campaign/workspace if its Contract has no fixed-seed split archive or no opaque
+Agent-ID map; do not mix its old full-set or source-ID results with new Valid-only measurements.
+The shared VecAdd example has two Shapes for this reason.
 
 Agents never receive exact validation Shapes, `reference.py`, `input.py`, metadata, or Roofline.
 They receive a public `shape_train` contract describing the legal parameter domain and non-Shape

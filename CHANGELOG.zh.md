@@ -31,8 +31,9 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 - 新 Campaign 用固定种子 `42` 随机封存 50/50 Valid/Test Shape 划分：Agent 操作及普通评测只使用 Valid，
   Runtime 权威 ABBA 使用 Valid + Test。Agent Evidence 隐藏 Test 明细、全量聚合延迟及 Test
   误差指标；奇数多出的一个归 Valid，单 Shape 拒绝启动。两个集合各随机抽取最多 15 个 Shape，多出的
-  Shape 不参与评测，Metadata/Roofline 同步裁剪。私有 `shape_split` 留档种子、算法、原始全集与选中 ID。
-  VecAdd 示例新增第二个 Shape。
+  Shape 不参与评测，Metadata/Roofline 同步裁剪。私有 `shape_split` 留档种子、算法、原始全集、选中 ID
+  和稳定的不透明 Agent Shape-ID 映射。Agent 请求与历史投影只使用连续 `0..V-1`，原始 ID 缺口不再
+  泄漏 Test 成员。VecAdd 示例新增第二个 Shape。
 
 - Evolver 按 Lineage/Backend 持续 resume 原生会话，跨进化、串行 Challenger 构建、基础设施重试和
   控制器重启保留历史；每次仍加载新的输入和 Candidate，Trace 与用量不重复计入历史内容。

@@ -630,6 +630,16 @@ class CampaignBootstrapper:
                     "Campaign creation_key and workspace. Its frozen evaluation Contract "
                     "cannot be changed."
                 )
+            if (
+                contract.shape_split is not None
+                and contract.shape_split.agent_shape_id_map is not None
+                and stored_contract.shape_split is not None
+                and stored_contract.shape_split.agent_shape_id_map is None
+            ):
+                raise ValueError(
+                    "Existing Campaign predates opaque Agent Shape IDs; create a new Campaign "
+                    "creation_key and workspace. Its frozen evaluation Contract cannot be changed."
+                )
             without_roofline = {"roofline": None}
             comparable_contract = contract
             if stored_contract.accelerator_backend is None and stored_contract.device_slug is None:
@@ -652,10 +662,17 @@ class CampaignBootstrapper:
             return contract, "explicit", None
         if contract.roofline is None and self._roofline_builder is not None:
             try:
+                from .gateway.batched_evaluate import subset_evaluation_contract
+
+                valid_contract = (
+                    contract
+                    if contract.validation_shape_ids is None
+                    else subset_evaluation_contract(contract, contract.validation_shape_ids)
+                )
                 roofline = self._roofline_builder.build(
                     operator=operator,
                     hardware_target=hardware_target,
-                    contract=contract.for_agent(),
+                    contract=valid_contract,
                 )
             except Exception as error:
                 detail = f"{type(error).__name__}: {error}"[:1000]

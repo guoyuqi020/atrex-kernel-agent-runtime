@@ -37,7 +37,9 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
   no Test rows, full-set latency aggregates, or Test error metrics. Odd extras go to Valid;
   single-Shape tasks are rejected. Each subset randomly samples at most 15 Shapes; excess Shapes
   are excluded from evaluation, with matching metadata/Roofline subsetting. A private `shape_split`
-  record seals the seed, algorithm, source population, and selections. VecAdd examples now include two Shapes.
+  record seals the seed, algorithm, source population, selections, and stable opaque Agent Shape-ID
+  map. Agent requests and historical projections use contiguous `0..V-1` IDs, so source-ID gaps do
+  not reveal Test membership. VecAdd examples now include two Shapes.
 
 - Evolver now resumes one native conversation per Lineage/Backend across Evolutions, sequential
   Challenger construction, infrastructure retries, and controller restarts. Each invocation still

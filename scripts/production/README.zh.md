@@ -159,9 +159,11 @@ bash scripts/production/run.sh \
 Bootstrap 用固定种子 `42` 随机将精确 Shape 按 50/50 划分为 Valid/Test，奇数多出的一个归
 Valid，至少需要两个 Shape；再从每一半各随机抽取最多 15 个，多出的 Shape 不参与评测。
 原始全集和选中 ID 留档在私有 Contract 的 `shape_split` 中。
+Valid Shape 对 Agent 只显示为稳定的连续 ID `0..V-1`；私有 Contract 保留到评测 ID 的映射，
+因此编号缺口不会泄漏 Test 成员。
 Agent 操作及 Bootstrap/Seed 的普通 Eval 只使用 Valid；权威 Runtime
 ABBA 使用 Valid + Test。Test 明细和全量平均延迟不会进入 Agent Evidence 或工具返回。
-旧 Campaign Contract 不可变，旧实验应用此划分需要新建任务 Workspace。
+旧 Campaign Contract 不可变，旧实验应用此划分或不透明 ID 映射需要新建任务 Workspace。
 详见[评测隐私](../../docs/evaluation.zh.md)。
 
 当 `--kernel` 指向算子目录时，默认使用 `reference.py` 作为三个 bootstrap 的语义 Seed；

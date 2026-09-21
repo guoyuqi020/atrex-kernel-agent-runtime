@@ -1,11 +1,11 @@
 {
   "schema_version": 3,
-  "creation_key": "qwen38-fa4-prefill-hd256-sm120-r0-ablation-workflow-v1-20260921",
+  "creation_key": "qwen38-fa4-prefill-hd256-sm120-from-sm103-ablation-v3-20260921",
   "operator": "flashinfer_trtllm_prefill_attention_fp8",
   "hardware_target": "L20N",
   "evaluation_contract": "evaluation-contract.json",
   "shape_train": "task/shape_train.json",
-  "base_revision": {"commit": "85218b7a94bdcd4e67d74cc74e9c53356a5e500c"},
+  "base_revision": {"commit": "32fb3e619c0b8043dcd3e663cc3809b7e2388303"},
   "workflow_command": "workflow/evolve_3.py",
   "challenger_count": 1,
   "challenger_start_epoch": 2,

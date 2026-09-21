@@ -41,7 +41,8 @@ use the supplied contracts, not invented endpoints or guessed IDs.
 
 Agent Gateway operations use only the Campaign's fixed Valid subset; authoritative Runtime ABBA
 uses Valid + Test, each containing at most 15 Shapes. Test inputs and per-Shape results are never
-exposed. Latencies in this Evidence view cover Valid only; Kernel acceptance and Branch selection
+exposed. Valid Shapes use stable contiguous opaque IDs `0..V-1`, not source-dataset IDs. Latencies
+in this Evidence view cover Valid only; Kernel acceptance and Branch selection
 are Runtime verdicts, not Valid-only performance decisions. Do not attempt to reconstruct hidden
 Test data.
 

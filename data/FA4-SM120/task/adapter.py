@@ -1,23 +1,10 @@
-"""C05 production-ABI adapter over the pristine FA4 b54df166 source tree.
-
-This file intentionally contains no C05/Increment kernel optimization.  It
-adapts the benchmark ABI to FA4's private forward interface and leaves the
-P64, ragged-length, and PackGQA capability gaps visible to the optimizer.
-"""
+"""Fixed production ABI adapter for a self-authored SM120 CuTe implementation."""
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent
-for _path in (ROOT / "vendor_support", ROOT / "vendor/flash_attention"):
-    sys.path.insert(0, str(_path))
-
 import torch
 import torch.nn as nn
-
-from flash_attn.cute.interface import _flash_attn_fwd
+from implementation.sm120 import flash_attention_sm120
 
 
 class Model(nn.Module):
@@ -40,7 +27,6 @@ class Model(nn.Module):
         o_sf_scale: torch.Tensor | None,
         out: torch.Tensor,
     ) -> torch.Tensor:
-        del workspace_buffer, cum_seq_lens_kv
         fp8 = torch.float8_e4m3fn
         if query.ndim != 3 or tuple(query.shape[1:]) != (16, 256):
             raise ValueError("query must have shape [total_q, 16, 256]")
@@ -56,42 +42,39 @@ class Model(nn.Module):
             raise ValueError("seq_lens must be rank-1 int32")
         if cum_seq_lens_q.ndim != 1 or cum_seq_lens_q.dtype != torch.int32:
             raise ValueError("cum_seq_lens_q must be rank-1 int32")
+        if cum_seq_lens_kv.ndim != 1 or cum_seq_lens_kv.dtype != torch.int32:
+            raise ValueError("cum_seq_lens_kv must be rank-1 int32")
         if batch_size != seq_lens.numel() or block_tables.shape[0] != batch_size:
             raise ValueError("batch metadata dimensions disagree")
         if cum_seq_lens_q.numel() != batch_size + 1:
             raise ValueError("cum_seq_lens_q must contain batch_size + 1 entries")
+        if cum_seq_lens_kv.numel() != batch_size + 1:
+            raise ValueError("cum_seq_lens_kv must contain batch_size + 1 entries")
         if bmm2_scale != 1.0:
-            raise ValueError("FA4 R0 requires bmm2_scale == 1")
+            raise ValueError("target contract requires bmm2_scale == 1")
         if window_left != -1 or sinks is not None or o_sf_scale is not None:
-            raise ValueError("FA4 R0 target is full causal attention without sinks/output scaling")
+            raise ValueError("target is full causal attention without sinks/output scaling")
 
-        page_size = kv_cache.shape[-2]
-        max_pages = (max_kv_len + page_size - 1) // page_size
-        if max_pages > block_tables.shape[1]:
-            raise ValueError("block_tables does not cover max_kv_len")
-
-        # Zero-copy views from the production interleaved KV cache into FA4's
-        # native paged NHD layout.  Supporting P64 in the dedicated HD256
-        # kernel is deliberately left as optimization work, not hidden here.
-        k_view = kv_cache[:, 0].transpose(1, 2)
-        v_view = kv_cache[:, 1].transpose(1, 2)
-        page_table = block_tables[:, :max_pages]
-        returned = _flash_attn_fwd(
-            query,
-            k_view,
-            v_view,
-            cu_seqlens_q=cum_seq_lens_q,
-            cu_seqlens_k=None,
-            seqused_k=seq_lens,
-            max_seqlen_q=max_q_len,
-            max_seqlen_k=max_pages * page_size,
-            page_table=page_table,
-            softmax_scale=bmm1_scale,
-            causal=True,
-            num_splits=1,
-            pack_gqa=True,
+        result = flash_attention_sm120(
+            query=query,
+            kv_cache=kv_cache,
+            workspace_buffer=workspace_buffer,
+            block_tables=block_tables,
+            seq_lens=seq_lens,
+            max_q_len=max_q_len,
+            max_kv_len=max_kv_len,
+            bmm1_scale=bmm1_scale,
+            bmm2_scale=bmm2_scale,
+            batch_size=batch_size,
+            cum_seq_lens_q=cum_seq_lens_q,
+            cum_seq_lens_kv=cum_seq_lens_kv,
+            window_left=window_left,
+            sinks=sinks,
+            o_sf_scale=o_sf_scale,
             out=out,
-        )[0]
-        if returned is not out:
-            raise RuntimeError("FA4 private API did not preserve the supplied out tensor")
+        )
+        if result is not out:
+            raise RuntimeError(
+                "SM120 implementation must mutate and return the supplied out tensor"
+            )
         return out

@@ -91,7 +91,7 @@
         "correctness_cases": 1,
         "bench_iters": 100
       },
-      "production_gate": false,
+      "production_gate": true,
       "warmup_iters": 10,
       "atol": 0.06,
       "rtol": 0.04,

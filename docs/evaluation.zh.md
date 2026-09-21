@@ -20,8 +20,8 @@ Test 取 `min(15, floor(N/2))` 个；少于两个 Shape 拒绝启动，多出的
 其补集即 Test；逐 Shape Metadata 和 Roofline 也同步裁剪。所有 DSL、Attempt、重试和消融臂
 使用同一划分，不会在每次调用时重新抽样。
 
-私有 Contract 的 `shape_split` 会留档算法、种子、上限、原始全集数量与 ID，以及最终选中的
-Valid/Test ID。例如原始 ID 为 `"0"` 到 `"9"` 时：
+私有 Contract 的 `shape_split` 会留档算法、种子、上限、原始全集数量与 ID、最终选中的
+Valid/Test ID，以及稳定的不透明 Agent ID 映射。例如原始 ID 为 `"0"` 到 `"9"` 时：
 
 ```json
 {
@@ -31,7 +31,8 @@ Valid/Test ID。例如原始 ID 为 `"0"` 到 `"9"` 时：
   "source_shape_count": 10,
   "source_shape_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
   "valid_shape_ids": ["2", "3", "5", "7", "8"],
-  "test_shape_ids": ["0", "1", "4", "6", "9"]
+  "test_shape_ids": ["0", "1", "4", "6", "9"],
+  "agent_shape_id_map": {"0": "2", "1": "3", "2": "5", "3": "7", "4": "8"}
 }
 ```
 
@@ -39,6 +40,10 @@ Valid/Test ID。例如原始 ID 为 `"0"` 到 `"9"` 时：
 `<artifacts_root>/sha256/<去掉 sha256: 前缀的 digest>/payload/value.json` 的 `shape_split` 中
 查看不可变档案。Contract 同时保留选中 Shape 的准确参数，可直接复用而无需重新抽样。
 这是管理端数据：Agent Context 与逐批请求都会移除该档案，不应复制到 Agent Workspace 或 Evidence。
+
+Agent 可见的 Valid Shape 会重新编号为连续的不透明 ID `"0"` 到 `"V-1"`。Runtime 在构造
+Agent Evaluate/Profile 请求及把权威结果投影回历史 Evidence 时使用私有映射，因此原始 ID 的
+缺号不能再泄漏 Test 成员；同一 Campaign 内别名保持稳定。
 
 Agent 的普通 Evaluate、Agent ABBA、Profile、Check 等操作只使用 Valid。Bootstrap 终评、
 Lineage Seed 评测和普通 Evaluate Comparator 也只使用 Valid；只有 Runtime 权威 ABBA 使用
@@ -51,8 +56,8 @@ Kernel 接受/拒绝及分支胜负仍可见。完整权威结果保留在私有
 不描述集合成员。自动生成问题上下文和补建 Roofline 也只使用 Valid 输入。
 
 此划分在新 Campaign 中封存，不改写旧 Campaign 的不可变 Contract。应用到旧实验时应新建
-Campaign/Workspace（旧 Contract 没有固定种子划分档案时），避免混用旧全量结果和新 Valid-only
-测量；公共 VecAdd 示例因此保留两个 Shape。
+Campaign/Workspace（旧 Contract 没有固定种子划分档案或不透明 Agent ID 映射时），避免混用
+旧全量/原始 ID 结果和新 Valid-only 测量；公共 VecAdd 示例因此保留两个 Shape。
 
 Agent 不会看到精确 Validation Shapes、`reference.py`、`input.py`、Metadata 或 Roofline，只会得到
 描述合法参数域和非 Shape ABI 约束的公开 `shape_train` Contract。Gateway 响应只暴露聚合正确性、

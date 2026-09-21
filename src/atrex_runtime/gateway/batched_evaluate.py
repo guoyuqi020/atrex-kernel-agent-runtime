@@ -207,6 +207,38 @@ def subset_evaluation_contract(
     )
 
 
+def remap_evaluation_contract(
+    contract: AgateEvaluationContractV1,
+    target_to_source: dict[str, str],
+) -> AgateEvaluationContractV1:
+    """Copy a private contract while replacing evaluator Shape IDs with opaque Agent IDs."""
+    if not target_to_source or len(set(target_to_source.values())) != len(target_to_source):
+        raise ValueError("Shape ID remapping must be non-empty and one-to-one")
+    missing = set(target_to_source.values()) - contract.shapes.keys()
+    if missing:
+        raise ValueError("Shape ID remapping references Shapes outside the evaluation contract")
+    return contract.model_copy(
+        update={
+            "shapes": {
+                target: contract.shapes[source]
+                for target, source in target_to_source.items()
+            },
+            "validation_shape_ids": None,
+            "shape_split": None,
+            "metadata": remap_shape_document(
+                contract.metadata,
+                target_to_source,
+                metadata=True,
+            ),
+            "roofline": remap_shape_document(
+                contract.roofline,
+                target_to_source,
+                metadata=False,
+            ),
+        }
+    )
+
+
 def subset_shape_document(
     value: dict[str, JsonValue] | None,
     shape_ids: tuple[str, ...] | list[str],
@@ -223,6 +255,28 @@ def subset_shape_document(
         }
     if metadata and "num_shapes" in result:
         result["num_shapes"] = len(shape_ids)
+    return result
+
+
+def remap_shape_document(
+    value: dict[str, JsonValue] | None,
+    target_to_source: dict[str, str],
+    *,
+    metadata: bool,
+) -> dict[str, JsonValue] | None:
+    """Copy one auxiliary Shape document using the same opaque IDs as the Agent contract."""
+    if value is None:
+        return None
+    result = dict(value)
+    per_shape = result.get("shapes")
+    if isinstance(per_shape, dict):
+        result["shapes"] = {
+            target: per_shape[source]
+            for target, source in target_to_source.items()
+            if source in per_shape
+        }
+    if metadata and "num_shapes" in result:
+        result["num_shapes"] = len(target_to_source)
     return result
 
 
