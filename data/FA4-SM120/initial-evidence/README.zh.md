@@ -8,6 +8,12 @@
 1 个 KV Head、生产边界上的 P64 HND Page、Ragged Batch、右下对齐因果 Mask，以及原地写入
 给定 `out` Tensor。布局、Scaling 和 Shape 语义以公开合约为准。
 
+这是一个要求**原生 FP8 计算路径**的 FA4 任务，而不只是兼容 FP8 输入。主要的 QK 和
+Probability-V 矩阵乘必须使用 SM120 FP8 Tensor Core MMA，或等价的原生 FP8 MMA 数据路径。
+如果先把完整的 Query、Key 或 Value Tensor 转换成 BF16/FP32，再运行通用的高精度 Attention，
+则不符合本题预期。Softmax、Scaling、归约以及为了数值正确性所需的累加可以使用更高精度，
+但主要矩阵乘数据路径必须保持 FP8。
+
 `work/kernel/reference_sm103/` 是原 SM103-family 题目实现的只读副本，用于参考 HD256、
 分页 KV、PackGQA、Mask、调度和启动设计。重点文件包括 `flash_fwd_sm100.py`、
 `sm100_hd256_2cta_fmha_forward.py`、`paged_kv.py`、`pack_gqa.py`、

@@ -98,6 +98,8 @@ def test_fa4_sm120_exposes_only_sm103_reference_and_empty_target_implementation(
     hint = (SM120_INPUTS / "initial-evidence/README.md").read_text()
     assert "SM120 source" in hint and "deliberately absent" in hint
     assert "not a runtime dependency" in hint
+    assert "native FP8-compute FA4 task" in hint
+    assert "principal matrix-multiply data path in FP8" in hint
 
 
 def test_fa4_sm120_preparation_is_self_contained(tmp_path: Path, runner) -> None:

@@ -9,6 +9,14 @@ KV head, P64 HND pages at the production boundary, ragged batches, bottom-right 
 and mutation of the supplied `out` tensor. The public contract is authoritative for layout,
 scaling, and Shape semantics.
 
+This is a **native FP8-compute FA4 task**, not merely an FP8-input compatibility task. The
+dominant QK and probability-V matrix products must use SM120 FP8 Tensor Core MMA, or an
+equivalent native FP8 MMA data path. Eagerly converting the complete Query, Key, or Value
+tensors to BF16/FP32 and then running a generic higher-precision Attention implementation does
+not satisfy the intended computation. Use higher precision where Attention requires it—for
+example softmax, scaling, reductions, and accumulation needed for numerical correctness—but
+keep the principal matrix-multiply data path in FP8.
+
 `work/kernel/reference_sm103/` is an immutable copy of the original implementation used by the
 SM103-family task. Read it for its HD256, paged-KV, PackGQA, masking, scheduling, and launch
 design. The most relevant files include `flash_fwd_sm100.py`,
