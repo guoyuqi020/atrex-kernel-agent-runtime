@@ -194,6 +194,31 @@ def _latency_by_shape_value(
             projected = _latency_by_shape_value(artifacts, nested, seen=set(seen))
             if projected:
                 return projected
+    batches = value.get("batches")
+    if isinstance(batches, list):
+        batch_projection: dict[str, float] = {}
+        for batch in batches:
+            if not isinstance(batch, Mapping):
+                continue
+            nested = batch.get("job")
+            nested_values = (
+                _latency_by_shape_value(artifacts, nested, seen=set(seen))
+                if isinstance(nested, Mapping)
+                else {}
+            )
+            batch_projection.update(nested_values)
+            shape_ids = batch.get("shape_ids")
+            latency = _positive_finite_number(batch.get("latency_us"))
+            if (
+                not nested_values
+                and isinstance(shape_ids, list)
+                and len(shape_ids) == 1
+                and isinstance(shape_ids[0], str)
+                and latency is not None
+            ):
+                batch_projection[shape_ids[0]] = latency
+        if batch_projection:
+            return batch_projection
     stages = value.get("completed_stages")
     if isinstance(stages, list):
         for stage in reversed(stages):

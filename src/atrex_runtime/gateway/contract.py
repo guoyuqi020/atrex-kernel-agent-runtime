@@ -419,7 +419,7 @@ def candidate_path_for_attempt(
 
 
 class RegistryAgateEvaluationContextResolver:
-    """Resolve and verify a Campaign evaluation contract through the Registry and CAS."""
+    """Resolve the Agent-visible Valid-only evaluation context."""
 
     def __init__(
         self,
@@ -432,7 +432,15 @@ class RegistryAgateEvaluationContextResolver:
         self._bootstrap_subjects = bootstrap_subjects
 
     def resolve(self, attempt_id: AttemptId) -> AgateEvaluationContext:
-        """Follow Attempt ownership and parse the sealed versioned contract."""
+        """Follow Attempt ownership and project the sealed contract for an Agent."""
+        return self._resolve(attempt_id, agent_visible=True)
+
+    def _resolve(
+        self,
+        attempt_id: AttemptId,
+        *,
+        agent_visible: bool,
+    ) -> AgateEvaluationContext:
         try:
             attempt = self._registry.get_attempt(attempt_id)
         except KeyError:
@@ -451,7 +459,9 @@ class RegistryAgateEvaluationContextResolver:
             hardware_target = campaign.hardware_target
             dsl = lineage.dsl
             contract_digest = campaign.evaluation_contract_digest
-        contract = load_evaluation_contract(self._artifacts, contract_digest).for_agent()
+        contract = load_evaluation_contract(self._artifacts, contract_digest)
+        if agent_visible:
+            contract = contract.for_agent()
         return AgateEvaluationContext(
             operator=operator,
             hardware_target=hardware_target,
@@ -459,6 +469,14 @@ class RegistryAgateEvaluationContextResolver:
             contract=contract,
             evaluation_contract_digest=contract_digest,
         )
+
+
+class RegistryAuthoritativeEvaluationContextResolver(RegistryAgateEvaluationContextResolver):
+    """Resolve the complete private Valid+Test contract for Runtime-owned Gates."""
+
+    def resolve(self, attempt_id: AttemptId) -> AgateEvaluationContext:
+        """Follow Attempt ownership without applying the Agent-visible projection."""
+        return self._resolve(attempt_id, agent_visible=False)
 
 
 class RegistryKernelEvaluationContextResolver:

@@ -74,7 +74,7 @@ from .workspace import (
 
 EVOLUTION_INPUT_VERSION: Literal[11] = 11
 EVOLUTION_TRACE_VERSION: Literal[9] = 9
-EVOLUTION_FAILURE_VERSION: Literal[5] = 5
+EVOLUTION_FAILURE_VERSION: Literal[6] = 6
 EVOLVER_LAUNCH_INSTRUCTION = "Run the versioned Evolver Bundle once."
 EVOLVER_TIMEOUT_EXIT_STATUS = 124
 EVOLVER_WORKSPACE_RELATIVE_PATH = PurePosixPath("input/evolver")
@@ -615,7 +615,7 @@ def _previous_evolution_output(
     return output
 
 
-class EvolutionFailureProcessV2(BaseModel):
+class EvolutionFailureProcessV3(BaseModel):
     """Bounded process evidence retained for a rejected Evolution result."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -626,7 +626,7 @@ class EvolutionFailureProcessV2(BaseModel):
     stderr: str
     session_trace_digest: ArtifactDigest | None
     session_trace_retention_error_type: str | None
-    token_usage: ProviderUsageReportV2
+    token_usage: ProviderUsageReportV2 | None
 
     @field_validator("session_trace_digest", mode="before")
     @classmethod
@@ -638,17 +638,18 @@ class EvolutionFailureProcessV2(BaseModel):
         return parse_artifact_digest(value)
 
 
-class EvolutionFailureTraceV5(BaseModel):
+class EvolutionFailureTraceV6(BaseModel):
     """Immutable bounded evidence for an Evolution run that produced no Challenger."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[5] = EVOLUTION_FAILURE_VERSION
+    schema_version: Literal[6] = EVOLUTION_FAILURE_VERSION
     status: Literal["failed"] = "failed"
     input: EvolutionInputManifestV11
     phase: Literal["session", "candidate_validation"]
     error_type: str = Field(min_length=1, max_length=200)
-    process: EvolutionFailureProcessV2 | None
+    error_message: str = Field(min_length=1, max_length=2048)
+    process: EvolutionFailureProcessV3 | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -948,6 +949,26 @@ class EvolutionSessionResult:
 
 
 @dataclass(frozen=True, slots=True)
+class EvolutionProcessObservation:
+    """Reaped process evidence available even without authoritative usage."""
+
+    returncode: int
+    stdout: str
+    stderr: str
+    agent: EvolutionAgentDescriptorV3
+    session_trace_path: Path | None
+    token_usage: ProviderUsageReportV2 | None = None
+
+
+class EvolutionProcessInfrastructureError(InfrastructureError):
+    """Infrastructure failure retaining the exact bounded process observation."""
+
+    def __init__(self, message: str, process: EvolutionProcessObservation) -> None:
+        super().__init__(message)
+        self.process = process
+
+
+@dataclass(frozen=True, slots=True)
 class PreparedEvolutionLaunch:
     """Exact Evolver environment reusable by the process and dev-shell drivers."""
 
@@ -1134,8 +1155,19 @@ class SubprocessEvolutionSessionDriver:
         # that terminal condition before validating usage: a killed Provider
         # cannot emit its final authoritative usage event, so the resulting
         # partial report is evidence of the timeout rather than its root cause.
+        agent = self._config.agent_descriptor(prepared.model)
+        session_trace_path = launch.session_trace_path
         if result.returncode == EVOLVER_TIMEOUT_EXIT_STATUS:
-            raise InfrastructureError("Evolver timed out")
+            raise EvolutionProcessInfrastructureError(
+                "Evolver timed out",
+                EvolutionProcessObservation(
+                    result.returncode,
+                    result.stdout,
+                    result.stderr,
+                    agent,
+                    session_trace_path,
+                ),
+            )
         try:
             expected_unit: UsageUnit = (
                 "credits" if self._config.agent_backend == "qodercli" else "provider_tokens"
@@ -1146,15 +1178,29 @@ class SubprocessEvolutionSessionDriver:
                 expected_budget=None,
             )
         except ValueError as error:
-            raise InfrastructureError(
-                f"Invalid Evolution provider usage report: {error}"
+            observation = EvolutionProcessObservation(
+                result.returncode,
+                result.stdout,
+                result.stderr,
+                agent,
+                session_trace_path,
+            )
+            if result.returncode != 0:
+                diagnostic = result.stderr.strip() or result.stdout.strip() or "no diagnostics"
+                raise EvolutionProcessInfrastructureError(
+                    f"Evolution process exited with {result.returncode}: {diagnostic[:1000]}",
+                    observation,
+                ) from error
+            raise EvolutionProcessInfrastructureError(
+                f"Invalid Evolution provider usage report: {error}",
+                observation,
             ) from error
         return EvolutionSessionResult(
             result.returncode,
             result.stdout,
             result.stderr,
-            self._config.agent_descriptor(prepared.model),
-            launch.session_trace_path,
+            agent,
+            session_trace_path,
             token_usage,
         )
 
@@ -1315,6 +1361,59 @@ class EvolverBundleRunner(EvolverRunner):
         exit_kind = "failed"
         try:
             result = await self._sessions.run(prepared)
+        except EvolutionProcessInfrastructureError as error:
+            process = error.process
+            exit_kind = (
+                "timeout"
+                if str(error) == "Evolver timed out" or "wall-time limit" in str(error)
+                else "infrastructure_failed"
+            )
+            failure_digest, retention_error_type = self._seal_failure_trace(
+                prepared,
+                error,
+                phase="session",
+                result=process,
+            )
+            session_trace_digest = self._session_trace_from_failure(failure_digest)
+            if self._worker_sessions is not None:
+                self._worker_sessions.finish_worker_session(
+                    worker_session_id,
+                    status=(
+                        WorkerSessionStatus.TIMED_OUT
+                        if exit_kind == "timeout"
+                        else WorkerSessionStatus.FAILED
+                    ),
+                    finish_reason=(
+                        "timeout"
+                        if exit_kind == "timeout"
+                        else (
+                            f"process-exit-{process.returncode}"
+                            if process.returncode != 0
+                            else "invalid-provider-usage"
+                        )
+                    ),
+                    trace_digest=session_trace_digest,
+                    token_usage=(
+                        None
+                        if process.token_usage is None
+                        else process.token_usage.to_domain()
+                    ),
+                    process_returncode=process.returncode,
+                    error_type=type(error).__name__,
+                    error_message=str(error),
+                )
+            self._events.record_runtime_event(
+                f"worker.{exit_kind}",
+                request.epoch_id,
+                {
+                    **event_base,
+                    "process_returncode": process.returncode,
+                    "error_type": type(error).__name__,
+                    "failure_artifact_digest": failure_digest,
+                    "failure_retention_error_type": retention_error_type,
+                },
+            )
+            raise
         except InfrastructureError as error:
             exit_kind = (
                 "timeout"
@@ -1497,11 +1596,11 @@ class EvolverBundleRunner(EvolverRunner):
         error: Exception,
         *,
         phase: Literal["session", "candidate_validation"],
-        result: EvolutionSessionResult | None,
+        result: EvolutionSessionResult | EvolutionProcessObservation | None,
     ) -> tuple[ArtifactDigest | None, str | None]:
         """Best-effort seal bounded failure evidence without masking the primary error."""
         try:
-            process: EvolutionFailureProcessV2 | None = None
+            process: EvolutionFailureProcessV3 | None = None
             if result is not None:
                 session_trace_digest: ArtifactDigest | None = None
                 session_trace_retention_error_type: str | None = None
@@ -1514,7 +1613,7 @@ class EvolverBundleRunner(EvolverRunner):
                         )
                     except Exception as retention_error:
                         session_trace_retention_error_type = type(retention_error).__name__
-                process = EvolutionFailureProcessV2(
+                process = EvolutionFailureProcessV3(
                     agent=result.agent,
                     returncode=result.returncode,
                     stdout=result.stdout,
@@ -1523,12 +1622,13 @@ class EvolverBundleRunner(EvolverRunner):
                     session_trace_retention_error_type=session_trace_retention_error_type,
                     token_usage=result.token_usage,
                 )
-            trace = EvolutionFailureTraceV5(
+            trace = EvolutionFailureTraceV6(
                 input=EvolutionInputManifestV11.model_validate_json(
                     prepared.manifest_path.read_bytes()
                 ),
                 phase=phase,
                 error_type=type(error).__name__,
+                error_message=(str(error) or type(error).__name__)[:2048],
                 process=process,
             )
             digest = self._artifacts.put_json(

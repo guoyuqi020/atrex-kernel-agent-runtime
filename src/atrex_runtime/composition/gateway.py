@@ -9,7 +9,7 @@ from ..artifacts.local import LocalArtifactStore
 from ..config import RuntimeSettings
 from ..gateway.agate import AgateClient, AgateRequestBuilder, load_agate_sdk
 from ..gateway.configuration import build_agate_connection
-from ..gateway.contract import RegistryAgateEvaluationContextResolver
+from ..gateway.contract import RegistryAuthoritativeEvaluationContextResolver
 from ..gateway.control import SqliteGatewayControl
 from ..gateway.finalization import (
     AgateAuthoritativeCandidateEvaluator,
@@ -52,7 +52,7 @@ def compose_authoritative_candidate_evaluator(
     return AgateAuthoritativeCandidateEvaluator(
         source_tree_client(settings, client),
         request_builder,
-        RegistryAgateEvaluationContextResolver(registry, artifacts, control),
+        RegistryAuthoritativeEvaluationContextResolver(registry, artifacts, control),
         artifacts,
         control,
         registry,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 
@@ -135,7 +135,9 @@ class AgateAuthoritativeCandidateEvaluator:
         # This identity deliberately excludes the recovery generation. A Runtime
         # restart must resume the same remote Agate job rather than submit another
         # authoritative measurement for an unchanged Attempt and candidate.
-        idempotency_key = f"runtime-final:{attempt_id}:{candidate_digest}"
+        # Version the identity so a pre-holdout Runtime-final measurement cannot be
+        # recovered and committed after this evaluator starts enforcing Valid+Test.
+        idempotency_key = f"runtime-final-all-shapes-v2:{attempt_id}:{candidate_digest}"
         recovered = self._control.find_runtime_final_evaluation(attempt_id, idempotency_key)
         if recovered is not None:
             return self._control.commit_authoritative_outcome(
@@ -145,7 +147,10 @@ class AgateAuthoritativeCandidateEvaluator:
             )
 
         context = self._contexts.resolve(attempt_id)
-        context = replace(context, contract=context.contract.for_agent())
+        if context.contract.shape_split is not None and context.evaluation_contract_digest is None:
+            raise ValueError(
+                "authoritative holdout evaluation requires its sealed evaluation Contract"
+            )
         resolved = resolve_kernel_candidate(
             self._artifacts,
             candidate_digest,
@@ -274,7 +279,7 @@ class AgateAuthoritativeCandidateEvaluator:
             )
             if not evaluation.correct:
                 break
-        job: JsonValue = {
+        job: dict[str, JsonValue] = {
             "schema_version": 1,
             "operation": "bootstrap_staged_evaluate",
             "bench_iters": self._bootstrap_bench_iters,
@@ -283,6 +288,10 @@ class AgateAuthoritativeCandidateEvaluator:
             "latency_source_stage": len(stage_results) - 1,
             "latency_us": evaluation.latency_us,
         }
+        if context.evaluation_contract_digest is not None:
+            job["evaluation_contract_digest"] = str(context.evaluation_contract_digest)
+        if context.contract.validation_shape_ids is not None:
+            job["validation_shape_ids"] = list(context.contract.validation_shape_ids)
         job_id = None
         profile_job: JsonValue | None = None
         if (

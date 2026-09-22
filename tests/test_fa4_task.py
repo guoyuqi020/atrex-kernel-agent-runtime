@@ -29,6 +29,13 @@ from atrex_runtime.workers.problem_generalization import validate_public_operato
 
 INPUTS = REPOSITORY / "data/FA4"
 SM120_INPUTS = REPOSITORY / "data/FA4-SM120"
+EVOLVER_REVIEW_CONTRACT_COMMIT = "794219bc6e2c7f465327f77b7819d04eb031dd61"
+
+
+@pytest.mark.parametrize("inputs", [INPUTS, SM120_INPUTS])
+def test_fa4_tasks_pin_review_compatible_evolver(inputs: Path) -> None:
+    settings = RuntimeSettings.from_file(inputs / "runtime.template.json")
+    assert settings.campaign.evolver.commit == EVOLVER_REVIEW_CONTRACT_COMMIT
 
 
 def test_fa4_sm120_exposes_only_sm103_reference_and_empty_target_implementation(

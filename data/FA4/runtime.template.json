@@ -179,7 +179,7 @@
       "reasoning_effort": "max",
       "session_settings": "",
       "repository": "../../src/atrex-kernel-agent-evolver",
-      "commit": "42fb56874985d73d2f24500a9d2add2dc5fa31c6",
+      "commit": "794219bc6e2c7f465327f77b7819d04eb031dd61",
       "git_executable": "/usr/bin/git",
       "fetch_timeout_seconds": 120,
       "max_archive_bytes": 16777216,

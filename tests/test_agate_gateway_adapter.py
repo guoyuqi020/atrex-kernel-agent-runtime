@@ -43,6 +43,7 @@ from atrex_runtime.gateway.contract import (
     AgateEvaluationContractV1,
     AgateEvaluationOptionsV1,
     RegistryAgateEvaluationContextResolver,
+    RegistryAuthoritativeEvaluationContextResolver,
 )
 from atrex_runtime.gateway.control import GatewayOperation
 from atrex_runtime.gateway.protocol import (
@@ -1836,8 +1837,9 @@ async def test_agate_query_commands_are_scoped_and_config_is_redacted(tmp_path: 
 
 def test_registry_context_resolver_reads_sealed_contract(tmp_path: Path) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    contract = _contract().with_shape_holdout()
     contract_digest = artifacts.put_json(
-        _contract().model_dump(mode="json"), ArtifactKind.EVALUATION_CONTRACT
+        contract.model_dump(mode="json"), ArtifactKind.EVALUATION_CONTRACT
     )
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     lineage = seed_lineage(
@@ -1888,10 +1890,16 @@ def test_registry_context_resolver_reads_sealed_contract(tmp_path: Path) -> None
     registry.insert_attempt(attempt)
 
     context = RegistryAgateEvaluationContextResolver(registry, artifacts).resolve(attempt.id)
+    authoritative = RegistryAuthoritativeEvaluationContextResolver(
+        registry, artifacts
+    ).resolve(attempt.id)
 
     assert context.operator == "vector_add"
     assert context.hardware_target == "nvidia-h100"
     assert context.contract.options.bench_iters == 50
+    assert set(context.contract.shapes) == set(contract.agent_shape_id_map() or {})
+    assert set(authoritative.contract.shapes) == set(contract.shapes)
+    assert authoritative.contract.shape_split == contract.shape_split
     registry.close()
 
 

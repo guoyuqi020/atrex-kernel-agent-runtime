@@ -12,7 +12,13 @@ Successful Evolver runs already produced immutable provenance, but timeouts, pro
 
 ## Decision
 
-Every failed Evolver invocation attempts to seal an `EVOLUTION` failure artifact. The strict version-1 record contains the immutable input manifest, failure phase, exception type, and, when the Coding Agent returned a structured result, its non-secret Agent descriptor, return code, bounded stdout/stderr, validated token report, and optional separately sealed Session Trace. It does not copy the Candidate tree, exception message, prompt, argv, environment values, or secrets.
+Every failed Evolver invocation attempts to seal an `EVOLUTION` failure artifact. The strict
+version-6 record contains the immutable input manifest, failure phase, bounded exception type and
+message, and, whenever a worker process was reaped, its non-secret Agent descriptor, return code,
+bounded stdout/stderr, optional validated token report, and optional separately sealed Session
+Trace. Process evidence is retained even when the usage report is missing or invalid. A nonzero
+process exit remains the primary error; secondary usage validation cannot replace it. The artifact
+does not copy the Candidate tree, prompt, argv, environment values, or secrets.
 
 The Worker timeout/failure or `evolution.candidate_rejected` Event carries `failure_artifact_digest`. If failure-evidence sealing itself fails, the original exception remains authoritative and the Event records only `failure_retention_error_type`; retention must never mask or reclassify the primary failure. A failed trace never creates or promotes a Kernel Agent Revision.
 

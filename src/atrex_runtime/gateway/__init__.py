@@ -14,6 +14,7 @@ from .contract import (
     AgateEvaluationContractV1,
     AgateEvaluationOptionsV1,
     RegistryAgateEvaluationContextResolver,
+    RegistryAuthoritativeEvaluationContextResolver,
     RegistryKernelEvaluationContextResolver,
 )
 from .control import (
@@ -82,6 +83,7 @@ __all__ = [
     "GatewaySolSummary",
     "ProductionKernelPolicy",
     "RegistryAgateEvaluationContextResolver",
+    "RegistryAuthoritativeEvaluationContextResolver",
     "RegistryCandidateDiffValidator",
     "RegistryKernelEvaluationContextResolver",
     "RegistryProductionKernelValidator",

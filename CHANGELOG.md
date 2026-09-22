@@ -6,6 +6,14 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- FA4 and FA4-SM120 now pin Evolver `794219bc`, whose Evidence contract accepts and validates the
+  Runtime-projected `input/evidence/review/` directory. This prevents every Evolver-backed arm from
+  failing at startup when it reaches Challenger construction. Both task definitions use new
+  creation keys so regenerated workspaces cannot resolve to the incompatible frozen Campaigns.
+- Evolver failure Artifact v6 retains the bounded process return code, stdout/stderr, optional
+  Session trace, and optional provider usage even when the provider-usage report is missing or
+  invalid. A nonzero process exit is now reported as the primary failure instead of being obscured
+  by the secondary usage-report error; the bounded exception message is retained for diagnosis.
 - Bootstrap Sandboxes no longer mount the repository's pinned upstream reference projects. The
   Bootstrap workspace and prompt now expose only the task seed, Agent Revision state, Runtime tools,
   and scratch space. Newly generated Runtime configurations omit `reference_projects_root`; the old
@@ -18,6 +26,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 - Bootstrap now materializes the configured initial-evidence Artifact at read-only
   `input/evidence/` and injects its bounded UTF-8 `README.md` into the framework-baseline prompt.
   Task hints are therefore visible to the model rather than serving only as a Registry identity.
+- Runtime-owned final evaluation now uses the complete sealed Valid+Test Shape contract. Agent
+  Evaluate/Profile remains Valid-only, and Agent-facing result projections continue to expose only
+  opaque Valid Shape IDs and Valid-only latency metrics. Bootstrap v0 therefore cannot be
+  registered without passing the private Test Shapes.
 
 - Single-file Agent and authoritative ABBA now use Agate's native Eval ABBA API. Runtime maps two
   side measurements to one complete A/B/B/A block, rebuilds its existing authoritative aggregate

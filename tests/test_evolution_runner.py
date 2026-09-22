@@ -1943,6 +1943,125 @@ async def test_evolver_automatically_retries_process_exit_in_fresh_workspace(
 
 
 @pytest.mark.anyio
+async def test_process_exit_without_usage_retains_original_diagnostics(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request = _request(artifacts, tmp_path)
+    script = tmp_path / "fail-before-usage.py"
+    script.write_text(
+        "import sys\n"
+        "sys.stderr.write('visible Evidence directories disagree with the manifest\\n')\n"
+        "raise SystemExit(1)\n",
+        encoding="utf-8",
+    )
+    driver = SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        EvolutionProcessConfig(
+            bundle_commit="0" * 40,
+            bundle_tree="1" * 40,
+            bundle_artifact_digest=digest("evolver-bundle"),
+            command_argv=(str(Path(sys.executable).resolve()), str(script)),
+            agent_backend="claude",
+            isolated_home_environment_keys=(),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            environment=(),
+            timeout_seconds=10,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+        ),
+    )
+    events = FakeRuntimeEventRecorder([])
+    runner = EvolverBundleRunner(
+        EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts),
+        driver,
+        artifacts,
+        events,
+        kernel_agent_limits=kernel_agent_limits(),
+        max_output_manifest_bytes=8192,
+    )
+
+    with pytest.raises(
+        InfrastructureError,
+        match=r"Evolution process exited with 1: visible Evidence directories disagree",
+    ):
+        await runner.build_challenger(request)
+
+    failure_payload = events.records[1][2]
+    assert isinstance(failure_payload, dict)
+    failure_digest = failure_payload["failure_artifact_digest"]
+    assert isinstance(failure_digest, str)
+    failure = json.loads(
+        (artifacts.verify(failure_digest).payload_path / "value.json").read_text()
+    )
+    assert failure["schema_version"] == 6
+    assert failure["error_message"].startswith("Evolution process exited with 1:")
+    assert failure["process"]["returncode"] == 1
+    assert failure["process"]["stderr"] == (
+        "visible Evidence directories disagree with the manifest\n"
+    )
+    assert failure["process"]["token_usage"] is None
+
+
+@pytest.mark.anyio
+async def test_missing_usage_after_success_retains_process_observation(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request = _request(artifacts, tmp_path)
+    script = tmp_path / "success-without-usage.py"
+    script.write_text(
+        "import sys\nsys.stderr.write('wrapper omitted usage\\n')\n",
+        encoding="utf-8",
+    )
+    driver = SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        EvolutionProcessConfig(
+            bundle_commit="0" * 40,
+            bundle_tree="1" * 40,
+            bundle_artifact_digest=digest("evolver-bundle"),
+            command_argv=(str(Path(sys.executable).resolve()), str(script)),
+            agent_backend="claude",
+            isolated_home_environment_keys=(),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            environment=(),
+            timeout_seconds=10,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+        ),
+    )
+    events = FakeRuntimeEventRecorder([])
+    runner = EvolverBundleRunner(
+        EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts),
+        driver,
+        artifacts,
+        events,
+        kernel_agent_limits=kernel_agent_limits(),
+        max_output_manifest_bytes=8192,
+    )
+
+    with pytest.raises(
+        InfrastructureError,
+        match="Invalid Evolution provider usage report",
+    ):
+        await runner.build_challenger(request)
+
+    failure_payload = events.records[1][2]
+    assert isinstance(failure_payload, dict)
+    failure_digest = failure_payload["failure_artifact_digest"]
+    assert isinstance(failure_digest, str)
+    failure = json.loads(
+        (artifacts.verify(failure_digest).payload_path / "value.json").read_text()
+    )
+    assert failure["schema_version"] == 6
+    assert failure["process"]["returncode"] == 0
+    assert failure["process"]["stderr"] == "wrapper omitted usage\n"
+    assert failure["process"]["token_usage"] is None
+
+
+@pytest.mark.anyio
 async def test_fixed_runner_rejects_false_change_declaration(tmp_path: Path) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     request = _request(artifacts, tmp_path)

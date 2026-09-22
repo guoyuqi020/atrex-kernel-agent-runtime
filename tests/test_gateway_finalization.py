@@ -36,7 +36,10 @@ from atrex_runtime.gateway.finalization import (
     AgateAuthoritativeCandidateEvaluator,
     BootstrapEvaluationStage,
 )
-from atrex_runtime.gateway.result_metrics import gateway_result_sol_summary
+from atrex_runtime.gateway.result_metrics import (
+    gateway_result_projection,
+    gateway_result_sol_summary,
+)
 from atrex_runtime.gateway.retrying_client import RetryingAgateClient
 from atrex_runtime.ports import AttemptCandidateResult
 from atrex_runtime.registry.sqlite import SqliteRegistry
@@ -210,9 +213,16 @@ class FakeEvents:
 
 
 class FakeContexts:
-    def __init__(self, shape_count: int = 1, *, holdout: bool = False) -> None:
+    def __init__(
+        self,
+        shape_count: int = 1,
+        *,
+        holdout: bool = False,
+        artifacts: LocalArtifactStore | None = None,
+    ) -> None:
         self._shape_count = shape_count
         self._holdout = holdout
+        self._artifacts = artifacts
 
     def resolve(self, _attempt_id: object) -> AgateEvaluationContext:
         context = AgateEvaluationContext(
@@ -236,6 +246,14 @@ class FakeContexts:
         )
         if self._holdout:
             context = replace(context, contract=context.contract.with_shape_holdout())
+        if self._artifacts is not None:
+            context = replace(
+                context,
+                evaluation_contract_digest=self._artifacts.put_json(
+                    context.contract.model_dump(mode="json"),
+                    ArtifactKind.EVALUATION_CONTRACT,
+                ),
+            )
         return context
 
 
@@ -335,7 +353,7 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     )
     client = Client()
     events = FakeEvents()
-    contexts = FakeContexts(5, holdout=holdout)
+    contexts = FakeContexts(5, holdout=holdout, artifacts=artifacts)
     finalizer = AgateAuthoritativeCandidateEvaluator(
         client,  # type: ignore[arg-type]
         _builder,
@@ -362,7 +380,8 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert recovered == outcome
     assert outcome.correct is True
     assert outcome.latency_us == 7.5
-    shape_ids = set(contexts.resolve(attempt_id).contract.for_agent().shapes)
+    private_contract = contexts.resolve(attempt_id).contract
+    shape_ids = set(private_contract.shapes)
     expected_jobs = len(shape_ids) + int(failure_reason is not None)
     assert len(client.submitted) == expected_jobs
     assert len(fetched) == len(set(fetched)) == expected_jobs
@@ -394,6 +413,22 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     batches = raw["completed_stages"][0]["job"]
     assert batches["shape_batch_size"] == 1
     assert batches["max_parallel_shape_batches"] == 16
+    if holdout:
+        assert set(raw["validation_shape_ids"]) == set(private_contract.validation_shape_ids or ())
+        assert raw["evaluation_contract_digest"] == str(
+            contexts.resolve(attempt_id).evaluation_contract_digest
+        )
+        public = gateway_result_projection(
+            artifacts,
+            outcome.gateway_result_digest,
+            correct=outcome.correct,
+            latency_us=outcome.latency_us,
+        )
+        aliases = private_contract.agent_shape_id_map()
+        assert aliases is not None
+        assert set(public["latency_us_by_shape"]) == set(aliases)
+        assert public["measurement_domain"] == "valid"
+        assert public["shape_ids_are_opaque"] is True
     evaluations = control.list_evaluations(attempt_id)
     assert [item.source.value for item in evaluations] == ["agent", "runtime_final"]
     assert evaluations[-1].kernel_artifact_digest == candidate_digest
