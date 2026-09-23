@@ -249,7 +249,7 @@ ablation_arm_labels() {
   "${atrex_prod_python}" -c '
 import json, re, sys
 value = json.load(open(sys.argv[1], encoding="utf-8"))
-if value.get("schema_version") != 5:
+if value.get("schema_version") != 9:
     raise SystemExit(f"unsupported ablation plan schema: {sys.argv[1]}")
 if not value.get("enabled"):
     raise SystemExit(0)
@@ -270,7 +270,7 @@ seed_arm() (
   # The arm clones the evolution Lineage's frozen baseline, so its spec only needs that
   # Lineage plus its own Trajectory shape.
   if ! "${atrex_prod_python}" -c '
-import json, sys
+import json, pathlib, sys
 bootstrap = json.load(open(sys.argv[1], encoding="utf-8"))
 plan = json.load(open(sys.argv[2], encoding="utf-8"))
 label = sys.argv[4]
@@ -278,25 +278,30 @@ lineages = bootstrap.get("lineages", [])
 if len(lineages) != 1:
     raise SystemExit("Bootstrap result does not own exactly one Lineage")
 arm = next(item for item in plan["arms"] if item["label"] == label)
+observer_id = None
+observer_label = arm.get("observer_label")
+if observer_label is not None:
+    observer_path = pathlib.Path(sys.argv[6]) / observer_label / "seed-result.json"
+    if not observer_path.is_file():
+        raise SystemExit(f"observer arm must be seeded first: {observer_path}")
+    observer = json.load(open(observer_path, encoding="utf-8"))
+    observer_id = observer["lineage"]["lineage_id"]
 json.dump(
     {
         "schema_version": 1,
         "creation_key": f"{label}-{sys.argv[5]}",
         "source_lineage_id": lineages[0]["lineage_id"],
-        "attempts_per_trajectory": int(arm["attempts_per_trajectory"]),
-        "trajectories_per_branch": int(arm["trajectories_per_branch"]),
-        "ephemeral_agent_state": bool(arm["ephemeral_agent_state"]),
-        "challenger_count": int(arm["challenger_count"]),
-        "challenger_start_epoch": int(arm["challenger_start_epoch"]),
-        "first_epoch_same_agent": bool(arm["first_epoch_same_agent"]),
+        "optimizer_attempt_budget": int(arm["optimizer_attempt_budget"]),
+        "max_challengers": int(arm["max_challengers"]),
         "workflow_command": arm["workflow_command"],
+        "evolver_observer_lineage_id": observer_id,
     },
     open(sys.argv[3], "w", encoding="utf-8"),
     indent=2,
     sort_keys=True,
 )
 ' "${atrex_prod_bootstrap_result}" "${atrex_prod_ablation_plan}" "${atrex_prod_arm_spec}" \
-    "${label}" "${dsl}"; then
+    "${label}" "${dsl}" "${atrex_prod_dsl_workspace}"; then
     echo "[${dsl}/${label}] Could not write the arm spec." >&2
     return 1
   fi
@@ -365,7 +370,7 @@ run_one() (
   local temporary="${atrex_prod_campaign_result}.tmp.${BASHPID}"
   rm -f -- "${temporary}"
   : >"${atrex_prod_campaign_log}"
-  echo "[${dsl}/evolve-${attempts_per_branch}] Campaign ${campaign_id} started through Epoch ${target_epoch}."
+  echo "[${dsl}/evolve-3] Campaign ${campaign_id} started through Epoch ${target_epoch}."
   set +e
   "${atrex_prod_cli}" run-campaign --config "${atrex_prod_config}" \
     --campaign "${campaign_id}" --target-epoch "${target_epoch}" \
@@ -409,9 +414,16 @@ run_dsl_pipeline() (
   echo "[${dsl}] Bootstrap succeeded; entering Epoch execution immediately."
   local pids=()
   local labels=()
-  run_one "${dsl}" "${campaign_id}" &
-  pids+=("$!")
-  labels+=("evolve-${attempts_per_branch}")
+  local main_evolve_enabled
+  main_evolve_enabled="$("${atrex_prod_python}" -c '
+import json, sys
+print("true" if json.load(open(sys.argv[1], encoding="utf-8")).get("main_evolve_enabled") else "false")
+' "${atrex_prod_ablation_plan}")" || return 1
+  if [[ "${main_evolve_enabled}" == true ]]; then
+    run_one "${dsl}" "${campaign_id}" &
+    pids+=("$!")
+    labels+=("evolve-3")
+  fi
   for label in "${arms[@]}"; do
     run_arm "${dsl}" "${label}" &
     pids+=("$!")
@@ -431,22 +443,29 @@ run_dsl_pipeline() (
 )
 
 echo
-attempts_per_branch="$(
+attempts_per_epoch="$(
   "${atrex_prod_python}" -c '
 import json, sys
-print(json.load(open(sys.argv[1], encoding="utf-8"))["attempts_per_trajectory"])
+print(json.load(open(sys.argv[1], encoding="utf-8"))["optimizer_attempt_budget"])
 ' "${atrex_prod_dsls_root}/cuda/campaign.json"
 )"
-echo "Main evolve-${attempts_per_branch}: ${attempts_per_branch} serial Attempts per Branch; target Epoch ${target_epoch}."
+main_evolve_enabled="$("${atrex_prod_python}" -c '
+import json, sys
+print("true" if json.load(open(sys.argv[1], encoding="utf-8")).get("main_evolve_enabled") else "false")
+' "${atrex_prod_ablation_plan}")"
+if [[ "${main_evolve_enabled}" == true ]]; then
+  echo "Main evolve-3: ${attempts_per_epoch} Optimizer Attempts per Epoch; target Epoch ${target_epoch}."
+else
+  echo "Main evolve-3: disabled; the Bootstrap Campaign is used only as the shared arm seed."
+fi
 if [[ -f "${atrex_prod_ablation_plan}" ]]; then
   "${atrex_prod_python}" -c '
 import json, sys
 plan = json.load(open(sys.argv[1], encoding="utf-8"))
 if plan.get("enabled"):
     values = [
-        ("{label}={trajectories_per_branch} Trajectories x {target_epoch_number} Epochs "
-         "x {attempts_per_trajectory} Attempts + {challenger_count} Challenger(s) "
-         "(Epoch 1 same Agent: {first_epoch_same_agent}) = {optimizer_attempt_budget_total} total; "
+        ("{label}={optimizer_attempt_budget} Attempts/Epoch x {target_epoch_number} Epochs; "
+         "max {max_challengers} Challenger(s); {optimizer_attempt_budget_total} total; "
          "{evolution_count} Evolutions ({budget} Attempts/executed Trajectory)").format(
             **arm,
             budget=plan["optimizer_attempt_budget_per_trajectory"],
@@ -456,7 +475,7 @@ if plan.get("enabled"):
     print("Ablation arms: " + ", ".join(values))
 ' "${atrex_prod_ablation_plan}"
 fi
-echo "The main and Isolated-Pool-Evolve arms run Active plus a replica Challenger in Epoch 1; Challenger-only Isolated-Evolve and Retained-Evolve controls run only the replica. Evolution starts at Epoch 2."
+echo "Each versioned Workflow owns Branch, Trajectory, replication, evolution, and routing policy; Runtime enforces only its resource envelope."
 
 for dsl in "${dsls[@]}"; do
   run_dsl_pipeline "${dsl}" &

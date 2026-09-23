@@ -106,7 +106,8 @@ def test_bootstrap_prepare_builds_valid_remote_agate_inputs(tmp_path: Path) -> N
     assert settings.campaign.optimizer.bootstrap_timeout_seconds == 14_400
     assert spec.hardware_target == "TEST_GPU"
     assert tuple(spec.lineages) == (Dsl.TRITON,)
-    assert spec.challenger_start_epoch == 1
+    assert spec.max_challengers == 1
+    assert spec.optimizer_attempt_budget == 6
     assert spec.creation_key.endswith(spec.base_revision.commit[:12])
     assert settings.campaign.gate_policy.atol == 0.01
     assert settings.campaign.gate_policy.rtol == 0.05

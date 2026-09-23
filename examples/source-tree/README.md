@@ -40,32 +40,31 @@ L20N task. The source commit comes from the existing manifest; the Optimizer com
 to the deployment's configured base repository. Output must be a new directory. Resume with the
 generated Campaign unchanged, rather than rerunning preparation over an existing workspace.
 
-Default: CuteDSL only, with the same twelve instances as single-file production: `evolve-3`,
-`ablation-isolated-01/02`, `ablation-isolated-evolve-01/02`,
-`ablation-retained-evolve-01/02`, `ablation-isolated-pool-evolve-3`, `ablation-retained-01/02`,
-`ablation-pool-3`, and `ablation-pool-retained-3`. The generated
+Default: CuteDSL only, with the same enabled matrix as single-file production: three independent
+replicas each of Isolated, Retained, Pool-3, Pool-Retained-3, and Isolated-Evolve.
+The legacy single-Lineage Evolve-3, Retained-Evolve, and Isolated-Pool-Evolve Workflows remain
+available but are disabled.
+The generated
 `ablation.json` and checked-in `ablation.example.json`
 use the shared production plan builder, not a second set of scheduling rules.
-All arms start from one frozen source-tree v0; controls never repeat Bootstrap/evaluation.
-Each runs 100 Epochs with three serial Attempts per trajectory. Isolated/Retained instances
-have one trajectory (300 Attempts each); both pools have two (600 each). Isolated/Pool reset
+All Lineages start from one frozen source-tree v0; controls never repeat Bootstrap/evaluation.
+Each runs 100 Epochs with three serial Attempts per trajectory. Isolated, Retained, and
+Isolated-Evolve replicas have one trajectory (300 Attempts each); both pools have two (600 each). Isolated/Pool reset
 adaptive State; Retained/Pool-Retained keep it. Pool trajectories share the winning Kernel
 at Epoch boundaries; Pool-Retained also inherits the winning trajectory's terminal State.
-The main arm compares Active against Challenger and acts as the Retained-State evolution reference.
-The two Isolated-Evolve arms run only their replicated/evolved Challenger, reset State per Attempt,
-while the two Retained-Evolve arms use the same Challenger-only topology and retain State across
-serial Attempts. Neither performs a same-Epoch Agent comparison. Isolated-Pool-Evolve adds Active
-and Challenger Pools with two Trajectories per side while resetting Optimizer-produced State every
-Attempt. Total: 5,400 Optimizer Attempts; no external original-AKA run. Arms have independent later
-history/state.
+The three Isolated-Evolve replicas run only their replicated/evolved Challenger, reset State per
+Attempt, and perform no same-Epoch Active comparison. Each observes the matching Isolated replica
+only through its preceding Epoch and waits if that observer is behind. Total: 6,300 Optimizer Attempts; no external
+original-AKA run. Arms have independent later history/state.
 
 The runner saves per-arm seed IDs, logs/results and `campaign-results.json` under `run/`.
 Actual Session/Artifact storage remains in the supplied Runtime. Failures do not cancel
 other arms; rerunning resumes the same identities. Do not change frozen inputs to resume.
-`--target-epoch` changes only the main arm; new control plans spend 300 Attempts per trajectory.
+New control plans spend 300 Attempts per trajectory. `--target-epoch` is retained only for
+compatibility with plans that enable the main arm.
 Existing workspaces retain their frozen plan; explicitly use `--target-epoch 5` to resume an
 old five-Epoch experiment without extending its main arm. Single-file defaults are unchanged.
-This can run eighteen Optimizers concurrently; provision sufficient host memory. Nothing starts
+This can run twenty-one Optimizers concurrently; provision sufficient host memory. Nothing starts
 during preparation. To run only the main arm, use the raw `bootstrap` and `run-campaign`
 CLI commands instead of this runner.
 

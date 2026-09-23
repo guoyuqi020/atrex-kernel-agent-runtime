@@ -22,7 +22,12 @@ from .agate import (
     AgateRequestBuilder,
     parse_agate_evaluation,
 )
-from .batched_evaluate import ShapeBatch, ShapeBatchedEvaluateExecutor, ShapeBatchOutcome
+from .batched_evaluate import (
+    ShapeBatch,
+    ShapeBatchedEvaluateExecutor,
+    ShapeBatchOutcome,
+    subset_evaluation_contract,
+)
 from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContextResolver, AgateEvaluationContractV1
 from .control import SqliteGatewayControl
@@ -43,6 +48,17 @@ _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 
 def _utc_now() -> datetime:
     return datetime.now(UTC)
+
+
+def _is_infrastructure_failure(error: BaseException) -> bool:
+    """Recognize direct and TaskGroup-wrapped infrastructure failures."""
+    if isinstance(error, InfrastructureError):
+        return True
+    if isinstance(error, BaseExceptionGroup):
+        return bool(error.exceptions) and all(
+            _is_infrastructure_failure(item) for item in error.exceptions
+        )
+    return False
 
 
 @dataclass(frozen=True, slots=True)
@@ -135,9 +151,11 @@ class AgateAuthoritativeCandidateEvaluator:
         # This identity deliberately excludes the recovery generation. A Runtime
         # restart must resume the same remote Agate job rather than submit another
         # authoritative measurement for an unchanged Attempt and candidate.
-        # Version the identity so a pre-holdout Runtime-final measurement cannot be
-        # recovered and committed after this evaluator starts enforcing Valid+Test.
-        idempotency_key = f"runtime-final-all-shapes-v2:{attempt_id}:{candidate_digest}"
+        # Version the identity so measurements made while Test affected the Bootstrap
+        # Gate cannot be recovered after Test becomes observation-only.
+        idempotency_key = (
+            f"runtime-final-valid-gate-test-observation-v3:{attempt_id}:{candidate_digest}"
+        )
         recovered = self._control.find_runtime_final_evaluation(attempt_id, idempotency_key)
         if recovered is not None:
             return self._control.commit_authoritative_outcome(
@@ -209,8 +227,19 @@ class AgateAuthoritativeCandidateEvaluator:
         stage_results: list[JsonValue] = []
         evaluation = EvaluationV2(correct=False, latency_us=None)
         final_payload: dict[str, object] | None = None
+        valid_contract = context.contract
+        test_contract: AgateEvaluationContractV1 | None = None
+        if context.contract.shape_split is not None:
+            valid_contract = subset_evaluation_contract(
+                context.contract,
+                context.contract.shape_split.valid_shape_ids,
+            )
+            test_contract = subset_evaluation_contract(
+                context.contract,
+                context.contract.shape_split.test_shape_ids,
+            )
         for stage_index, stage in enumerate(self._bootstrap_stages):
-            stage_contract = context.contract.model_copy(
+            stage_contract = valid_contract.model_copy(
                 update={
                     "options": context.contract.options.model_copy(
                         update={
@@ -234,6 +263,7 @@ class AgateAuthoritativeCandidateEvaluator:
             final_payload = payload
             stage_event: dict[str, object] = {
                 **event_base,
+                "measurement_domain": "valid",
                 "stage": stage_index,
                 "correctness_cases": stage.correctness_cases,
                 "stage_repeats": stage.evaluate_repeats,
@@ -279,6 +309,67 @@ class AgateAuthoritativeCandidateEvaluator:
             )
             if not evaluation.correct:
                 break
+        test_observation: JsonValue | None = None
+        if (
+            test_contract is not None
+            and evaluation.correct
+            and len(stage_results) == len(self._bootstrap_stages)
+        ):
+            observation_stage = self._bootstrap_stages[-1]
+            observation_contract = test_contract.model_copy(
+                update={
+                    "options": test_contract.options.model_copy(
+                        update={
+                            "num_correctness_cases": observation_stage.correctness_cases,
+                            "bench_iters": self._bootstrap_bench_iters,
+                        }
+                    )
+                }
+            )
+            try:
+                observation_job, _, observation = await self._evaluate_batched(
+                    attempt_id,
+                    candidate_source=candidate_source,
+                    operator=context.operator,
+                    contract=observation_contract,
+                    hardware_target=context.agate_gpu,
+                    dsl=context.dsl,
+                    name=f"{context.operator}_{attempt_id}_bootstrap_test_observation",
+                    idempotency_key=f"{idempotency_key}:test-observation",
+                    event_base={
+                        **event_base,
+                        "measurement_domain": "test",
+                        "affects_promotion": False,
+                    },
+                )
+                test_observation = {
+                    "domain": "test",
+                    "affects_promotion": False,
+                    "status": "completed",
+                    "correct": observation.correct,
+                    "latency_us": observation.latency_us,
+                    "job": observation_job,
+                }
+            except Exception as error:
+                if not _is_infrastructure_failure(error):
+                    raise
+                test_observation = {
+                    "domain": "test",
+                    "affects_promotion": False,
+                    "status": "unavailable",
+                    "failure_type": type(error).__name__,
+                    "detail": str(error),
+                }
+                self._events.record_runtime_event(
+                    "gateway.bootstrap_test_observation_failed",
+                    attempt_id,
+                    {
+                        **event_base,
+                        "measurement_domain": "test",
+                        "affects_promotion": False,
+                        "failure_type": type(error).__name__,
+                    },
+                )
         job: dict[str, JsonValue] = {
             "schema_version": 1,
             "operation": "bootstrap_staged_evaluate",
@@ -288,6 +379,8 @@ class AgateAuthoritativeCandidateEvaluator:
             "latency_source_stage": len(stage_results) - 1,
             "latency_us": evaluation.latency_us,
         }
+        if test_observation is not None:
+            job["test_observation"] = test_observation
         if context.evaluation_contract_digest is not None:
             job["evaluation_contract_digest"] = str(context.evaluation_contract_digest)
         if context.contract.validation_shape_ids is not None:

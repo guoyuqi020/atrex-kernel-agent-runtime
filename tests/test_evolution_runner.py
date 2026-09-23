@@ -48,6 +48,8 @@ from atrex_runtime.workers.evolution import (
     _upgrade_historical_output,
 )
 from atrex_runtime.workers.launcher import CleanEnvironmentLauncher
+from atrex_runtime.workers.session_contract import SessionContractPolicy
+from atrex_runtime.workers.workspace import initialize_reusable_agent_state
 
 
 @dataclass
@@ -106,6 +108,43 @@ def test_legacy_contribution_ids_are_migrated_only_when_reading_history() -> Non
     assert old["contributing_revision_ids"] == [revision]
     with pytest.raises(ValueError, match="contributing_revision_ids"):
         EvolutionOutput.model_validate(old)
+
+
+def test_trusted_runtime_rejects_task_evidence_embedded_in_candidate(tmp_path: Path) -> None:
+    parent = tmp_path / "parent"
+    candidate = tmp_path / "candidate"
+    (parent / "prompts").mkdir(parents=True)
+    (candidate / "prompts").mkdir(parents=True)
+    relative = "prompts/episode.md"
+    (parent / relative).write_text("Compare trusted measurements.\n")
+    (candidate / relative).write_text(
+        "Compare trusted measurements.\nPrefer direction_d7462410254b4c8aa1ba96a0b93a3a58.\n"
+    )
+
+    with pytest.raises(ValueError, match="task Evidence identities"):
+        EvolverBundleRunner._validate_task_independent_candidate(
+            parent,
+            candidate,
+            {relative},
+        )
+
+
+def test_trusted_runtime_accepts_task_independent_candidate_change(tmp_path: Path) -> None:
+    parent = tmp_path / "parent"
+    candidate = tmp_path / "candidate"
+    (parent / "prompts").mkdir(parents=True)
+    (candidate / "prompts").mkdir(parents=True)
+    relative = "prompts/episode.md"
+    (parent / relative).write_text("Compare trusted measurements.\n")
+    (candidate / relative).write_text(
+        "Compare trusted measurements before drawing a causal conclusion.\n"
+    )
+
+    EvolverBundleRunner._validate_task_independent_candidate(
+        parent,
+        candidate,
+        {relative},
+    )
 
 
 def _optimizer_repository(
@@ -557,9 +596,7 @@ def test_unified_bundle_replaces_packaged_resources_without_resurrecting_files(
             assert not (bundle / name / "removed.md").exists()
     assert not (parent.stat().st_mode & 0o200)
     assert prepared.candidate_root.stat().st_mode & 0o200
-    assert (
-        artifacts.verify(revision.optimizer_digest).payload_path / "insights/removed.md"
-    ).is_file()
+    assert (artifacts.verify(revision.optimizer_digest).payload_path / "tools/removed.md").is_file()
 
 
 def test_evolution_workspace_copies_full_parent_to_writable_candidate(tmp_path: Path) -> None:
@@ -592,10 +629,110 @@ def test_evolution_workspace_copies_full_parent_to_writable_candidate(tmp_path: 
     assert (prepared.candidate_root / "skills").is_dir()
     assert (prepared.candidate_root / "tools/README.md").is_file()
     assert not (prepared.candidate_root / "trajectories").exists()
+
+
+def test_evolution_workspace_exposes_next_optimizer_contract_read_only(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request = replace(
+        _request(artifacts, tmp_path),
+        hardware_target="sm_120",
+    )
+    prepared = EvolutionWorkspaceAssembler(
+        tmp_path / "evolutions",
+        artifacts,
+        next_optimizer_contract_policy=SessionContractPolicy(
+            agent_backend="claude",
+            session_timeout_seconds=7200,
+            usage_unit="provider_tokens",
+            usage_budget=20_000_000,
+            max_attempt_report_bytes=1_048_576,
+        ),
+    ).prepare(request)
+
+    contract = prepared.root / "input/next-session-contract"
+    assert prepared.next_optimizer_contract_root == contract
+    assert {path.name for path in contract.iterdir()} == {
+        "environment.json",
+        "limits.json",
+        "tools.json",
+    }
+    environment = json.loads((contract / "environment.json").read_text())
+    limits = json.loads((contract / "limits.json").read_text())
+    tools = json.loads((contract / "tools.json").read_text())
+    assert environment["phase"] == "optimization_attempt"
+    assert environment["dsl"] == "triton"
+    assert environment["hardware_target"] == "sm_120"
+    assert environment["agent_backend"] == "claude"
+    assert limits["session_timeout_seconds"] == 7200
+    assert limits["provider_usage"] == {
+        "budget": 20_000_000,
+        "unit": "provider_tokens",
+    }
+    assert "evaluate" in tools["gateway"]["operations"]
+    assert not (contract.stat().st_mode & 0o200)
     assert not (prepared.root / "input/parent").exists()
     assert not (prepared.root / "input/reusable-agents").exists()
     assert not (prepared.root / "runtime-tools").exists()
     assert not (prepared.root / "scratch/candidate-base.json").exists()
+
+
+def test_evolution_workspace_exposes_independent_active_lineage_as_read_only_observer(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request = _request(artifacts, tmp_path / "challenger")
+    observer_revision = _parent(artifacts, tmp_path / "observer")
+    observer_lineage_id = new_lineage_id()
+    observer_entry = replace(
+        _baseline_catalog_entry(observer_revision),
+        lineage_id=observer_lineage_id,
+    )
+    attempt_workspaces = tmp_path / "attempt-workspaces"
+    future_state = (
+        attempt_workspaces
+        / ".reusable"
+        / observer_lineage_id
+        / observer_revision.id
+        / "trajectory-00000001"
+    )
+    initialize_reusable_agent_state(
+        future_state,
+        artifacts.verify(observer_revision.optimizer_digest).payload_path,
+    )
+    (future_state / "tools/future.md").write_text("must not leak\n")
+    request = replace(
+        request,
+        observer_lineage_id=observer_lineage_id,
+        observer_evidence_checkpoint=_evidence(
+            artifacts,
+            tmp_path / "observer-evidence",
+        ),
+        observer_agent_catalog=(observer_entry,),
+    )
+
+    prepared = EvolutionWorkspaceAssembler(
+        tmp_path / "evolutions",
+        artifacts,
+        attempt_workspaces_root=attempt_workspaces,
+    ).prepare(request)
+    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+
+    assert manifest.observer is not None
+    assert manifest.observer.lineage_id == observer_lineage_id
+    assert manifest.observer.relationship == "independent_active_lineage"
+    observer = prepared.root / "input/observer/active"
+    assert (observer / "agents/agent-v0/source/prompts/episode.md").is_file()
+    assert (observer / "evidence/agent-v0/optimization-summary.json").is_file()
+    assert (observer / "evidence/agent-v0/resources/trajectories").is_dir()
+    assert not (
+        observer / "evidence/agent-v0/resources/trajectories/trajectory-00000001/tools/future.md"
+    ).exists()
+    assert (observer / "evidence/latest-epoch-facts.json").is_file()
+    assert not (observer.stat().st_mode & 0o200)
+    assert not (observer / "agents/agent-v0/source").stat().st_mode & 0o200
+    assert not (observer / "evidence/agent-v0/resources").stat().st_mode & 0o200
 
 
 def test_evolution_workspace_copies_active_revision_runtime_state_seed(tmp_path: Path) -> None:
@@ -1618,10 +1755,10 @@ async def _build_with_contributor(
         / request.parent_revision.id
         / "trajectory-00000002"
     )
-    for directory in ("prompts", "insights", "skills", "tools"):
+    for directory in ("prompts", "skills", "tools"):
         (learned / directory).mkdir(parents=True)
         (learned / directory / "README.md").write_text("index")
-    (learned / "insights/lesson.md").write_text("measured insight before evolution")
+    (learned / "tools/lesson.md").write_text("reusable helper before evolution")
     sessions = SubprocessEvolutionSessionDriver(
         CleanEnvironmentLauncher(Path("/usr/bin/env")),
         EvolutionProcessConfig(
@@ -1660,7 +1797,7 @@ async def test_contribution_snapshot_preserves_exact_parent_trajectory_resources
     tmp_path: Path,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
-    relative = "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/insights"
+    relative = "input/evidence/agent-v0/resources/trajectories/trajectory-00000002/tools"
     build, _ = await _build_with_contributor(
         artifacts,
         tmp_path,
@@ -1678,8 +1815,8 @@ async def test_contribution_snapshot_preserves_exact_parent_trajectory_resources
         learned.write_text("later attempt replaced the lesson")
     frozen = artifacts.verify(snapshot["snapshot_digest"])
     assert (
-        frozen.payload_path / "insights/lesson.md"
-    ).read_text() == "measured insight before evolution"
+        frozen.payload_path / "tools/lesson.md"
+    ).read_text() == "reusable helper before evolution"
     closure = artifacts.expand_reference_closure([build.evolution_trace_digest])
     assert snapshot["snapshot_digest"] in closure
 
@@ -1992,9 +2129,7 @@ async def test_process_exit_without_usage_retains_original_diagnostics(
     assert isinstance(failure_payload, dict)
     failure_digest = failure_payload["failure_artifact_digest"]
     assert isinstance(failure_digest, str)
-    failure = json.loads(
-        (artifacts.verify(failure_digest).payload_path / "value.json").read_text()
-    )
+    failure = json.loads((artifacts.verify(failure_digest).payload_path / "value.json").read_text())
     assert failure["schema_version"] == 6
     assert failure["error_message"].startswith("Evolution process exited with 1:")
     assert failure["process"]["returncode"] == 1
@@ -2052,9 +2187,7 @@ async def test_missing_usage_after_success_retains_process_observation(
     assert isinstance(failure_payload, dict)
     failure_digest = failure_payload["failure_artifact_digest"]
     assert isinstance(failure_digest, str)
-    failure = json.loads(
-        (artifacts.verify(failure_digest).payload_path / "value.json").read_text()
-    )
+    failure = json.loads((artifacts.verify(failure_digest).payload_path / "value.json").read_text())
     assert failure["schema_version"] == 6
     assert failure["process"]["returncode"] == 0
     assert failure["process"]["stderr"] == "wrapper omitted usage\n"
@@ -2299,7 +2432,9 @@ Path(os.environ["ATREX_TOKEN_USAGE_REPORT"]).write_text(json.dumps({
 @pytest.mark.parametrize("backend", ("claude", "codex", "qodercli", "pi"))
 @pytest.mark.parametrize("fail_first", (False, True))
 async def test_real_bundle_resumes_lineage_history_across_parent_revisions(
-    tmp_path: Path, backend: str, fail_first: bool,
+    tmp_path: Path,
+    backend: str,
+    fail_first: bool,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     request = _request(artifacts, tmp_path)
@@ -2380,37 +2515,48 @@ sys.exit(1 if FAIL_FIRST and not resumed else 0)
     bundle = Path(__file__).resolve().parents[1] / "src/atrex-kernel-agent-evolver"
     bundle_digest = artifacts.put_directory(bundle, ArtifactKind.EVOLVER_BUNDLE)
     assembler = EvolutionWorkspaceAssembler(
-        tmp_path / "evolutions", artifacts, evolver_bundle_digest=bundle_digest,
+        tmp_path / "evolutions",
+        artifacts,
+        evolver_bundle_digest=bundle_digest,
     )
     config = EvolutionProcessConfig(
-        bundle_commit="0" * 40, bundle_tree="1" * 40,
+        bundle_commit="0" * 40,
+        bundle_tree="1" * 40,
         bundle_artifact_digest=bundle_digest,
         command_argv=(str(Path(sys.executable).resolve()), str(bundle / "src/main.py")),
         isolated_home_environment_keys=("HOME",),
         session_trace_relative_path="scratch/evolver-session",
         token_usage_report_relative_path="scratch/token-usage.json",
         environment=(("PATH", f"{provider_bin}{os.pathsep}{os.environ['PATH']}"),),
-        timeout_seconds=10, terminate_grace_seconds=1, max_diagnostic_bytes=8192,
+        timeout_seconds=10,
+        terminate_grace_seconds=1,
+        max_diagnostic_bytes=8192,
         agent_backend=backend,
     )
     first = assembler.prepare(request)
     first_result = await SubprocessEvolutionSessionDriver(
-        CleanEnvironmentLauncher(Path("/usr/bin/env")), config,
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        config,
     ).run(first)
     assert first_result.returncode == (1 if fail_first else 0), first_result.stderr
     observation = json.loads((first.root / "scratch/provider-observation.json").read_bytes())
     assert not observation["resumed"]
     # A new driver and new Parent reproduce a campaign restart after promotion.
     new_parent = (
-        request.parent_revision if fail_first
+        request.parent_revision
+        if fail_first
         else replace(request.parent_revision, id=new_kernel_agent_revision_id())
     )
-    second = assembler.prepare(replace(
-        request, parent_revision=new_parent,
-        agent_catalog=(replace(request.agent_catalog[0], revision=new_parent),),
-    ))
+    second = assembler.prepare(
+        replace(
+            request,
+            parent_revision=new_parent,
+            agent_catalog=(replace(request.agent_catalog[0], revision=new_parent),),
+        )
+    )
     second_result = await SubprocessEvolutionSessionDriver(
-        CleanEnvironmentLauncher(Path("/usr/bin/env")), config,
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        config,
     ).run(second)
     assert second_result.returncode == 0, second_result.stderr
     assert json.loads((second.root / "scratch/provider-observation.json").read_bytes())["resumed"]
@@ -2422,7 +2568,7 @@ sys.exit(1 if FAIL_FIRST and not resumed else 0)
     if backend == "claude":
         raw_path = second.root / "scratch/evolver-session/provider/claude-session.raw-jsonl"
         raw = raw_path.read_text()
-        assert 'response-0' not in raw and 'response-1' in raw
+        assert "response-0" not in raw and "response-1" in raw
 
 
 def test_prepare_launch_binds_the_runtime_session_timeout(tmp_path: Path) -> None:

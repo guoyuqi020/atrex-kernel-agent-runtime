@@ -1,4 +1,4 @@
-"""Source-tree runs 100 Epochs while retaining production's per-Epoch topology."""
+"""Source-tree runs freeze only Runtime resource bounds, not Workflow topology."""
 
 from __future__ import annotations
 
@@ -35,14 +35,13 @@ def _module(relative: str) -> ModuleType:
 @pytest.mark.parametrize("relative", [
     "data/GDN/campaign.json", "examples/source-tree/campaign.example.json",
 ])
-def test_source_tree_configs_use_three_attempts(relative: str) -> None:
+def test_source_tree_configs_share_the_production_resource_envelope(relative: str) -> None:
     campaign = CampaignSpecV3.model_validate_json((REPOSITORY / relative).read_text())
     policy = json.loads((REPOSITORY / "scripts/production/policy.json").read_text())
-    assert campaign.attempts_per_trajectory == policy["schedule"]["attempts_per_trajectory"] == 3
-    assert campaign.trajectories_per_branch == 1
-    assert campaign.challenger_count == 1
-    assert campaign.challenger_start_epoch == 2
-    assert campaign.first_epoch_same_agent == (relative.startswith("examples/"))
+    assert campaign.optimizer_attempt_budget == (
+        policy["schedule"]["optimizer_attempt_budget"]
+    ) == 6
+    assert campaign.max_challengers == policy["schedule"]["max_challengers"] == 1
 
 
 def test_gdn_source_tree_sessions_allow_one_hundred_million_tokens() -> None:

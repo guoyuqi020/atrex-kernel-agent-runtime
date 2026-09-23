@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from typing import cast
 
 import pytest
-from conftest import NOW, digest, seed_lineage
+from conftest import NOW, digest, freeze_branch_workflow, seed_lineage
 
 import atrex_runtime.cli as runtime_cli
 import atrex_runtime.cli.campaign as runtime_cli_campaign
@@ -153,9 +153,8 @@ def test_run_campaign_cli_reports_recoverable_target_result(
         active_kernel_agent_revision_id=new_kernel_agent_revision_id(),
         best_kernel_revision_id=new_kernel_revision_id(),
         evidence_checkpoint="sha256:" + "a" * 64,
-        challenger_count=1,
-        trajectories_per_branch=1,
-        attempts_per_trajectory=4,
+        max_challengers=1,
+        optimizer_attempt_budget=8,
         next_epoch_number=4,
         status=LineageStatus.READY,
     )
@@ -242,16 +241,19 @@ def test_attempt_progress_distinguishes_agent_branch_and_trajectory(
 
 def test_interactive_attempt_progress_draws_every_branch() -> None:
     stream = io.StringIO()
-    renderer = runtime_cli_progress.AttemptProgressRenderer(stream, interactive=True)
+    renderer = runtime_cli_progress.AttemptProgressRenderer(
+        stream,
+        interactive=True,
+        workflow_topology=lambda _epoch, _challenger_ordinal: (2, 3),
+    )
     epoch = cast(
         Epoch,
         SimpleNamespace(
             id=new_epoch_id(),
             lineage_id=new_lineage_id(),
             number=1,
-            challenger_count=1,
-            trajectories_per_branch=2,
-            attempts_per_trajectory=3,
+            max_challengers=1,
+            optimizer_attempt_budget=12,
         ),
     )
     attempt = cast(
@@ -578,9 +580,8 @@ def test_epoch_history_cli_shows_challenger_promotion(
             challenger_kernel_agent_revision_ids=(),
             starting_kernel_revision_id=seeded.baseline.id,
             evidence_checkpoint=lineage.evidence_checkpoint,
-            challenger_count=1,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=1,
+            max_challengers=1,
+            optimizer_attempt_budget=2,
             status=EpochStatus.BUILDING_CHALLENGER,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -588,6 +589,7 @@ def test_epoch_history_cli_shows_challenger_promotion(
             completed_at=None,
         )
         registry.insert_epoch(epoch)
+        freeze_branch_workflow(registry, epoch)
         registry.attach_challenger(
             EpochChallenger(
                 epoch.id,
@@ -662,9 +664,8 @@ def test_attempt_history_cli_keeps_completed_pivot_without_kernel_version(
             challenger_kernel_agent_revision_ids=(),
             starting_kernel_revision_id=seeded.baseline.id,
             evidence_checkpoint=lineage.evidence_checkpoint,
-            challenger_count=0,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=1,
+            max_challengers=0,
+            optimizer_attempt_budget=1,
             status=EpochStatus.RUNNING,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -672,6 +673,7 @@ def test_attempt_history_cli_keeps_completed_pivot_without_kernel_version(
             completed_at=None,
         )
         registry.insert_epoch(epoch)
+        freeze_branch_workflow(registry, epoch)
         attempt = Attempt(
             id=new_attempt_id(),
             epoch_id=epoch.id,
@@ -890,9 +892,8 @@ def test_recover_epoch_cli_is_idempotent_and_reports_recovery(
             challenger_kernel_agent_revision_ids=(),
             starting_kernel_revision_id=seeded.baseline.id,
             evidence_checkpoint=registry.get_lineage(seeded.lineage_id).evidence_checkpoint,
-            challenger_count=0,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=1,
+            max_challengers=0,
+            optimizer_attempt_budget=1,
             status=EpochStatus.RUNNING,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -900,6 +901,7 @@ def test_recover_epoch_cli_is_idempotent_and_reports_recovery(
             completed_at=None,
         )
         registry.insert_epoch(epoch)
+        freeze_branch_workflow(registry, epoch)
         attempt = Attempt(
             id=new_attempt_id(),
             epoch_id=epoch.id,

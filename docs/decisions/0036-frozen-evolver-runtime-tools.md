@@ -32,7 +32,7 @@ Trajectory's terminal resources; the next Active starts from the same snapshot. 
 State falls back to Epoch-start State, revision seed, and packaged defaults.
 Historical derivation copies the complete selected Bundle before editing it. Evolver may synthesize
 eligible Agents' resources and record their contributions. Runtime validates the selected revision
-and entire Bundle diff, including all four adaptive directories, then seals Bundle and State.
+and entire Bundle diff, including all three adaptive directories, then seals Bundle and State.
 
 The Evolver query endpoint, query capability, public helper, Candidate allowlist, and private query
 snapshot are removed. Detailed history and full Evolution traces remain in Runtime's existing

@@ -52,14 +52,17 @@ through gaps in a dense source-ID sequence. The aliases remain stable for the Ca
 
 Agent operations, including ordinary Evaluate, Agent ABBA, Profile, and Check, use Valid only.
 Bootstrap final Evaluate, Lineage seed Evaluate, and ordinary Evaluate comparisons also use
-Valid. Only authoritative Runtime ABBA executes Valid + Test. Custom Agent probes still use
+Valid. Authoritative Runtime ABBA executes Valid + Test but derives correctness, latency, and
+promotion exclusively from Valid. Test is a private, observation-only generalization measurement;
+its failure or slowdown cannot reject a Kernel or Agent revision. Bootstrap similarly gates v0 on
+Valid and records one non-blocking private Test observation. Custom Agent probes still use
 Agent-supplied inputs; they cannot select or reveal hidden Test cases.
 
 Agent-facing historical reports, Evolver summaries, and Attempt fact indexes expose only Valid
 per-Shape timings and recompute their latency aggregates from Valid. They never expose full-set
-aggregate latencies, Test profiler data, or Test error metrics. Acceptance/selection verdicts
-remain visible. Private Gateway Results and Registry measurements retain complete authoritative
-evidence for administration/audit; Result Artifacts remain Agent-visible projections.
+aggregate latencies, Test profiler data, or Test error metrics. Acceptance/selection verdicts are
+Valid-only. Private Gateway Results retain Test observations for administration and research;
+Result Artifacts remain Agent-visible Valid projections.
 Public `shape_train` describes the legal domain, not the holdout membership. Auto-generated
 problem context and missing Roofline construction use Valid inputs only.
 
@@ -84,7 +87,8 @@ An exploratory `evaluate` records measurement evidence, but it does not create a
 revision. The Agent may evaluate several Candidates in one Attempt and record them in the
 Experiment Journal. A `candidate_ready` nomination still requires a successful full evaluation of
 the exact Candidate against the trusted Contract's Valid subset. This precheck is not the
-authoritative Valid + Test ABBA Gate.
+authoritative same-allocation ABBA retention decision; that decision also uses Valid while Test is
+recorded only as a private observation.
 That precheck may come from this Attempt or from an explicit `adopt` Experiment referencing a
 compatible successful full Evaluate in visible history. Runtime verifies the original Trial and
 exact Kernel/Result binding; adoption neither creates a new measurement nor changes its ownership.

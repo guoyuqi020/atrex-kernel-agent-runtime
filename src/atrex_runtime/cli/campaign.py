@@ -202,7 +202,10 @@ def run_campaign(
                 )
             )
 
-        def workflow_topology(epoch: Epoch, challenger_ordinal: int) -> tuple[int, int]:
+        def workflow_topology(
+            epoch: Epoch,
+            challenger_ordinal: int,
+        ) -> tuple[int, int] | None:
             branch = BranchRole.ACTIVE if challenger_ordinal == 0 else BranchRole.CHALLENGER
             workflow = progress_registry.get_epoch_branch_workflow(
                 epoch.id,
@@ -210,7 +213,7 @@ def run_campaign(
                 challenger_ordinal,
             )
             if workflow is None:
-                return epoch.trajectories_per_branch, epoch.attempts_per_trajectory
+                return None
             return workflow.trajectories, workflow.attempts_per_trajectory
 
         progress = AttemptProgressRenderer(

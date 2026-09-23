@@ -4,17 +4,15 @@ English | [中文](README.zh.md)
 
 Defaults connect to the remote Agate service; explicit environment overrides remain supported.
 
-This example runs a complete single-DSL Lineage through exactly one Epoch. Its defaults are:
+This example runs a complete single-DSL Lineage through exactly one Epoch. The Campaign grants the
+Agent-owned Workflow no Challenger slots and an exact budget of three Optimizer Attempts. The
+selected `workflow/isolated.py` program spends that budget on one Trajectory with three serial
+rounds, explicitly routes each retained Kernel to the next round, and resets adaptive State before
+every Attempt.
 
-- `challenger_count=0`: no Evolver session and no Challenger Branch;
-- `trajectories_per_branch=1`: one independent trajectory from the Epoch starting Kernel;
-- `attempts_per_trajectory=3`: three serial Optimizer Attempts in that trajectory.
-
-Therefore the Epoch starts exactly three fresh Optimizer sessions. Each retained Kernel becomes the
-next Attempt's input; a reverted result leaves the previous retained Kernel in place.
-Because `challenger_count=0`, Runtime resolves neither a separate Evolver credential nor its Git
-Bundle. The Optimizer still uses the Runtime default QoderCLI credential. The same credential is
-already available if a positive Challenger count is selected.
+Runtime therefore starts exactly three fresh Optimizer sessions, but does not decide their topology
+or routing. Because the Workflow never requests a Challenger, no Evolver session or Evolver Git
+Bundle is needed. The Optimizer uses the Runtime default QoderCLI credential.
 
 `run-campaign` prints each durably completed Attempt immediately to stderr, for example:
 
@@ -93,8 +91,6 @@ bash examples/lineage/inspect.sh
 Agent revision table. `X` counts rows in Attempt history; it does not promise `X` new Kernel
 versions.
 
-The topology values can be overridden with `ATREX_CHALLENGER_COUNT`,
-`ATREX_CHALLENGER_START_EPOCH`, `ATREX_TRAJECTORIES_PER_BRANCH`, and
-`ATREX_ATTEMPTS_PER_TRAJECTORY` before invoking the script.
-Topology is immutable for an existing Lineage; select a different `ATREX_LINEAGE_STATE_DIR` or move
-the old example workspace when testing different values.
+Search organization is executable Agent code. To test another organization, select another
+Workflow implementation and give it matching `max_challengers` and `optimizer_attempt_budget`
+resource limits in a new Campaign workspace.

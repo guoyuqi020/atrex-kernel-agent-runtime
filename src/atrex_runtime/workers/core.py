@@ -23,6 +23,12 @@ from .launcher import WorkerLauncher, validate_worker_environment
 from .manifest import AttemptInputManifestV9
 from .optimizer import OptimizerSessionConfig, OptimizerSessionResult
 from .process import BoundedProcessConfig
+from .session_contract import (
+    RUNTIME_CONTRACT_ENVIRONMENT_KEY,
+    RUNTIME_CONTRACT_RELATIVE_PATH,
+    materialize_session_contract,
+    runtime_contract_environment,
+)
 from .workspace import PreparedAttempt
 
 _RUNTIME_KEYS = {
@@ -32,6 +38,7 @@ _RUNTIME_KEYS = {
     "ATREX_AGENT_REASONING_EFFORT",
     "ATREX_AGENT_SESSION_SETTINGS",
     "ATREX_REPORT_COMPLETION_RETRIES",
+    RUNTIME_CONTRACT_ENVIRONMENT_KEY,
     "ATREX_ATTEMPT_REPORT_MAX_BYTES",
     "ATREX_CORE_PHASE",
     "ATREX_ATTEMPT_MANIFEST",
@@ -327,5 +334,24 @@ class CoreOptimizerSessionDriver:
                     "ATREX_WIKI_PROXY_URL": config.wiki_endpoint,
                 }
             )
+        manifest = AttemptInputManifestV9.from_json_bytes(prepared.manifest_path.read_bytes())
+        contract_path = prepared.root / RUNTIME_CONTRACT_RELATIVE_PATH
+        if not contract_path.exists():
+            materialize_session_contract(
+                prepared.root,
+                phase="optimization_attempt",
+                dsl=manifest.dsl.value,
+                hardware_target=manifest.context.hardware_target,
+                agent_backend=self._config.agent_backend,
+                model=config.model,
+                session_timeout_seconds=self._config.timeout_seconds,
+                usage_unit=environment["ATREX_USAGE_UNIT"],
+                usage_budget=float(environment["ATREX_USAGE_BUDGET"]),
+                max_attempt_report_bytes=self._config.max_attempt_report_bytes,
+                wiki_available=(
+                    config.wiki_endpoint is not None and config.wiki_capability is not None
+                ),
+            )
+        environment.update(runtime_contract_environment(contract_path))
         validate_worker_environment(environment)
         return environment

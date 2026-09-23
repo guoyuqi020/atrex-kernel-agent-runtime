@@ -10,7 +10,7 @@ Example 为模板；本文解释权责与约束，不重复容易过期的全部
 | 文档 | Schema | 用途 |
 | --- | --- | --- |
 | [`runtime.example.json`](../runtime.example.json) | Runtime v1 | 部署、服务、策略、Agent Backend、存储与 Launcher。 |
-| `examples/*/campaign.json` | Campaign 配置 | 算子、私有/公开 Contract、Core Commit、DSL Lineage、Model 与 Epoch 拓扑。 |
+| `examples/*/campaign.json` | Campaign 配置 | 算子、私有/公开 Contract、Agent Commit、DSL Lineage、Model、Workflow 命令与 Runtime 资源包络。 |
 | [`lineage-seed.example.json`](../lineage-seed.example.json) | Lineage Seed v1 | 从封存 Agent/Kernel 内容增加独立 Lineage。 |
 | Ablation Arm Spec | Ablation v1 | 从源 Lineage 的 Bootstrap Baseline 创建控制 Campaign，可配置独立进化调度。 |
 
@@ -157,8 +157,7 @@ Evidence 或由管理端读取，但不会上传到 GPU Wiki。
 - 优先使用 `shape_train`，迁移期可使用 `agent_problem`；若配置 Core Problem Generalization，
   二者可以都省略；
 - 完整 `base_revision.commit`；
-- `challenger_count`、`challenger_start_epoch`、`trajectories_per_branch` 与
-  `attempts_per_trajectory`；
+- 资源上限 `max_challengers` 与 `optimizer_attempt_budget`；
 - 以 DSL 为 Key 的非空 `lineages` Map。
 
 每条 Lineage 提供可选 Optimizer/Evolver Model 与 `initial_evidence`，并选择 `baseline_kernel`
@@ -166,16 +165,19 @@ Evidence 或由管理端读取，但不会上传到 GPU Wiki。
 Model 时委托给配置的 Backend CLI 默认值。可选 `problem_generalization_model` 只作用于 Core
 Problem Generalization。
 
-可选 `first_epoch_same_agent` 默认 false，生产进化臂启用它，并要求 `challenger_count=1`。
-Epoch 1 的 Active 与副本使用同一 Agent Revision、相同 Kernel/State 起点，可写 State 相互隔离；
-不调用 Evolver、不创建新 Agent Revision。之后遵循 `challenger_start_epoch`，该选项随 Lineage 冻结。
+这两个值只是资源包络，不定义 Epoch 拓扑。版本化的 `workflow/main.py` 决定何时复制或进化
+Agent、运行哪些 Branch/Trajectory、如何分配 Attempt 预算，以及下一轮使用哪个 Kernel 和自适应
+State。Workflow 超出 Challenger 上限或未精确分配 Attempt 预算时，Runtime 会拒绝执行。
+
+部署项 `campaign.max_parallel_attempts` 独立限制一个 Workflow 并行批次中同时准入的 Optimizer
+Session 数量。它只是并发上限，不是拓扑定义。
 
 Bootstrap 会查询 Agate。返回架构（例如 `sm_120`）对 Agent 可见；Canonical GPU Alias 单独封存
 用于 Agate 调度。
 
 ## Lineage Seed v1
 
-Spec 固定 DSL 与 Epoch 拓扑，并选择一种来源：
+Spec 固定 DSL 与同一资源包络，并选择一种来源：
 
 - `source_type: "artifacts"`：Agent Artifact Digest 与 Kernel Artifact Digest；
 - `source_type: "revisions"`：已注册 Agent Revision ID 与 Kernel Revision ID；
@@ -188,19 +190,14 @@ Runtime 在发布独立 `agent-v0`/`v0` 根之前重新校验 Agent，并在目�
 `seed-ablation-arm --spec` 接受：
 
 - `creation_key` 与 `source_lineage_id`；
-- `attempts_per_trajectory` 和可选 `trajectories_per_branch`；
-- `ephemeral_agent_state`（默认 true）；
-- `challenger_count`（默认 0）和 `challenger_start_epoch`（默认 2）；
-- `first_epoch_same_agent`（默认 false，要求一个 Challenger）；
+- `optimizer_attempt_budget` 与可选 `max_challengers`（默认 0）；
+- `workflow_command`，用于选择完整的初始可执行组织方式；
 - 可选 `optimizer_model`。
 
-它创建一个独立的单 Lineage Campaign，默认不生成 Challenger。当
-`ephemeral_agent_state=true` 时，每个 Attempt 的 `prompts/`、`insights/`、`skills/` 与 `tools/` 恢复到固定 Core Revision 的初始内容；
-设为 false 时保留源 Bootstrap Deposit 和后续串行 State。对比进化频率时使用
-`challenger_count=1`、`challenger_start_epoch=2`、`first_epoch_same_agent=true`、
-`ephemeral_agent_state=false`，调整
-`attempts_per_trajectory`。Evolver 模型及 Commit 继承自源；Optimizer 模型也默认继承，
-可显式覆盖。Baseline Outcome 直接复用，不重复测量。
+它创建一个独立的单 Lineage Campaign，默认不允许 Challenger。被选择的 Workflow 程序自行决定
+Branch/Trajectory 组织、进化时机、Kernel 路由，以及是否复用已完成 Attempt 的输出 State；
+Runtime 不再解释 reset/retain、首轮复制或进化频率配置。Evolver 模型及 Commit 继承自源；
+Optimizer 模型也默认继承，可显式覆盖。Baseline Outcome 直接复用，不重复测量。
 
 ## 校验规则
 

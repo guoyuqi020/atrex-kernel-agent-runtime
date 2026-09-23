@@ -21,19 +21,18 @@ workspace/
 ├── agent/optimizer/            # read-only implementation/config; initial State copies omitted
 ├── work/kernel/                # writable candidate copied from the incumbent
 ├── prompts/                    # read-only versioned phase prompts and README.md index
-├── insights/                   # read-only, evidence-derived decision guidance
 ├── skills/                     # read-only reusable procedures installed for Claude
 ├── tools/                      # writable reusable tool scripts and README.md index
 ├── sessions/                   # session capture owned by the launcher; do not modify
 └── scratch/                    # writable temporary requests, plans, recovery files, and reports
 ```
 
-Use the files already present as your starting point. `prompts/`, `insights/`, and `skills/` belong
-to the versioned Agent Revision: read and use them, but do not modify them during an Optimizer or
-Bootstrap session. Only `tools/` is adaptive here. Save genuinely reusable scripts there and keep
-`tools/README.md` current. Record hypotheses, evidence, and conclusions through the Direction and
-Experiment Journal instead of creating free-form Insights. Evolver curates Journal and Session
-evidence between Agent revisions and owns changes to Prompts, Insights, and Skills.
+Use the files already present as your starting point. `prompts/` and `skills/` belong to the
+versioned Agent Revision: read and use them, but do not modify them during an Optimizer or Bootstrap
+session. Only `tools/` is adaptive here. Save genuinely reusable scripts there and keep
+`tools/README.md` current. Record task hypotheses, evidence, and conclusions through the Direction
+and Experiment Journal. Evolver may use that evidence to improve task-independent Agent behavior,
+but it does not publish task knowledge or choose future Kernel optimization Directions.
 Files in `scratch/` are temporary and are not carried into later sessions or retries.
 
 Read the indexes before using content. Whenever you add, change, rename, or remove a Tool, keep its

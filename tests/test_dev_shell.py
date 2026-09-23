@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from conftest import NOW, digest, seed_lineage
+from conftest import NOW, digest, freeze_branch_workflow, seed_lineage
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.controller.leases import RegistryLineageLeaseManager
@@ -432,9 +432,8 @@ def test_evolver_dev_shell_reconstructs_selected_epoch_without_mutating_it(
             challenger_kernel_agent_revision_ids=(),
             starting_kernel_revision_id=lineage.best_kernel_revision_id,
             evidence_checkpoint=lineage.evidence_checkpoint,
-            challenger_count=0,
-            trajectories_per_branch=lineage.trajectories_per_branch,
-            attempts_per_trajectory=lineage.attempts_per_trajectory,
+            max_challengers=0,
+            optimizer_attempt_budget=lineage.optimizer_attempt_budget,
             status=EpochStatus.READY,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -442,6 +441,7 @@ def test_evolver_dev_shell_reconstructs_selected_epoch_without_mutating_it(
             completed_at=None,
         )
         bootstrap_registry.insert_epoch(epoch)
+        freeze_branch_workflow(bootstrap_registry, epoch)
 
     registry = SqliteRegistry(database, require_fencing=True)
     try:

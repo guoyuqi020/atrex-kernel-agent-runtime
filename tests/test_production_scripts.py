@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import pytest
 
+from atrex_runtime.ablation_plan import build_ablation_plan
 from atrex_runtime.bootstrap import CampaignSpecV3
 from atrex_runtime.config import RuntimeSettings
 
@@ -64,7 +65,7 @@ def _shape_train_operator(root: Path) -> Path:
 @pytest.mark.parametrize(
     "old_layout",
     [
-        "ablation-pool-3",
+        "ablation-pool-3-01",
         "single-retained",
         "without-pool-retained",
         "removed-frequency-arms",
@@ -98,11 +99,9 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     for dsl in ("cuda", "triton", "cutedsl"):
         dsl_workspace = workspace / "dsls" / dsl
         campaign = CampaignSpecV3.from_file(dsl_workspace / "campaign.json")
-        assert campaign.first_epoch_same_agent is True
         assert tuple(value.value for value in campaign.selected_dsls()) == (dsl,)
-        assert campaign.attempts_per_trajectory == 3
-        assert campaign.challenger_count == 1
-        assert campaign.challenger_start_epoch == 2
+        assert campaign.max_challengers == 1
+        assert campaign.optimizer_attempt_budget == 6
         assert campaign.workflow_command == "workflow/evolve_3.py"
         assert campaign.lineages[campaign.selected_dsls()[0]].baseline_kernel == (
             dsl_workspace / "inputs/baseline-kernel"
@@ -118,7 +117,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert not (workspace / "campaign.json").exists()
     assert settings.campaign is not None
     assert settings.campaign.bootstrap_max_parallel_lineages == 3
-    assert settings.campaign.max_parallel_branches == 2
+    assert settings.campaign.max_parallel_attempts == 2
     assert settings.campaign.gate_policy.production_gate is True
     assert settings.campaign.optimizer.agent_backend == "codex"
     assert settings.campaign.optimizer.max_attempt_report_bytes == 1_048_576
@@ -130,81 +129,54 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert secrets.stat().st_mode & 0o777 == 0o600
 
     plan = json.loads((workspace / "ablation.json").read_text(encoding="utf-8"))
-    assert plan["schema_version"] == 5
+    assert plan["schema_version"] == 9
     assert plan["enabled"] is True
+    assert plan["main_evolve_enabled"] is False
     assert plan["optimizer_attempt_budget_per_trajectory"] == 15
     # Each Trajectory spends 15 Attempts after Bootstrap; every Pool runs two.
     assert [
         (
             arm["kind"],
             arm["label"],
-            arm["trajectories_per_branch"],
-            arm["attempts_per_trajectory"],
+            arm["max_challengers"],
+            arm["optimizer_attempt_budget"],
             arm["target_epoch_number"],
-            arm["ephemeral_agent_state"],
             arm["workflow_command"],
         )
         for arm in plan["arms"]
     ] == [
-        ("isolated", "ablation-isolated-01", 1, 3, 5, True, "workflow/isolated.py"),
-        ("isolated", "ablation-isolated-02", 1, 3, 5, True, "workflow/isolated.py"),
-        (
-            "isolated-evolve",
-            "ablation-isolated-evolve-01",
-            1,
-            3,
-            5,
-            True,
-            "workflow/evolve_isolated_3.py",
-        ),
-        (
-            "isolated-evolve",
-            "ablation-isolated-evolve-02",
-            1,
-            3,
-            5,
-            True,
-            "workflow/evolve_isolated_3.py",
-        ),
-        (
-            "retained-evolve",
-            "ablation-retained-evolve-01",
-            1,
-            3,
-            5,
-            False,
-            "workflow/evolve_retained_3.py",
-        ),
-        (
-            "retained-evolve",
-            "ablation-retained-evolve-02",
-            1,
-            3,
-            5,
-            False,
-            "workflow/evolve_retained_3.py",
-        ),
-        (
-            "isolated-pool-evolve",
-            "ablation-isolated-pool-evolve-3",
-            2,
-            3,
-            5,
-            True,
-            "workflow/evolve_isolated_pool_3.py",
-        ),
-        ("pooled", "ablation-pool-3", 2, 3, 5, True, "workflow/pool_3.py"),
-        (
-            "pool-retained",
-            "ablation-pool-retained-3",
-            2,
-            3,
-            5,
-            False,
-            "workflow/pool_retained_3.py",
-        ),
-        ("retained", "ablation-retained-01", 1, 3, 5, False, "workflow/retained.py"),
-        ("retained", "ablation-retained-02", 1, 3, 5, False, "workflow/retained.py"),
+        ("isolated", "ablation-isolated-01", 0, 3, 5, "workflow/isolated.py"),
+        ("isolated", "ablation-isolated-02", 0, 3, 5, "workflow/isolated.py"),
+        ("isolated", "ablation-isolated-03", 0, 3, 5, "workflow/isolated.py"),
+        ("retained", "ablation-retained-01", 0, 3, 5, "workflow/retained.py"),
+        ("retained", "ablation-retained-02", 0, 3, 5, "workflow/retained.py"),
+        ("retained", "ablation-retained-03", 0, 3, 5, "workflow/retained.py"),
+        *[
+            ("pooled", f"ablation-pool-3-{ordinal:02d}", 0, 6, 5, "workflow/pool_3.py")
+            for ordinal in (1, 2, 3)
+        ],
+        *[
+            (
+                "pool-retained",
+                f"ablation-pool-retained-3-{ordinal:02d}",
+                0,
+                6,
+                5,
+                "workflow/pool_retained_3.py",
+            )
+            for ordinal in (1, 2, 3)
+        ],
+        *[
+            (
+                "isolated-evolve",
+                f"ablation-isolated-evolve-{ordinal:02d}",
+                1,
+                3,
+                5,
+                "workflow/evolve_isolated_3.py",
+            )
+            for ordinal in (1, 2, 3)
+        ],
     ]
 
     manifest_path = workspace / "production-manifest.json"
@@ -225,7 +197,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
             {
                 **pool,
                 "label": "ablation-pool-1",
-                "attempts_per_trajectory": 1,
+                "optimizer_attempt_budget": 1,
                 "target_epoch_number": 15,
             }
         )
@@ -237,7 +209,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
         retained["label"] = "ablation-retained"
     else:
         pool = next(arm for arm in plan["arms"] if arm["label"] == old_layout)
-        pool["trajectories_per_branch"] = 1
+        pool["optimizer_attempt_budget"] = 1
     plan_path = workspace / "ablation.json"
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
     resumed = subprocess.run(command, env=environment, capture_output=True, text=True)
@@ -247,169 +219,47 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
 
 
 def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
-    """Give each Trajectory 15 post-Bootstrap Attempts; every Pool has two."""
-    schedule = {
-        "challenger_count": 2,
-        "trajectories_per_branch": 3,
-        "attempts_per_trajectory": 3,
-        # Gating Challengers out of early Epochs must not shrink the arm set, or arm
-        # identity would move between Epochs.
-        "challenger_start_epoch": 5,
-    }
-
+    """Resource envelopes match the organization implemented by each Workflow."""
+    schedule = {"max_challengers": 7, "optimizer_attempt_budget": 99}
     enabled = _ablation_plan({"schedule": {**schedule, "event_only": True}})
     disabled = _ablation_plan({"schedule": {**schedule, "event_only": False}})
     omitted = _ablation_plan({"schedule": schedule})
 
-    assert enabled["schema_version"] == 5
+    assert enabled["schema_version"] == 9
+    assert enabled["main_evolve_enabled"] is False
     assert enabled["optimizer_attempt_budget_per_trajectory"] == 15
     by_kind: dict[str, list[dict[str, Any]]] = {}
     for arm in enabled["arms"]:
-        by_kind.setdefault(str(arm["kind"]), []).append(
-            {
-                key: value
-                for key, value in arm.items()
-                if key
-                not in (
-                    "challenger_count",
-                    "challenger_start_epoch",
-                    "optimizer_attempt_budget_total",
-                    "evolution_count",
-                    "first_epoch_same_agent",
-                )
-            }
-        )
-        assert arm["attempts_per_trajectory"] * arm["target_epoch_number"] == 15
-        per_branch_total = (
-            arm["trajectories_per_branch"]
-            * arm["attempts_per_trajectory"]
-            * arm["target_epoch_number"]
-        )
-        evolving = arm["kind"] in (
-            "isolated-evolve",
-            "retained-evolve",
-            "isolated-pool-evolve",
-        )
-        assert per_branch_total == (
-            30 if arm["kind"] in ("pooled", "pool-retained", "isolated-pool-evolve") else 15
-        )
-        assert arm["challenger_start_epoch"] == 2
-        assert arm["challenger_count"] == (1 if evolving else 0)
-        assert arm["first_epoch_same_agent"] is evolving
-        assert arm["evolution_count"] == (4 if evolving else 0)
-        assert arm["optimizer_attempt_budget_total"] == per_branch_total * (
-            2 if arm["kind"] == "isolated-pool-evolve" else 1
-        )
-    # 3 Trajectories x (1 Active + 2 Challengers) = 9.
-    assert len(by_kind["isolated"]) == 9
-    assert {arm["trajectories_per_branch"] for arm in by_kind["isolated"]} == {1}
-    assert {arm["attempts_per_trajectory"] for arm in by_kind["isolated"]} == {3}
-    assert {arm["target_epoch_number"] for arm in by_kind["isolated"]} == {5}
-    assert {arm["ephemeral_agent_state"] for arm in by_kind["isolated"]} == {True}
-    assert [arm["label"] for arm in by_kind["isolated"][:2]] == [
-        "ablation-isolated-01",
-        "ablation-isolated-02",
+        by_kind.setdefault(str(arm["kind"]), []).append(arm)
+        assert arm["target_epoch_number"] == 5
+        assert arm["optimizer_attempt_budget_total"] in (15, 30)
+
+    assert all(len(arms) == 3 for arms in by_kind.values())
+    assert all(arm["max_challengers"] == 0 for arm in by_kind["isolated"])
+    assert all(arm["optimizer_attempt_budget"] == 3 for arm in by_kind["isolated"])
+    assert all(arm["optimizer_attempt_budget"] == 3 for arm in by_kind["retained"])
+    assert all(arm["max_challengers"] == 1 for arm in by_kind["isolated-evolve"])
+    assert [arm["observer_label"] for arm in by_kind["isolated-evolve"]] == [
+        f"ablation-isolated-{ordinal:02d}" for ordinal in (1, 2, 3)
     ]
-    assert by_kind["pooled"] == [
-        {
-            "kind": "pooled",
-            "label": "ablation-pool-3",
-            "trajectories_per_branch": 2,
-            "attempts_per_trajectory": 3,
-            "target_epoch_number": 5,
-            "ephemeral_agent_state": True,
-            "workflow_command": "workflow/pool_3.py",
-        },
-    ]
-    # Pool-Retained pairs with Pool, differing only in state persistence.
-    assert by_kind["pool-retained"] == [
-        {
-            **pooled,
-            "kind": "pool-retained",
-            "label": pooled["label"].replace("pool-", "pool-retained-"),
-            "ephemeral_agent_state": False,
-            "workflow_command": "workflow/pool_retained_3.py",
-        }
-        for pooled in by_kind["pooled"]
-    ]
-    assert by_kind["isolated-evolve"] == [
-        {
-            "kind": "isolated-evolve",
-            "label": f"ablation-isolated-evolve-{ordinal:02d}",
-            "trajectories_per_branch": 1,
-            "attempts_per_trajectory": 3,
-            "target_epoch_number": 5,
-            "ephemeral_agent_state": True,
-            "workflow_command": "workflow/evolve_isolated_3.py",
-        }
-        for ordinal in (1, 2)
-    ]
-    assert by_kind["retained-evolve"] == [
-        {
-            **isolated_evolve,
-            "kind": "retained-evolve",
-            "label": isolated_evolve["label"].replace("isolated", "retained"),
-            "ephemeral_agent_state": False,
-            "workflow_command": "workflow/evolve_retained_3.py",
-        }
-        for isolated_evolve in by_kind["isolated-evolve"]
-    ]
-    assert by_kind["isolated-pool-evolve"] == [
-        {
-            "kind": "isolated-pool-evolve",
-            "label": "ablation-isolated-pool-evolve-3",
-            "trajectories_per_branch": 2,
-            "attempts_per_trajectory": 3,
-            "target_epoch_number": 5,
-            "ephemeral_agent_state": True,
-            "workflow_command": "workflow/evolve_isolated_pool_3.py",
-        }
-    ]
-    # Retained pairs with Isolated one-to-one, differing only in state persistence.
-    assert by_kind["retained"] == [
-        {
-            **isolated,
-            "kind": "retained",
-            "label": isolated["label"].replace("isolated", "retained"),
-            "ephemeral_agent_state": False,
-            "workflow_command": "workflow/retained.py",
-        }
-        for isolated in by_kind["isolated"]
-    ]
+    assert all(arm["optimizer_attempt_budget"] == 6 for arm in by_kind["pooled"])
+    assert all(arm["optimizer_attempt_budget"] == 6 for arm in by_kind["pool-retained"])
     assert disabled["arms"] == []
     assert disabled["enabled"] is False
     assert omitted == disabled
-
-    # Pool schedules stay fixed even with a custom evolution schedule.
-    custom = _ablation_plan(
-        {"schedule": {**schedule, "attempts_per_trajectory": 5, "event_only": True}}
-    )
-    for expected in (
-        by_kind["pooled"]
-        + by_kind["pool-retained"]
-        + by_kind["isolated-evolve"]
-        + by_kind["retained-evolve"]
-        + by_kind["isolated-pool-evolve"]
-    ):
-        pool = next(arm for arm in custom["arms"] if arm["label"] == expected["label"])
-        assert all(pool[key] == value for key, value in expected.items())
-    assert all(
-        arm["attempts_per_trajectory"] == 5 and arm["target_epoch_number"] == 3
-        for arm in custom["arms"]
-        if arm["kind"] == "retained"
-    )
     assert set(by_kind) == {
         "isolated",
         "isolated-evolve",
-        "retained-evolve",
-        "isolated-pool-evolve",
         "retained",
         "pooled",
         "pool-retained",
     }
 
-    with pytest.raises(ValueError, match="cannot spend exactly 15 Attempts"):
-        _ablation_plan({"schedule": {**schedule, "attempts_per_trajectory": 4, "event_only": True}})
+    with pytest.raises(ValueError, match="cannot spend exactly 16 Attempts"):
+        build_ablation_plan(
+            {"schedule": {**schedule, "event_only": True}},
+            optimizer_attempt_budget_per_trajectory=16,
+        )
 
 
 def test_default_ablation_plan_keeps_only_three_attempt_schedules() -> None:
@@ -417,30 +267,54 @@ def test_default_ablation_plan_keeps_only_three_attempt_schedules() -> None:
     assert [arm["label"] for arm in plan["arms"]] == [
         "ablation-isolated-01",
         "ablation-isolated-02",
-        "ablation-isolated-evolve-01",
-        "ablation-isolated-evolve-02",
-        "ablation-retained-evolve-01",
-        "ablation-retained-evolve-02",
-        "ablation-isolated-pool-evolve-3",
-        "ablation-pool-3",
-        "ablation-pool-retained-3",
+        "ablation-isolated-03",
         "ablation-retained-01",
         "ablation-retained-02",
+        "ablation-retained-03",
+        "ablation-pool-3-01",
+        "ablation-pool-3-02",
+        "ablation-pool-3-03",
+        "ablation-pool-retained-3-01",
+        "ablation-pool-retained-3-02",
+        "ablation-pool-retained-3-03",
+        "ablation-isolated-evolve-01",
+        "ablation-isolated-evolve-02",
+        "ablation-isolated-evolve-03",
     ]
-    assert all(arm["attempts_per_trajectory"] == 3 for arm in plan["arms"])
+    assert [arm["optimizer_attempt_budget"] for arm in plan["arms"]] == [
+        3,
+        3,
+        3,
+        3,
+        3,
+        3,
+        6,
+        6,
+        6,
+        6,
+        6,
+        6,
+        3,
+        3,
+        3,
+    ]
     assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
     assert [arm["evolution_count"] for arm in plan["arms"]] == [
         0,
         0,
-        4,
-        4,
-        4,
-        4,
-        4,
         0,
         0,
         0,
         0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        4,
+        4,
+        4,
     ]
 
 
@@ -721,7 +595,7 @@ def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
         dsl_workspace = workspace / "dsls" / dsl
         dsl_workspace.mkdir(parents=True)
         dsl_workspace.joinpath("campaign.json").write_text(
-            json.dumps({"lineages": {dsl: {}}, "attempts_per_trajectory": 3}), encoding="utf-8"
+            json.dumps({"lineages": {dsl: {}}, "optimizer_attempt_budget": 6}), encoding="utf-8"
         )
         dsl_workspace.joinpath("bootstrap-result.json").write_text(
             json.dumps(
@@ -745,7 +619,7 @@ def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
     workspace.joinpath("ablation.json").write_text(
         json.dumps(
             {
-                "schema_version": 5,
+                    "schema_version": 9,
                 "enabled": False,
                 "optimizer_attempt_budget_per_trajectory": 15,
                 "arms": [],
@@ -784,7 +658,7 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
         dsl_workspace = workspace / "dsls" / dsl
         dsl_workspace.mkdir(parents=True)
         dsl_workspace.joinpath("campaign.json").write_text(
-            json.dumps({"lineages": {dsl: {}}, "attempts_per_trajectory": 3}), encoding="utf-8"
+            json.dumps({"lineages": {dsl: {}}, "optimizer_attempt_budget": 6}), encoding="utf-8"
         )
         dsl_workspace.joinpath("campaign-result.json").write_text(
             json.dumps(
@@ -822,8 +696,8 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
             encoding="utf-8",
         )
         # A second arm that never produced a result must not sink the whole summary.
-        (dsl_workspace / "ablation-pool-3").mkdir()
-        retained_pool = dsl_workspace / "ablation-pool-retained-3"
+        (dsl_workspace / "ablation-pool-3-01").mkdir()
+        retained_pool = dsl_workspace / "ablation-pool-retained-3-01"
         retained_pool.mkdir()
         (retained_pool / "campaign-result.json").write_text(
             json.dumps(
@@ -839,7 +713,7 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
     workspace.joinpath("ablation.json").write_text(
         json.dumps(
             {
-                "schema_version": 5,
+                    "schema_version": 9,
                 "enabled": True,
                 "optimizer_attempt_budget_per_trajectory": 15,
                 "arms": [
@@ -850,8 +724,8 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
                     if arm["label"]
                     in (
                         "ablation-isolated-01",
-                        "ablation-pool-3",
-                        "ablation-pool-retained-3",
+                        "ablation-pool-3-01",
+                        "ablation-pool-retained-3-01",
                     )
                 ],
             }
@@ -882,11 +756,14 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
         assert entry["arm"] == "evolve-3"
         assert [arm["arm"] for arm in entry["ablation"]] == [
             "ablation-isolated-01",
-            "ablation-pool-3",
-            "ablation-pool-retained-3",
+            "ablation-pool-3-01",
+            "ablation-pool-retained-3-01",
         ]
         arms = entry["ablation"][:2]
-        assert [arm["arm"] for arm in arms] == ["ablation-isolated-01", "ablation-pool-3"]
+        assert [arm["arm"] for arm in arms] == [
+            "ablation-isolated-01",
+            "ablation-pool-3-01",
+        ]
         assert arms[0]["campaign_id"] != entry["campaign_id"]
         assert arms[0]["result"]["lineages"][0]["dsl"] == dsl
         assert arms[0]["seed_result"]["event_only"] is True
@@ -894,19 +771,17 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
         assert arms[0]["optimizer_attempt_budget_total"] == 15
         assert arms[1]["status"] == "missing"
         assert arms[1]["target_epoch_number"] == 5
-        assert arms[1]["trajectories_per_branch"] == 2
-        assert arms[1]["attempts_per_trajectory"] == 3
+        assert arms[1]["max_challengers"] == 0
+        assert arms[1]["optimizer_attempt_budget"] == 6
         assert arms[1]["optimizer_attempt_budget_total"] == 30
         retained_pool = entry["ablation"][2]
-        assert retained_pool["arm"] == "ablation-pool-retained-3"
+        assert retained_pool["arm"] == "ablation-pool-retained-3-01"
         assert retained_pool["target_epoch_number"] == 5
         assert retained_pool["result"]["target_epoch_number"] == 5
         assert retained_pool["result"]["lineages"][0]["dsl"] == dsl
-        assert retained_pool["trajectories_per_branch"] == 2
-        assert retained_pool["attempts_per_trajectory"] == 3
-        assert retained_pool["ephemeral_agent_state"] is False
+        assert retained_pool["max_challengers"] == 0
+        assert retained_pool["optimizer_attempt_budget"] == 6
         assert retained_pool["optimizer_attempt_budget_total"] == 30
-        assert retained_pool["challenger_count"] == 0
         assert retained_pool["evolution_count"] == 0
 
     subprocess.run(
@@ -934,7 +809,7 @@ def test_summarize_preserves_successful_dsl_results_when_one_is_missing(
         dsl_workspace = workspace / "dsls" / dsl
         dsl_workspace.mkdir(parents=True)
         dsl_workspace.joinpath("campaign.json").write_text(
-            json.dumps({"lineages": {dsl: {}}, "attempts_per_trajectory": 3}), encoding="utf-8"
+            json.dumps({"lineages": {dsl: {}}, "optimizer_attempt_budget": 6}), encoding="utf-8"
         )
         if dsl == "cuda":
             continue
@@ -951,7 +826,7 @@ def test_summarize_preserves_successful_dsl_results_when_one_is_missing(
     workspace.joinpath("ablation.json").write_text(
         json.dumps(
             {
-                "schema_version": 5,
+                    "schema_version": 9,
                 "enabled": False,
                 "optimizer_attempt_budget_per_trajectory": 15,
                 "arms": [],
@@ -1013,12 +888,12 @@ def test_production_runner_has_independent_per_dsl_pipelines() -> None:
 
 def test_production_runner_prints_schedule_through_actual_shell(tmp_path: Path) -> None:
     runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
-    start = runner.index('attempts_per_branch="$(')
+    start = runner.index('attempts_per_epoch="$(')
     end = runner.index('for dsl in "${dsls[@]}"; do', start)
     cuda = tmp_path / "dsls" / "cuda"
     cuda.mkdir(parents=True)
     (cuda / "campaign.json").write_text(
-        json.dumps({"attempts_per_trajectory": 3}), encoding="utf-8"
+        json.dumps({"optimizer_attempt_budget": 6}), encoding="utf-8"
     )
     plan = _ablation_plan(json.loads((PRODUCTION / "policy.json").read_text()))
     plan_path = tmp_path / "ablation.json"
@@ -1037,30 +912,19 @@ def test_production_runner_prints_schedule_through_actual_shell(tmp_path: Path) 
         capture_output=True,
         text=True,
     )
-    assert "3 serial Attempts per Branch" in result.stdout
-    assert "Main evolve-3:" in result.stdout
-    assert "ablation-pool-3=2 Trajectories x 5 Epochs x 3 Attempts" in result.stdout
-    assert "0 Challenger(s) (Epoch 1 same Agent: False) = 30 total; 0 Evolutions" in result.stdout
-    assert "ablation-pool-retained-3=2 Trajectories x 5 Epochs x 3 Attempts" in result.stdout
-    for label in (
-        "ablation-isolated-evolve-01",
-        "ablation-isolated-evolve-02",
-        "ablation-retained-evolve-01",
-        "ablation-retained-evolve-02",
-    ):
+    assert "Main evolve-3: disabled" in result.stdout
+    assert "ablation-pool-3-01=6 Attempts/Epoch x 5 Epochs" in result.stdout
+    assert "max 0 Challenger(s); 30 total; 0 Evolutions" in result.stdout
+    assert "ablation-pool-retained-3-01=6 Attempts/Epoch x 5 Epochs" in result.stdout
+    for ordinal in (1, 2, 3):
+        label = f"ablation-isolated-evolve-{ordinal:02d}"
         assert (
-            f"{label}=1 Trajectories x 5 Epochs x 3 Attempts + 1 Challenger(s) "
-            "(Epoch 1 same Agent: True) = 15 total; 4 Evolutions"
+            f"{label}=3 Attempts/Epoch x 5 Epochs; max 1 Challenger(s); 15 total; 4 Evolutions"
         ) in result.stdout
-    assert (
-        "ablation-isolated-pool-evolve-3=2 Trajectories x 5 Epochs x 3 Attempts "
-        "+ 1 Challenger(s) (Epoch 1 same Agent: True) = 60 total; 4 Evolutions"
-    ) in result.stdout
-    for ordinal in (1, 2):
-        assert (
-            f"ablation-retained-{ordinal:02d}=1 Trajectories x 5 Epochs x 3 Attempts"
-            in result.stdout
-        )
+    assert "ablation-retained-evolve" not in result.stdout
+    assert "ablation-isolated-pool-evolve" not in result.stdout
+    for ordinal in (1, 2, 3):
+        assert f"ablation-retained-{ordinal:02d}=3 Attempts/Epoch x 5 Epochs" in result.stdout
     for kind in ("pool", "pool-retained", "evolve"):
         for attempts in (1, 5):
             assert f"ablation-{kind}-{attempts}=" not in result.stdout

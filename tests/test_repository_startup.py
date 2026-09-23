@@ -263,7 +263,8 @@ def test_checked_in_lineage_seed_template_is_strict_and_artifact_based() -> None
 
     assert isinstance(spec.seed, ArtifactLineageSeedV1)
     assert spec.dsl is Dsl.TRITON
-    assert spec.attempts_per_trajectory == 3
+    assert spec.max_challengers == 1
+    assert spec.optimizer_attempt_budget == 6
 
 
 def test_runtime_examples_own_their_configs_and_share_only_canonical_inputs() -> None:

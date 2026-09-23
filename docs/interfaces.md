@@ -116,10 +116,13 @@ controller-owned field is not an Agent request parameter.
 The private `shape_split` record stores seed `42`, algorithm, cap, original population IDs/count,
 and selected Valid/Test IDs. It is sealed with the Contract and stripped from Agent and per-batch
 contexts; use it only for administrative reproduction.
-Default Agent operations use Valid only; authoritative Runtime ABBA uses all Shapes. Historical
-Agent-visible ABBA projections include `measurement_domain: "valid"`, omit Test rows/error
-metrics, and recompute GeoMean and arithmetic mean over Valid only. Management catalogs retain
-full authoritative measurements. See [evaluation privacy](evaluation.md#evaluation-inputs-and-privacy).
+Default Agent operations use Valid only. Authoritative Runtime ABBA executes all selected Shapes,
+but only its Valid aggregation controls correctness, latency, and promotion. Test is stored as a
+private `test_observation` with `affects_promotion: false`; Test failure or slowdown cannot reject a
+revision. Bootstrap follows the same rule: Valid gates v0 and Test is a private side observation.
+Historical Agent-visible projections include `measurement_domain: "valid"`, omit Test rows/error
+metrics, and recompute GeoMean and arithmetic mean over Valid only. See
+[evaluation privacy](evaluation.md#evaluation-inputs-and-privacy).
 
 The `evaluate` wire request optionally accepts `mode: "full" | "correctness_only"` (default
 `full`), `input_py` (UTF-8 Python input-generator source, at most 128 KiB), and `shapes` (a non-empty
@@ -578,7 +581,7 @@ usage contain only newly captured activity, not replayed history. Standalone cal
 
 Evolver has no Runtime Tool or Runtime HTTP capability. Runtime materializes one frozen filesystem
 view keyed by Lineage version. `input/agents/agent-vN/` contains one complete Agent Bundle:
-implementation, configuration, and `prompts/`, `insights/`, `skills/`, `tools/`.
+implementation, configuration, and `prompts/`, `skills/`, `tools/`.
 The writable `candidate/` has the same layout. Existing checkpoints replace packaged defaults;
 there is no second Source/State pair to edit.
 
@@ -594,9 +597,9 @@ records from Bootstrap and completed Epochs, including Attempts without a termin
 
 For `evolve_from_history`, copy the selected complete historical Bundle into Candidate before editing.
 Declare that revision as `kernel_agent_revision_id` and report the exact sorted Bundle-relative
-`changed_paths`, including all four adaptive directories. Runtime revalidates the full diff and seals
-the complete Bundle plus a four-directory checkpoint. Optimizer permissions and inheritance rules
-are unchanged: implementation is read-only, the four adaptive directories remain writable.
+`changed_paths`, including all three adaptive directories. Runtime revalidates the full diff and seals
+the complete Bundle plus a three-directory checkpoint. Optimizer permissions and inheritance rules
+are unchanged: implementation, Prompts, and Skills are read-only; Tools remain writable.
 
 `no_change` names the Active revision, leaves Candidate untouched, and closes any remaining
 Challenger slots without skipping the Epoch. `contributing_paths` records sorted, unique workspace-relative files or directories actually incorporated from
@@ -606,14 +609,20 @@ contain no links/traversal, and belong to eligible evaluated history or Parent, 
 unevaluated Challenger. `reuse` requires `[]`. Runtime records ownership and exact content snapshots
 in the Evolution Trace; the field does not change the Bundle base or revision ancestry.
 
+After a Workflow edit, Evolver runs local `workflow-check`. Runtime injects the exact Epoch resource
+envelope and the tool dry-runs first-Epoch replication, later successful Evolution, and later
+`no_change` paths against deterministic non-persistent service responses. It launches no Optimizer
+or GPU work and writes no Registry state. Runtime independently repeats the dry-run in the Worker
+sandbox before Candidate sealing.
+
 Evolver submits a draft through its local `evolution-report` tool. Invalid submissions return `issues`,
 `request_schema`, and `recovery` without publishing; the first success atomically writes
 `scratch/evolution-report.json`. Runtime independently revalidates the report after Session exit.
 The report has seven fields; `suggested_directions` is unsupported, even when empty. Evolver
 reconciles cross-Branch evidence, distinguishes implementation failures from refuted mechanisms,
-and curates attribution corrections in Candidate Insights, Prompts, Skills, Tools, or workflow,
-citing the relevant Direction/Experiment IDs without rewriting Journal facts. Optimizers choose
-their own research Directions. Bootstrap establishes a correct `v0` and records actual work;
+and may turn that evidence into task-independent Candidate Prompt, Skill, Tool, implementation, or
+Workflow corrections without embedding concrete task IDs or prescribing Kernel Directions.
+Optimizers choose their own research Directions. Bootstrap establishes a correct `v0` and records actual work;
 `action="suggest"` is rejected both by `update-direction` and live terminal Report validation.
 
 Historical suggestions remain readable through `list-directions`/`load-direction` and frozen
@@ -625,7 +634,8 @@ Historical Evolution reports remain decodable, but their old suggestions are nev
 
 Runtime's Evolver Evidence Prompt includes a next-Optimizer service catalog: Gateway operations,
 Kernel/Result Artifact reads, Direction/Experiment Journals, and terminal handoff. The catalog
-does not grant those tools to Evolver; Evolution uses frozen files and its local report tool.
+does not grant those live tools to Evolver; Evolution uses frozen files plus its local Workflow
+dry-run and report tools.
 Before reporting an unimplemented capability, Evolver checks whether existing services can be
 composed in Candidate Tools or implementation code. It updates discovery instructions and indexes,
 preserves Result provenance and Runtime enforcement, and uses only bounded CPU/mock checks here.
@@ -700,19 +710,20 @@ exposed inside an Optimizer Session.
 |---|---|---|
 | `replicate_active(ordinal)` | permitted Challenger ordinal | attached Agent Revision ID |
 | `evolve_agent(ordinal)` | permitted Challenger ordinal | Challenger Revision ID or `None` |
-| `create_pool(...)` | Branch label, Trajectory count, round count, State policy | immutable Epoch Pool |
+| `create_pool(...)` | Branch label, Trajectory count, round count | immutable Epoch Pool |
 | `run_pools(..., after_round=...)` | one or more Pools and optional callback | trusted results grouped by logical round |
 | `round.outcomes(pool)` | Pool in the completed round | normalized outcomes in Trajectory order |
 | `round.best_accepted_kernel(...)` | zero or more participating Pools | best accepted Kernel ID or `None` |
 | `round.route_kernel(...)` | Pool and accepted same-Epoch Kernel | next-round Kernel route |
-| `round.route_state(...)` | Pool and compatible completed Attempt | next-round State route |
+| `round.route_state(...)` | Pool, Trajectory ordinal, and opaque completed output State | next-round State route |
 | `complete()` | none | Runtime-selected Kernel/Agent and committed Epoch status |
 
 Round outcomes include the Attempt identity, input/output/current Trajectory Kernel identities,
-acceptance, correctness, latency, failure reason, and whether a Runtime-State checkpoint exists.
+acceptance, correctness, latency, failure reason, and an opaque `output_state` reference.
 The private SDK assigns deterministic ordinals and replays completed rounds idempotently after a
 Workflow restart. Kernel routing accepts only the Epoch start or an accepted same-Epoch result; State routing
-accepts only a completed same-Agent Attempt under `retain_across_attempts`. Runtime requires all
+accepts only a completed same-Agent Attempt. Omitting a route resets that Trajectory to its immutable
+initial State for the next round. Runtime requires all
 attached Branches and the full budget for normal organizations. A controlled Challenger-only
 evolution organization may register only its sole Challenger and must spend the exact single-Branch budget.
 Every planned Attempt must complete before Epoch completion. Runtime retains cross-Epoch scheduling,

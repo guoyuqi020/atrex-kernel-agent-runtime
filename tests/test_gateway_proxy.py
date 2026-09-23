@@ -12,7 +12,7 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from conftest import NOW, digest, seed_lineage
+from conftest import NOW, digest, freeze_branch_workflow, seed_lineage
 from pydantic import TypeAdapter, ValidationError
 from test_attempt_report import _value as _report_value
 
@@ -86,9 +86,8 @@ def _insert_attempt(
         challenger_kernel_agent_revision_ids=(),
         starting_kernel_revision_id=seeded.baseline.id,
         evidence_checkpoint=digest("evidence"),
-        challenger_count=0,
-        trajectories_per_branch=1,
-        attempts_per_trajectory=attempts_per_trajectory,
+        max_challengers=0,
+        optimizer_attempt_budget=attempts_per_trajectory,
         status=EpochStatus.RUNNING,
         winner_kernel_agent_revision_id=None,
         best_kernel_revision_id=None,
@@ -96,6 +95,7 @@ def _insert_attempt(
         completed_at=None,
     )
     registry.insert_epoch(epoch)
+    freeze_branch_workflow(registry, epoch)
     attempt = Attempt(
         id=new_attempt_id(),
         epoch_id=epoch.id,
@@ -2104,6 +2104,7 @@ def test_prior_failed_attempt_journal_is_visible_without_expanding_measurement_s
             winner_kernel_agent_revision_id=None,
         )
         registry.insert_epoch(second_epoch)
+        freeze_branch_workflow(registry, second_epoch)
         second = replace(first, id=new_attempt_id(), epoch_id=second_epoch.id)
         registry.insert_attempt(second)
 

@@ -297,16 +297,16 @@ def test_campaign_config_resolves_worker_paths_and_explicit_environment(tmp_path
     assert campaign.agent_promotion_comparison.method == "evaluate"
     assert campaign.agent_promotion_comparison.repeats == 1
     assert campaign.bootstrap_max_parallel_lineages == 1
-    assert campaign.max_parallel_branches == 4
+    assert campaign.max_parallel_attempts == 4
 
 
-def test_campaign_config_requires_positive_parallel_branch_limit(tmp_path: Path) -> None:
+def test_campaign_config_requires_positive_parallel_attempt_limit(tmp_path: Path) -> None:
     path = _write_config(tmp_path)
     value = json.loads(path.read_text(encoding="utf-8"))
-    value["campaign"]["max_parallel_branches"] = 0
+    value["campaign"]["max_parallel_attempts"] = 0
     path.write_text(json.dumps(value), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="max_parallel_branches"):
+    with pytest.raises(ValueError, match="max_parallel_attempts"):
         RuntimeSettings.from_file(path)
 
 

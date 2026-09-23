@@ -18,8 +18,11 @@ from atrex_runtime.domain.ids import (
     parse_artifact_digest,
 )
 from atrex_runtime.domain.models import (
+    BranchRole,
     Campaign,
     Dsl,
+    Epoch,
+    EpochBranchWorkflow,
     KernelAgentRevision,
     KernelEvaluation,
     KernelRevision,
@@ -31,6 +34,39 @@ from atrex_runtime.ports import BuildAttemptEvidenceRequest
 from atrex_runtime.registry.sqlite import SqliteRegistry
 
 NOW = "2026-08-14T00:00:00+00:00"
+
+
+def freeze_branch_workflow(
+    registry: SqliteRegistry,
+    epoch: Epoch,
+    *,
+    branch: BranchRole = BranchRole.ACTIVE,
+    challenger_ordinal: int = 0,
+    trajectories: int = 1,
+    attempts_per_trajectory: int | None = None,
+) -> EpochBranchWorkflow:
+    """Freeze the explicit test Workflow required before inserting an Attempt."""
+    revision_id = (
+        epoch.active_kernel_agent_revision_id
+        if branch is BranchRole.ACTIVE
+        else epoch.challenger_kernel_agent_revision_ids[challenger_ordinal - 1]
+    )
+    workflow = EpochBranchWorkflow(
+        epoch_id=epoch.id,
+        branch=branch,
+        challenger_ordinal=challenger_ordinal,
+        kernel_agent_revision_id=revision_id,
+        kind="test-workflow",
+        program_sha256="0" * 64,
+        trajectories=trajectories,
+        attempts_per_trajectory=(
+            attempts_per_trajectory
+            if attempts_per_trajectory is not None
+            else epoch.optimizer_attempt_budget
+        ),
+        created_at=NOW,
+    )
+    return registry.ensure_epoch_branch_workflow(workflow)
 
 
 def with_local_interpreter(campaign: CampaignRuntimeSettings) -> CampaignRuntimeSettings:
@@ -111,7 +147,6 @@ def seed_lineage(
     attempts_per_trajectory: int = 2,
     optimizer_model: str | None = None,
     evolver_model: str | None = None,
-    ephemeral_agent_state: bool = False,
     bootstrap_source_lineage_id: LineageId | None = None,
 ) -> SeededLineage:
     """Create a complete ready lineage with one correct baseline Kernel."""
@@ -164,16 +199,16 @@ def seed_lineage(
             active_kernel_agent_revision_id=active_revision_id,
             best_kernel_revision_id=baseline.id,
             evidence_checkpoint=evidence_checkpoint or digest("epoch-1-evidence"),
-            challenger_count=challenger_count,
-            challenger_start_epoch=challenger_start_epoch,
-            first_epoch_same_agent=first_epoch_same_agent,
-            trajectories_per_branch=trajectories_per_branch,
-            attempts_per_trajectory=attempts_per_trajectory,
+            max_challengers=challenger_count,
+            optimizer_attempt_budget=(
+                (1 + challenger_count)
+                * trajectories_per_branch
+                * attempts_per_trajectory
+            ),
             next_epoch_number=1,
             status=LineageStatus.READY,
             optimizer_model=optimizer_model,
             evolver_model=evolver_model,
-            ephemeral_agent_state=ephemeral_agent_state,
             bootstrap_source_lineage_id=bootstrap_source_lineage_id,
         )
     )

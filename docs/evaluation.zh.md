@@ -46,13 +46,16 @@ Agent Evaluate/Profile 请求及把权威结果投影回历史 Evidence 时使�
 缺号不能再泄漏 Test 成员；同一 Campaign 内别名保持稳定。
 
 Agent 的普通 Evaluate、Agent ABBA、Profile、Check 等操作只使用 Valid。Bootstrap 终评、
-Lineage Seed 评测和普通 Evaluate Comparator 也只使用 Valid；只有 Runtime 权威 ABBA 使用
-Valid + Test。Agent 自定义探测仍使用自己提供的输入，不能通过编号选择或获取隐藏 Test。
+Lineage Seed 评测和普通 Evaluate Comparator 也只使用 Valid。Runtime 权威 ABBA 会执行
+Valid + Test，但正确性、延迟和晋升结论只由 Valid 决定；Test 只是私有的泛化旁路观测，
+其错误或性能下降不能拒绝 Kernel 或 Agent Revision。Bootstrap 同样只用 Valid 决定 v0，
+并额外记录一次非阻塞的私有 Test 观测。Agent 自定义探测仍使用自己提供的输入，不能通过编号
+选择或获取隐藏 Test。
 
 Agent 可见的历史报告、Evolver 效果汇总及逐 Attempt 事实索引只展示 Valid 逐 Shape 延迟，
 并据此重新计算聚合延迟。不展示包含 Test 的全量平均延迟、Test Profile 或 Test 误差指标；
-Kernel 接受/拒绝及分支胜负仍可见。完整权威结果保留在私有 Gateway Result 和 Registry 中，
-供管理端审计；Result Artifact 始终是 Agent 可见投影。公开 `shape_train` 描述合法参数域，
+Kernel 接受/拒绝及分支胜负也只由 Valid 决定。私有 Gateway Result 保留 Test 观测，供管理端
+审计和研究；Result Artifact 始终是 Agent 可见的 Valid 投影。公开 `shape_train` 描述合法参数域，
 不描述集合成员。自动生成问题上下文和补建 Roofline 也只使用 Valid 输入。
 
 此划分在新 Campaign 中封存，不改写旧 Campaign 的不可变 Contract。应用到旧实验时应新建
@@ -71,8 +74,8 @@ Optimizer Runtime Tools 通过 `gateway-execute` 暴露 `check`、`dev`、`evalu
 
 探索性 `evaluate` 会记录测量证据，但不会直接创建 `vN` Kernel Revision。Agent 可以在一个
 Attempt 中评测多个 Candidate，并写入 Experiment Journal。通过 `candidate_ready` 提名时，
-该精确 Candidate 仍须成功完成可信 Contract 的 Valid 子集评测；这只是预检，不是
-Valid + Test 的权威 ABBA Gate。
+该精确 Candidate 仍须成功完成可信 Contract 的 Valid 子集评测；这只是预检，不是权威
+Same-allocation ABBA Retention 裁决。Retention 同样只由 Valid 决定，Test 仅作为私有旁路观测。
 这份预检证据可以来自本 Attempt，也可以通过 `adopt` Experiment 显式采纳可见历史中的兼容成功
 完整 Evaluate。Runtime 核验原始 Trial 和精确 Kernel/Result 绑定；采纳只记录当前决策，不新建
 测量，也不改变原测量归属。配置的独立 Retention 比较保持不变。不兼容的历史证据需要重新做完整

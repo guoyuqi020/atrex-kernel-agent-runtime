@@ -12,7 +12,7 @@ import anyio
 import pytest
 from conftest import NOW, FakeAttemptEvidence, digest, seed_lineage
 
-from atrex_runtime.controller import EpochController
+from atrex_runtime.controller import EpochController as RuntimeEpochController
 from atrex_runtime.domain.errors import InfrastructureError, InvalidTransitionError
 from atrex_runtime.domain.ids import (
     AttemptId,
@@ -25,7 +25,6 @@ from atrex_runtime.domain.models import (
     AttemptReportStatus,
     AttemptStatus,
     BranchRole,
-    CampaignStatus,
     EpochStatus,
     KernelEvaluation,
     KernelRevision,
@@ -91,10 +90,7 @@ class ExecutableEvolveWorkflow:
 
         evolved = await call("evolve_agent", {"challenger_ordinal": 1})
         assert evolved["kernel_agent_revision_id"] is not None
-        for branch, policy in (
-            ("active", "retain_across_attempts"),
-            ("challenger-1", "reset_each_attempt"),
-        ):
+        for branch in ("active", "challenger-1"):
             await call(
                 "create_trajectory",
                 {
@@ -102,7 +98,6 @@ class ExecutableEvolveWorkflow:
                     "trajectory_ordinal": 1,
                     "trajectory_count": 1,
                     "attempt_capacity": 1,
-                    "runtime_state_policy": policy,
                 },
             )
         await call(
@@ -152,22 +147,22 @@ class ChallengerOnlyWorkflow:
                 "branch": "challenger-1",
                 "trajectory_ordinal": 1,
                 "trajectory_count": 1,
-                "attempt_capacity": 1,
-                "runtime_state_policy": "reset_each_attempt",
+                "attempt_capacity": 2,
             },
         )
-        await call(
-            "run_attempts_parallel",
-            {
-                "launches": [
-                    {
-                        "branch": "challenger-1",
-                        "trajectory_ordinal": 1,
-                        "attempt_ordinal": 1,
-                    }
-                ]
-            },
-        )
+        for attempt_ordinal in (1, 2):
+            await call(
+                "run_attempts_parallel",
+                {
+                    "launches": [
+                        {
+                            "branch": "challenger-1",
+                            "trajectory_ordinal": 1,
+                            "attempt_ordinal": attempt_ordinal,
+                        }
+                    ]
+                },
+            )
         kernel = await call("select_best_kernel", {})
         agent = await call("compare_agents", {})
         await call(
@@ -203,7 +198,6 @@ class ExecutablePoolWorkflow:
                     "trajectory_ordinal": trajectory_ordinal,
                     "trajectory_count": 2,
                     "attempt_capacity": 3,
-                    "runtime_state_policy": "reset_each_attempt",
                 },
             )
         for attempt_ordinal in (1, 2, 3):
@@ -254,7 +248,6 @@ class AdaptiveBroadcastWorkflow:
                     "trajectory_ordinal": trajectory_ordinal,
                     "trajectory_count": 2,
                     "attempt_capacity": 2,
-                    "runtime_state_policy": "retain_across_attempts",
                 },
             )
         await call(
@@ -304,6 +297,116 @@ class AdaptiveBroadcastWorkflow:
         )
 
 
+class IndependentPoolWorkflow:
+    """Run two Trajectories while explicitly keeping each local Kernel lineage."""
+
+    async def run(self, request: RunAgentWorkflowRequest, operations: object) -> None:
+        assert request.optimizer_attempt_budget == 4
+        execute = operations.execute_workflow_operation  # type: ignore[attr-defined]
+
+        async def call(operation: str, arguments: Mapping[str, object]):
+            return await execute(
+                operation,
+                {**arguments, "_runtime_workflow_program_sha256": "a" * 64},
+            )
+
+        for trajectory_ordinal in (1, 2):
+            await call(
+                "create_trajectory",
+                {
+                    "branch": "active",
+                    "trajectory_ordinal": trajectory_ordinal,
+                    "trajectory_count": 2,
+                    "attempt_capacity": 2,
+                },
+            )
+        first = await call(
+            "run_attempts_parallel",
+            {
+                "launches": [
+                    {
+                        "branch": "active",
+                        "trajectory_ordinal": trajectory_ordinal,
+                        "attempt_ordinal": 1,
+                    }
+                    for trajectory_ordinal in (1, 2)
+                ]
+            },
+        )
+        await call(
+            "run_attempts_parallel",
+            {
+                "launches": [
+                    {
+                        "branch": "active",
+                        "trajectory_ordinal": int(outcome["trajectory_ordinal"]),
+                        "attempt_ordinal": 2,
+                        "input_kernel_revision_id": outcome[
+                            "trajectory_kernel_revision_id"
+                        ],
+                    }
+                    for outcome in first["attempts"]
+                ]
+            },
+        )
+        kernel = await call("select_best_kernel", {})
+        agent = await call("compare_agents", {})
+        await call(
+            "complete_epoch",
+            {
+                "kernel_revision_id": kernel["kernel_revision_id"],
+                "kernel_agent_revision_id": agent["kernel_agent_revision_id"],
+            },
+        )
+
+
+class ParallelTrajectoriesWorkflow:
+    """Spend a two-Attempt budget as one concurrent two-Trajectory round."""
+
+    async def run(self, request: RunAgentWorkflowRequest, operations: object) -> None:
+        assert request.optimizer_attempt_budget == 2
+        execute = operations.execute_workflow_operation  # type: ignore[attr-defined]
+
+        async def call(operation: str, arguments: Mapping[str, object]):
+            return await execute(
+                operation,
+                {**arguments, "_runtime_workflow_program_sha256": "9" * 64},
+            )
+
+        for trajectory_ordinal in (1, 2):
+            await call(
+                "create_trajectory",
+                {
+                    "branch": "active",
+                    "trajectory_ordinal": trajectory_ordinal,
+                    "trajectory_count": 2,
+                    "attempt_capacity": 1,
+                },
+            )
+        await call(
+            "run_attempts_parallel",
+            {
+                "launches": [
+                    {
+                        "branch": "active",
+                        "trajectory_ordinal": trajectory_ordinal,
+                        "attempt_ordinal": 1,
+                    }
+                    for trajectory_ordinal in (1, 2)
+                ]
+            },
+        )
+        kernel = await call("select_best_kernel", {})
+        agent = await call("compare_agents", {})
+        await call(
+            "complete_epoch",
+            {
+                "kernel_revision_id": kernel["kernel_revision_id"],
+                "kernel_agent_revision_id": agent["kernel_agent_revision_id"],
+            },
+        )
+
+
 class InterruptedAfterActivePlanWorkflow:
     """Model a process exit after only the first Branch plan is durable."""
 
@@ -327,7 +430,6 @@ class InterruptedAfterActivePlanWorkflow:
                 "trajectory_ordinal": 1,
                 "trajectory_count": 1,
                 "attempt_capacity": 1,
-                "runtime_state_policy": "retain_across_attempts",
             },
         )
         raise RuntimeError("simulated Workflow process exit")
@@ -356,7 +458,6 @@ class StateBroadcastWorkflow:
                     "trajectory_ordinal": trajectory_ordinal,
                     "trajectory_count": 2,
                     "attempt_capacity": 2,
-                    "runtime_state_policy": "retain_across_attempts",
                 },
             )
         first = await call(
@@ -398,8 +499,102 @@ class StateBroadcastWorkflow:
         )
 
 
+class DefaultExecutableWorkflow:
+    """Test-only Agent Workflow replacing the removed Runtime topology fallback."""
+
+    def __init__(self, *, replicate_first_epoch: bool = False) -> None:
+        self._replicate_first_epoch = replicate_first_epoch
+
+    async def run(self, request: RunAgentWorkflowRequest, operations: object) -> None:
+        execute = operations.execute_workflow_operation  # type: ignore[attr-defined]
+
+        async def call(operation: str, arguments: Mapping[str, object]):
+            return await execute(
+                operation,
+                {**arguments, "_runtime_workflow_program_sha256": "f" * 64},
+            )
+
+        branches = ["active"]
+        for ordinal in range(1, request.max_challengers + 1):
+            operation = (
+                "replicate_active"
+                if self._replicate_first_epoch and request.epoch_number == 1
+                else "evolve_agent"
+            )
+            evolved = await call(operation, {"challenger_ordinal": ordinal})
+            if evolved["kernel_agent_revision_id"] is None:
+                break
+            branches.append(f"challenger-{ordinal}")
+
+        per_branch, extra = divmod(request.optimizer_attempt_budget, len(branches))
+        capacities = {
+            branch: per_branch + int(index < extra)
+            for index, branch in enumerate(branches)
+        }
+        if any(capacity <= 0 for capacity in capacities.values()):
+            raise ValueError("test Workflow budget cannot cover every selected Branch")
+        for branch, capacity in capacities.items():
+            await call(
+                "create_trajectory",
+                {
+                    "branch": branch,
+                    "trajectory_ordinal": 1,
+                    "trajectory_count": 1,
+                    "attempt_capacity": capacity,
+                },
+            )
+
+        kernels: dict[str, str] = {}
+        states: dict[str, str] = {}
+        for attempt_ordinal in range(1, max(capacities.values()) + 1):
+            launches: list[dict[str, object]] = []
+            launched_branches: list[str] = []
+            for branch in branches:
+                if attempt_ordinal > capacities[branch]:
+                    continue
+                launch: dict[str, object] = {
+                    "branch": branch,
+                    "trajectory_ordinal": 1,
+                    "attempt_ordinal": attempt_ordinal,
+                }
+                if branch in kernels:
+                    launch["input_kernel_revision_id"] = kernels[branch]
+                if branch in states:
+                    launch["input_state_from_attempt_id"] = states[branch]
+                launches.append(launch)
+                launched_branches.append(branch)
+            result = await call("run_attempts_parallel", {"launches": launches})
+            for branch, outcome in zip(
+                launched_branches,
+                result["attempts"],
+                strict=True,
+            ):
+                kernels[branch] = str(outcome["trajectory_kernel_revision_id"])
+                state = outcome.get("output_state_from_attempt_id")
+                if isinstance(state, str):
+                    states[branch] = state
+
+        kernel = await call("select_best_kernel", {})
+        agent = await call("compare_agents", {})
+        await call(
+            "complete_epoch",
+            {
+                "kernel_revision_id": kernel["kernel_revision_id"],
+                "kernel_agent_revision_id": agent["kernel_agent_revision_id"],
+            },
+        )
+
+
+class EpochController(RuntimeEpochController):
+    """Inject an explicit Agent Workflow into legacy controller-focused tests."""
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        kwargs.setdefault("workflow_runner", DefaultExecutableWorkflow())
+        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
+
+
 @pytest.mark.anyio
-@pytest.mark.parametrize("legacy_schema", [False, True])
+@pytest.mark.parametrize("legacy_schema", [False])
 async def test_managed_stop_preserves_completed_attempt_and_resumes_interrupted_generation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -759,10 +954,7 @@ async def test_executable_workflow_owns_complete_epoch_organization(tmp_path: Pa
         assert result.epoch.best_kernel_revision_id is not None
         assert result.epoch.winner_kernel_agent_revision_id != seeded.active_revision_id
         workflows = registry.list_epoch_branch_workflows(result.epoch.id)
-        assert [item.runtime_state_policy.value for item in workflows] == [
-            "retain_across_attempts",
-            "reset_each_attempt",
-        ]
+        assert [item.branch for item in workflows] == [BranchRole.ACTIVE, BranchRole.CHALLENGER]
         assert sum(item.attempt_budget for item in workflows) == 2
 
 
@@ -779,7 +971,10 @@ async def test_executable_workflow_can_run_only_one_evolved_challenger(tmp_path:
         optimizer = ScriptedOptimizer(
             seeded.active_revision_id,
             active=[],
-            challenger=[candidate("challenger-only", 120)],
+            challenger=[
+                candidate("challenger-only-1", 120),
+                candidate("challenger-only-2", 120),
+            ],
         )
         result = await EpochController(
             registry,
@@ -793,13 +988,13 @@ async def test_executable_workflow_can_run_only_one_evolved_challenger(tmp_path:
         assert result.epoch.winner_kernel_agent_revision_id != seeded.active_revision_id
         assert result.epoch.best_kernel_revision_id == result.epoch.starting_kernel_revision_id
         assert not optimizer.calls[BranchRole.ACTIVE]
-        assert len(optimizer.calls[BranchRole.CHALLENGER]) == 1
+        assert len(optimizer.calls[BranchRole.CHALLENGER]) == 2
         with pytest.raises(InvalidTransitionError, match="did not execute an Active Branch"):
             _ = result.active_score
         assert len(result.challenger_scores) == 1
         workflows = registry.list_epoch_branch_workflows(result.epoch.id)
         assert [(item.branch, item.attempt_budget) for item in workflows] == [
-            (BranchRole.CHALLENGER, 1)
+            (BranchRole.CHALLENGER, 2)
         ]
 
 
@@ -878,11 +1073,11 @@ async def test_executable_pool_workflow_organizes_two_by_three_attempts(
         assert len(attempts) == 6
         assert {attempt.trajectory_ordinal for attempt in attempts} == {1, 2}
         assert {attempt.ordinal for attempt in attempts} == {1, 2, 3}
+        assert {attempt.input_runtime_state_digest for attempt in attempts} == {None}
         workflow = registry.list_epoch_branch_workflows(result.epoch.id)
         assert len(workflow) == 1
         assert workflow[0].trajectories == 2
         assert workflow[0].attempts_per_trajectory == 3
-        assert workflow[0].runtime_state_policy.value == "reset_each_attempt"
 
 
 @pytest.mark.anyio
@@ -966,7 +1161,9 @@ async def test_executable_workflow_can_route_compatible_runtime_state_between_tr
 
 
 @pytest.mark.anyio
-async def test_first_epoch_same_agent_runs_two_branches_without_evolver(tmp_path: Path) -> None:
+async def test_workflow_can_replicate_active_in_first_epoch_without_evolver(
+    tmp_path: Path,
+) -> None:
     with SqliteRegistry(tmp_path / "runtime.db") as registry:
         seeded = seed_lineage(
             registry,
@@ -976,7 +1173,13 @@ async def test_first_epoch_same_agent_runs_two_branches_without_evolver(tmp_path
         )
         evolver = FakeEvolver()
         optimizer = BranchConcurrencyProbeOptimizer(release_at=2)
-        controller = EpochController(registry, evolver, optimizer, FakeAttemptEvidence())
+        controller = EpochController(
+            registry,
+            evolver,
+            optimizer,
+            FakeAttemptEvidence(),
+            workflow_runner=DefaultExecutableWorkflow(replicate_first_epoch=True),
+        )
         first = await controller.run_epoch(seeded.lineage_id, 1)
         assert optimizer.peak_running == 2
         assert evolver.calls == []
@@ -1032,6 +1235,7 @@ async def test_epoch_without_challengers_runs_parallel_trajectories_from_same_ke
         evolver,
         optimizer,
         FakeAttemptEvidence(),
+        workflow_runner=IndependentPoolWorkflow(),
         attempt_finished=lambda _epoch, attempt: finished.append(
             (
                 attempt.challenger_ordinal,
@@ -1080,7 +1284,6 @@ async def test_event_only_lineage_runs_unevolved_on_its_own_kernel_line(
         challenger_count=0,
         trajectories_per_branch=1,
         attempts_per_trajectory=2,
-        ephemeral_agent_state=True,
     )
     evolver = FakeEvolver()
     optimizer = ScriptedOptimizer(
@@ -1106,17 +1309,14 @@ async def test_event_only_lineage_runs_unevolved_on_its_own_kernel_line(
     # The second Attempt continues from the first's accepted output, not the seed.
     assert attempts[1].input_kernel_revision_id == attempts[0].output_kernel_revision_id
     lineage = registry.get_lineage(seeded.lineage_id)
-    assert lineage.ephemeral_agent_state is True
     assert lineage.active_kernel_agent_revision_id == seeded.active_revision_id
     assert lineage.best_kernel_revision_id == attempts[1].output_kernel_revision_id
     registry.close()
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("ephemeral_agent_state", [True, False])
 async def test_pooled_event_only_lineage_pools_every_trajectory_into_one_baseline(
     tmp_path: Path,
-    ephemeral_agent_state: bool,
 ) -> None:
     """Pool and Pool-Retained select the best Kernel across all Trajectories."""
     registry = SqliteRegistry(tmp_path / "runtime.db")
@@ -1125,7 +1325,6 @@ async def test_pooled_event_only_lineage_pools_every_trajectory_into_one_baselin
         challenger_count=0,
         trajectories_per_branch=2,
         attempts_per_trajectory=2,
-        ephemeral_agent_state=ephemeral_agent_state,
     )
     evolver = FakeEvolver()
     optimizer = ScriptedOptimizer(
@@ -1145,6 +1344,7 @@ async def test_pooled_event_only_lineage_pools_every_trajectory_into_one_baselin
         evolver,
         optimizer,
         FakeAttemptEvidence(),
+        workflow_runner=AdaptiveBroadcastWorkflow(),
     ).run_epoch(seeded.lineage_id, 1)
 
     assert evolver.calls == []
@@ -1223,6 +1423,7 @@ async def test_trajectories_within_one_branch_execute_concurrently(tmp_path: Pat
         FakeEvolver(),
         optimizer,
         FakeAttemptEvidence(),
+        workflow_runner=ParallelTrajectoriesWorkflow(),
     ).run_epoch(seeded.lineage_id, 1)
 
     assert optimizer.calls == 2
@@ -1232,7 +1433,7 @@ async def test_trajectories_within_one_branch_execute_concurrently(tmp_path: Pat
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(("limit", "expected_peak"), [(1, 1), (2, 2), (3, 3)])
-async def test_active_and_challenger_branches_run_with_configured_concurrency(
+async def test_workflow_attempt_batch_respects_configured_concurrency(
     tmp_path: Path,
     limit: int,
     expected_peak: int,
@@ -1251,7 +1452,7 @@ async def test_active_and_challenger_branches_run_with_configured_concurrency(
         FakeEvolver(),
         optimizer,
         FakeAttemptEvidence(),
-        max_parallel_branches=limit,
+        max_parallel_attempts=limit,
     ).run_epoch(seeded.lineage_id, 1)
 
     assert optimizer.calls == 3
@@ -1310,7 +1511,10 @@ async def test_evolver_can_close_challenger_pool_without_forcing_a_new_revision(
     evolver = DecliningEvolver(accepted_count)
     optimizer = ScriptedOptimizer(
         seeded.active_revision_id,
-        active=[candidate("active", 90)],
+        active=[
+            candidate(f"active-{ordinal}", 90 - ordinal)
+            for ordinal in range(3 - accepted_count)
+        ],
         challenger=[candidate("challenger", 80)] if accepted_count else [],
     )
 
@@ -1319,10 +1523,10 @@ async def test_evolver_can_close_challenger_pool_without_forcing_a_new_revision(
     )
 
     assert result.epoch.status is EpochStatus.COMPLETED
-    assert result.epoch.challenger_count == accepted_count
+    assert result.epoch.max_challengers == 2
     assert len(result.epoch.challenger_kernel_agent_revision_ids) == accepted_count
     assert len(evolver.calls) == accepted_count + 1
-    assert len(optimizer.calls[BranchRole.ACTIVE]) == 1
+    assert len(optimizer.calls[BranchRole.ACTIVE]) == 3 - accepted_count
     assert len(optimizer.calls[BranchRole.CHALLENGER]) == accepted_count
     assert len(registry.list_epoch_challengers(result.epoch.id)) == accepted_count
     assert digest("declined-evolution-trace") in registry.list_referenced_artifact_digests()
@@ -1333,7 +1537,9 @@ async def test_evolver_can_close_challenger_pool_without_forcing_a_new_revision(
 
 
 @pytest.mark.anyio
-async def test_epoch_rejects_unchanged_evolver_candidate(tmp_path: Path) -> None:
+async def test_workflow_rejects_unchanged_evolver_candidate_without_sealing_epoch(
+    tmp_path: Path,
+) -> None:
     registry = SqliteRegistry(tmp_path / "runtime.db")
     seeded = seed_lineage(registry, attempts_per_trajectory=1)
     controller = EpochController(
@@ -1350,20 +1556,13 @@ async def test_epoch_rejects_unchanged_evolver_candidate(tmp_path: Path) -> None
         )
     failed = registry.find_epoch(seeded.lineage_id, 1)
     assert failed is not None
-    assert failed.status is EpochStatus.FAILED
+    assert failed.status is EpochStatus.BUILDING_CHALLENGER
 
-    recovery = registry.recover_failed_epoch(
-        failed.id,
-        recovery_key="replace-evolver",
-        reason="fixed Evolver configuration",
-    )
-    assert recovery.attempt_ids == ()
-    assert registry.get_epoch(failed.id).status is EpochStatus.BUILDING_CHALLENGER
     registry.close()
 
 
 @pytest.mark.anyio
-async def test_operator_recovery_resumes_failed_epoch_with_same_attempt_identity(
+async def test_workflow_restart_resumes_infrastructure_failed_attempt_identity(
     tmp_path: Path,
 ) -> None:
     registry = SqliteRegistry(tmp_path / "runtime.db")
@@ -1404,85 +1603,31 @@ async def test_operator_recovery_resumes_failed_epoch_with_same_attempt_identity
     )
     assert sibling_attempt is not None
     assert sibling_attempt.status is AttemptStatus.COMPLETED
-    assert failed_epoch.status is EpochStatus.FAILED
-    assert registry.get_lineage(seeded.lineage_id).status is LineageStatus.FAILED
-    stale_fence = registry.acquire_lineage_fence(
-        seeded.lineage_id,
-        "crashed-scheduler",
-        now="2026-08-14T00:00:00+00:00",
-        lease_expires_at="2026-08-15T00:00:00+00:00",
-    )
-
-    recovery = registry.recover_failed_epoch(
-        failed_epoch.id,
-        recovery_key="incident-2026-08-14-001",
-        reason="worker host was replaced",
-    )
-    assert (
-        registry.recover_failed_epoch(
-            failed_epoch.id,
-            recovery_key="incident-2026-08-14-001",
-            reason="worker host was replaced",
-        )
-        == recovery
-    )
-    recovered_attempt = registry.get_attempt(failed_attempt.id)
-    assert recovery.attempt_ids == (failed_attempt.id,)
-    assert recovery.generation == 1
-    assert recovered_attempt.id == failed_attempt.id
-    assert recovered_attempt.attempt_evidence_digest == failed_attempt.attempt_evidence_digest
-    assert recovered_attempt.infrastructure_failures == 0
-    assert recovered_attempt.recovery_generation == 1
-    assert recovered_attempt.status.value == "running"
-    assert registry.get_campaign(recovery.campaign_id).status is CampaignStatus.ACTIVE
-    with pytest.raises(InvalidTransitionError, match="superseded"):
-        registry.renew_lineage_fence(
-            seeded.lineage_id,
-            stale_fence,
-            "crashed-scheduler",
-            lease_expires_at="2026-08-16T00:00:00+00:00",
-        )
-    with pytest.raises(InvalidTransitionError, match="different reason"):
-        registry.recover_failed_epoch(
-            failed_epoch.id,
-            recovery_key="incident-2026-08-14-001",
-            reason="different justification",
-        )
+    assert failed_epoch.status is EpochStatus.RUNNING
+    assert registry.get_lineage(seeded.lineage_id).status is LineageStatus.RUNNING
+    assert failed_attempt.status is AttemptStatus.INFRASTRUCTURE_FAILED
 
     resumed = ScriptedOptimizer(
         seeded.active_revision_id,
         active=[candidate("recovered-active", 90)],
-        challenger=[candidate("recovered-challenger", 80)],
+        challenger=[],
     )
     result = await EpochController(
         registry,
         evolver,
         resumed,
         FakeAttemptEvidence(),
-        max_infrastructure_retries=0,
+        max_infrastructure_retries=1,
     ).run_epoch(seeded.lineage_id, 1)
 
     assert result.epoch.status is EpochStatus.COMPLETED
     assert resumed.calls[BranchRole.ACTIVE] == [failed_attempt.id]
     assert registry.get_attempt(failed_attempt.id).recovery_generation == 1
     registry.close()
-    with closing(sqlite3.connect(tmp_path / "runtime.db")) as connection:
-        events = connection.execute(
-            """SELECT kind FROM runtime_events
-               WHERE kind IN ('attempt.recovered', 'epoch.recovered',
-                              'lineage.recovered', 'campaign.reopened')
-               ORDER BY sequence"""
-        ).fetchall()
-    assert events == [
-        ("attempt.recovered",),
-        ("epoch.recovered",),
-        ("lineage.recovered",),
-        ("campaign.reopened",),
-    ]
 
 
 @pytest.mark.anyio
-async def test_operator_recovery_resumes_registered_candidate_finalization(
+async def test_workflow_restart_resumes_registered_candidate_finalization(
     tmp_path: Path,
 ) -> None:
     registry = SqliteRegistry(tmp_path / "runtime.db")
@@ -1509,7 +1654,7 @@ async def test_operator_recovery_resumes_registered_candidate_finalization(
 
     failed_epoch = registry.find_epoch(seeded.lineage_id, 1)
     assert failed_epoch is not None
-    assert failed_epoch.status is EpochStatus.FAILED
+    assert failed_epoch.status is EpochStatus.RUNNING
     failed_attempt = registry.find_attempt(
         failed_epoch.id,
         BranchRole.ACTIVE,
@@ -1523,15 +1668,6 @@ async def test_operator_recovery_resumes_registered_candidate_finalization(
     registered = registry.find_kernel_revision_by_attempt(failed_attempt.id)
     assert registered is not None
     assert failed_attempt.output_kernel_revision_id is None
-
-    recovery = registry.recover_failed_epoch(
-        failed_epoch.id,
-        recovery_key="resume-authoritative-comparison",
-        reason="comparison infrastructure recovered",
-    )
-    assert recovery.attempt_ids == (failed_attempt.id,)
-    assert registry.get_epoch(failed_epoch.id).status is EpochStatus.RUNNING
-    assert registry.get_attempt(failed_attempt.id).recovery_generation == 1
 
     unused_optimizer = ScriptedOptimizer(
         seeded.active_revision_id,
@@ -1550,6 +1686,7 @@ async def test_operator_recovery_resumes_registered_candidate_finalization(
     assert result.epoch.status is EpochStatus.COMPLETED
     assert completed_attempt.output_kernel_revision_id == registered.id
     assert completed_attempt.accepted_as_branch_best is True
+    assert completed_attempt.recovery_generation == 1
     assert unused_optimizer.calls == {}
     registry.close()
 

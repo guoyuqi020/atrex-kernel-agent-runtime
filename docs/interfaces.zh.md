@@ -101,9 +101,11 @@ Agent 可见 `operation`、`status`、`result` 独立封存为 Result Artifact�
 Valid 子集，其补集为 Test；两个集合各最多 15 个。这是控制器字段，不是 Agent 请求参数。
 私有 `shape_split` 记录种子 `42`、算法、上限、原始全集 ID/数量及选中的 Valid/Test ID，随
 Contract 一起封存，Agent 和逐批 Context 会移除它；仅供管理端复现。
-Agent 默认操作只使用 Valid；Runtime 权威 ABBA 使用
-全量 Shape。历史权威 ABBA 的 Agent 可见投影增加 `measurement_domain: "valid"`，隐藏 Test
-行及误差指标，并仅按 Valid 重算几何/算术平均延迟。管理端目录保留全量权威测量。
+Agent 默认操作只使用 Valid。Runtime 权威 ABBA 会执行全部选中 Shape，但正确性、延迟和晋升
+只由 Valid 聚合决定；Test 以 `affects_promotion: false` 的私有 `test_observation` 保存，Test
+错误或性能下降不能拒绝 Revision。Bootstrap 同样由 Valid 决定 v0，Test 只作私有旁路观测。
+历史权威 ABBA 的 Agent 可见投影增加 `measurement_domain: "valid"`，隐藏 Test 行及误差指标，
+并仅按 Valid 重算几何/算术平均延迟。
 详见[评测隐私](evaluation.zh.md#评测输入与隐私)。
 
 `evaluate` 的 Wire Request 可指定 `mode: "full" | "correctness_only"`（默认 `full`）、
@@ -499,9 +501,9 @@ Transcript/索引；凭据投影、当轮输入、Candidate 起点、报告校�
 Workspace；每轮 Session Artifact 和用量只包含新增活动。独立调用可绑定
 `ATREX_EVOLVER_RESUME_SESSION_ID`，托管调用由 Runtime 设置。
 
-Evolver 没有 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份按 Lineage 版本索引的冻结文件
+Evolver 没有实时 Runtime Tool 或 Runtime HTTP Capability。Runtime 物化一份按 Lineage 版本索引的冻结文件
 视图。`input/agents/agent-vN/` 是完整 Agent Bundle，直接包含实现、配置及
-`prompts/`、`insights/`、`skills/`、`tools/`。可写 `candidate/` 使用相同布局。
+`prompts/`、`skills/`、`tools/`。可写 `candidate/` 使用相同布局。
 已有 Checkpoint 替换打包默认内容，无需再分别编辑 Source/State。
 
 `input/evidence/agent-vN/` 保存优化效果汇总和补充的 `resources/trajectories/<N>/` 快照。
@@ -513,8 +515,9 @@ Candidate 结果及 Agent 自述 Journal ID。
 `input/evidence/journal/directions/index.json` 和 `experiments/index.json` 可定位 Bootstrap 与已完成 Epoch 的完整 `<id>.json` 记录，包括没有终态报告的 Attempt。
 
 从历史派生时先复制完整历史 Bundle 到 Candidate，再修改；报告所选 `kernel_agent_revision_id`，
-`changed_paths` 为相对于 Bundle 根目录的排序文件 Diff，包括四目录改动。Runtime 独立校验 Diff，
-封存完整 Bundle 和四目录 Checkpoint。Optimizer 的权限与继承规则不变：实现只读，四个自适应目录可写。
+`changed_paths` 为相对于 Bundle 根目录的排序文件 Diff，包括三目录改动。Runtime 独立校验 Diff，
+封存完整 Bundle 和三目录 Checkpoint。Optimizer 的权限与继承规则不变：实现、Prompt 与 Skill 只读，
+Tool 可写。
 
 `no_change` 指向当前 Active Revision，不修改 Candidate，关闭剩余 Challenger 名额而不跳过 Epoch。
 `contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许
@@ -523,13 +526,20 @@ Candidate 结果及 Agent 自述 Journal ID。
 不能引用同 Epoch 尚未评估的 Challenger。`reuse` 要求 `[]`。Runtime 在 Evolution Trace 中保存归属
 和准确内容快照；该字段不改变 Bundle Base 或 Revision 祖先关系。
 
+修改 Workflow 后，Evolver 运行本地 `workflow-check`。Runtime 注入准确的 Epoch 资源边界；工具以确定性、
+不持久化的服务响应 Dry-run 首 Epoch 复制、后续成功 Evolution 和后续 `no_change` 路径，不启动 Optimizer
+或 GPU 工作，也不写 Registry。Runtime 在封存 Candidate 前会在 Worker Sandbox 中独立重复该检查。
+
 Evolver 通过本地 `evolution-report` 提交 Draft；错误返回 `issues`、`request_schema` 和 `recovery`，
 不发布。首次成功原子生成 `scratch/evolution-report.json`，Session 退出后 Runtime 再独立校验。
-报告只有七个字段，不支持 `suggested_directions`，即使为空数组也会拒绝。Evolver 负责跨分支证据整合、区分实现失败与机制被证伪，并在 Candidate 的 Insights、Prompts、Skills、Tools 或 Workflow 中沉淀归因修正，关联原 Direction/Experiment ID，不改写 Journal 事实。Optimizer 自主选择研究方向。Bootstrap 专注建立正确的 `v0` 并记录实际探索；`update-direction` 和当前终态报告校验均拒绝 `action="suggest"`。
+报告只有七个字段，不支持 `suggested_directions`，即使为空数组也会拒绝。Evolver 可以分析跨分支证据，
+但只能把结论转化为与任务无关的 Prompt、Skill、Tool、实现或 Workflow 修正；Candidate 不能包含具体
+任务 ID，也不能指定 Kernel 优化方向。Optimizer 自主选择研究方向。Bootstrap 专注建立正确的 `v0`
+并记录实际探索；`update-direction` 和当前终态报告校验均拒绝 `action="suggest"`。
 
 历史建议仍可通过 `list-directions`/`load-direction` 和 Evolver 的冻结 Evidence 读取，但不能直接启动、测量或关闭。已有谱系与 `gateway_proxy.suggestion_ttl_epochs`（默认 `1`）仅用于这些历史记录：有效建议仍可作为新 `adoption` 的父方向；`expired`/`adopted` 记录只能派生 `refinement`，不能再次采纳。这是读取投影，不改写历史。历史 Evolution 报告仍可解码，但不会重新发布其中的旧建议。
 
-Runtime 注入给 Evolver 的 Evidence Prompt 包含下一轮 Optimizer 的服务目录：Gateway 操作、Kernel/Result Artifact 读取、Direction/Experiment Journal 和终态提交。目录不向 Evolver 授予这些工具；本次 Evolution 仅使用冻结文件和本地报告工具。Evolver 在报告能力缺口前，先判断能否在 Candidate 的 Tools 或实现代码中组合现有服务，并同步更新发现/调用说明与索引；保留 Result 证据身份和 Runtime 校验，只在本次进行有限 CPU/Mock 检查。`reason_unimplemented` 说明考虑过哪些服务及剩余的具体阻碍，不能只因为缺少便捷命令就认定 Runtime 存在缺口。这扩展的是 Agent 侧能力，不新增 Runtime API 或权限，效果在下一 Epoch 验证。
+Runtime 注入给 Evolver 的 Evidence Prompt 包含下一轮 Optimizer 的服务目录：Gateway 操作、Kernel/Result Artifact 读取、Direction/Experiment Journal 和终态提交。目录不向 Evolver 授予这些实时工具；本次 Evolution 仅使用冻结文件、本地 Workflow Dry-run 和报告工具。Evolver 在报告能力缺口前，先判断能否在 Candidate 的 Tools 或实现代码中组合现有服务，并同步更新发现/调用说明与索引；保留 Result 证据身份和 Runtime 校验，只在本次进行有限 CPU/Mock 检查。`reason_unimplemented` 说明考虑过哪些服务及剩余的具体阻碍，不能只因为缺少便捷命令就认定 Runtime 存在缺口。这扩展的是 Agent 侧能力，不新增 Runtime API 或权限，效果在下一 Epoch 验证。
 
 Evolver 再次修改前，先通过 Evolution 报告的 `generated_agent.path` 找到最新已完成 Epoch 中对应 Agent 的会话，优先复核上一轮 Challenger；若已晋升，则查看其 Active 会话。检查改动是否可用、被发现、被调用、执行成功，以及输出是否真正进入后续决策，对照 `expected_effect` 和权威结果区分缺少观察、无适用触发、失败、收益不明及有证据的收益/负作用，再决定保留、修复、精简或移除，避免持续累积未验证工具。复核结论写入现有 `hypothesis`/`expected_effect` 字段，不新增在线测试或报告字段。
 
@@ -581,18 +591,19 @@ Optimizer Tool，也不会暴露到 Optimizer Session 内。
 |---|---|---|
 | `replicate_active(ordinal)` | 允许的 Challenger 序号 | 已挂接 Agent Revision ID |
 | `evolve_agent(ordinal)` | 允许的 Challenger 序号 | Challenger Revision ID 或 `None` |
-| `create_pool(...)` | Branch、Trajectory 数、轮次数、State 策略 | 不可变 Epoch Pool |
+| `create_pool(...)` | Branch、Trajectory 数、轮次数 | 不可变 Epoch Pool |
 | `run_pools(..., after_round=...)` | 一个或多个 Pool 与可选回调 | 按逻辑轮次分组的可信结果 |
 | `round.outcomes(pool)` | 本轮参与的 Pool | 按 Trajectory 排序的规范化结果 |
 | `round.best_accepted_kernel(...)` | 零个或多个本轮 Pool | 最佳已接受 Kernel ID 或 `None` |
 | `round.route_kernel(...)` | Pool 与本 Epoch 已接受 Kernel | 下一轮 Kernel 路由 |
-| `round.route_state(...)` | Pool 与兼容的已完成 Attempt | 下一轮 State 路由 |
+| `round.route_state(...)` | Pool、Trajectory 序号与不透明的已完成输出 State | 下一轮 State 路由 |
 | `complete()` | 无 | Runtime 选择 Kernel/Agent 并提交后的 Epoch 状态 |
 
 轮次结果包含 Attempt 身份、输入/输出/当前 Trajectory Kernel 身份、是否接受、正确性、Latency、
-失败原因以及是否存在 Runtime-State Checkpoint。私有 SDK 分配确定性的序号，Workflow 重启后会幂等
-重放已完成轮次。Kernel 路由只接受 Epoch 起点或本 Epoch 已接受结果；State 路由只接受
-`retain_across_attempts` 下同一 Agent 的已完成 Attempt。普通组织在选择前必须登记全部已挂接 Branch、
+失败原因以及不透明的 `output_state` 引用。私有 SDK 分配确定性的序号，Workflow 重启后会幂等
+重放已完成轮次。Kernel 路由只接受 Epoch 起点或本 Epoch 已接受结果；State 路由只接受同一 Agent
+的已完成 Attempt。若 Workflow 不显式路由，下一轮会重新使用该 Trajectory 的不可变初始 State。
+普通组织在选择前必须登记全部已挂接 Branch、
 用完完整预算。受控的仅 Challenger 进化组织可以只登记唯一 Challenger，但必须精确用完单 Branch 预算。
 全部计划 Attempt 都必须完成；跨 Epoch 调度、执行、Gateway、Gate、持久化、比较与晋升权威仍归 Runtime。
 

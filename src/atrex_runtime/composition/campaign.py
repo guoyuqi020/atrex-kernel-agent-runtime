@@ -78,6 +78,8 @@ from ..workers.optimizer import (
     OptimizerSessionDriver,
     SessionOptimizerRunner,
 )
+from ..workers.session_contract import SessionContractPolicy
+from ..workers.token_usage import UsageUnit
 from ..workers.workspace import LocalAttemptWorkspaceAssembler
 from .gateway import compose_authoritative_candidate_evaluator
 
@@ -196,9 +198,10 @@ def build_campaign_runtime(
         optimizer_environment = campaign.optimizer.environment.resolve(environment)
 
         optimizer_config = OptimizerSessionConfig(environment=optimizer_environment)
+        core_process_config = build_core_process_config(campaign)
         optimizer_sessions = optimizer_session_driver or CoreOptimizerSessionDriver(
             worker_launcher,
-            build_core_process_config(campaign),
+            core_process_config,
             artifacts,
             contexts=RegistryAgateEvaluationContextResolver(registry, artifacts, control),
         )
@@ -257,6 +260,9 @@ def build_campaign_runtime(
                     artifacts,
                     evolver_bundle_digest=evolution_config.bundle_artifact_digest,
                     attempt_workspaces_root=campaign.attempt_workspaces_root,
+                    next_optimizer_contract_policy=(
+                        build_optimizer_session_contract_policy(campaign)
+                    ),
                 ),
                 evolution_sessions,
                 artifacts,
@@ -304,7 +310,7 @@ def build_campaign_runtime(
             kernel_retention_comparator=kernel_retention_comparator,
             agent_promotion_comparator=agent_promotion_comparator,
             max_infrastructure_retries=campaign.max_infrastructure_retries,
-            max_parallel_branches=campaign.max_parallel_branches,
+            max_parallel_attempts=campaign.max_parallel_attempts,
             workflow_runner=SandboxedAgentWorkflowRunner(
                 artifacts,
                 worker_launcher,
@@ -386,6 +392,28 @@ def build_evolution_process_config(
         timeout_seconds=campaign.evolver.timeout_seconds,
         terminate_grace_seconds=campaign.evolver.terminate_grace_seconds,
         max_diagnostic_bytes=campaign.evolver.max_diagnostic_bytes,
+    )
+
+
+def build_optimizer_session_contract_policy(
+    campaign: CampaignRuntimeSettings,
+) -> SessionContractPolicy:
+    """Describe the exact next-Optimizer limits visible to an Evolver."""
+    worker = campaign.optimizer
+    usage_unit: UsageUnit = (
+        "credits" if worker.agent_backend == "qodercli" else "provider_tokens"
+    )
+    return SessionContractPolicy(
+        agent_backend=worker.agent_backend,
+        session_timeout_seconds=worker.timeout_seconds,
+        usage_unit=usage_unit,
+        usage_budget=(
+            worker.max_session_credits
+            if usage_unit == "credits"
+            else float(worker.max_session_tokens)
+        ),
+        max_attempt_report_bytes=worker.max_attempt_report_bytes,
+        wiki_available=False,
     )
 
 

@@ -43,30 +43,30 @@ python scripts/gdn/run.py ablation
 
 This starts tasks only, as the same container user as `campaign`, without sudo/systemd.
 `ablation-campaign.json` uses a new `gdn-source-tree-l20d-claude-ablation` creation key;
-it neither changes nor takes over the existing trial. After one full Bootstrap, eleven controls
+it neither changes nor takes over the existing trial. After one full Bootstrap, fifteen Lineages
 reuse the new experiment's exact v0, Agent, edit boundaries, contract and initial evidence.
 No repeated baseline measurement or old trial experience is imported.
 
 `ablation.json` uses the same plan builder as single-file production. Defaults:
 
-| Campaign instance | Per-Epoch topology | Optimizer Attempts | Retain State | Evolutions |
+| Campaign instance | Agent Workflow behavior | Optimizer Attempts | Retain State | Evolutions |
 |---|---|---:|---|---:|
-| `evolve-3` | Active + Challenger, 1 trajectory × 3 Attempts each | 600 | yes | 99 |
-| `ablation-isolated-01/02` | Two independent instances, 1 trajectory × 3 each | 300 each | no | 0 |
-| `ablation-isolated-evolve-01/02` | Challenger only, 1 trajectory × 3 each | 300 each | no | 99 each |
-| `ablation-retained-evolve-01/02` | Challenger only, 1 trajectory × 3 each | 300 each | yes | 99 each |
-| `ablation-isolated-pool-evolve-3` | Active + Challenger, 2 trajectories × 3 each | 1,200 | no | 99 |
-| `ablation-retained-01/02` | Two independent instances, 1 trajectory × 3 each | 300 each | yes | 0 |
-| `ablation-pool-3` | One Active Branch, 2 trajectories × 3 | 600 | no | 0 |
-| `ablation-pool-retained-3` | One Active Branch, 2 trajectories × 3 | 600 | yes | 0 |
+| `ablation-isolated-01/02/03` | One trajectory × 3 per replica | 300 each | no | 0 |
+| `ablation-retained-01/02/03` | One trajectory × 3 per replica | 300 each | yes | 0 |
+| `ablation-pool-3-01/02/03` | Two trajectories × 3 per replica | 600 each | no | 0 |
+| `ablation-pool-retained-3-01/02/03` | Two trajectories × 3 per replica | 600 each | yes | 0 |
+| `ablation-isolated-evolve-01/02/03` | Challenger only; observes matching Isolated replica | 300 each | no | 99 each |
 
-Twelve Campaigns, 100 Epochs each, 5,400 Optimizer Attempts excluding Bootstrap/Evolver.
-The ablation main arm uses two independent copies of the same Agent in Epoch 1; evolution
-starts in Epoch 2. The original `campaign` role retains its Active-only first Epoch.
+Fifteen Campaigns, 100 Epochs each, 6,300 Optimizer Attempts excluding Bootstrap/Evolver. Legacy Evolve-3,
+Retained-Evolve, and Isolated-Pool-Evolve remain implemented but are disabled.
 No external original-AKA control is launched. Resetting State preserves Kernel progress and
 Runtime journals. Pools restart from the best Kernel at Epoch boundaries; Pool-Retained also
 inherits that trajectory's terminal State, without merging. Arms share no subsequent history
 or writable files.
+
+Each Isolated-Evolve replica evolves only from itself and additionally reads its matching Isolated
+replica through the preceding Epoch. It waits when that observer is behind; the two histories and
+mutable states remain separate.
 
 Outputs live under `workspaces/GDN/ablation/`: frozen inputs, Bootstrap, `campaign-results.json`,
 and per-arm `campaign-result.json` / `campaign.log` (plus control seed definitions/results).
@@ -78,7 +78,7 @@ Existing workspaces keep their frozen control budgets; to resume an old five-Epo
 extending the main arm, pass `--target-epoch 5` explicitly.
 Changed frozen inputs require a new workspace and creation key.
 
-Up to eighteen Optimizer workers run concurrently. On memory-limited Lima, finish the old trial
+Up to twenty-one Optimizer workers run concurrently. On memory-limited Lima, finish the old trial
 before explicitly launching this suite. Adding these configs does not start/stop/restart tasks.
 
 ## Contents and provenance
@@ -96,7 +96,7 @@ The workspace holds `task/` and `initial-evidence/` snapshots, `source/` (the re
 do not optimize here), generated `runtime.json` / `evaluation-contract.json`, Campaign definitions,
 and `prepared.json` (content hashes, pinned commits, and local validation results).
 
-Both Campaign definitions pin KDA commit `41af4a45ca4155254f3c2e8d501ae28a5fb5bb62`.
+Both Campaign definitions pin KDA commit `6f9a92b7741bf50f6423ac961399a24a269564cf`.
 This version bundles neither KernelWiki nor ncu-report-skill and needs no Skill submodule
 checkout; the Runtime template's `allowed_submodules` is empty. New workspaces use this
 pin, while existing workspaces keep their frozen Agent revisions. Local uncommitted KDA

@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from runtime import EpochRuntime, serve  # type: ignore[import-not-found]
+from runtime import EpochRound, EpochRuntime, serve  # type: ignore[import-not-found]
 
 
 def run_epoch(epoch: EpochRuntime) -> None:
@@ -11,9 +11,21 @@ def run_epoch(epoch: EpochRuntime) -> None:
         branch="active",
         trajectories=2,
         rounds=3,
-        runtime_state_policy="reset_each_attempt",
     )
-    epoch.run_pools([pool])
+    def broadcast_best_kernel(current: EpochRound) -> None:
+        if current.number >= pool.rounds:
+            return
+        best = current.best_accepted_kernel(pool)
+        for outcome in current.outcomes(pool):
+            current.route_kernel(
+                pool,
+                trajectory_ordinal=int(outcome["trajectory_ordinal"]),
+                kernel_revision_id=(
+                    best or str(outcome["trajectory_kernel_revision_id"])
+                ),
+            )
+
+    epoch.run_pools([pool], after_round=broadcast_best_kernel)
     epoch.complete()
 
 

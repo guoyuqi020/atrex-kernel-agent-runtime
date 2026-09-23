@@ -23,7 +23,6 @@ from ..domain.models import (
     EpochStatus,
     KernelAgentRevision,
     Lineage,
-    RuntimeStatePolicy,
 )
 from ..filesystem import make_tree_owner_writable, make_tree_read_only
 from ..gateway.contract import load_agent_correctness_policy
@@ -38,15 +37,17 @@ from .manifest import (
 )
 from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 
-REUSABLE_AGENT_DIRECTORIES = ("prompts", "insights", "skills", "tools")
-OPTIMIZER_READ_ONLY_DIRECTORIES = ("prompts", "insights", "skills")
+REUSABLE_AGENT_DIRECTORIES = ("prompts", "skills", "tools")
+OPTIMIZER_READ_ONLY_DIRECTORIES = ("prompts", "skills")
 OPTIMIZER_WRITABLE_DIRECTORIES = ("tools",)
-_LEGACY_INSIGHT_DIRECTORIES = ("memory", "knowledge", "docs")
+_LEGACY_INSIGHT_DIRECTORIES = ("insights", "memory", "knowledge")
+_LEGACY_COMPATIBILITY_DIRECTORIES = ("docs",)
 _REMOVED_STATE_DIRECTORIES = ("hooks",)
 _LEGACY_STATE_DIRECTORIES = frozenset(
     (
         *REUSABLE_AGENT_DIRECTORIES,
         *_LEGACY_INSIGHT_DIRECTORIES,
+        *_LEGACY_COMPATIBILITY_DIRECTORIES,
         *_REMOVED_STATE_DIRECTORIES,
     )
 )
@@ -58,112 +59,15 @@ REUSABLE_READMES = {
 }
 
 
-def _merge_legacy_insight_directories(
-    root: Path,
-    *,
-    include_docs: bool,
-    remove_sources: bool,
-) -> None:
-    """Merge old memory/knowledge State into insights/ without rewriting sealed inputs."""
-    names = _LEGACY_INSIGHT_DIRECTORIES if include_docs else ("memory", "knowledge")
-    sources = [
-        root / name
-        for name in names
-        if (root / name).exists() or (root / name).is_symlink()
-    ]
-    if not sources:
-        return
-    for source in sources:
-        _validate_reusable_tree(source)
-
-    destination = root / "insights"
-    if destination.exists() or destination.is_symlink():
-        _validate_reusable_tree(destination)
-
-    files: dict[Path, Path] = {}
-    directories: set[Path] = set()
-    for source in sources:
-        for entry in source.rglob("*"):
-            relative = entry.relative_to(source)
-            if relative == Path("README.md"):
-                continue
-            if entry.is_dir():
-                directories.add(relative)
-                continue
-            previous = files.get(relative)
-            if previous is not None and previous.read_bytes() != entry.read_bytes():
-                raise ValueError(
-                    "Legacy Runtime State cannot merge memory/ and knowledge/ into insights/: "
-                    f"conflicting file {relative.as_posix()}"
-                )
-            files[relative] = entry
-    conflicting_kinds = set(files) & directories
-    if conflicting_kinds:
-        relative = min(conflicting_kinds)
-        raise ValueError(
-            "Legacy Runtime State cannot merge into insights/: "
-            f"file/directory conflict at {relative.as_posix()}"
-        )
-
-    if destination.exists():
-        for relative, source in files.items():
-            target = destination / relative
-            if (target.exists() or target.is_symlink()) and (
-                not target.is_file() or target.read_bytes() != source.read_bytes()
-            ):
-                raise ValueError(
-                    "Legacy Runtime State cannot merge into insights/: "
-                    f"conflicting file {relative.as_posix()}"
-                )
-        for relative in directories:
-            target = destination / relative
-            if target.exists() and not target.is_dir():
-                raise ValueError(
-                    "Legacy Runtime State cannot merge into insights/: "
-                    f"conflicting directory {relative.as_posix()}"
-                )
-
-    destination.mkdir(mode=0o700, exist_ok=True)
-    for relative in sorted(directories):
-        (destination / relative).mkdir(parents=True, mode=0o700, exist_ok=True)
-    for relative, source in sorted(files.items()):
-        target = destination / relative
-        if not target.exists():
-            target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-            shutil.copy2(source, target)
-
-    readme = destination / "README.md"
-    if readme.exists() and not readme.is_file():
-        raise ValueError("Reusable insights README must be a regular file")
-    base = (
-        readme.read_text(encoding="utf-8")
-        if readme.is_file()
-        else REUSABLE_READMES["insights"]
-    )
-    migrated: list[str] = []
-    for source in sources:
-        old_readme = source / "README.md"
-        if old_readme.is_file():
-            migrated.append(
-                f"\n### Migrated `{source.name}/README.md`\n\n"
-                f"{old_readme.read_text(encoding='utf-8').strip()}\n"
-            )
-    if migrated:
-        readme.write_text(
-            base.rstrip()
-            + "\n\n## Migrated legacy indexes\n\n"
-            + "These indexes are retained for context. Consolidate their useful conclusions into "
-            + "scoped Insight entries and remove stale duplication.\n"
-            + "".join(migrated),
-            encoding="utf-8",
-        )
-    elif not readme.exists():
-        readme.write_text(base, encoding="utf-8")
-
-    if remove_sources:
-        for source in sources:
-            shutil.rmtree(source)
-    make_tree_owner_writable(destination)
+def _drop_legacy_task_state(root: Path) -> None:
+    """Discard task-specific learned state when materializing a mutable Agent copy."""
+    for name in (*_LEGACY_INSIGHT_DIRECTORIES, *_REMOVED_STATE_DIRECTORIES):
+        removed = root / name
+        if not (removed.exists() or removed.is_symlink()):
+            continue
+        _validate_reusable_tree(removed)
+        make_tree_owner_writable(removed)
+        shutil.rmtree(removed)
 
 
 def ensure_reusable_directories(root: Path, *, optimizer_source: Path | None = None) -> None:
@@ -177,16 +81,10 @@ def ensure_reusable_directories(root: Path, *, optimizer_source: Path | None = N
         if seed.exists() or seed.is_symlink():
             _copy_reusable_tree(seed, prompts)
             make_tree_owner_writable(prompts)
-    _merge_legacy_insight_directories(root, include_docs=True, remove_sources=True)
-    # Hooks used to be mutable Agent State. Lifecycle completion is now enforced by
-    # the Runtime protocol, so an old checkpoint's hooks must never be installed or
-    # carried into a new Session.
-    for name in _REMOVED_STATE_DIRECTORIES:
-        removed = root / name
-        if removed.exists() or removed.is_symlink():
-            _validate_reusable_tree(removed)
-            make_tree_owner_writable(removed)
-            shutil.rmtree(removed)
+    # Old revisions may contain task-specific Insights/Memory/Knowledge or mutable
+    # Hooks. They remain readable in immutable historical Artifacts, but are never
+    # carried into a new Agent Revision or Optimizer Session.
+    _drop_legacy_task_state(root)
     for name in REUSABLE_AGENT_DIRECTORIES:
         directory = root / name
         if directory.is_symlink():
@@ -203,9 +101,9 @@ def ensure_reusable_directories(root: Path, *, optimizer_source: Path | None = N
 def protect_optimizer_agent_state(root: Path) -> None:
     """Enforce the Optimizer boundary after Runtime finishes workspace assembly.
 
-    Evolver publishes prompts, Insights, and Skills as versioned Agent content. An
-    Optimizer session may consume them but may only adapt reusable executable
-    helpers under tools/. Production launchers additionally overlay these paths
+    Evolver publishes prompts and Skills as versioned Agent content. An Optimizer
+    session may consume them but may only adapt reusable executable helpers under
+    tools/. Production launchers additionally overlay these paths
     with read-only mounts; filesystem modes also protect development launches.
     """
     ensure_reusable_directories(root)
@@ -224,11 +122,6 @@ def copy_reusable_agent_state(
         if directory.exists() or directory.is_symlink():
             _copy_reusable_tree(directory, destination / name)
             make_tree_owner_writable(destination / name)
-    for name in _LEGACY_INSIGHT_DIRECTORIES:
-        directory = source / name
-        if directory.exists() or directory.is_symlink():
-            _copy_reusable_tree(directory, destination / name)
-            make_tree_owner_writable(destination / name)
     ensure_reusable_directories(destination, optimizer_source=optimizer_source)
 
 
@@ -241,8 +134,7 @@ def remove_optimizer_state_seeds(repository: Path) -> None:
         repository.chmod(mode | stat.S_IWUSR)
         for name in (
             *REUSABLE_AGENT_DIRECTORIES,
-            "memory",
-            "knowledge",
+            *_LEGACY_INSIGHT_DIRECTORIES,
             *_REMOVED_STATE_DIRECTORIES,
         ):
             path = repository / name
@@ -345,16 +237,20 @@ def validate_reusable_agent_state_seed(
     allowed = set(REUSABLE_AGENT_DIRECTORIES) if require_complete else _LEGACY_STATE_DIRECTORIES
     if not present <= allowed:
         raise ValueError(
-            "Candidate runtime-state may contain only prompts/, insights/, skills/, tools/"
+            "Candidate runtime-state may contain only prompts/, skills/, tools/"
         )
-    # Older immutable snapshots may use memory/, knowledge/, or docs/. Normalize only
-    # materialized copies; new Candidate output must have all four indexes.
+    # Older immutable snapshots may contain task-specific learned directories. They
+    # are accepted for historical reads only; new Candidate output has three indexes.
     files = 0
     total_bytes = 0
     names = (
         REUSABLE_AGENT_DIRECTORIES
         if require_complete
-        else (*REUSABLE_AGENT_DIRECTORIES, *_LEGACY_INSIGHT_DIRECTORIES)
+        else (
+            *REUSABLE_AGENT_DIRECTORIES,
+            *_LEGACY_INSIGHT_DIRECTORIES,
+            *_LEGACY_COMPATIBILITY_DIRECTORIES,
+        )
     )
     for name in names:
         directory = state_root / name
@@ -434,7 +330,7 @@ class PreparedAttempt:
         )
 
     def seal_runtime_state(self, artifacts: LocalArtifactStore) -> ArtifactDigest:
-        """Seal all four post-Session State directories as one immutable checkpoint."""
+        """Seal the three post-Session Agent directories as one immutable checkpoint."""
         ensure_reusable_directories(self.root)
         scratch = self.root / "scratch"
         scratch.mkdir(mode=0o700, exist_ok=True)
@@ -454,20 +350,13 @@ def initialize_reusable_agent_state(root: Path, optimizer_source: Path) -> None:
         if directory.exists() or directory.is_symlink():
             _copy_reusable_tree(directory, root / name)
             make_tree_owner_writable(root / name)
-    # Old Core revisions packaged memory/ and knowledge/ as separate seeds. Import
-    # those two directories, but never treat the repository's engineering docs/ as State.
-    for name in ("memory", "knowledge"):
-        directory = optimizer_source / name
-        if directory.exists() or directory.is_symlink():
-            _copy_reusable_tree(directory, root / name)
-            make_tree_owner_writable(root / name)
     # Older Core commits do not contain State seeds. Missing directories/indexes
     # get empty defaults, without importing Source's engineering docs/.
     ensure_reusable_directories(root)
 
 
 def persist_reusable_agent_state(root: Path, destination: Path | None, lock: Path | None) -> None:
-    """Publish all adaptive directories with the same lock and persistence rules."""
+    """Publish all reusable Agent directories with the same persistence rules."""
     if destination is None or lock is None:
         return
     with _exclusive_lock(lock):
@@ -516,89 +405,49 @@ class LocalAttemptWorkspaceAssembler:
             raise ValueError("Attempt request disagrees with its Epoch Evidence")
         lineage = self._registry.get_lineage(epoch.lineage_id)
         campaign = self._registry.get_campaign(lineage.campaign_id)
-        branch_workflow = self._registry.get_epoch_branch_workflow(
-            attempt.epoch_id,
-            attempt.branch,
-            attempt.challenger_ordinal,
+        # Workflow owns all cross-Attempt State routing. The Registry records the exact
+        # immutable input checkpoint selected for this logical Attempt. A physical retry may
+        # resume this same Attempt's latest sealed checkpoint, but a later Attempt never
+        # inherits its predecessor unless Workflow explicitly routed that predecessor.
+        previous_runtime_state_digest = (
+            attempt.runtime_state_digest or attempt.input_runtime_state_digest
         )
-        retain_runtime_state = (
-            not lineage.ephemeral_agent_state
-            if branch_workflow is None
-            else branch_workflow.runtime_state_policy
-            is RuntimeStatePolicy.RETAIN_ACROSS_ATTEMPTS
-        )
-        # An ephemeral-state Lineage is an ablation control arm, so every Attempt starts from the
-        # same Core seed. That has to be decided before reading any prior digest:
-        # attempt.runtime_state_digest is sealed after the Session, so a physical retry would
-        # otherwise inherit the first run's Skills.
-        previous_runtime_state_digest: ArtifactDigest | None = None
-        reset_persistent_scope = False
-        if retain_runtime_state:
-            # A physical retry of the same logical Attempt resumes from its latest
-            # sealed Session state. A new serial Attempt resumes from its predecessor.
-            previous_runtime_state_digest = (
-                attempt.runtime_state_digest or attempt.input_runtime_state_digest
-            )
-            if previous_runtime_state_digest is None and attempt.ordinal > 1:
-                previous = self._registry.find_attempt(
-                    attempt.epoch_id,
-                    attempt.branch,
-                    attempt.challenger_ordinal,
-                    attempt.trajectory_ordinal,
-                    attempt.ordinal - 1,
-                )
-                if previous is None or previous.runtime_state_digest is None:
-                    raise ValueError("Previous serial Attempt has no Runtime State checkpoint")
-                previous_runtime_state_digest = previous.runtime_state_digest
-            elif previous_runtime_state_digest is None:
-                if attempt.branch is BranchRole.ACTIVE:
-                    previous_runtime_state_digest = self._active_branch_seed(epoch)
-                if previous_runtime_state_digest is None:
-                    previous_runtime_state_digest = revision.runtime_state_digest
-                # A first logical Attempt starts a fresh per-Trajectory copy of the
-                # canonical Branch seed. It must not inherit an old same-ordinal cache.
-                reset_persistent_scope = previous_runtime_state_digest is not None
+        if previous_runtime_state_digest is None:
+            if attempt.branch is BranchRole.ACTIVE:
+                previous_runtime_state_digest = self._active_branch_seed(epoch)
+            if previous_runtime_state_digest is None:
+                previous_runtime_state_digest = revision.runtime_state_digest
 
         attempt_root = self._root / str(request.attempt_id)
         attempt_root.mkdir(mode=0o700, exist_ok=True)
         root = attempt_root / f"run-{uuid4().hex}"
         root.mkdir(mode=0o700)
 
-        persistent_state: Path | None = None
-        persistent_lock: Path | None = None
-        if not retain_runtime_state:
-            initialize_reusable_agent_state(
-                root, self._artifacts.verify(revision.optimizer_digest).payload_path
+        state_trajectory = attempt.trajectory_ordinal
+        if (
+            epoch.number == 1
+            and attempt.branch is BranchRole.CHALLENGER
+            and attempt.kernel_agent_revision_id == epoch.active_kernel_agent_revision_id
+        ):
+            # One Agent ID owns two independent Branches in this Epoch. Reserve
+            # the second range of its state slots for the replica, not Active's cache.
+            active_workflow = self._registry.get_epoch_branch_workflow(
+                epoch.id,
+                BranchRole.ACTIVE,
+                0,
             )
-        else:
-            state_trajectory = attempt.trajectory_ordinal
-            if (
-                epoch.number == 1
-                and attempt.branch is BranchRole.CHALLENGER
-                and attempt.kernel_agent_revision_id
-                == epoch.active_kernel_agent_revision_id
-            ):
-                # One Agent ID owns two independent Branches in this Epoch. Reserve
-                # the second range of its state slots for the replica, not Active's cache.
-                active_workflow = self._registry.get_epoch_branch_workflow(
-                    epoch.id,
-                    BranchRole.ACTIVE,
-                    0,
-                )
-                state_trajectory += (
-                    epoch.trajectories_per_branch
-                    if active_workflow is None
-                    else active_workflow.trajectories
-                )
-            persistent_state, persistent_lock = self._persistent_root(
-                lineage_id=lineage.id,
-                revision=revision,
-                trajectory_ordinal=state_trajectory,
-                previous_runtime_state_digest=previous_runtime_state_digest,
-                reset_from_seed=reset_persistent_scope,
-                bootstrap_seed=self._shared_bootstrap_seed(lineage),
-            )
-            copy_reusable_agent_state(persistent_state, root)
+            if active_workflow is None:
+                raise ValueError("replica Agent State requires an Active Workflow Branch")
+            state_trajectory += active_workflow.trajectories
+        persistent_state, persistent_lock = self._persistent_root(
+            lineage_id=lineage.id,
+            revision=revision,
+            trajectory_ordinal=state_trajectory,
+            previous_runtime_state_digest=previous_runtime_state_digest,
+            reset_from_seed=True,
+            bootstrap_seed=self._shared_bootstrap_seed(lineage),
+        )
+        copy_reusable_agent_state(persistent_state, root)
 
         manifest = AttemptInputManifestV9(
             attempt_id=request.attempt_id,
@@ -771,10 +620,9 @@ class LocalAttemptWorkspaceAssembler:
         )
         with _exclusive_lock(lock_path):
             if reset_from_seed and scope.exists():
-                if previous_runtime_state_digest is None:
-                    raise ValueError("Runtime State reset requires an explicit State seed")
                 if scope.is_symlink() or not scope.is_dir():
                     raise ValueError(f"Reusable Agent scope is invalid: {scope}")
+                make_tree_owner_writable(scope)
                 shutil.rmtree(scope)
             if not scope.exists():
                 scope.mkdir(parents=True, mode=0o700)

@@ -127,7 +127,7 @@ def install_optimizer_extensions(
     if not home.is_absolute() or home == workspace or not home.is_relative_to(workspace):
         raise ValueError("Optimizer extension installation requires HOME inside its workspace")
     _local_path(workspace, home)
-    # Keep installation products outside the four checkpointed adaptive directories.
+    # Keep installation products outside the three checkpointed adaptive directories.
     if home.relative_to(workspace).parts[0] != "sessions":
         raise ValueError("Optimizer extension HOME must be under workspace/sessions")
     visible_workspace = visible_workspace or workspace

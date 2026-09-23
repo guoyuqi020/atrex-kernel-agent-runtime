@@ -9,7 +9,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
-from conftest import NOW, digest, seed_lineage
+from conftest import NOW, digest, freeze_branch_workflow, seed_lineage
 from pydantic import SecretStr, ValidationError
 
 from atrex_runtime.artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
@@ -113,9 +113,8 @@ def _insert_attempt(registry: SqliteRegistry) -> Attempt:
         challenger_kernel_agent_revision_ids=(),
         starting_kernel_revision_id=seeded.baseline.id,
         evidence_checkpoint=digest("epoch-evidence"),
-        challenger_count=0,
-        trajectories_per_branch=1,
-        attempts_per_trajectory=1,
+        max_challengers=0,
+        optimizer_attempt_budget=1,
         status=EpochStatus.RUNNING,
         winner_kernel_agent_revision_id=None,
         best_kernel_revision_id=None,
@@ -123,6 +122,7 @@ def _insert_attempt(registry: SqliteRegistry) -> Attempt:
         completed_at=None,
     )
     registry.insert_epoch(epoch)
+    freeze_branch_workflow(registry, epoch)
     attempt = Attempt(
         id=new_attempt_id(),
         epoch_id=epoch.id,

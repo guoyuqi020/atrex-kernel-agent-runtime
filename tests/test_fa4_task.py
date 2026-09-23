@@ -29,7 +29,7 @@ from atrex_runtime.workers.problem_generalization import validate_public_operato
 
 INPUTS = REPOSITORY / "data/FA4"
 SM120_INPUTS = REPOSITORY / "data/FA4-SM120"
-EVOLVER_REVIEW_CONTRACT_COMMIT = "794219bc6e2c7f465327f77b7819d04eb031dd61"
+EVOLVER_REVIEW_CONTRACT_COMMIT = "2ac444b793bedcbc1c317ecb4d5a1cecf4ccf801"
 
 
 @pytest.mark.parametrize("inputs", [INPUTS, SM120_INPUTS])
@@ -269,11 +269,10 @@ def test_fa4_target_contract_and_schedule_are_self_contained() -> None:
     spec = CampaignSpecV3.from_file(INPUTS / "campaign.json")
     assert spec.hardware_target == "L20D"
     assert set(spec.lineages) == {Dsl.CUTEDSL}
-    assert spec.challenger_count == 1 and spec.challenger_start_epoch == 2
-    assert spec.first_epoch_same_agent
-    assert spec.attempts_per_trajectory == 3 and spec.trajectories_per_branch == 1
+    assert spec.max_challengers == 1
+    assert spec.optimizer_attempt_budget == 6
     plan = build_ablation_plan({"schedule": {**spec.model_dump(mode="json"), "event_only": True}})
-    assert len(plan["arms"]) == 11
+    assert len(plan["arms"]) == 15
     assert plan["optimizer_attempt_budget_per_trajectory"] == 15
     assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
     shapes = json.loads((INPUTS / "task/shape_valid.json").read_text())
@@ -337,7 +336,7 @@ def test_preparation_is_offline_preserves_inputs_and_exposes_real_r0(
     prepared = json.loads((workspace / "prepared.json").read_text())
     assert prepared["gpu_jobs_submitted"] == 0
     assert prepared["seed_static_policy_violations"]  # Why this task disables that static scan.
-    assert prepared["ablation_arm_count"] == 12
+    assert prepared["ablation_arm_count"] == 15
     assert prepared["ablation_optimizer_attempt_budget_per_trajectory"] == 15
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     source = import_source_tree(

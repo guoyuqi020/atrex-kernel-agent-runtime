@@ -69,9 +69,9 @@ Agent 仍然可能遗漏或修改 Analysis，但它不能让已经执行的测�
 Runtime 是普通的可信 Python 控制面，不是 Agent。它执行确定性调度并持有策略。Core 与 Evolver 是
 Commit 固定、以不可信 Worker 运行的 Agent Bundle。
 
-Optimizer 可以修改 Kernel 源码与自适应 `tools/`，并以只读方式使用 `prompts/`、`insights/`、
-`skills/`；Evolver 可以修改 Optimizer 的
-源码、Workflow 与自适应 Runtime State。但两者都不能修改 Registry、读取私有验证输入、为自己签发
+Optimizer 可以修改 Kernel 源码与自适应 `tools/`，并以只读方式使用 `prompts/`、`skills/`；
+Evolver 可以修改 Optimizer 的源码、Workflow 与自适应 Runtime State，但修改必须与具体任务无关，
+也不能指定 Kernel 优化方向。两者都不能修改 Registry、读取私有验证输入、为自己签发
 Capability、决定自身晋升结果或重写历史。
 
 这条边界既允许 Agent 大范围进化，又保证故障可恢复、结果可比较。
@@ -119,7 +119,7 @@ Session 外保存真正需要继承的数据：
 - 精确 Kernel Trial 与 Gateway Result；
 - Direction、Experiment、Attempt 与 Evolution Report；
 - 保留的 Conversation 与 Provider Usage；
-- `prompts/`、`insights/`、`skills/`、`tools/` 中的自适应 Runtime State，各自维护 README 索引。
+- `prompts/`、`skills/`、`tools/` 中的自适应 Runtime State，各自维护 README 索引。
 
 这样可以避免上下文污染，使每次重试可观察，并避免把无限增长的历史对话重新塞进每个 Prompt。
 

@@ -24,61 +24,53 @@ Contract、结果和日志。`sandbox` 模式下每个 Agent Attempt 拥有独�
 不要把整个入口命令写成 `sudo bash ...`。`sandbox` 模式只在启动 bwrap/cgroup transient
 service 前自行提权；`container` 模式完全不会提权。
 
-固定调度策略：
+## 版本化 Workflow
+
+Campaign 配置只冻结 `max_challengers` 与精确的 `optimizer_attempt_budget`。每个消融臂的版本化
+`workflow/main.py` 自行决定下述 Branch、Trajectory、Round、进化、Kernel 路由与 State 路由。
+Runtime 只约束资源边界与可信评测/晋升策略，不根据消融臂名称或拓扑参数重建调度。
 
 - 三个单 DSL Campaign 由三个独立进程并行运行 framework bootstrap，各自生成正确的 `v0`；
 - 每个 DSL 在自己的 Bootstrap 成功后立即进入 Epoch，不等待另外两个 DSL；
 - 一个 DSL Bootstrap 或运行失败不会取消或阻塞另外两个，成功结果会保留，重复执行只恢复失败
   或未完成的 Campaign；
-- 默认运行至 Epoch 5；
-- Epoch 1 用同一 Agent Revision、v0 Kernel 和初始 State 并行运行 Active 与副本两个独立分支，
-  每分支串行运行 3 个全新 Optimizer Session，不调用 Evolver；
-- 从 Epoch 2 开始，每个 Epoch 开始前由一个 Evolver 生成一个 Challenger；
-- Active 和 Challenger 并行运行，各自串行运行 3 个 Attempt；
-- Epoch 结束后独立比较并选择 Agent，下一 Epoch 再生成一个 Challenger；
+- 每个启用臂默认运行至 Epoch 5；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
 
-默认 `event_only=true` 时，每个 DSL 共运行 12 个 Campaign 实例，含主臂。所有臂共享同一份冻结的
-Bootstrap v0，对照臂不重复 Bootstrap 或 Baseline 测量。默认均运行 5 个 Epoch，每条 Trajectory
-在每个 Epoch 串行执行 3 个 Attempt：
+当前计划停用旧的 `evolve-3`、`retained-evolve` 和 `isolated-pool-evolve`，但保留其 Workflow 实现。
+每个 DSL 启动 15 个独立对照 Campaign。
+所有臂共享同一份冻结的 Bootstrap v0，
+不重复 Bootstrap 或 Baseline 测量。每条 Trajectory 每个 Epoch 串行执行 3 个 Attempt：
 
 | 臂 | 并行结构 | Optimizer Attempts 总数 | 保留 Runtime State | Evolution 次数 |
 |---|---|---:|---|---:|
-| `evolve-3`（主臂） | Active + Challenger，各一条 Trajectory | 30 | 是 | 4 |
-| `ablation-isolated-01/02` | 两个独立实例，各一条 Trajectory | 各 15，共 30 | 否 | 0 |
-| `ablation-isolated-evolve-01/02` | 仅 Challenger，各一条 Trajectory | 各 15，共 30 | 否 | 各 4 |
-| `ablation-retained-evolve-01/02` | 仅 Challenger，各一条 Trajectory | 各 15，共 30 | 是 | 各 4 |
-| `ablation-isolated-pool-evolve-3` | Active + Challenger，各两条 Trajectory | 60 | 否 | 4 |
-| `ablation-retained-01/02` | 两个独立实例，各一条 Trajectory | 各 15，共 30 | 是 | 0 |
-| `ablation-pool-3` | 同一 Branch 内两条 Trajectory | 30 | 否 | 0 |
-| `ablation-pool-retained-3` | 同一 Branch 内两条 Trajectory | 30 | 是 | 0 |
+| `ablation-isolated-01/02/03` | 每个重复一条 Trajectory | 各 15 | 否 | 0 |
+| `ablation-retained-01/02/03` | 每个重复一条 Trajectory | 各 15 | 是 | 0 |
+| `ablation-pool-3-01/02/03` | 每个重复两条 Trajectory | 各 30 | 否 | 0 |
+| `ablation-pool-retained-3-01/02/03` | 每个重复两条 Trajectory | 各 30 | 是 | 0 |
+| `ablation-isolated-evolve-01/02/03` | 仅 Challenger；旁观对应 Isolated 重复 | 各 15 | 否 | 各 4 |
 
 Runtime State 包含 Memory/Knowledge/Skills/Tools。重置 State 时，每个目录恢复到固定 Core Revision 的初始内容，
 不清除 Kernel 进展或 Runtime 历史。Isolated 和 Retained 实例只共享 Bootstrap Baseline，
-不共享后续历史或可写 State；两类实例数随配置的 Active/Challenger Trajectory 总数派生。
+不共享后续历史或可写 State。
 
 Pool 的 Trajectory 在同一 Epoch 内独立运行，在下一 Epoch 共享已完成历史，并从选出的最佳 Kernel
 重新开始。Pool-Retained 还继承该 Kernel 产出 Trajectory 的终态 State；State 选择继承，不合并，
 也不实时同步。所有对照臂的 Source 固定。两个 Pool 臂始终使用两条 Trajectory、每 Epoch 三次 Attempt。
 
-主臂、四个仅 Challenger 的进化臂和 Isolated-Pool-Evolve 都运行 Evolver。主臂是双分支 Retained-State + Evolution 对照，
-仍比较 Active 与 Challenger。Isolated-Evolve 和 Retained-Evolve 都只运行复制/进化得到的
-Challenger，不运行同轮 Active；二者唯一差别是每个 Attempt 前重置 State，还是在三个串行 Attempt
-间继承 State。`first_epoch_same_agent=true` 使首轮使用 Active 副本，不产生新 Agent Revision 或
-Evolution Report。Bootstrap 和 Evolver Session 不计入 Attempt。
+Isolated-Evolve 只运行复制/进化得到的 Challenger，不运行同轮 Active，并在每个 Attempt 前重置
+State。编号为 `XX` 的重复直接旁观已有的 `isolated-XX`，不重复运行 Active。Epoch 1 可与对应
+Isolated 并行；N > 1 时，调度器先等待 `isolated-XX` 发布 Epoch N-1，再向 Evolver 提供该时点的
+只读证据前缀。Challenger 仍只从自己的上一版本继续进化；两条 Lineage 不共享 Kernel、Journal、
+可写 State 或版本祖先。Bootstrap 和 Evolver Session 不计入 Attempt。
 
-Isolated-Pool-Evolve 同时运行 Active 和 Challenger Pool，每边两条独立 Trajectory。它在每个
-Attempt 前重置自适应 State，因此 Optimizer 产出的 Tool/Skill/Memory/Knowledge 不会继承；Kernel
-进展与 Runtime Journal 历史仍由 Runtime 保留。
-
-每个臂都持有 Lineage-local `agent-v0`，并在其中冻结自己的可执行 Workflow：`evolve_3.py`、
-`evolve_isolated_3.py`、`evolve_retained_3.py`、`evolve_isolated_pool_3.py`、`isolated.py`、`retained.py`、`pool_3.py` 或
-`pool_retained_3.py`。
+每个启用臂都持有 Lineage-local `agent-v0`，并冻结 `evolve_isolated_3.py`、`isolated.py`、
+`retained.py`、`pool_3.py` 或 `pool_retained_3.py`。停用模板仍保留。
 Optimizer Source 与共享
 Bootstrap Kernel 仍受控；Runtime 不再根据臂 Label 推断组织拓扑。
 
-主臂位于 `dsls/DSL/`，对照臂文件位于 `dsls/DSL/ablation-*/`。生成的 `ablation.json` 冻结对照臂配置，
-每条 Trajectory 固定运行 15 次 Bootstrap 之后的 Attempt；`--target-epoch` 只修改主臂目标。
+仅用于 Bootstrap/派生的源 Campaign 位于 `dsls/DSL/`，启用臂位于 `dsls/DSL/ablation-*/`。
+生成的 `ablation.json` 冻结消融臂配置，每条 Trajectory 固定运行 15 次 Bootstrap 之后的 Attempt。
 任务级 `campaign-results.json` 汇总各臂结果和预算。已有 Workspace 保留冻结的 Plan，准备脚本拒绝
 改变 Arm 集合；应用此拓扑需要新 Workspace，不会删除已有实验数据。
 
@@ -161,8 +153,9 @@ Valid，至少需要两个 Shape；再从每一半各随机抽取最多 15 个�
 原始全集和选中 ID 留档在私有 Contract 的 `shape_split` 中。
 Valid Shape 对 Agent 只显示为稳定的连续 ID `0..V-1`；私有 Contract 保留到评测 ID 的映射，
 因此编号缺口不会泄漏 Test 成员。
-Agent 操作及 Bootstrap/Seed 的普通 Eval 只使用 Valid；权威 Runtime
-ABBA 使用 Valid + Test。Test 明细和全量平均延迟不会进入 Agent Evidence 或工具返回。
+Agent 操作及 Bootstrap/Seed 的普通 Eval 只使用 Valid。权威 Runtime ABBA 会执行 Valid + Test，
+但晋升只由 Valid 决定，Test 仅作私有旁路观测；Bootstrap 通过 Valid Gate 后也会记录一次私有
+Test 观测。Test 明细和全量平均延迟不会进入 Agent Evidence 或工具返回。
 旧 Campaign Contract 不可变，旧实验应用此划分或不透明 ID 映射需要新建任务 Workspace。
 详见[评测隐私](../../docs/evaluation.zh.md)。
 

@@ -136,13 +136,10 @@ class LineageSeedSpecV1(BaseModel):
     seed: LineageSeedSourceV1
     initial_evidence: Path | None = None
     models: LineageSeedModelsV1 = LineageSeedModelsV1()
-    challenger_count: int = Field(default=1, ge=0)
-    challenger_start_epoch: int = Field(default=1, gt=0)
-    first_epoch_same_agent: bool = False
-    trajectories_per_branch: int = Field(default=1, gt=0)
-    attempts_per_trajectory: int = Field(gt=0)
-    ephemeral_agent_state: bool = False
+    max_challengers: int = Field(default=1, ge=0)
+    optimizer_attempt_budget: int = Field(gt=0)
     workflow_command: str | None = None
+    evolver_observer_lineage_id: LineageId | None = None
 
     @field_validator("creation_key")
     @classmethod
@@ -159,10 +156,17 @@ class LineageSeedSpecV1(BaseModel):
             return None
         return KernelAgentBundleWorkflowV1(command=value).command
 
+    @field_validator("evolver_observer_lineage_id", mode="before")
+    @classmethod
+    def _validate_observer_lineage_id(cls, value: object) -> LineageId | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Evolver observer Lineage ID must be a string or null")
+        return parse_lineage_id(value)
+
     @model_validator(mode="after")
     def _validate_seed_combination(self) -> Self:
-        if self.first_epoch_same_agent and self.challenger_count != 1:
-            raise ValueError("first_epoch_same_agent requires exactly one Challenger")
         if isinstance(self.seed, LineageBaselineSeedV1) and self.initial_evidence is not None:
             raise ValueError("a cloned Lineage baseline already carries its Bootstrap Evidence")
         return self
@@ -306,6 +310,36 @@ class LineageSeeder:
                 evidence,
             )
 
+        if spec.evolver_observer_lineage_id is not None:
+            observer = self._registry.get_lineage(spec.evolver_observer_lineage_id)
+            if observer.dsl is not spec.dsl:
+                raise ValueError(
+                    "Evolver observer must use the same DSL as the observed Lineage"
+                )
+            if (
+                roots.source_lineage_id is None
+                or observer.bootstrap_source_lineage_id != roots.source_lineage_id
+            ):
+                raise ValueError(
+                    "Evolver observer and observed Lineage must clone the same Bootstrap Lineage"
+                )
+            observer_campaign = self._registry.get_campaign(observer.campaign_id)
+            observed_campaign = self._registry.get_campaign(campaign_id)
+            if (
+                observer_campaign.operator,
+                observer_campaign.hardware_target,
+                observer_campaign.evaluation_contract_digest,
+                observer_campaign.agent_problem_digest,
+            ) != (
+                observed_campaign.operator,
+                observed_campaign.hardware_target,
+                observed_campaign.evaluation_contract_digest,
+                observed_campaign.agent_problem_digest,
+            ):
+                raise ValueError(
+                    "Evolver observer and observed Lineage must share the frozen Campaign contract"
+                )
+
         self._validate_agent_artifact(roots.agent_artifact_digest, spec.dsl)
         try:
             kernel = self._registry.get_kernel_revision(kernel_id)
@@ -380,17 +414,14 @@ class LineageSeeder:
             active_kernel_agent_revision_id=agent.id,
             best_kernel_revision_id=kernel.id,
             evidence_checkpoint=evidence,
-            challenger_count=spec.challenger_count,
-            challenger_start_epoch=spec.challenger_start_epoch,
-            first_epoch_same_agent=spec.first_epoch_same_agent,
-            trajectories_per_branch=spec.trajectories_per_branch,
-            attempts_per_trajectory=spec.attempts_per_trajectory,
+            max_challengers=spec.max_challengers,
+            optimizer_attempt_budget=spec.optimizer_attempt_budget,
             next_epoch_number=1,
             status=LineageStatus.READY,
             optimizer_model=spec.models.optimizer,
             evolver_model=spec.models.evolver,
-            ephemeral_agent_state=spec.ephemeral_agent_state,
             bootstrap_source_lineage_id=roots.source_lineage_id,
+            evolver_observer_lineage_id=spec.evolver_observer_lineage_id,
         )
         self._registry.insert_lineage(lineage)
         self._registry.record_runtime_event(
@@ -524,8 +555,8 @@ class LineageSeeder:
             "source_agent_revision_id": roots.source_agent_revision_id,
             "source_kernel_revision_id": roots.source_kernel_revision_id,
             "source_lineage_id": roots.source_lineage_id,
-            "ephemeral_agent_state": spec.ephemeral_agent_state,
             "initial_evidence_digest": evidence_checkpoint,
+            "evolver_observer_lineage_id": spec.evolver_observer_lineage_id,
         }
         if spec.workflow_command is not None:
             value["workflow_command"] = spec.workflow_command
@@ -552,30 +583,24 @@ class LineageSeeder:
         kernel = kernel_entries[0].revision
         actual = (
             lineage.dsl,
-            lineage.challenger_count,
-            lineage.challenger_start_epoch,
-            lineage.first_epoch_same_agent,
-            lineage.trajectories_per_branch,
-            lineage.attempts_per_trajectory,
+            lineage.max_challengers,
+            lineage.optimizer_attempt_budget,
             lineage.optimizer_model,
             lineage.evolver_model,
-            lineage.ephemeral_agent_state,
             lineage.bootstrap_source_lineage_id,
+            lineage.evolver_observer_lineage_id,
             agent.optimizer_digest,
             agent.source_provenance_digest,
             kernel.artifact_digest,
         )
         expected = (
             spec.dsl,
-            spec.challenger_count,
-            spec.challenger_start_epoch,
-            spec.first_epoch_same_agent,
-            spec.trajectories_per_branch,
-            spec.attempts_per_trajectory,
+            spec.max_challengers,
+            spec.optimizer_attempt_budget,
             spec.models.optimizer,
             spec.models.evolver,
-            spec.ephemeral_agent_state,
             roots.source_lineage_id,
+            spec.evolver_observer_lineage_id,
             roots.agent_artifact_digest,
             provenance_digest,
             roots.kernel_artifact_digest,

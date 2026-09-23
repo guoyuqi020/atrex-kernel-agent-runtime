@@ -774,7 +774,7 @@ class CampaignRuntimeSettings(BaseModel):
     gate_policy: GatePolicySettings
     max_infrastructure_retries: int = Field(ge=0)
     bootstrap_max_parallel_lineages: int = Field(default=1, gt=0)
-    max_parallel_branches: int = Field(default=4, gt=0)
+    max_parallel_attempts: int = Field(default=4, gt=0)
     roofline_builder: AtrexBenchRooflineBuilderSettings | None = None
     kernel_retention_comparison: ComparisonSettings
     agent_promotion_comparison: ComparisonSettings

@@ -38,6 +38,7 @@ _PRIVATE_RESULT_KEYS = frozenset(
         "shape_split",
         "source_shape_ids",
         "test_shape_ids",
+        "test_observation",
         "shapes",
         "spec",
         "stderr",

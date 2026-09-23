@@ -6,15 +6,16 @@ Defaults connect to the remote Agate service; explicit environment overrides rem
 
 This example runs one Triton Lineage through Epoch 3 and exercises two controlled Agent evolutions:
 
-- Epoch 1 has only Active and runs one Optimizer Attempt;
+- Epoch 1 explicitly replicates Active, then Active and its replica run one Attempt each;
 - Epoch 2 creates one Challenger from Epoch 1 Evidence, then Active and Challenger run one Attempt each;
 - Epoch 3 creates one Challenger from Epoch 2 Evidence, then Active and Challenger run one Attempt each;
 - the target stops at Epoch 3, so Runtime never creates Epoch 4 or invokes Evolver again.
 
-The topology is `challenger_count=1`, `challenger_start_epoch=2`,
-`trajectories_per_branch=1`, and `attempts_per_trajectory=1`. “One Attempt” is per Branch, so the
-whole example contains five fresh Optimizer Sessions and two Evolver Sessions. Runtime evaluates
-Active and Challenger independently and promotes a Challenger only when it wins.
+The Campaign grants one Challenger slot and an exact budget of two Optimizer Attempts per Epoch.
+The Agent-owned Workflow decides the first-Epoch replication, later evolution timing, Branches,
+Trajectory layout, Kernel routing, and State routing. The whole example contains six fresh
+Optimizer Sessions and two Evolver Sessions. Runtime evaluates the resulting Branches independently
+and promotes a Challenger only when it wins.
 
 This directory owns its `runtime.json` and three-Epoch `campaign.json`. It uses only the canonical
 VecAdd inputs and generic helpers under `examples/shared/`, never another runnable example.

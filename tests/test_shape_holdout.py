@@ -137,6 +137,10 @@ def test_split_archive_is_not_in_agent_result_projection() -> None:
         {
             "status": "completed",
             "shape_split": split.shape_split.model_dump(mode="json"),
+            "test_observation": {
+                "status": "completed",
+                "candidate": {"correct": False, "latency_us": 123456},
+            },
         }
     ) == {"status": "completed"}
 
@@ -307,9 +311,11 @@ async def test_agent_abba_uses_only_valid_inputs(case: Case) -> None:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("shape_count", [10, 40])
-async def test_authoritative_abba_measures_all_shapes_but_evidence_hides_test(
+@pytest.mark.parametrize("test_failure", [False, True])
+async def test_authoritative_abba_gates_on_valid_and_observes_test_privately(
     tmp_path: Path,
     shape_count: int,
+    test_failure: bool,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     revisions = []
@@ -328,6 +334,31 @@ async def test_authoritative_abba_measures_all_shapes_but_evidence_hides_test(
             )
         )
     contract = _contract(shape_count).with_shape_holdout()
+    assert contract.shape_split is not None
+    failed_test_shape = contract.shape_split.test_shape_ids[0]
+
+    class ObservationClient(AbbaClient):
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            accepted = super().submit_job(kind, request)
+            files = request["files"]
+            assert isinstance(files, dict)
+            request_shapes = set(json.loads(files["reference/shapes.json"]))
+            if test_failure and failed_test_shape in request_shapes:
+                job = self.jobs[str(accepted["job_id"])]
+                result_payload = job["result"]
+                assert isinstance(result_payload, dict)
+                stdout = result_payload["stdout"]
+                assert isinstance(stdout, str)
+                payload = json.loads(stdout.split("=", 1)[1])
+                for run in payload["runs"]:
+                    run["result"]["all_pass"] = False
+                    run["result"]["latency_us_by_shape"] = {}
+                result_payload["stdout"] = "__ATREX_RUNTIME_ABBA_RESULT__=" + json.dumps(
+                    payload,
+                    separators=(",", ":"),
+                )
+            return accepted
+
     contract_digest = artifacts.put_json(
         contract.model_dump(mode="json"), ArtifactKind.EVALUATION_CONTRACT
     )
@@ -338,7 +369,7 @@ async def test_authoritative_abba_measures_all_shapes_but_evidence_hides_test(
         contract,
         evaluation_contract_digest=contract_digest,
     )
-    client = AbbaClient()
+    client = ObservationClient()
     journal = FakeJournal()
     runner = AgateSameAllocationAbbaRunner(
         client,
@@ -367,12 +398,21 @@ async def test_authoritative_abba_measures_all_shapes_but_evidence_hides_test(
     assert len(set(contract.shapes) - set(contract.validation_shape_ids)) <= 15
     raw_path = artifacts.verify(result.gateway_result_digest).payload_path / "value.json"
     raw = json.loads(raw_path.read_text())
-    assert set(raw["candidate"]["latency_us_by_shape"]) == set(contract.shapes)
     valid_ids = set(contract.validation_shape_ids)
+    test_ids = set(contract.shape_split.test_shape_ids)
+    assert raw["promotion_domain"] == "valid"
+    assert raw["candidate"]["correct"] is True
+    assert all(run.correct for run in result.candidate_runs)
+    assert set(raw["candidate"]["latency_us_by_shape"]) == valid_ids
+    assert raw["test_observation"]["affects_promotion"] is False
+    assert raw["test_observation"]["status"] == "completed"
+    assert raw["test_observation"]["candidate"]["correct"] is (not test_failure)
+    assert set(raw["test_observation"]["candidate"]["latency_us_by_shape"]) == (
+        set() if test_failure else test_ids
+    )
     # Synthetic distinctive Test measurements catch aggregate and scalar leakage.
-    raw["candidate"]["latency_us_by_shape"] = {
-        sid: 90 if sid in valid_ids else 9000 for sid in contract.shapes
-    }
+    raw["candidate"]["latency_us_by_shape"] = {sid: 90 for sid in valid_ids}
+    raw["test_observation"]["candidate"]["latency_us_by_shape"] = {sid: 9000 for sid in test_ids}
     raw["candidate"]["correctness"]["max_abs_err"] = 123456789
     private_result = artifacts.put_json(raw, ArtifactKind.GATEWAY_RESULT)
     public = gateway_result_projection(artifacts, private_result, correct=True, latency_us=900)

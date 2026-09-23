@@ -3,7 +3,7 @@
 
 from __future__ import annotations
 
-from runtime import EpochRuntime, serve  # type: ignore[import-not-found]
+from runtime import EpochRound, EpochRuntime, serve  # type: ignore[import-not-found]
 
 
 def run_epoch(epoch: EpochRuntime) -> None:
@@ -12,9 +12,18 @@ def run_epoch(epoch: EpochRuntime) -> None:
         branch="active",
         trajectories=1,
         rounds=budget,
-        runtime_state_policy="reset_each_attempt",
     )
-    epoch.run_pools([pool])
+    def carry_kernel(current: EpochRound) -> None:
+        if current.number >= pool.rounds:
+            return
+        outcome = current.outcomes(pool)[0]
+        current.route_kernel(
+            pool,
+            trajectory_ordinal=1,
+            kernel_revision_id=str(outcome["trajectory_kernel_revision_id"]),
+        )
+
+    epoch.run_pools([pool], after_round=carry_kernel)
     epoch.complete()
 
 

@@ -123,8 +123,9 @@ class DirectionSuggestionForbiddenError(ValueError):
         super().__init__(
             "action=suggest is no longer supported in any session, including Bootstrap. "
             "Use action=propose for a Direction you intend to explore; existing historical "
-            "suggestions remain readable. Evolver should record evidence-backed attribution "
-            "corrections in the Candidate's Insights, Prompts, Skills, Tools, or workflow"
+            "suggestions remain readable. Evolver may record only task-independent corrections "
+            "in Candidate Prompts, Skills, Tools, or workflow; it must not prescribe Kernel "
+            "optimization directions"
         )
 
 

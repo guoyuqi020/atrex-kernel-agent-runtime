@@ -110,7 +110,7 @@
       }
     },
     "max_infrastructure_retries": 2,
-    "max_parallel_branches": 2,
+    "max_parallel_attempts": 2,
     "roofline_builder": null,
     "kernel_retention_comparison": {
       "method": "same_allocation_abba",
@@ -179,7 +179,7 @@
       "reasoning_effort": "max",
       "session_settings": "",
       "repository": "../../src/atrex-kernel-agent-evolver",
-      "commit": "794219bc6e2c7f465327f77b7819d04eb031dd61",
+      "commit": "2ac444b793bedcbc1c317ecb4d5a1cecf4ccf801",
       "git_executable": "/usr/bin/git",
       "fetch_timeout_seconds": 120,
       "max_archive_bytes": 16777216,

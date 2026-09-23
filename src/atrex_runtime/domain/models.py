@@ -34,13 +34,6 @@ class BranchRole(StrEnum):
     CHALLENGER = "challenger"
 
 
-class RuntimeStatePolicy(StrEnum):
-    """How one Workflow Branch carries adaptive Agent state between Attempts."""
-
-    RESET_EACH_ATTEMPT = "reset_each_attempt"
-    RETAIN_ACROSS_ATTEMPTS = "retain_across_attempts"
-
-
 class AgentSelectionReason(StrEnum):
     """Which rule resolved the final Agent comparison of one completed Epoch."""
 
@@ -464,46 +457,30 @@ class Lineage:
     active_kernel_agent_revision_id: KernelAgentRevisionId
     best_kernel_revision_id: KernelRevisionId
     evidence_checkpoint: ArtifactDigest
-    challenger_count: int
-    trajectories_per_branch: int
-    attempts_per_trajectory: int
+    max_challengers: int
+    optimizer_attempt_budget: int
     next_epoch_number: int
     status: LineageStatus
-    challenger_start_epoch: int = 1
-    first_epoch_same_agent: bool = False
     optimizer_model: str | None = None
     evolver_model: str | None = None
-    # Every Attempt starts from empty Skills and Tools instead of inheriting them. Absence
-    # of the Evolver is a separate matter, expressed by a zero Challenger count.
-    ephemeral_agent_state: bool = False
     bootstrap_source_lineage_id: LineageId | None = None
+    evolver_observer_lineage_id: LineageId | None = None
 
     def __post_init__(self) -> None:
-        if self.challenger_count < 0:
-            raise ValueError("a lineage cannot require a negative Challenger count")
+        if self.max_challengers < 0:
+            raise ValueError("a lineage cannot allow a negative Challenger count")
         if self.bootstrap_source_lineage_id == self.id:
             raise ValueError("a lineage cannot inherit its own Bootstrap history")
-        if self.challenger_start_epoch <= 0:
-            raise ValueError("a lineage requires a positive Challenger start Epoch")
-        if self.first_epoch_same_agent and self.challenger_count != 1:
-            raise ValueError("first_epoch_same_agent requires exactly one Challenger")
-        if self.trajectories_per_branch <= 0:
-            raise ValueError("a lineage requires at least one Trajectory per Branch")
-        if self.attempts_per_trajectory <= 0:
-            raise ValueError("a lineage requires a positive per-Trajectory Attempt budget")
+        if self.evolver_observer_lineage_id == self.id:
+            raise ValueError("a lineage cannot observe itself during Evolution")
+        if self.optimizer_attempt_budget <= 0:
+            raise ValueError("a lineage requires a positive Optimizer Attempt budget")
         for role, model in (
             ("Optimizer", self.optimizer_model),
             ("Evolver", self.evolver_model),
         ):
             if model is not None and (not model.strip() or "\x00" in model):
                 raise ValueError(f"Lineage {role} model is invalid")
-
-    def challengers_for_epoch(self, number: int) -> int:
-        """Include the initial same-Agent replica independently of Evolver start."""
-        if number == 1 and self.first_epoch_same_agent:
-            return 1
-        return 0 if number < self.challenger_start_epoch else self.challenger_count
-
 
 @dataclass(frozen=True, slots=True)
 class Epoch:
@@ -516,9 +493,8 @@ class Epoch:
     challenger_kernel_agent_revision_ids: tuple[KernelAgentRevisionId, ...]
     starting_kernel_revision_id: KernelRevisionId
     evidence_checkpoint: ArtifactDigest
-    challenger_count: int
-    trajectories_per_branch: int
-    attempts_per_trajectory: int
+    max_challengers: int
+    optimizer_attempt_budget: int
     status: EpochStatus
     winner_kernel_agent_revision_id: KernelAgentRevisionId | None
     best_kernel_revision_id: KernelRevisionId | None
@@ -527,16 +503,16 @@ class Epoch:
     selection_reason: AgentSelectionReason | None = None
 
     def __post_init__(self) -> None:
-        if self.challenger_count < 0:
-            raise ValueError("an Epoch cannot require a negative Challenger count")
-        if len(self.challenger_kernel_agent_revision_ids) > self.challenger_count:
-            raise ValueError("an Epoch contains more Challengers than configured")
+        if self.max_challengers < 0:
+            raise ValueError("an Epoch cannot allow a negative Challenger count")
+        if len(self.challenger_kernel_agent_revision_ids) > self.max_challengers:
+            raise ValueError("an Epoch contains more Challengers than its Runtime limit")
         if len(set(self.challenger_kernel_agent_revision_ids)) != len(
             self.challenger_kernel_agent_revision_ids
         ):
             raise ValueError("an Epoch cannot contain duplicate Challengers")
-        if self.trajectories_per_branch <= 0 or self.attempts_per_trajectory <= 0:
-            raise ValueError("an Epoch requires positive Trajectory and Attempt budgets")
+        if self.optimizer_attempt_budget <= 0:
+            raise ValueError("an Epoch requires a positive Optimizer Attempt budget")
 
 
 @dataclass(frozen=True, slots=True)
@@ -580,7 +556,6 @@ class EpochBranchWorkflow:
     program_sha256: str | None
     trajectories: int
     attempts_per_trajectory: int
-    runtime_state_policy: RuntimeStatePolicy
     created_at: str
 
     def __post_init__(self) -> None:

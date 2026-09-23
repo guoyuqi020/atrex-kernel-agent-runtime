@@ -19,61 +19,54 @@ mandatory; startup rejects any workspace whose `gate_policy.production_gate` is 
 Do not wrap the complete command in `sudo bash ...`. In `sandbox` mode the scripts escalate only
 transient-service and sandbox execution. In `container` mode they never escalate.
 
-## Fixed schedule
+## Versioned Workflows
 
-- Main arm `evolve-3`: default absolute target Epoch 5 (its existing workspace stays at `dsls/DSL/`).
-- Epoch 1: Active and a replica run the same Agent revision, v0 Kernel and starting State in two
-  isolated Branches, each with three serial fresh Optimizer Attempts. No Evolver runs.
-- Epoch 2 onward: one Evolver creates one Challenger; Active and Challenger run concurrently, with
-  three serial Attempts on each Branch.
-- Epoch completion independently compares Kernels and selects the next Active Agent.
+Campaign configuration freezes only `max_challengers` and the exact
+`optimizer_attempt_budget`. Each arm's versioned `workflow/main.py` owns the Branch, Trajectory,
+round, evolution, Kernel-routing, and State-routing decisions described below. Runtime enforces the
+resource envelope and trusted evaluation/promotion policy; it does not reconstruct this schedule
+from arm labels or topology parameters.
 
-With the default `event_only=true`, each DSL runs twelve Campaign instances including the main arm.
-All share the same frozen Bootstrap v0; controls do not repeat Bootstrap or baseline measurement.
-All default schedules run 5 Epochs with 3 serial Attempts per Trajectory per Epoch:
+The current plan disables the legacy `evolve-3`, `retained-evolve`, and
+`isolated-pool-evolve` experiments without removing their Workflow implementations. Each DSL runs
+15 independent control Campaigns. They share one frozen Bootstrap v0 and do not repeat baseline
+measurement.
+Each enabled topology has three independent replicas. Default schedules run 5 Epochs with 3 serial
+Attempts per Trajectory per Epoch:
 
 | Arm | Parallel structure | Total Optimizer Attempts | Retain Runtime State | Evolutions |
 |---|---|---:|---|---:|
-| `evolve-3` (main) | Active + Challenger, one Trajectory each | 30 | yes | 4 |
-| `ablation-isolated-01/02` | Two independent instances, one Trajectory each | 15 each, 30 combined | no | 0 |
-| `ablation-isolated-evolve-01/02` | Challenger only, one Trajectory each | 15 each, 30 combined | no | 4 each |
-| `ablation-retained-evolve-01/02` | Challenger only, one Trajectory each | 15 each, 30 combined | yes | 4 each |
-| `ablation-isolated-pool-evolve-3` | Active + Challenger, two Trajectories each | 60 | no | 4 |
-| `ablation-retained-01/02` | Two independent instances, one Trajectory each | 15 each, 30 combined | yes | 0 |
-| `ablation-pool-3` | Two Trajectories in one Branch | 30 | no | 0 |
-| `ablation-pool-retained-3` | Two Trajectories in one Branch | 30 | yes | 0 |
+| `ablation-isolated-01/02/03` | One Trajectory per replica | 15 each | no | 0 |
+| `ablation-retained-01/02/03` | One Trajectory per replica | 15 each | yes | 0 |
+| `ablation-pool-3-01/02/03` | Two Trajectories per replica | 30 each | no | 0 |
+| `ablation-pool-retained-3-01/02/03` | Two Trajectories per replica | 30 each | yes | 0 |
+| `ablation-isolated-evolve-01/02/03` | Challenger only; observes matching Isolated replica | 15 each | no | 4 each |
 
 Runtime State includes Memory/Knowledge/Skills/Tools. Resetting State restores the pinned Core's initial
 contents; it does not erase Kernel progress or Runtime history. Isolated and Retained instances
-share only the Bootstrap baseline, not subsequent history or mutable State. Their replica counts
-follow the configured Active/Challenger Trajectory count.
+share only the Bootstrap baseline, not subsequent history or mutable State.
 
 Pool Trajectories run independently within each Epoch and share completed history at the next Epoch,
 restarting from the selected best Kernel. Pool-Retained also inherits its producing Trajectory's
 terminal State; State is selected, not merged or synchronized live. Source stays fixed in all controls.
 Both Pool arms always use two Trajectories and three Attempts per Epoch.
 
-The main, four Challenger-only arms, and Isolated-Pool-Evolve run Evolver. The main arm is the two-Branch
-Retained-State evolution reference and still compares Active against Challenger. Isolated-Evolve
-and Retained-Evolve run only the replicated/evolved Challenger, with no same-Epoch Active
-comparator; they differ only in whether State resets before every Attempt or persists across the
-three serial Attempts. With `first_epoch_same_agent=true`, Epoch 1 uses an Active replica without
-creating a new Agent revision or Evolution Report. Bootstrap and Evolver Sessions are excluded from
-Attempt counts.
+Isolated-Evolve runs the replicated/evolved Challenger without a same-Epoch Active comparator and
+resets State before every Attempt. Replica `XX` observes the existing `isolated-XX` Lineage instead
+of running a duplicate Active. Epoch 1 runs concurrently with that Isolated control. Before Epoch N
+starts for N > 1, the scheduler waits until `isolated-XX` has published Epoch N-1; the Evolver then
+receives that exact read-only prefix. It still evolves only from its own previous Challenger. Kernels,
+Journals, mutable State, and version ancestry never cross between the Lineages. Bootstrap and Evolver
+Sessions are excluded from Attempt counts.
 
-Isolated-Pool-Evolve runs Active and Challenger Pools, each with two independent Trajectories. It
-resets adaptive State before every Attempt, so Optimizer-produced Tools/Skills/Memory/Knowledge do
-not survive; Kernel progress and Runtime Journal history remain authoritative.
-
-Each arm owns a Lineage-local `agent-v0` that freezes its executable Workflow: `evolve_3.py`,
-`evolve_isolated_3.py`, `evolve_retained_3.py`, `evolve_isolated_pool_3.py`, `isolated.py`, `retained.py`, `pool_3.py`, or
-`pool_retained_3.py`. The
+Each enabled arm owns a Lineage-local `agent-v0` that freezes `evolve_isolated_3.py`, `isolated.py`,
+`retained.py`, `pool_3.py`, or `pool_retained_3.py`. Disabled Workflow templates remain available. The
 Optimizer source and shared
 Bootstrap Kernel remain controlled; Runtime no longer infers arm organization from its label.
 
-The main arm lives at `dsls/DSL/`; control files are under `dsls/DSL/ablation-*/`.
+The Bootstrap-only source Campaign lives at `dsls/DSL/`; enabled arms are under `dsls/DSL/ablation-*/`.
 The generated `ablation.json` freezes the control schedules with 15 post-Bootstrap Attempts per
-Trajectory. `--target-epoch` changes only the main arm's target. Task-level `campaign-results.json`
+Trajectory. Task-level `campaign-results.json`
 summarizes all results and budgets. Existing Workspaces retain their frozen plans; preparation
 rejects a changed Arm set. Use a new Workspace for this topology; existing experiment data is not removed.
 
@@ -196,10 +189,12 @@ at least two Shapes required), then randomly samples at most 15 from each half. 
 Contract's `shape_split` archives the population and selected IDs; extra Shapes are excluded from evaluation.
 Valid Shapes are exposed to the Agent only through stable contiguous IDs `0..V-1`; the private
 Contract retains the mapping to evaluator IDs, so gaps cannot reveal Test membership.
-Agent operations and Bootstrap/seed ordinary Eval use Valid only;
-authoritative Runtime ABBA uses Valid + Test. Test rows and full-set aggregates never enter
-Agent Evidence or tool responses. Existing Campaign Contracts are immutable: use a new task
-workspace to apply the split or opaque-ID map to a pre-change experiment. See [evaluation privacy](../../docs/evaluation.md).
+Agent operations and Bootstrap/seed ordinary Eval use Valid only. Authoritative Runtime ABBA
+executes Valid + Test, but promotion uses only Valid; Test is a private observation. Bootstrap also
+records a private Test observation after its Valid gate. Test rows and full-set aggregates never
+enter Agent Evidence or tool responses. Existing Campaign Contracts are immutable: use a new task
+workspace to apply the split or opaque-ID map to a pre-change experiment. See
+[evaluation privacy](../../docs/evaluation.md).
 
 ## Per-DSL inspection
 

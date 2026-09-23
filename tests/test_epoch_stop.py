@@ -33,9 +33,10 @@ def create_epoch(
         id=new_epoch_id(), lineage_id=lineage.id, number=1,
         active_kernel_agent_revision_id=lineage.active_kernel_agent_revision_id,
         challenger_kernel_agent_revision_ids=(), starting_kernel_revision_id=seed.baseline.id,
-        evidence_checkpoint=lineage.evidence_checkpoint, challenger_count=lineage.challenger_count,
-        trajectories_per_branch=lineage.trajectories_per_branch,
-        attempts_per_trajectory=lineage.attempts_per_trajectory, status=status,
+        evidence_checkpoint=lineage.evidence_checkpoint,
+        max_challengers=lineage.max_challengers,
+        optimizer_attempt_budget=lineage.optimizer_attempt_budget,
+        status=status,
         winner_kernel_agent_revision_id=None, best_kernel_revision_id=None,
         created_at=NOW, completed_at=None,
     )

@@ -162,7 +162,7 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     agent = tmp_path / "agent"
     agent.mkdir()
     _write_agent(agent)
-    for name in ("prompts", "insights", "skills", "tools"):
+    for name in ("prompts", "skills", "tools"):
         (agent / name).mkdir()
         (agent / name / "README.md").write_text(f"Initial {name} index")
         (agent / name / "seed.md").write_text(f"Initial {name}")
@@ -230,11 +230,11 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert (prepared.root / "reference").is_dir()
     assert not list((prepared.root / "reference").iterdir())
     (prepared.root / "tools/probe.py").write_text("print('probe')\n")
-    for name in ("prompts", "insights", "skills", "tools"):
+    for name in ("prompts", "skills", "tools"):
         assert (prepared.root / name / "README.md").read_text() == f"Initial {name} index"
         assert not (prepared.root / "agent/optimizer" / name).exists()
         assert (prepared.root / name / "seed.md").read_text() == f"Initial {name}"
-    for name in ("prompts", "insights", "skills"):
+    for name in ("prompts", "skills"):
         assert prepared.root.joinpath(name).stat().st_mode & 0o222 == 0
     (prepared.root / "tools/entry.txt").write_text("bootstrap tools")
     (prepared.root / "tools/README.md").write_text("tools: entry.txt")
@@ -281,7 +281,7 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert (resumed.root / "tools/probe.py").read_text() == "print('probe')\n"
     assert (resumed.root / "tools/entry.txt").read_text() == "bootstrap tools"
     assert (resumed.root / "tools/README.md").read_text() == "tools: entry.txt"
-    for name in ("prompts", "insights", "skills"):
+    for name in ("prompts", "skills"):
         assert (resumed.root / name / "seed.md").read_text() == f"Initial {name}"
         assert (resumed.root / name / "README.md").read_text() == f"Initial {name} index"
     assert not (resumed.root / "hooks").exists()

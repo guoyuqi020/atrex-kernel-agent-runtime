@@ -719,9 +719,9 @@ async def test_source_tree_ablation_preserves_full_v0_and_edit_boundary(source_s
                 **{
                     key: arm[key]
                     for key in (
-                        "attempts_per_trajectory",
-                        "trajectories_per_branch",
-                        "ephemeral_agent_state",
+                        "max_challengers",
+                        "optimizer_attempt_budget",
+                        "workflow_command",
                     )
                 },
             )
@@ -743,5 +743,5 @@ async def test_source_tree_ablation_preserves_full_v0_and_edit_boundary(source_s
             restored = tmp_path / arm["label"]
             source_seed.artifacts.materialize(cloned.lineage.kernel_artifact_digest, restored)
             assert source.validate_tree(restored) == source.validate_tree(source_seed.working)
-        assert len(ids) == 11
+        assert len(ids) == 15
         assert baseline.calls == [Dsl.CUTEDSL]

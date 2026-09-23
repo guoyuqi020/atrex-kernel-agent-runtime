@@ -83,9 +83,9 @@ same boundary instead of creating it.
 Runtime is ordinary trusted Python, not an Agent. It performs deterministic scheduling and owns
 policy. Core and Evolver are commit-pinned Agent Bundles running as untrusted Workers.
 
-An Optimizer may change Kernel source and adaptive `tools/`; it consumes `prompts/`, `insights/`,
-and `skills/` read-only. An Evolver may change
-the Optimizer's source, workflow, and adaptive Runtime State. Neither may change the Registry, reveal private
+An Optimizer may change Kernel source and adaptive `tools/`; it consumes `prompts/` and `skills/`
+read-only. An Evolver may make task-independent changes to the Optimizer's source, workflow, and
+adaptive Runtime State, but cannot prescribe Kernel optimization Directions. Neither may change the Registry, reveal private
 validation inputs, grant itself capabilities, choose its own promotion result, or rewrite history.
 
 This boundary permits broad Agent evolution while keeping failures recoverable and results
@@ -137,7 +137,7 @@ Lineage. Runtime persists the data needed across Sessions:
 - exact Kernel Trials and Gateway results;
 - Direction, Experiment, Attempt, and Evolution reports;
 - retained conversations and provider usage;
-- adaptive Runtime State in `prompts/`, `insights/`, `skills/`, and `tools/`, each with a maintained README.
+- adaptive Runtime State in `prompts/`, `skills/`, and `tools/`, each with a maintained README.
 
 This prevents context pollution, makes retries observable, and lets later Agents inspect history
 without replaying an unbounded conversation into every prompt.

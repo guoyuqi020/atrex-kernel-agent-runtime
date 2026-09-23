@@ -187,21 +187,13 @@ def _campaign_inputs(
             _resolve_template_path(template_path, spec["agent_problem"], "agent_problem")
         )
     spec["base_revision"]["commit"] = core_commit
-    spec["challenger_count"] = _nonnegative_integer_environment(
-        "ATREX_CHALLENGER_COUNT",
-        cast(int, spec["challenger_count"]),
+    spec["max_challengers"] = _nonnegative_integer_environment(
+        "ATREX_MAX_CHALLENGERS",
+        cast(int, spec["max_challengers"]),
     )
-    spec["challenger_start_epoch"] = _integer_environment(
-        "ATREX_CHALLENGER_START_EPOCH",
-        cast(int, spec["challenger_start_epoch"]),
-    )
-    spec["trajectories_per_branch"] = _integer_environment(
-        "ATREX_TRAJECTORIES_PER_BRANCH",
-        cast(int, spec["trajectories_per_branch"]),
-    )
-    spec["attempts_per_trajectory"] = _integer_environment(
-        "ATREX_ATTEMPTS_PER_TRAJECTORY",
-        cast(int, spec["attempts_per_trajectory"]),
+    spec["optimizer_attempt_budget"] = _integer_environment(
+        "ATREX_OPTIMIZER_ATTEMPT_BUDGET",
+        cast(int, spec["optimizer_attempt_budget"]),
     )
     lineages = cast(dict[str, dict[str, Any]], spec["lineages"])
     for dsl, lineage in lineages.items():

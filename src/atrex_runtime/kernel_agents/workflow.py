@@ -233,15 +233,11 @@ class SandboxedAgentWorkflowRunner:
                 "dsl": request.revision.dsl.value,
                 "epoch_id": request.epoch_id,
                 "epoch_number": request.epoch_number,
-                "first_epoch_same_agent": request.first_epoch_same_agent,
                 "workflow_program_sha256": program_sha256,
             },
             "limits": {
                 "max_challengers": request.max_challengers,
                 "optimizer_attempts": request.optimizer_attempt_budget,
-                "default_trajectories": request.default_trajectories,
-                "default_attempts_per_trajectory": request.default_attempts_per_trajectory,
-                "default_runtime_state_policy": request.default_runtime_state_policy,
             },
         }
 

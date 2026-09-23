@@ -674,7 +674,6 @@ class LocalEvidenceAssembler:
                     "program_sha256": item.program_sha256,
                     "trajectories": item.trajectories,
                     "attempts_per_trajectory": item.attempts_per_trajectory,
-                    "runtime_state_policy": item.runtime_state_policy.value,
                     "attempt_budget": item.attempt_budget,
                 }
                 for item in self._registry.list_epoch_branch_workflows(epoch.id)
@@ -683,9 +682,8 @@ class LocalEvidenceAssembler:
                 list[JsonValue],
                 list(self._registry.list_epoch_suggested_directions(epoch.id)),
             ),
-            "challenger_count": epoch.challenger_count,
-            "trajectories_per_branch": epoch.trajectories_per_branch,
-            "attempts_per_trajectory": epoch.attempts_per_trajectory,
+            "max_challengers": epoch.max_challengers,
+            "optimizer_attempt_budget": epoch.optimizer_attempt_budget,
             "winner_kernel_agent_revision_id": epoch.winner_kernel_agent_revision_id,
             "selection_reason": (
                 None if epoch.selection_reason is None else epoch.selection_reason.value

@@ -30,13 +30,18 @@ A Campaign freezes operator, resolved hardware architecture, Agate GPU selector,
 Contract, public Agent Problem, Core source provenance, Evolver commit, and policy. A creation key is
 idempotent only while all immutable inputs match.
 
-Each Lineage owns exactly one DSL, independent Agent/Kernel version trees, models, Epoch topology,
-active Agent, best Kernel, common Evidence checkpoint, and Runtime State lineage. Adding a seeded
+Each Lineage owns exactly one DSL, independent Agent/Kernel version trees, models, a versioned
+Workflow, Runtime resource limits, active Agent, best Kernel, common Evidence checkpoint, and Runtime State lineage. Adding a seeded
 Lineage creates fresh `agent-v0`/`v0` roots; source Revision IDs are provenance, not shared
 version ancestry.
 
-An Ablation Arm is a separate Campaign and Lineage rooted from another Lineage's sealed Bootstrap
-baseline. It has no Challengers. Its optional ephemeral-State behavior is part of Lineage identity.
+An Ablation Arm owns a separate Campaign and Lineage rooted from another Lineage's sealed Bootstrap
+baseline. An evolving arm may name an external control Lineage as its Evolver observer. Before its
+Epoch N starts, Runtime waits for the observer to publish Epoch N-1, then exposes exactly that
+read-only Evidence prefix. This does not merge their Agent/Kernel version trees, Journals, mutable
+State, or Workflow execution. Agent Workflows define Branches,
+State routing, and Kernel routing within each Lineage; Runtime config does not infer behavior from
+the Arm label.
 
 ## Epoch, Branch, Trajectory, and Attempt
 
@@ -72,9 +77,11 @@ provider usage remains mandatory.
 The commit-pinned Evolver Bundle declares its entrypoint in `atrex-evolver-bundle.json` schema 1.
 Runtime sends exactly `Run the versioned Evolver Bundle once.` on stdin. Evolution input schema 11
 contains Parent identity, DSL, Evidence checkpoint, workspace paths, and the frozen Agent catalog;
-it grants no Gateway/Wiki or Runtime query capability. Trace schema 9 retains process, usage,
-report, Candidate identity, and contribution snapshots. Provider usage is required; there is no
-Evolver token cutoff.
+it grants no Gateway/Wiki or live Runtime query capability. Runtime injects only a non-persistent
+`workflow-check` dry-run context. The tool exercises the Candidate Workflow against deterministic
+first-Epoch, later-Epoch, and `no_change` responses without creating Epochs, Attempts, or Registry
+records. Trace schema 9 retains process, usage, report, Candidate identity, and contribution
+snapshots. Provider usage is required; there is no Evolver token cutoff.
 
 Every `input/agents/agent-vN/` is a complete read-only Bundle; `candidate/` uses the same layout.
 Evidence summaries and supplementary per-Trajectory resources are under `input/evidence/agent-vN/`.
@@ -86,7 +93,8 @@ expected effect, exact Bundle-relative `changed_paths`, `contributing_paths`, an
 capabilities. Historical derivation copies the selected complete Bundle before editing it.
 The local `evolution-report` tool validates drafts and returns `issues`, `request_schema`, and
 `recovery` on error without publishing. The first valid call atomically publishes
-`scratch/evolution-report.json`; Runtime independently revalidates it after the Session exits.
+`scratch/evolution-report.json`; Runtime independently revalidates it after the Session exits and
+repeats the Workflow dry-run inside the same Worker sandbox before sealing a Candidate.
 
 Every new revision seals the complete Bundle and four-directory State checkpoint, recording
 `optimizer_digest` and `runtime_state_digest`. Each new Trajectory starts from a separate copy;
@@ -158,33 +166,33 @@ profile evidence, and Direction-bound Findings.
 
 ## Runtime State
 
-Versioned Core Source includes initial `prompts/`, `insights/`, `skills/`, and `tools/` seeds.
+Versioned Core Source includes initial `prompts/`, `skills/`, and `tools/` seeds.
 Runtime copies them when no inherited State exists. Learned State remains a separate Artifact:
 
 ```text
 runtime-state/
   trajectories/<N>/
     prompts/README.md
-    insights/README.md
     skills/README.md
     tools/README.md
 ```
 
-An Optimizer workspace presents one Trajectory's `prompts/`, `insights/`, and `skills/` read-only,
+An Optimizer workspace presents one Trajectory's `prompts/` and `skills/` read-only,
 while `tools/` is writable and its README tracks additions, edits, renames, and removals. Runtime
-seals the terminal contents and restores them for the next serial Attempt. Evolver receives
+seals the terminal contents as that Attempt's opaque output State. Workflow may route that State
+to a later round of the same Trajectory; without an explicit route, the later Attempt starts from
+the immutable Trajectory seed. A physical retry of the same logical Attempt resumes its latest
+sealed State. Evolver receives
 frozen participant/historical State and writes one flat Candidate seed at
-`candidate/{prompts,insights,skills,tools}/`. A new Agent Revision records both source and State
+`candidate/{prompts,skills,tools}/`. A new Agent Revision records both source and State
 digests as one logical Bundle; each new Trajectory receives an independent copy.
 
-Without inherited State, Runtime copies the four initial directories from the pinned Core Source.
-An Ablation Lineage with ephemeral Agent State returns to that seed on every Attempt/retry.
-All four directories are sealed together and share the same inheritance and isolation rules;
-Evolver owns versioned changes to Prompts, Insights, and Skills.
-Insights are scoped, evidence-derived interpretations that change later search decisions; Runtime
-Journal remains the factual history, and static reference material belongs in Skill references.
-When an older immutable State is materialized, Runtime merges its `memory/`, `knowledge/`, or legacy
-`docs/` content into `insights/` without rewriting the sealed Artifact and rejects conflicting paths.
+Without inherited State, Runtime copies the three initial directories from the pinned Core Source.
+All three directories are sealed together and share the same inheritance and isolation rules.
+Evolver may make task-independent changes to Prompts, Skills, Tools, implementation, or Workflow.
+Task-specific hypotheses, optimization Directions, measurements, and conclusions remain in Runtime
+Journals and Reports. Older `insights/`, `memory/`, and `knowledge/` State remains readable in
+immutable historical Artifacts but is not carried into a new Session or Agent Revision.
 
 ## Evidence visibility
 
@@ -226,14 +234,15 @@ Agent Revision code rather than a controller-side label or topology preset, whil
 Evolver never receive unrelated arm implementations.
 
 The context provides DSL/Epoch identity and a resource envelope: maximum Challenger slots, hard
-Optimizer Attempt capacity, default topology, and default Runtime-State policy. Pool creation
-freezes each Branch capacity and State policy. The private SDK assigns explicit Attempt ordinals,
-so a Workflow restart replays completed logical rounds idempotently; round callbacks run again over
-the same trusted outcomes. Normal multi-Branch organizations must register every attached Branch
-and spend the full budget exactly. A controlled Challenger-only evolution organization may omit
-Active and execute only the sole Challenger, but must spend the exact configured single-Branch budget.
-`epoch.complete()` rejects any other subset, missing or unfinished work, and commits only Runtime's
-trusted Kernel and Agent selections.
+Optimizer Attempt capacity, and default topology. Pool creation freezes each Branch capacity. Every
+Trajectory round starts from its immutable initial State unless Workflow explicitly routes a
+completed Attempt's output State into the next round. The private SDK assigns explicit Attempt
+ordinals, so a Workflow restart replays completed logical rounds idempotently; round callbacks run
+again over the same trusted outcomes. Normal multi-Branch organizations must register every attached
+Branch and spend the full budget exactly. A controlled Challenger-only evolution organization may
+omit Active and execute only the sole Challenger, but must spend the exact configured single-Branch
+budget. `epoch.complete()` rejects any other subset, missing or unfinished work, and commits only
+Runtime's trusted Kernel and Agent selections.
 
 Workflow code has no Gateway, Registry, hidden-Test, arbitrary Worker-launch, Gate, promotion,
 rollback, or additional-budget authority. Runtime launches and recovers Attempts, evaluates Kernels,

@@ -88,9 +88,8 @@ def test_dev_shell_prepare_materializes_an_independent_active_only_campaign(
     settings = RuntimeSettings.from_file(tmp_path / "runtime.json")
     spec = CampaignSpecV3.from_file(tmp_path / "campaign.json")
     serialized = (tmp_path / "runtime.json").read_text(encoding="utf-8")
-    assert spec.challenger_count == 0
-    assert spec.trajectories_per_branch == 1
-    assert spec.attempts_per_trajectory == 1
+    assert spec.max_challengers == 0
+    assert spec.optimizer_attempt_budget == 1
     assert settings.campaign is not None
     assert settings.campaign.launcher.mode == "sandbox"
     assert settings.server.host == "127.0.0.1"

@@ -11,7 +11,7 @@ explains ownership and invariants rather than duplicating every numeric value.
 | Document | Schema | Purpose |
 | --- | --- | --- |
 | [`runtime.example.json`](../runtime.example.json) | Runtime v1 | Deployment, services, policy, Agent backends, storage, and launcher. |
-| `examples/*/campaign.json` | Campaign configuration | Operator, private/public contracts, Core commit, DSL Lineages, models, and Epoch topology. |
+| `examples/*/campaign.json` | Campaign configuration | Operator, private/public contracts, Agent commit, DSL Lineages, models, Workflow command, and Runtime resource envelope. |
 | [`lineage-seed.example.json`](../lineage-seed.example.json) | Lineage Seed v1 | Add one independent Lineage from sealed Agent/Kernel content. |
 | Ablation Arm spec | Ablation v1 | Create a control Campaign from a source Lineage's Bootstrap baseline with an independent evolution schedule. |
 
@@ -168,8 +168,7 @@ Required top-level fields:
 - exactly one public input: preferred `shape_train`, legacy `agent_problem`, or neither when Core
   problem generalization is configured;
 - full `base_revision.commit`;
-- `challenger_count`, `challenger_start_epoch`, `trajectories_per_branch`, and
-  `attempts_per_trajectory`;
+- resource bounds `max_challengers` and `optimizer_attempt_budget`;
 - non-empty `lineages` map keyed by DSL.
 
 Each Lineage provides optional Optimizer/Evolver model identities and `initial_evidence`, plus
@@ -179,17 +178,20 @@ Missing model identity delegates to the configured Backend CLI default.
 Optional `problem_generalization_model` applies only when Runtime invokes Core problem
 generalization.
 
-Optional `first_epoch_same_agent` (default false; production evolve arms enable it) requires
-`challenger_count=1`. Epoch 1 runs Active and a replica of the same Agent revision, with identical
-Kernel/State seeds and isolated mutable State. No Evolver is called and no Agent revision is created.
-Later Epochs obey `challenger_start_epoch`. The flag is frozen with the Lineage.
+These two values are limits, not an Epoch topology. The versioned `workflow/main.py` decides when
+to replicate or evolve an Agent, which Branches and Trajectories to run, how to divide the Attempt
+budget, and which Kernel or adaptive State to route into the next round. Runtime rejects a Workflow
+that exceeds the Challenger cap or does not allocate the exact Attempt budget.
+
+Deployment setting `campaign.max_parallel_attempts` independently bounds the number of Optimizer
+Sessions admitted from one Workflow parallel batch. It is a concurrency limit, not a topology.
 
 At Bootstrap, Runtime queries Agate. The returned architecture (for example `sm_120`) is Agent
 visible; the canonical GPU alias is sealed separately for Agate scheduling.
 
 ## Lineage Seed v1
 
-The spec fixes DSL and Epoch topology and selects one source:
+The spec fixes DSL and the same resource envelope, then selects one source:
 
 - `source_type: "artifacts"`: Agent Artifact digest plus Kernel Artifact digest;
 - `source_type: "revisions"`: registered Agent Revision ID plus Kernel Revision ID;
@@ -204,20 +206,16 @@ publishing independent `agent-v0`/`v0` roots.
 `seed-ablation-arm --spec` accepts:
 
 - `creation_key` and `source_lineage_id`;
-- `attempts_per_trajectory` and optional `trajectories_per_branch`;
-- `ephemeral_agent_state` (default true);
-- `challenger_count` (default 0) and `challenger_start_epoch` (default 2);
-- `first_epoch_same_agent` (default false; requires one Challenger);
+- `optimizer_attempt_budget` and optional `max_challengers` (default 0);
+- `workflow_command`, selecting the complete initial executable organization;
 - optional `optimizer_model`.
 
-It creates a separate single-Lineage Campaign; by default no Challenger is generated. When
-`ephemeral_agent_state=true`, every Attempt starts from the pinned Core's initial `prompts/`,
-`insights/`, `skills/`, and `tools/`;
-false retains the source Bootstrap deposit and later serial State. To compare evolution frequencies,
-use `challenger_count=1`, `challenger_start_epoch=2`, `first_epoch_same_agent=true`, and
-`ephemeral_agent_state=false` with different
-`attempts_per_trajectory`. The Evolver model and commit are inherited from the source; Optimizer
-model also inherits unless explicitly overridden. The baseline outcome is reused without remeasurement.
+It creates a separate single-Lineage Campaign; by default no Challenger is generated. The selected
+Workflow program owns Branch/Trajectory construction, evolution timing, Kernel routing, and whether
+each completed Attempt's output State is reused. Runtime interprets neither reset/retain nor
+first-Epoch/evolution-frequency flags. The Evolver model and commit are inherited from the source;
+the Optimizer model also inherits unless explicitly overridden. The baseline outcome is reused
+without remeasurement.
 
 ## Validation rules
 

@@ -33,6 +33,12 @@ from .attempt_report import AttemptReportV12
 from .core import CoreOptimizerProcessConfig
 from .core_phase import CorePhaseRunner, PreparedCorePhase
 from .launcher import WorkerLauncher, validate_worker_environment
+from .session_contract import (
+    RUNTIME_CONTRACT_ENVIRONMENT_KEY,
+    RUNTIME_CONTRACT_RELATIVE_PATH,
+    materialize_session_contract,
+    runtime_contract_environment,
+)
 from .workspace import (
     copy_reusable_agent_state,
     ensure_reusable_directories,
@@ -50,6 +56,7 @@ _RUNTIME_KEYS = {
     "ATREX_AGENT_REASONING_EFFORT",
     "ATREX_AGENT_SESSION_SETTINGS",
     "ATREX_REPORT_COMPLETION_RETRIES",
+    RUNTIME_CONTRACT_ENVIRONMENT_KEY,
     "ATREX_ATTEMPT_REPORT_MAX_BYTES",
     "ATREX_CORE_PHASE",
     "ATREX_CORRECTNESS_POLICY_JSON",
@@ -456,5 +463,26 @@ class CoreLineageBootstrapSessionDriver:
         if config.wiki_endpoint is not None and config.wiki_capability is not None:
             environment["ATREX_WIKI_PROXY_URL"] = config.wiki_endpoint
             environment["ATREX_WIKI_CAPABILITY"] = config.wiki_capability
+        manifest = LineageBootstrapManifestV2.model_validate_json(
+            prepared.manifest_path.read_bytes()
+        )
+        contract_path = prepared.root / RUNTIME_CONTRACT_RELATIVE_PATH
+        if not contract_path.exists():
+            materialize_session_contract(
+                prepared.root,
+                phase="framework_baseline",
+                dsl=manifest.dsl.value,
+                hardware_target=manifest.hardware_target,
+                agent_backend=self._config.agent_backend,
+                model=config.model,
+                session_timeout_seconds=self._config.timeout_seconds,
+                usage_unit=environment["ATREX_USAGE_UNIT"],
+                usage_budget=float(environment["ATREX_USAGE_BUDGET"]),
+                max_attempt_report_bytes=self._config.max_attempt_report_bytes,
+                wiki_available=(
+                    config.wiki_endpoint is not None and config.wiki_capability is not None
+                ),
+            )
+        environment.update(runtime_contract_environment(contract_path))
         validate_worker_environment(environment)
         return environment

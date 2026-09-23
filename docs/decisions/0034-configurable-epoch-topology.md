@@ -1,50 +1,41 @@
-# 0034: Configurable Epoch Topology
+# 0034: Agent-owned Epoch Workflow
 
 English | [中文](0034-configurable-epoch-topology.zh.md)
 
 ## Status
 
-Accepted.
+Accepted. This decision supersedes the earlier configuration-driven Epoch topology recorded under
+the same decision number.
 
 ## Context
 
-A fixed Active-versus-one-Challenger Epoch conflates three independent budgets: how many Agent
-designs to compare, how many independent Kernel-search paths each design receives, and how long each
-path may continue learning. Calling the independent paths “lineages” also conflicts with the durable
-DSL Lineage that owns Agent and Kernel history.
+Branch count, evolution timing, Trajectory layout, Attempt rounds, Kernel propagation, and adaptive
+State propagation are search strategy. Encoding them as Runtime configuration makes every new
+strategy require controller changes and prevents the Evolver from changing how optimization work is
+organized.
+
+Runtime still needs hard, auditable resource bounds. It must also keep evaluation, isolation,
+selection, promotion, persistence, and recovery outside the untrusted Agent.
 
 ## Decision
 
-Each durable DSL Lineage configures:
+Each Lineage freezes only two Epoch resource limits:
 
-- `challenger_count` (`K`, zero or greater);
-- `challenger_start_epoch` (positive, default `1`);
-- `trajectories_per_branch` (`Y`, positive); and
-- `attempts_per_trajectory` (`X`, positive).
+- `max_challengers`: the maximum number of Challenger slots a Workflow may materialize;
+- `optimizer_attempt_budget`: the exact number of Optimizer Attempts the Workflow must allocate.
 
-One Epoch freezes one Active Agent, one starting Kernel, and one Evidence checkpoint. Before
-`challenger_start_epoch`, its effective `K` is zero; from that Epoch onward Runtime invokes the
-Evolver sequentially `K` times, and one invocation creates exactly one Challenger. Invocation
-`i` receives a read-only catalog containing the Active revision, retained Agent history, and
-Challengers `1..i-1`; future Challengers cannot be visible before they exist.
+The versioned Agent Bundle owns `workflow/main.py`. Through a narrow Workflow SDK it may replicate
+or evolve Agents, create Branch pools and Trajectories, execute concurrent rounds, and explicitly
+route Kernel and adaptive State outputs into later Attempts. Runtime validates capabilities and the
+exact budget, then executes those requests. It does not infer a topology or provide a fallback
+schedule.
 
-The Epoch has `1 + K` Branch slots. Active uses Challenger ordinal zero; each Challenger uses its
-one-based creation ordinal. Every Branch launches `Y` Trajectories from the same starting Kernel.
-Trajectories are independent and may run concurrently. Within a Trajectory, `X` Attempts run
-serially, and a retained result becomes only that Trajectory's next input. Every Attempt is a fresh
-Agent Session. The Epoch therefore contains `(1 + K) × Y × X` Optimizer Sessions and `K` Evolver
-Sessions.
-
-Kernel selection considers retained results from all Trajectories. Agent promotion compares the
-Active score with every Challenger score and retains the incumbent on an exact tie. Runtime publishes
-one Evidence checkpoint only after the entire Epoch is selected. Attempt Evidence exposes only prior
-Attempts in the same Trajectory; completed Epoch Evidence preserves all measured Branch and
-Trajectory outcomes.
+The Workflow cannot change evaluation policy, Gate policy, resource limits, sandbox authority,
+Registry facts, selection, or promotion. Those remain trusted Runtime responsibilities.
 
 ## Consequences
 
-Setting `K=0` cleanly disables Evolution while preserving the Epoch boundary. Increasing `Y`
-improves independent search coverage without leaking intermediate Kernel state between paths.
-Increasing `X` deepens one path's serial learning. Resource planning is explicit from the Session
-formula. Registry schema 19 preserves existing Lineages by migrating `challenger_start_epoch` to
-`1`.
+Every Campaign must contain an executable Workflow. Different ablation arms are different Workflow
+programs rather than labels interpreted by Runtime. The Evolver can change search organization by
+editing the Candidate Workflow, while Runtime remains small, policy-oriented, recoverable, and
+auditable.

@@ -36,7 +36,7 @@ flowchart LR
 | Kernel Revision | Lineage 内被保留并标记为 `vN` 的 Kernel。 |
 | Agent Revision | Lineage 内标记为 `agent-vN` 的 Agent Bundle，包含其版本化搜索 Workflow 程序。 |
 | Agent Workflow | 不可信的版本化代码，在固定资源包络内调用一组受限的可信 Runtime 服务，编排一个完整 Epoch。 |
-| Runtime State | Agent 执行产生的自适应 `prompts/`、`insights/`、`skills/` 与 `tools/`，与版本化源码分开存储。 |
+| Runtime State | Agent 执行产生的自适应 `prompts/`、`skills/` 与 `tools/`，与版本化源码分开存储。 |
 | Artifact | Runtime 本地 CAS 中不可变的内容寻址数据。 |
 
 术语必须保持一致：“Lineage”不表示并行 Trajectory，“Attempt”不表示 Provider 重试；角色相关时
@@ -60,8 +60,8 @@ Worker 输出是不可信 Evidence；Registry Transition 与 Runtime 选择的 G
 
 ### Bootstrap
 
-Campaign schema v3 提供 Core Commit、DSL Lineage、Seed Kernel、公开 `shape_train` Contract、私有
-Evaluation Contract、Model 与 Epoch 拓扑。Runtime 解析 Agate Environment，冻结返回的架构与 GPU
+Campaign schema v3 提供 Agent Commit、DSL Lineage、Seed Kernel、公开 `shape_train` Contract、私有
+Evaluation Contract、Model、Workflow 命令与资源包络。Runtime 解析 Agate Environment，冻结返回的架构与 GPU
 Selector，导入并封存 Core，冻结配置的 Evolver Commit，并可选构建缺失 Roofline。
 
 每个 DSL 运行一次 Core `framework_baseline` Session。Bootstrap 是特殊 Attempt：使用与普通
@@ -81,10 +81,11 @@ Runtime 还会冻结版本化 Agent/Kernel Catalog 和全部历史 Kernel Artifa
 Attempt Conversation 与 Attempt Report。每份汇总都记录该版本的分支与胜负，以及最后一次两两选择使用
 的规则；存在多个 Challenger 时，该规则不代表完整淘汰过程。
 此前 Agent 创建时的报告位于只读
-`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，每个可见 Bundle 直接包含所选自适应目录。每个 Optimizer Session 都把终态 `prompts/insights/skills/tools` 封存为不可变
+`input/evolution-reports/`，完整 Evolution Trace 保持私有；详细 Epoch Tree 仅供 Runtime 内部使用，每个可见 Bundle 直接包含所选自适应目录。每个 Optimizer Session 都把终态 `prompts/skills/tools` 封存为不可变
 Runtime State Artifact，生产它的 Attempt 记录 `runtime_state_digest`；Attempt ID 本身就是生产者
-身份，因此不再引入第二个 Checkpoint ID。后续串行 Attempt 在本地缓存丢失时会从该摘要恢复准确
-State。Runtime 使用最近完成 Epoch 获胜分支中、产出最佳 Kernel 的 Trajectory 在最后一个 Attempt
+身份，因此不再引入第二个 Checkpoint ID。Workflow 获得该输出的不透明引用，可以显式路由给后续
+轮次；否则后续 Attempt 使用不可变 Trajectory Seed。同一逻辑 Attempt 的物理重试在本地缓存丢失时
+会恢复其最新封存 State。Runtime 使用最近完成 Epoch 获胜分支中、产出最佳 Kernel 的 Trajectory 在最后一个 Attempt
 结束后的终态 State，作为下一 Epoch Active Branch 与 Evolver Candidate 的共同种子；缺失时依次回退
 到该 Trajectory 的 Epoch 起始 State、Revision Seed 和打包默认内容。Evolver 把 Candidate Source 与 State
 一起封存为一个逻辑
@@ -104,9 +105,10 @@ Revision、复用可见历史 Revision、从历史创建新 Revision，或用 `n
 
 Workflow 只实现一个 `run_epoch(epoch)` 函数。其公开 SDK 创建 Branch 内 Pool 并推进同步轮次，不向
 Workflow 暴露 Attempt 序号或底层协议。每轮结束后，代码可以检查可信结果、把已接受 Kernel 广播给
-兄弟 Trajectory，或通过产出 Attempt 复制兼容 Runtime State；SDK 在内部把轮次翻译成可重放的 Attempt
-操作。普通组织必须花完整体容量；受控的仅 Challenger 进化拓扑只执行唯一 Challenger，并精确花完单 Branch
-预算。准确 Branch 容量、Runtime-State 策略、Challenger 集合与 Workflow 程序 Hash 仍会冻结。
+兄弟 Trajectory，或把已完成 Attempt 的不透明输出 State 显式路由到指定 Trajectory 的下一轮；若不
+路由，下一轮重新使用该 Trajectory 的初始 State。SDK 在内部把轮次翻译成可重放的 Attempt 操作。
+普通组织必须花完整体容量；受控的仅 Challenger 进化拓扑只执行唯一 Challenger，并精确花完单 Branch
+预算。准确 Branch 容量、Challenger 集合与 Workflow 程序 Hash 仍会冻结。
 Runtime 而非 Workflow 负责调度 Epoch、启动和恢复每个 Attempt、执行 Gateway
 评测与可信比较、校验跨 Trajectory 输入与选择身份并提交晋升。物理 Provider 调用可能包含基础设施
 重试和有上限的报告补交，均不增加 Attempt 数量。
@@ -130,22 +132,17 @@ Pool-Retained-3 模板。Runtime 只把被选中的程序物化为
 
 Workflow 程序属于不可变 Agent Revision，但 Workflow 执行进度不属于。每个 Epoch 只由当时的 Active
 Revision 编排；Challenger 修改后的 Workflow 只有在该 Agent 获胜、并在后续 Epoch 成为 Active 后才会
-生效。Registry 记录冻结的 Challenger 集合、Branch 拓扑、State 策略、程序 Hash 和全部 Attempt，
+生效。Registry 记录冻结的 Challenger 集合、Branch 拓扑、显式 State 路由边、程序 Hash 和全部 Attempt，
 因此重启可以幂等重放服务调用，而不会让变化后的代码重新解释已完成决策。Runtime 不会把 Workflow
 代码导入控制进程。Workflow 不能修改评测、隐藏 Shape、Gate Policy、Runtime 重试、晋升、回滚、
 Capability 或资源包络。
 
 `seed-ablation-arm` 从已有 Lineage 的冻结 Bootstrap Baseline 创建单独 Campaign 中的控制
-Lineage。`challenger_count` 默认 0，也可启用进化频率对照；`challenger_start_epoch` 默认 2。
-`ephemeral_agent_state` 决定每次 Attempt 后是否清空
-`prompts/`、`insights/`、`skills/` 与 `tools/`。该 Arm 共享可比较的源评测身份，但生命周期和版本历史独立。
-
-启用 `first_epoch_same_agent=true` 后，首轮 Challenger 是 Runtime 创建的 Active 同版本
-`replica`，不属于一次进化，Agent Revision 不变。普通竞争会执行 Active 与 Challenger 两边。
-受控的仅 Challenger 进化拓扑只执行该副本/Challenger：同一 Epoch 没有 Active 对照，Kernel 仍与
-Epoch 起点 Kernel 比较并保留较优者，唯一实际执行的 Agent 则晋升到下一 Epoch。Isolated-Evolve
-在每次 Attempt 前重置 State，Retained-Evolve 在串行 Attempt 间继承 State。Replica 来源记录不包含
-Evolution Trace。
+Lineage。其配置只冻结 `max_challengers`、`optimizer_attempt_budget` 与被选择的 Workflow 程序。
+该程序决定是否以及何时调用 Runtime 的复制/进化服务、执行哪些 Branch/Trajectory，并控制各轮
+Kernel 与 State 输出的路由。例如进化 Workflow 可以在 Epoch 1 创建 Active 副本、之后请求新进化的
+Challenger；仅 Challenger 的 Workflow 也可以把全部固定预算投入这一个 Agent。该 Arm 共享可比较的
+源评测身份，但生命周期和版本历史独立。
 
 ## 私有评测边界
 
@@ -156,8 +153,9 @@ Campaign、Lineage 或 Attempt 历史。
 
 新 Campaign 使用固定种子 `42` 随机对半划分 Valid/Test（奇数多出的一个归 Valid，至少两个
 Shape），再从两边各随机抽取最多 15 个。私有 Contract 留档原始全集与选中 ID，多出的 Shape 不参与评测。
-Agent 操作与普通评测只使用 Valid，权威 Runtime ABBA 使用两者。Agent 可见历史测量剔除 Test
-条目，并按 Valid 重算延迟汇总；只有 Runtime 的接受/选择裁决反映全量 Gate。详见[评测](evaluation.zh.md)。
+Agent 操作与普通评测只使用 Valid。权威 Runtime ABBA 会执行两者，但正确性、延迟、接受与选择
+只由 Valid 决定；Test 只是私有的泛化旁路观测，绝不影响晋升。Agent 可见历史测量剔除 Test
+条目，并按 Valid 重算延迟汇总。详见[评测](evaluation.zh.md)。
 
 ## Agent Source 与 Runtime State
 
@@ -166,9 +164,9 @@ Runtime 从已初始化的本地 Checkout 读取完整 Optimizer Commit，不执
 Manifest 或大小违规，随后封存完整 Agent Source Artifact。Git Commit 表示经审查源码来源，
 Artifact Digest 表示实际使用的精确校验 Snapshot，两者都保留。
 
-Optimizer Session 只读挂载 Agent Source、`prompts/`、`insights/` 和 `skills/`，仅 `tools/` 是可写的
+Optimizer Session 只读挂载 Agent Source、`prompts/` 和 `skills/`，仅 `tools/` 是可写的
 可复用状态。Runtime 封存每个 Session 终态 State，串行 Attempt 恢复前一 State。Evolution 提供只读 Active/Challenger/Historical Source
-与 State，以及可写的完整 `candidate/` Bundle（实现和四个自适应目录）；Runtime 校验并将二者
+与 State，以及可写的完整 `candidate/` Bundle（实现和三个自适应目录）；Runtime 校验并将二者
 封存为新 Agent Bundle。Runtime 不会把进化结果推回 Core 仓库。
 
 ## 存储与恢复

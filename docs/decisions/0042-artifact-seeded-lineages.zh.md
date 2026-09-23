@@ -30,7 +30,7 @@
 - CLI：`atrex-kernel-agent-runtime seed-lineage --config ... --campaign ... --spec ...`
 - 管理 API：`POST /v1/admin/campaigns/{campaign_id}/lineages`
 
-请求包含固定 DSL、可选 Optimizer/Evolver Model、Epoch 拓扑、可选初始 Evidence，以及一个带
+请求包含固定 DSL、可选 Optimizer/Evolver Model、Workflow 命令、Runtime 资源包络、可选初始 Evidence，以及一个带
 判别字段的 `seed` 来源。返回值包含新 Lineage ID、`agent-v0`、`v0`、来源 Provenance、权威
 Gateway Result 与 Latency。
 

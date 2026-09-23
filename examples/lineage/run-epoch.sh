@@ -37,7 +37,7 @@ atrex_example_ensure_bootstrapped_campaign
 selected_lineage_id="$(atrex_example_lineage_id)"
 
 echo
-echo "Running Epoch 1: K=${ATREX_CHALLENGER_COUNT}, start=${ATREX_CHALLENGER_START_EPOCH}, Y=${ATREX_TRAJECTORIES_PER_BRANCH}, X=${ATREX_ATTEMPTS_PER_TRAJECTORY}"
+echo "Running Epoch 1: max challengers=${ATREX_MAX_CHALLENGERS}, optimizer attempts=${ATREX_OPTIMIZER_ATTEMPT_BUDGET}"
 mkdir -p "$(dirname -- "${lineage_epoch_result_file}")"
 temporary="${lineage_epoch_result_file}.tmp.$$"
 trap 'rm -f "${temporary}"' EXIT

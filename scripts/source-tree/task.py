@@ -80,11 +80,9 @@ def prepare(inputs: Path, workspace: Path, backend: str | None, port: int | None
     if integrity is not None:
         verify_assets(inputs, integrity["files_sha256"])
     definition = json.loads((inputs / "campaign.json").read_text())
-    spec = CampaignSpecV3.model_validate(definition)
+    CampaignSpecV3.model_validate(definition)
     if len(definition["lineages"]) != 1:
         raise ValueError("This source-tree task runner requires exactly one DSL Lineage")
-    if not spec.first_epoch_same_agent:
-        raise ValueError("This source-tree task runner requires first_epoch_same_agent=true")
     ablation = build_ablation_plan({"schedule": {**definition, "event_only": True}})
     manifest = SourceManifest.model_validate_json(
         (inputs / "task/source_manifest.json").read_bytes()
@@ -246,7 +244,8 @@ def prepare(inputs: Path, workspace: Path, backend: str | None, port: int | None
                     "production_gate": gate["production_gate"],
                     "seed_static_policy_violations": list(policy_violations),
                     "gpu_jobs_submitted": 0,
-                    "ablation_arm_count": len(ablation["arms"]) + 1,
+                    "ablation_arm_count": len(ablation["arms"])
+                    + int(ablation.get("main_evolve_enabled", True)),
                     "ablation_optimizer_attempt_budget_per_trajectory": ablation[
                         "optimizer_attempt_budget_per_trajectory"
                     ],
@@ -349,9 +348,7 @@ def main() -> None:
         type=int,
         help="absolute main-arm target; defaults to 1 for campaign and 5 for ablation",
     )
-    parser.add_argument(
-        "--smoke-mode", choices=("upstream-p128", "sm120-bf16", "target")
-    )
+    parser.add_argument("--smoke-mode", choices=("upstream-p128", "sm120-bf16", "target"))
     parser.add_argument("--shape-id", default="0")
     args = parser.parse_args()
     if (args.target_epoch is not None and args.target_epoch < 1) or (

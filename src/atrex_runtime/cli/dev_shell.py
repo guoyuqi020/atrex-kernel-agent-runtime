@@ -12,6 +12,7 @@ from ..composition.bootstrap import build_gate_contract_policy, build_optimizer_
 from ..composition.campaign import (
     build_core_process_config,
     build_evolution_process_config,
+    build_optimizer_session_contract_policy,
     build_worker_launcher,
 )
 from ..config import RuntimeSettings
@@ -334,6 +335,9 @@ def open_evolver_dev_shell(
                 artifacts,
                 evolver_bundle_digest=evolution_config.bundle_artifact_digest,
                 attempt_workspaces_root=campaign.attempt_workspaces_root,
+                next_optimizer_contract_policy=(
+                    build_optimizer_session_contract_policy(campaign)
+                ),
             ),
             sessions,
             RegistryLineageLeaseManager(
@@ -430,6 +434,10 @@ def open_temporary_evolver_dev_shell(
             ),
             kernel_catalog=(),
             model=lineage_spec.models.evolver,
+            hardware_target=spec.hardware_target,
+            epoch_number=2,
+            max_challengers=spec.max_challengers,
+            optimizer_attempt_budget=spec.optimizer_attempt_budget,
         )
         evolution_config = build_evolution_process_config(
             campaign,
@@ -442,6 +450,9 @@ def open_temporary_evolver_dev_shell(
                 artifacts,
                 evolver_bundle_digest=evolution_config.bundle_artifact_digest,
                 attempt_workspaces_root=campaign.attempt_workspaces_root,
+                next_optimizer_contract_policy=(
+                    build_optimizer_session_contract_policy(campaign)
+                ),
             ),
             SubprocessEvolutionSessionDriver(
                 build_worker_launcher(settings, os.environ),

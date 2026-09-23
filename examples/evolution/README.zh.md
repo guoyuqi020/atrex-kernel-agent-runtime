@@ -6,15 +6,15 @@
 
 这个示例运行一个 Triton Lineage 到 Epoch 3，并展示两次受控 Agent 进化：
 
-- Epoch 1：只有 Active，运行一个 Optimizer Attempt；
+- Epoch 1：Workflow 显式复制 Active，Active 与副本各运行一个 Attempt；
 - Epoch 2：Evolver 基于 Epoch 1 Evidence 创建一个 Challenger，Active 和 Challenger 各运行一个 Attempt；
 - Epoch 3：Evolver 基于 Epoch 2 Evidence 再创建一个 Challenger，Active 和 Challenger 各运行一个 Attempt；
 - 到达目标 Epoch 3 后停止，不创建 Epoch 4，因此不会再调用 Evolver。
 
-配置为 `challenger_count=1`、`challenger_start_epoch=2`、
-`trajectories_per_branch=1`、`attempts_per_trajectory=1`。这里“一次 Attempt”是每个 Branch
-一次，因此本例总计 5 个全新 Optimizer Session 和 2 个 Evolver Session。Challenger 不会被无条件
-覆盖到 Active；每个 Epoch 仍由 Runtime 根据独立评测结果决定是否晋升。
+Campaign 授予一个 Challenger Slot，并为每个 Epoch 提供恰好两个 Optimizer Attempt 的预算。
+Agent 自有 Workflow 决定首轮复制、后续进化时机、Branch 与 Trajectory 组织、Kernel 路由和
+State 路由。因此本例总计 6 个全新 Optimizer Session 和 2 个 Evolver Session。Challenger
+不会被无条件覆盖到 Active；每个 Epoch 仍由 Runtime 根据独立评测结果决定是否晋升。
 
 本目录自行持有 `runtime.json` 和三 Epoch `campaign.json`，只使用 `examples/shared/` 下的标准
 VecAdd 输入与通用 Helper，不依赖其他可运行示例。

@@ -12,6 +12,7 @@ from .domain.ids import (
     EpochId,
     KernelAgentRevisionId,
     KernelRevisionId,
+    LineageId,
     WorkerSessionId,
 )
 from .domain.models import (
@@ -42,6 +43,34 @@ class BuildChallengerRequest:
     agent_catalog: tuple[KernelAgentCatalogEntry, ...] = ()
     kernel_catalog: tuple[KernelCatalogEntry, ...] = ()
     model: str | None = None
+    hardware_target: str = "unspecified"
+    epoch_number: int = 2
+    max_challengers: int = 1
+    optimizer_attempt_budget: int = 6
+    observer_lineage_id: LineageId | None = None
+    observer_evidence_checkpoint: ArtifactDigest | None = None
+    observer_agent_catalog: tuple[KernelAgentCatalogEntry, ...] = ()
+    observer_kernel_catalog: tuple[KernelCatalogEntry, ...] = ()
+
+    def __post_init__(self) -> None:
+        if self.epoch_number <= 0:
+            raise ValueError("Evolution Epoch number must be positive")
+        if self.max_challengers < 0:
+            raise ValueError("Evolution maximum Challengers cannot be negative")
+        if self.optimizer_attempt_budget <= 0:
+            raise ValueError("Evolution Optimizer Attempt budget must be positive")
+        if not self.hardware_target.strip() or "\x00" in self.hardware_target:
+            raise ValueError("Evolution hardware target is invalid")
+        observer_values = (
+            self.observer_lineage_id,
+            self.observer_evidence_checkpoint,
+        )
+        if (observer_values[0] is None) is not (observer_values[1] is None):
+            raise ValueError("Evolution observer identity and Evidence must be provided together")
+        if self.observer_lineage_id is None and (
+            self.observer_agent_catalog or self.observer_kernel_catalog
+        ):
+            raise ValueError("Evolution observer catalogs require an observer Lineage")
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,10 +136,6 @@ class RunAgentWorkflowRequest:
     epoch_number: int
     max_challengers: int
     optimizer_attempt_budget: int
-    default_trajectories: int
-    default_attempts_per_trajectory: int
-    default_runtime_state_policy: str
-    first_epoch_same_agent: bool
 
 
 class AgentWorkflowOperationHandler(Protocol):

@@ -3,18 +3,18 @@
 
 from __future__ import annotations
 
-from runtime import EpochRuntime, serve  # type: ignore[import-not-found]
+from runtime import (  # type: ignore[import-not-found]
+    AgentStateRef,
+    EpochRound,
+    EpochRuntime,
+    serve,
+)
 
 
 def run_epoch(epoch: EpochRuntime) -> None:
     budget = int(epoch.limits["optimizer_attempts"])
     epoch_number = int(epoch.context["epoch_number"])
-    first_epoch_same_agent = bool(epoch.context["first_epoch_same_agent"])
-    challenger: str | None
-    if epoch_number == 1 and first_epoch_same_agent:
-        challenger = epoch.replicate_active(1)
-    else:
-        challenger = epoch.evolve_agent(1)
+    challenger = epoch.replicate_active(1) if epoch_number == 1 else epoch.evolve_agent(1)
 
     if challenger is None:
         pools = [
@@ -22,7 +22,6 @@ def run_epoch(epoch: EpochRuntime) -> None:
                 branch="active",
                 trajectories=1,
                 rounds=budget,
-                runtime_state_policy="retain_across_attempts",
             )
         ]
     else:
@@ -31,11 +30,25 @@ def run_epoch(epoch: EpochRuntime) -> None:
                 branch=branch,
                 trajectories=1,
                 rounds=3,
-                runtime_state_policy="retain_across_attempts",
             )
             for branch in ("active", "challenger-1")
         ]
-    epoch.run_pools(pools)
+    def carry_states(current: EpochRound) -> None:
+        for pool in pools:
+            if current.number >= pool.rounds:
+                continue
+            outcome = current.outcomes(pool)[0]
+            current.route_kernel(
+                pool,
+                trajectory_ordinal=1,
+                kernel_revision_id=str(outcome["trajectory_kernel_revision_id"]),
+            )
+            state = outcome["output_state"]
+            if not isinstance(state, AgentStateRef):
+                raise TypeError("Attempt outcome omitted its Agent State")
+            current.route_state(pool, trajectory_ordinal=1, state=state)
+
+    epoch.run_pools(pools, after_round=carry_states)
     epoch.complete()
 
 

@@ -96,8 +96,8 @@ async def _evolution_arm(
                     "agent_artifact_digest": _agent_artifact(artifacts, tmp_path),
                     "kernel_artifact_digest": _kernel_artifact(artifacts, tmp_path),
                 },
-                "challenger_count": 1,
-                "attempts_per_trajectory": 2,
+                "max_challengers": 1,
+                "optimizer_attempt_budget": 4,
                 "models": {"optimizer": "optimizer-test", "evolver": "evolver-test"},
             }
         ),
@@ -124,7 +124,7 @@ async def test_ablation_arm_owns_a_separate_campaign_sharing_the_exact_contract(
             {
                 "creation_key": "ablation-1",
                 "source_lineage_id": str(evolution_lineage_id),
-                "attempts_per_trajectory": 2,
+                "optimizer_attempt_budget": 2,
             }
         )
 
@@ -148,11 +148,10 @@ async def test_ablation_arm_owns_a_separate_campaign_sharing_the_exact_contract(
         assert arm_campaign.agent_problem_digest == evolution_campaign.agent_problem_digest
 
         arm_lineage = registry.get_lineage(arm.lineage.lineage_id)
-        assert arm_lineage.ephemeral_agent_state is True
-        assert arm_lineage.challenger_count == 0
+        assert arm_lineage.max_challengers == 0
+        assert arm_lineage.optimizer_attempt_budget == 2
         assert arm_lineage.optimizer_model == "optimizer-test"
         assert arm_lineage.evolver_model == "evolver-test"
-        assert arm_lineage.trajectories_per_branch == 1
         assert arm_lineage.dsl is registry.get_lineage(evolution_lineage_id).dsl
         # Recording the shared Bootstrap is what lets the arm read that Bootstrap's
         # measurement history without seeing the evolution arm's own Attempts.
@@ -165,10 +164,10 @@ async def test_ablation_arm_owns_a_separate_campaign_sharing_the_exact_contract(
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("attempts,epochs,total", [(1, 15, 30), (5, 3, 30)])
+@pytest.mark.parametrize("budget,epochs,total", [(2, 15, 30), (10, 3, 30)])
 async def test_evolving_arm_preserves_baseline_and_models_with_independent_schedule(
     tmp_path: Path,
-    attempts: int,
+    budget: int,
     epochs: int,
     total: int,
 ) -> None:
@@ -183,36 +182,24 @@ async def test_evolving_arm_preserves_baseline_and_models_with_independent_sched
         )
         arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
         spec = AblationArmSpecV1(
-            creation_key=f"ablation-evolve-{attempts}",
+            creation_key=f"ablation-evolve-{budget}",
             source_lineage_id=source_id,
-            attempts_per_trajectory=attempts,
-            challenger_count=1,
-            challenger_start_epoch=2,
-            first_epoch_same_agent=True,
-            ephemeral_agent_state=False,
+            optimizer_attempt_budget=budget,
+            max_challengers=1,
+            workflow_command="workflow/evolve_3.py",
         )
         result = await arms.seed_arm(spec)
         assert await arms.seed_arm(spec) == result
         response = ablation_arm_result_value(result)
-        assert response["challenger_count"] == 1
-        assert response["challenger_start_epoch"] == 2
-        assert response["first_epoch_same_agent"] is True
+        assert response["max_challengers"] == 1
+        assert response["optimizer_attempt_budget"] == budget
         lineage = registry.get_lineage(result.lineage.lineage_id)
-        assert lineage.challenger_count == 1
-        assert lineage.challenger_start_epoch == 2
-        assert lineage.attempts_per_trajectory == attempts
-        assert lineage.trajectories_per_branch == 1
-        assert lineage.ephemeral_agent_state is False
+        assert lineage.max_challengers == 1
+        assert lineage.optimizer_attempt_budget == budget
         assert lineage.optimizer_model == "optimizer-test"
         assert lineage.evolver_model == "evolver-test"
         assert lineage.bootstrap_source_lineage_id == source_id
-        assert (
-            sum(
-                attempts * (1 + lineage.challengers_for_epoch(epoch))
-                for epoch in range(1, epochs + 1)
-            )
-            == total
-        )
+        assert lineage.optimizer_attempt_budget * epochs == total
         assert registry.get_campaign(result.campaign_id).evolver_commit == (
             registry.get_campaign(source_campaign_id).evolver_commit
         )
@@ -220,13 +207,13 @@ async def test_evolving_arm_preserves_baseline_and_models_with_independent_sched
         assert len(evaluator.calls) == 1
         # A resumed arm cannot silently change its frozen evolution schedule.
         with pytest.raises(ValueError, match="different"):
-            await arms.seed_arm(spec.model_copy(update={"first_epoch_same_agent": False}))
+            await arms.seed_arm(spec.model_copy(update={"max_challengers": 0}))
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("kind,ephemeral", [("isolated", True), ("retained", False)])
+@pytest.mark.parametrize("kind", ["isolated", "retained"])
 async def test_two_ablation_arms_are_mutually_independent(
-    tmp_path: Path, kind: str, ephemeral: bool
+    tmp_path: Path, kind: str
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     evaluator = FakeEvaluator(artifacts, [])
@@ -243,8 +230,7 @@ async def test_two_ablation_arms_are_mutually_independent(
                 {
                     "creation_key": f"ablation-{kind}-01",
                     "source_lineage_id": str(evolution_lineage_id),
-                    "attempts_per_trajectory": 3,
-                    "ephemeral_agent_state": ephemeral,
+                    "optimizer_attempt_budget": 3,
                 }
             )
         )
@@ -253,8 +239,7 @@ async def test_two_ablation_arms_are_mutually_independent(
                 {
                     "creation_key": f"ablation-{kind}-02",
                     "source_lineage_id": str(evolution_lineage_id),
-                    "attempts_per_trajectory": 3,
-                    "ephemeral_agent_state": ephemeral,
+                    "optimizer_attempt_budget": 3,
                 }
             )
         )
@@ -269,12 +254,66 @@ async def test_two_ablation_arms_are_mutually_independent(
         assert first.lineage.latency_us == second.lineage.latency_us
         for result in (first, second):
             lineage = registry.get_lineage(result.lineage.lineage_id)
-            assert lineage.ephemeral_agent_state is ephemeral
-            assert lineage.trajectories_per_branch == 1
-            assert lineage.attempts_per_trajectory == 3
-            assert lineage.challenger_count == 0
+            assert lineage.optimizer_attempt_budget == 3
+            assert lineage.max_challengers == 0
             assert lineage.bootstrap_source_lineage_id == evolution_lineage_id
         assert len(evaluator.calls) == 1
+
+
+@pytest.mark.anyio
+async def test_evolve_arm_observes_matching_isolated_arm_across_campaigns(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    evaluator = FakeEvaluator(artifacts, [])
+    with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
+        seeder, _source_campaign_id, source_id = await _evolution_arm(
+            registry,
+            artifacts,
+            tmp_path,
+            evaluator,
+        )
+        arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
+        active = await arms.seed_arm(
+            AblationArmSpecV1(
+                creation_key="paired-active",
+                source_lineage_id=source_id,
+                optimizer_attempt_budget=3,
+                workflow_command="workflow/isolated.py",
+            )
+        )
+        challenger = await arms.seed_arm(
+            AblationArmSpecV1(
+                creation_key="paired-challenger",
+                source_lineage_id=source_id,
+                optimizer_attempt_budget=3,
+                max_challengers=1,
+                workflow_command="workflow/evolve_isolated_3.py",
+                evolver_observer_lineage_id=active.lineage.lineage_id,
+            )
+        )
+
+        assert active.campaign_id != challenger.campaign_id
+        assert active.lineage.lineage_id != challenger.lineage.lineage_id
+        assert [lineage.id for lineage in registry.list_campaign_lineages(active.campaign_id)] == [
+            active.lineage.lineage_id
+        ]
+        assert [
+            lineage.id for lineage in registry.list_campaign_lineages(challenger.campaign_id)
+        ] == [challenger.lineage.lineage_id]
+        stored_active = registry.get_lineage(active.lineage.lineage_id)
+        stored_challenger = registry.get_lineage(challenger.lineage.lineage_id)
+        assert stored_active.evolver_observer_lineage_id is None
+        assert (
+            stored_challenger.evolver_observer_lineage_id
+            == active.lineage.lineage_id
+        )
+        assert stored_active.max_challengers == 0
+        assert stored_challenger.max_challengers == 1
+        assert (
+            stored_active.active_kernel_agent_revision_id
+            != stored_challenger.active_kernel_agent_revision_id
+        )
 
 
 @pytest.mark.anyio
@@ -293,7 +332,7 @@ async def test_ablation_agent_v0_freezes_its_selected_workflow(tmp_path: Path) -
             AblationArmSpecV1(
                 creation_key="isolated-workflow",
                 source_lineage_id=source_id,
-                attempts_per_trajectory=3,
+                optimizer_attempt_budget=3,
                 workflow_command="workflow/isolated.py",
             )
         )
@@ -301,8 +340,7 @@ async def test_ablation_agent_v0_freezes_its_selected_workflow(tmp_path: Path) -
             AblationArmSpecV1(
                 creation_key="retained-workflow",
                 source_lineage_id=source_id,
-                attempts_per_trajectory=3,
-                ephemeral_agent_state=False,
+                optimizer_attempt_budget=3,
                 workflow_command="workflow/retained.py",
             )
         )
@@ -341,10 +379,10 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
         )
         arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
         shapes = {
-            "isolated": {"trajectories_per_branch": 1, "ephemeral_agent_state": True},
-            "pooled": {"trajectories_per_branch": 2, "ephemeral_agent_state": True},
-            "retained": {"trajectories_per_branch": 1, "ephemeral_agent_state": False},
-            "pool-retained": {"trajectories_per_branch": 2, "ephemeral_agent_state": False},
+            "isolated": ("workflow/isolated.py", 3),
+            "pooled": ("workflow/pool_3.py", 6),
+            "retained": ("workflow/retained.py", 3),
+            "pool-retained": ("workflow/pool_retained_3.py", 6),
         }
         seeded = {
             kind: await arms.seed_arm(
@@ -352,8 +390,8 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
                     {
                         "creation_key": f"ablation-{kind}",
                         "source_lineage_id": str(evolution_lineage_id),
-                        "attempts_per_trajectory": 2,
-                        **shape,
+                        "optimizer_attempt_budget": shape[1],
+                        "workflow_command": shape[0],
                     }
                 )
             )
@@ -362,10 +400,10 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
 
         for kind, shape in shapes.items():
             lineage = registry.get_lineage(seeded[kind].lineage.lineage_id)
-            assert lineage.trajectories_per_branch == shape["trajectories_per_branch"]
-            assert lineage.ephemeral_agent_state is shape["ephemeral_agent_state"]
-            # No arm ever evolves, whatever its shape.
-            assert lineage.challenger_count == 0
+            assert lineage.optimizer_attempt_budget == shape[1]
+            assert seeded[kind].workflow_command == shape[0]
+            # No arm ever evolves; its Workflow alone owns organization.
+            assert lineage.max_challengers == 0
             assert lineage.bootstrap_source_lineage_id == evolution_lineage_id
 
         assert len({arm.campaign_id for arm in seeded.values()}) == 4
@@ -395,7 +433,7 @@ async def test_an_ablation_arm_cannot_be_cloned_from_another_ablation_arm(
                 {
                     "creation_key": "ablation-1",
                     "source_lineage_id": str(evolution_lineage_id),
-                    "attempts_per_trajectory": 2,
+                    "optimizer_attempt_budget": 2,
                 }
             )
         )
@@ -406,7 +444,7 @@ async def test_an_ablation_arm_cannot_be_cloned_from_another_ablation_arm(
                     {
                         "creation_key": "ablation-of-ablation",
                         "source_lineage_id": str(arm.lineage.lineage_id),
-                        "attempts_per_trajectory": 2,
+                        "optimizer_attempt_budget": 2,
                     }
                 )
             )

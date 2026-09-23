@@ -460,14 +460,24 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             self._request_builder, incumbent_source, candidate_source, repeats
         )
         transport = "agate_native_eval_abba" if native else "runtime_dev_abba"
-        evaluator_files = (
-            {} if native else await anyio.to_thread.run_sync(self._evaluator.files)
-        )
+        evaluator_files = {} if native else await anyio.to_thread.run_sync(self._evaluator.files)
         evaluator_bundle_digest = None if native else self._evaluator.bundle_digest()
         shape_ids = list(sorted_shape_ids(contract))
-        batches = tuple(
-            shape_ids[offset : offset + shape_batch_size]
-            for offset in range(0, len(shape_ids), shape_batch_size)
+        if contract.shape_split is None:
+            valid_shape_ids = shape_ids
+            test_shape_ids: list[str] = []
+        else:
+            valid = set(contract.shape_split.valid_shape_ids)
+            test = set(contract.shape_split.test_shape_ids)
+            valid_shape_ids = [shape_id for shape_id in shape_ids if shape_id in valid]
+            test_shape_ids = [shape_id for shape_id in shape_ids if shape_id in test]
+        batch_specs = tuple(
+            (domain, domain_shape_ids[offset : offset + shape_batch_size])
+            for domain, domain_shape_ids in (
+                ("valid", valid_shape_ids),
+                ("test", test_shape_ids),
+            )
+            for offset in range(0, len(domain_shape_ids), shape_batch_size)
         )
         comparison_id = str(
             canonical_json_digest(
@@ -484,7 +494,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     "transport": transport,
                     "purpose": purpose.value,
                     "schedule": schedule,
-                    "shape_batches": batches,
+                    "shape_batches": batch_specs,
                     "per_run_timeout_seconds": per_run_timeout_seconds,
                     "allocation_timeout_seconds": allocation_timeout_seconds,
                 }
@@ -495,15 +505,18 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         for repetition in range(MEASUREMENT_REPETITIONS):
             results: list[
                 tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str] | None
-            ] = [None] * len(batches)
+            ] = [None] * len(batch_specs)
+            observation_failures: list[dict[str, JsonValue] | None] = [None] * len(batch_specs)
 
             async def run_batch(
                 index: int,
+                domain: str,
                 batch: list[str],
                 measurement_repetition: int,
                 outputs: list[
                     tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str] | None
                 ],
+                failures: list[dict[str, JsonValue] | None],
             ) -> None:
                 attempt = 0
                 while True:
@@ -530,26 +543,43 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                                 incumbent=incumbent,
                                 candidate=candidate,
                             )
-                    except InfrastructureError as failure:
+                    except InfrastructureError as error:
                         attempt += 1
                         if attempt > _ABBA_BATCH_RETRIES:
+                            if domain == "test":
+                                failures[index] = {
+                                    "failure_type": type(error).__name__,
+                                    "detail": str(error),
+                                }
+                                self._journal.record_runtime_event(
+                                    "comparison.abba_test_observation_failed",
+                                    candidate.id,
+                                    {
+                                        "comparison_id": comparison_id,
+                                        "measurement_repetition": measurement_repetition + 1,
+                                        "batch_index": index,
+                                        "attempts": attempt,
+                                        "failure_type": type(error).__name__,
+                                    },
+                                )
+                                return
                             if contract.validation_shape_ids is not None:
                                 raise InfrastructureError(
                                     "Authoritative ABBA could not complete; "
                                     "private evaluator details withheld"
-                                ) from failure
+                                ) from error
                             raise
                         failure_payload: dict[str, JsonValue]
-                        if isinstance(failure, AbbaBatchFailure):
-                            failure_payload = failure.event_payload()
+                        if isinstance(error, AbbaBatchFailure):
+                            failure_payload = error.event_payload()
                         else:
                             failure_payload = {
                                 "error_class": None,
                                 "reason": None,
                                 "trace_id": None,
                                 "retryable": True,
-                                "failure_type": type(failure).__name__,
-                                "detail": str(failure),
+                                "failure_type": type(error).__name__,
+                                "detail": str(error),
                             }
                         self._journal.record_runtime_event(
                             "comparison.abba_batch_retried",
@@ -571,32 +601,106 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     return
 
             async with anyio.create_task_group() as tasks:
-                for index, batch in enumerate(batches):
-                    tasks.start_soon(run_batch, index, batch, repetition, results)
+                for index, (domain, batch) in enumerate(batch_specs):
+                    tasks.start_soon(
+                        run_batch,
+                        index,
+                        domain,
+                        batch,
+                        repetition,
+                        results,
+                        observation_failures,
+                    )
+            valid_indices = [
+                index for index, (domain, _batch) in enumerate(batch_specs) if domain == "valid"
+            ]
+            test_indices = [
+                index for index, (domain, _batch) in enumerate(batch_specs) if domain == "test"
+            ]
+            if any(results[index] is None for index in valid_indices):
+                raise InfrastructureError("ABBA Valid Shape batch execution was incomplete")
             completed = [result for result in results if result is not None]
-            if len(completed) != len(batches):
-                raise InfrastructureError("ABBA Shape batch execution was incomplete")
             jobs = [result[0] for result in completed]
             payloads = [result[1] for result in completed]
-            merged = self._merge_payloads(payloads, schedule, shape_ids)
-            repetitions.append(
-                {
-                    "measurement_repetition": repetition + 1,
-                    "jobs": jobs,
-                    "payloads": payloads,
-                    "batch_result_digests": [str(result[2]) for result in completed],
-                    "completed_at": max(result[3] for result in completed),
-                    "measurements": merged,
-                    "incumbent": self._aggregate_revision_metrics(
-                        merged, "incumbent", repeats, shape_ids
-                    ),
-                    "candidate": self._aggregate_revision_metrics(
-                        merged, "candidate", repeats, shape_ids
-                    ),
-                }
+            valid_payloads = [
+                cast(
+                    tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str],
+                    results[index],
+                )[1]
+                for index in valid_indices
+            ]
+            merged = self._merge_payloads(valid_payloads, schedule, valid_shape_ids)
+            test_completed_indices = [index for index in test_indices if results[index] is not None]
+            test_payloads = [
+                cast(
+                    tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str],
+                    results[index],
+                )[1]
+                for index in test_completed_indices
+            ]
+            observed_test_shape_ids = [
+                shape_id for index in test_completed_indices for shape_id in batch_specs[index][1]
+            ]
+            test_measurements = (
+                self._merge_payloads(test_payloads, schedule, observed_test_shape_ids)
+                if test_payloads
+                else []
             )
-        incumbent_metrics = self._measurement_revision_metrics(repetitions, "incumbent", shape_ids)
-        candidate_metrics = self._measurement_revision_metrics(repetitions, "candidate", shape_ids)
+            test_status = (
+                "completed"
+                if len(test_completed_indices) == len(test_indices)
+                else "partial"
+                if test_completed_indices
+                else "unavailable"
+            )
+            repetition_entry: dict[str, object] = {
+                "measurement_repetition": repetition + 1,
+                "jobs": jobs,
+                "payloads": payloads,
+                "batch_result_digests": [str(result[2]) for result in completed],
+                "completed_at": max(result[3] for result in completed),
+                "measurements": merged,
+                "incumbent": self._aggregate_revision_metrics(
+                    merged, "incumbent", repeats, valid_shape_ids
+                ),
+                "candidate": self._aggregate_revision_metrics(
+                    merged, "candidate", repeats, valid_shape_ids
+                ),
+            }
+            if test_indices:
+                repetition_entry["test_observation"] = {
+                    "domain": "test",
+                    "status": test_status,
+                    "measurements": test_measurements,
+                    "incumbent": (
+                        self._aggregate_revision_metrics(
+                            test_measurements, "incumbent", repeats, observed_test_shape_ids
+                        )
+                        if test_measurements
+                        else None
+                    ),
+                    "candidate": (
+                        self._aggregate_revision_metrics(
+                            test_measurements, "candidate", repeats, observed_test_shape_ids
+                        )
+                        if test_measurements
+                        else None
+                    ),
+                    "observed_shape_count": len(observed_test_shape_ids),
+                    "expected_shape_count": len(test_shape_ids),
+                    "batch_failures": [
+                        observation_failure
+                        for observation_failure in observation_failures
+                        if observation_failure is not None
+                    ],
+                }
+            repetitions.append(repetition_entry)
+        incumbent_metrics = self._measurement_revision_metrics(
+            repetitions, "incumbent", valid_shape_ids
+        )
+        candidate_metrics = self._measurement_revision_metrics(
+            repetitions, "candidate", valid_shape_ids
+        )
         all_jobs = [
             job
             for repetition in repetitions
@@ -621,7 +725,12 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                 else str(context.evaluation_contract_digest)
             ),
             "schedule": cast(list[JsonValue], schedule),
-            "shape_batches": cast(list[JsonValue], [list(batch) for batch in batches]),
+            "promotion_domain": "valid",
+            "shape_batches": cast(
+                list[JsonValue],
+                [list(batch) for _domain, batch in batch_specs],
+            ),
+            "shape_batch_domains": [domain for domain, _batch in batch_specs],
             "measurement_aggregation": measurement_aggregation_summary(),
             "jobs": cast(list[JsonValue], all_jobs),
             "payloads": cast(list[JsonValue], all_payloads),
@@ -629,6 +738,37 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             "incumbent": cast(JsonValue, incumbent_metrics),
             "candidate": cast(JsonValue, candidate_metrics),
         }
+        if test_shape_ids:
+            test_repetitions = [
+                cast(dict[str, object], repetition["test_observation"])
+                for repetition in repetitions
+            ]
+            complete_test = all(
+                repetition.get("status") == "completed" for repetition in test_repetitions
+            )
+            aggregate["test_observation"] = cast(
+                JsonValue,
+                {
+                    "domain": "test",
+                    "affects_promotion": False,
+                    "status": "completed" if complete_test else "partial",
+                    "incumbent": (
+                        self._measurement_revision_metrics(
+                            test_repetitions, "incumbent", test_shape_ids
+                        )
+                        if complete_test
+                        else None
+                    ),
+                    "candidate": (
+                        self._measurement_revision_metrics(
+                            test_repetitions, "candidate", test_shape_ids
+                        )
+                        if complete_test
+                        else None
+                    ),
+                    "repetitions": test_repetitions,
+                },
+            )
         if contract.validation_shape_ids is not None:
             aggregate["validation_shape_ids"] = list(contract.validation_shape_ids)
         result_digest = self._artifacts.put_json(aggregate, ArtifactKind.GATEWAY_RESULT)
@@ -667,7 +807,12 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                 "candidate_kernel_revision_id": candidate.id,
                 "repeats": repeats,
                 "measurement_repetitions": MEASUREMENT_REPETITIONS,
-                "shape_batch_count": len(batches),
+                "valid_shape_batch_count": len(
+                    [domain for domain, _batch in batch_specs if domain == "valid"]
+                ),
+                "test_shape_batch_count": len(
+                    [domain for domain, _batch in batch_specs if domain == "test"]
+                ),
                 "agate_job_ids": [value for value in all_job_ids if isinstance(value, str)],
                 "gateway_result_digest": result_digest,
             },
@@ -760,9 +905,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     "gateway_result_digest": cached,
                 },
             )
-            job, payload, completed_at = self._cached_batch(
-                cached, schedule, shape_ids, transport
-            )
+            job, payload, completed_at = self._cached_batch(cached, schedule, shape_ids, transport)
             return job, payload, cached, completed_at
         submission["idempotency_key"] = f"runtime-abba:{task_digest}:retry-{retry}"
 

@@ -63,10 +63,8 @@ def test_evolution_prepare_delays_challengers_and_uses_one_attempt_per_branch(
     )
 
     spec = CampaignSpecV3.from_file(tmp_path / "campaign.json")
-    assert spec.challenger_count == 1
-    assert spec.challenger_start_epoch == 2
-    assert spec.trajectories_per_branch == 1
-    assert spec.attempts_per_trajectory == 1
+    assert spec.max_challengers == 1
+    assert spec.optimizer_attempt_budget == 2
 
 
 def test_evolution_wrapper_targets_epoch_three_and_inspects_history() -> None:

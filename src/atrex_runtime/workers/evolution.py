@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
+import re
 import shutil
 import stat
+import sys
 import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -23,12 +26,15 @@ from ..domain.errors import InfrastructureError
 from ..domain.ids import (
     ArtifactDigest,
     KernelAgentRevisionId,
+    LineageId,
     new_worker_session_id,
     parse_artifact_digest,
     parse_kernel_agent_revision_id,
+    parse_lineage_id,
 )
 from ..domain.models import (
     Dsl,
+    KernelAgentCatalogEntry,
     KernelAgentRevision,
     WorkerSession,
     WorkerSessionRole,
@@ -40,6 +46,7 @@ from ..kernel_agents import (
     KernelAgentRevisionBuilder,
     is_ignored_kernel_agent_path,
 )
+from ..kernel_agents.revision import KernelAgentBundleManifestV1
 from ..ports import (
     BuildChallengerRequest,
     BuildChallengerResult,
@@ -59,6 +66,7 @@ from .evidence_view import (
 from .evolution_continuation import EvolutionConversation
 from .launcher import WorkerLauncher, validate_worker_environment
 from .process import BoundedProcessConfig, BoundedProcessRunner
+from .session_contract import SessionContractPolicy, materialize_session_contract
 from .session_trace import enforce_session_trace_retention
 from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 from .token_usage import ProviderUsageReportV2, UsageUnit
@@ -70,6 +78,15 @@ from .workspace import (
     remove_optimizer_state_seeds,
     resolve_revision_runtime_state_seed,
     validate_reusable_agent_state_seed,
+)
+
+_TASK_EVIDENCE_IDENTITY_PATTERNS = (
+    re.compile(
+        r"\b(?:agentrev|attempt|campaign|direction|epoch|experiment|gtrial|kernelrev|lineage)_"
+        r"[0-9a-f]{8,}\b",
+        re.IGNORECASE,
+    ),
+    re.compile(r"\bsha256:[0-9a-f]{32,64}\b", re.IGNORECASE),
 )
 
 EVOLUTION_INPUT_VERSION: Literal[11] = 11
@@ -223,6 +240,31 @@ class EvolutionPathsV2(BaseModel):
     output: Literal["scratch/evolution-report.json"] = "scratch/evolution-report.json"
 
 
+class EvolutionObserverV1(BaseModel):
+    """One independent read-only Lineage exposed only as Evolver context."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    lineage_id: LineageId
+    relationship: Literal["independent_active_lineage"] = "independent_active_lineage"
+    evidence_checkpoint: ArtifactDigest
+    path: Literal["input/observer/active"] = "input/observer/active"
+
+    @field_validator("lineage_id", mode="before")
+    @classmethod
+    def _validate_lineage_id(cls, value: object) -> LineageId:
+        if not isinstance(value, str):
+            raise ValueError("observer lineage_id must be a string")
+        return parse_lineage_id(value)
+
+    @field_validator("evidence_checkpoint", mode="before")
+    @classmethod
+    def _validate_evidence_checkpoint(cls, value: object) -> ArtifactDigest:
+        if not isinstance(value, str):
+            raise ValueError("observer Evidence checkpoint must be a string")
+        return parse_artifact_digest(value)
+
+
 class VisibleAgentRevisionV2(BaseModel):
     """One read-only Agent design exposed to an Evolver invocation."""
 
@@ -298,6 +340,7 @@ class EvolutionInputManifestV11(BaseModel):
     dsl: Dsl
     optimizer_digest: ArtifactDigest
     visible_agents: tuple[VisibleAgentRevisionV2, ...]
+    observer: EvolutionObserverV1 | None = None
     paths: EvolutionPathsV2 = EvolutionPathsV2()
 
     @field_validator("parent_revision_id", mode="before")
@@ -374,9 +417,10 @@ class EvolutionOutput(BaseModel):
     def _reject_suggestions(cls, value: object) -> object:
         if isinstance(value, dict) and "suggested_directions" in value:
             raise ValueError(
-                "suggested_directions is no longer supported; remove the field and curate "
-                "evidence-backed corrections in Candidate Insights, Prompts, Skills, Tools, "
-                "or workflow instead. Historical Direction records remain readable"
+                "suggested_directions is no longer supported; remove the field. Evolver may "
+                "make task-independent corrections in Candidate Prompts, Skills, Tools, or "
+                "workflow, but must not prescribe Kernel optimization directions. Historical "
+                "Direction records remain readable"
             )
         return value
 
@@ -665,6 +709,10 @@ class PreparedEvolution:
     parent_revision: KernelAgentRevision
     model: str | None = None
     conversation_key: str = ""
+    epoch_number: int = 2
+    max_challengers: int = 1
+    optimizer_attempt_budget: int = 6
+    next_optimizer_contract_root: Path | None = None
 
 
 class EvolutionWorkspaceAssembler:
@@ -677,11 +725,13 @@ class EvolutionWorkspaceAssembler:
         *,
         evolver_bundle_digest: ArtifactDigest | None = None,
         attempt_workspaces_root: str | Path | None = None,
+        next_optimizer_contract_policy: SessionContractPolicy | None = None,
     ) -> None:
         self._root = Path(root).resolve()
         self._artifacts = artifacts
         self._evolver_bundle_digest = evolver_bundle_digest
         self._attempt_workspaces_root = attempt_workspaces_root
+        self._next_optimizer_contract_policy = next_optimizer_contract_policy
         if evolver_bundle_digest is not None:
             parse_artifact_digest(evolver_bundle_digest)
         self._root.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -695,6 +745,7 @@ class EvolutionWorkspaceAssembler:
         control_root.mkdir(parents=True, mode=0o700)
         agents_root = run_root / "input/agents"
         evidence_root = run_root / "input/evidence"
+        observer_root = run_root / "input/observer/active"
         evolution_reports_root = run_root / "input/evolution-reports"
         candidate_root = run_root / "candidate"
         scratch_root = run_root / "scratch"
@@ -787,6 +838,52 @@ class EvolutionWorkspaceAssembler:
                     created_by=visible.created_by,
                 )
             )
+
+        observer_versions: dict[str, KernelAgentRevisionId] = {}
+        observer_sources: dict[KernelAgentRevisionId, Path] = {}
+        observer_catalog: dict[KernelAgentRevisionId, KernelAgentCatalogEntry] = {}
+        observer_pool_versions: set[str] = set()
+        observer_pool_active: KernelAgentRevisionId | None = None
+        observer_evidence_payload: Path | None = None
+        if request.observer_lineage_id is not None:
+            observer_checkpoint = request.observer_evidence_checkpoint
+            if observer_checkpoint is None:
+                raise AssertionError("observer Lineage has no Evidence checkpoint")
+            observer_artifact = self._artifacts.verify(observer_checkpoint)
+            if observer_artifact.kind is not ArtifactKind.EVIDENCE:
+                raise ValueError("Evolution observer Evidence has the wrong Artifact kind")
+            observer_catalog = {
+                entry.revision.id: entry for entry in request.observer_agent_catalog
+            }
+            observer_evidence_payload = observer_artifact.payload_path
+            observer_pool = _last_completed_epoch_pool(observer_artifact.payload_path)
+            observer_pool_active = None if observer_pool is None else observer_pool[0]
+            observer_pool_ids = (
+                set() if observer_pool is None else {observer_pool[0], *observer_pool[1]}
+            )
+            if not observer_pool_ids <= observer_catalog.keys():
+                raise ValueError("Evolution observer Branch pool is outside its Agent catalog")
+            observer_agents_root = observer_root / "agents"
+            observer_agents_root.mkdir(parents=True, mode=0o700)
+            for entry in request.observer_agent_catalog:
+                version = f"agent-v{entry.revision_number}"
+                observer_versions[version] = entry.revision.id
+                source = observer_agents_root / version / "source"
+                self._artifacts.materialize(entry.revision.optimizer_digest, source)
+                observer_sources[entry.revision.id] = source
+                if entry.revision.id in observer_pool_ids:
+                    observer_pool_versions.add(version)
+            assemble_evolver_evidence_view(
+                observer_root / "evidence",
+                control_root=control_root / ".runtime/observer-active",
+                lineage_payload=observer_artifact.payload_path,
+                lineage_checkpoint=observer_checkpoint,
+                artifacts=self._artifacts,
+                agent_versions={
+                    version: str(revision_id) for version, revision_id in observer_versions.items()
+                },
+                pool_versions=frozenset(observer_pool_versions),
+            )
         used_evolution_numbers = {
             revision_number
             for _revision, _output, revision_number in previous_reports
@@ -872,6 +969,40 @@ class EvolutionWorkspaceAssembler:
             destination.chmod(0o700)
             shutil.move(source_state, destination / "resources")
             make_tree_read_only(destination)
+        for version, revision_id in observer_versions.items():
+            destination = observer_root / "evidence" / version
+            destination.chmod(0o700)
+            resources = destination / "resources"
+            trajectories = resources / "trajectories"
+            trajectories.mkdir(parents=True, mode=0o700)
+            entry = observer_catalog[revision_id]
+            observer_revision = entry.revision
+            seed = resolve_revision_runtime_state_seed(self._artifacts, observer_revision)
+            if revision_id == observer_pool_active:
+                if observer_evidence_payload is None:
+                    raise AssertionError("observer Evidence payload disappeared")
+                seed = (
+                    _active_next_epoch_runtime_state_seed(
+                        observer_evidence_payload,
+                        revision_id,
+                        self._artifacts,
+                    )
+                    or seed
+                )
+            trajectory = trajectories / "trajectory-00000001"
+            trajectory.mkdir(mode=0o700)
+            if seed is None:
+                initialize_reusable_agent_state(
+                    trajectory,
+                    observer_sources[revision_id],
+                )
+            else:
+                copy_reusable_agent_state(
+                    seed,
+                    trajectory,
+                    optimizer_source=observer_sources[revision_id],
+                )
+            make_tree_read_only(destination)
         if reusable_state_staging.exists():
             if any(reusable_state_staging.iterdir()):
                 raise ValueError(
@@ -909,6 +1040,26 @@ class EvolutionWorkspaceAssembler:
         make_tree_owner_writable(candidate_root)
         make_tree_read_only(agents_root)
         make_tree_read_only(evolution_reports_root)
+        if observer_root.exists():
+            make_tree_read_only(observer_root)
+
+        next_optimizer_contract_root: Path | None = None
+        if self._next_optimizer_contract_policy is not None:
+            policy = self._next_optimizer_contract_policy
+            next_optimizer_contract_root = materialize_session_contract(
+                run_root,
+                phase="optimization_attempt",
+                dsl=revision.dsl.value,
+                hardware_target=request.hardware_target,
+                agent_backend=policy.agent_backend,
+                model=request.model,
+                session_timeout_seconds=policy.session_timeout_seconds,
+                usage_unit=policy.usage_unit,
+                usage_budget=policy.usage_budget,
+                max_attempt_report_bytes=policy.max_attempt_report_bytes,
+                wiki_available=policy.wiki_available,
+                relative_path=Path("input/next-session-contract"),
+            )
 
         manifest = EvolutionInputManifestV11(
             parent_revision_id=revision.id,
@@ -917,6 +1068,17 @@ class EvolutionWorkspaceAssembler:
             dsl=revision.dsl,
             optimizer_digest=revision.optimizer_digest,
             visible_agents=tuple(visible_agents),
+            observer=(
+                None
+                if request.observer_lineage_id is None
+                else EvolutionObserverV1(
+                    lineage_id=request.observer_lineage_id,
+                    evidence_checkpoint=cast(
+                        ArtifactDigest,
+                        request.observer_evidence_checkpoint,
+                    ),
+                )
+            ),
         )
         manifest_path = control_state_root / "evolution-input.json"
         manifest_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -933,6 +1095,10 @@ class EvolutionWorkspaceAssembler:
             revision,
             request.model,
             hashlib.sha256(str(checkpoint["lineage_id"]).encode()).hexdigest(),
+            request.epoch_number,
+            request.max_challengers,
+            request.optimizer_attempt_budget,
+            next_optimizer_contract_root,
         )
 
 
@@ -982,6 +1148,10 @@ class EvolutionSessionDriver(Protocol):
 
     async def run(self, prepared: PreparedEvolution) -> EvolutionSessionResult:
         """Mutate only the prepared Candidate and return bounded diagnostics."""
+        ...
+
+    async def validate_workflow(self, prepared: PreparedEvolution) -> None:
+        """Dry-run the Candidate Workflow inside the Worker sandbox."""
         ...
 
 
@@ -1050,6 +1220,8 @@ class EvolutionProcessConfig:
             "ATREX_EVIDENCE_PROMPT_PATH",
             "ATREX_EVIDENCE_PROMPT",
             "ATREX_EVOLUTION_OUTPUT",
+            "ATREX_WORKFLOW_CHECK_CONTEXT_JSON",
+            "ATREX_AGENT_CONTRACT_CHECK_CONTEXT_JSON",
             "ATREX_SESSION_TIMEOUT_SECONDS",
             "ATREX_USAGE_BUDGET",
             "ATREX_USAGE_UNIT",
@@ -1119,6 +1291,61 @@ class SubprocessEvolutionSessionDriver:
     async def run(self, prepared: PreparedEvolution) -> EvolutionSessionResult:
         """Run blocking process ownership in a worker thread."""
         return await anyio.to_thread.run_sync(self._run_sync, prepared)
+
+    async def validate_workflow(self, prepared: PreparedEvolution) -> None:
+        """Independently dry-run the submitted Workflow in the Evolver sandbox."""
+        await anyio.to_thread.run_sync(self._validate_workflow_sync, prepared)
+
+    def _validate_workflow_sync(self, prepared: PreparedEvolution) -> None:
+        manifest = KernelAgentBundleManifestV1.from_file(
+            prepared.candidate_root / "atrex-bundle.json"
+        )
+        # A legacy Bundle may not expose Agent-owned Workflow. There is no
+        # program to dry-run; normal Bundle/launch validation remains unchanged.
+        # The explicit Evolver tool still reports this absence to the Agent.
+        if manifest.workflow is None:
+            return
+        environment = dict(self._config.environment)
+        environment.update(
+            {
+                "HOME": str(prepared.root / "scratch/workflow-check-home"),
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "PYTHONUNBUFFERED": "1",
+            }
+        )
+        Path(environment["HOME"]).mkdir(parents=True, exist_ok=True, mode=0o700)
+        argv = self._launcher.wrap(
+            (
+                sys.executable,
+                "-m",
+                "atrex_runtime.kernel_agents.workflow_check",
+                "--candidate",
+                str(prepared.candidate_root),
+                "--dsl",
+                prepared.parent_revision.dsl.value,
+                "--epoch-number",
+                str(prepared.epoch_number),
+                "--max-challengers",
+                str(prepared.max_challengers),
+                "--optimizer-attempt-budget",
+                str(prepared.optimizer_attempt_budget),
+            ),
+            workspace=prepared.root,
+            environment=environment,
+        )
+        try:
+            result = self._processes.run(argv, cwd=prepared.root, stdin=None)
+        except (OSError, TimeoutError) as error:
+            raise InfrastructureError(f"Workflow check process failed: {error}") from error
+        if result.returncode != 0:
+            diagnostic = result.stdout.strip() or result.stderr.strip() or "no diagnostic"
+            raise ValueError(f"Candidate Workflow check failed: {diagnostic[:4000]}")
+        try:
+            response: object = json.loads(result.stdout)
+        except json.JSONDecodeError as error:
+            raise ValueError("Candidate Workflow check returned invalid JSON") from error
+        if not isinstance(response, dict) or response.get("status") != "valid":
+            raise ValueError("Candidate Workflow check did not return a valid result")
 
     def _run_sync(self, prepared: PreparedEvolution) -> EvolutionSessionResult:
         with self._conversation(prepared).owned():
@@ -1223,6 +1450,31 @@ class SubprocessEvolutionSessionDriver:
                 "ATREX_EVOLUTION_CANDIDATE": str(prepared.candidate_root),
                 "ATREX_EVIDENCE_PROMPT": EVOLVER_EVIDENCE_PROMPT_TEXT,
                 "ATREX_EVOLUTION_OUTPUT": str(prepared.output_path),
+                "ATREX_WORKFLOW_CHECK_CONTEXT_JSON": json.dumps(
+                    {
+                        "candidate": "candidate",
+                        "dsl": prepared.parent_revision.dsl.value,
+                        "epoch_number": prepared.epoch_number,
+                        "max_challengers": prepared.max_challengers,
+                        "optimizer_attempt_budget": prepared.optimizer_attempt_budget,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                "ATREX_AGENT_CONTRACT_CHECK_CONTEXT_JSON": json.dumps(
+                    {
+                        "candidate": "candidate",
+                        "contract": (
+                            None
+                            if prepared.next_optimizer_contract_root is None
+                            else prepared.next_optimizer_contract_root.relative_to(
+                                prepared.root
+                            ).as_posix()
+                        ),
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
                 "ATREX_SESSION_TIMEOUT_SECONDS": str(self._config.timeout_seconds),
             }
         )
@@ -1394,9 +1646,7 @@ class EvolverBundleRunner(EvolverRunner):
                     ),
                     trace_digest=session_trace_digest,
                     token_usage=(
-                        None
-                        if process.token_usage is None
-                        else process.token_usage.to_domain()
+                        None if process.token_usage is None else process.token_usage.to_domain()
                     ),
                     process_returncode=process.returncode,
                     error_type=type(error).__name__,
@@ -1531,6 +1781,9 @@ class EvolverBundleRunner(EvolverRunner):
                 {**event_base, "preceding_status": exit_kind},
             )
         try:
+            validator = getattr(self._sessions, "validate_workflow", None)
+            if validator is not None:
+                await validator(prepared)
             sealed, session_trace_digest = self._seal_result(request, prepared, result)
         except Exception as error:
             failure_digest, retention_error_type = self._seal_failure_trace(
@@ -1733,6 +1986,11 @@ class EvolverBundleRunner(EvolverRunner):
                 raise ValueError("Evolver produced no Agent Bundle changes")
             if set(output.changed_paths) != changed_paths:
                 raise ValueError("Evolution changed_paths disagrees with sealed Agent Bundle")
+            self._validate_task_independent_candidate(
+                base_root,
+                prepared.candidate_root,
+                changed_paths,
+            )
             # Every new Agent revision is a complete logical Bundle. Even when
             # Evolver changes Source only, retain the exact Candidate State that
             # was paired with that Source in the writable workspace.
@@ -1872,7 +2130,7 @@ class EvolverBundleRunner(EvolverRunner):
         return self._artifacts.put_directory(path, ArtifactKind.SESSION_LOG)
 
     def _seal_runtime_state(self, path: Path) -> ArtifactDigest:
-        # Storage remains split; only the four adaptive directories are checkpoints.
+        # Storage remains split; only the three adaptive directories are checkpoints.
         with tempfile.TemporaryDirectory(prefix="atrex-evolved-state-") as temporary:
             state = Path(temporary) / "state"
             for name in REUSABLE_AGENT_DIRECTORIES:
@@ -1887,6 +2145,50 @@ class EvolverBundleRunner(EvolverRunner):
                 require_complete=True,
             )
             return self._artifacts.put_directory(state, ArtifactKind.KERNEL_AGENT_RUNTIME_STATE)
+
+    @staticmethod
+    def _validate_task_independent_candidate(
+        parent: Path,
+        candidate: Path,
+        changed_paths: set[str],
+    ) -> None:
+        """Reject concrete task Evidence identities added to a reusable Agent Bundle."""
+        violations: dict[str, list[str]] = {}
+        for relative in sorted(changed_paths):
+            try:
+                before = (parent / relative).read_text(encoding="utf-8").splitlines(keepends=True)
+            except FileNotFoundError:
+                before = []
+            except UnicodeDecodeError:
+                continue
+            try:
+                after = (candidate / relative).read_text(encoding="utf-8").splitlines(keepends=True)
+            except (FileNotFoundError, UnicodeDecodeError):
+                continue
+            introduced: list[str] = []
+            matcher = difflib.SequenceMatcher(a=before, b=after, autojunk=False)
+            for operation, _left_start, _left_end, right_start, right_end in matcher.get_opcodes():
+                if operation in {"insert", "replace"}:
+                    introduced.extend(after[right_start:right_end])
+            added = "".join(introduced)
+            matches = sorted(
+                {
+                    match.group(0)
+                    for pattern in _TASK_EVIDENCE_IDENTITY_PATTERNS
+                    for match in pattern.finditer(added)
+                }
+            )
+            if matches:
+                violations[relative] = matches[:16]
+        if violations:
+            detail = "; ".join(
+                f"{path}: {', '.join(matches)}" for path, matches in violations.items()
+            )
+            raise ValueError(
+                "Evolved Agent Candidate embeds task Evidence identities. Keep concrete "
+                "Direction, Experiment, Kernel, Result, Attempt, and Artifact facts in Runtime "
+                f"Journals/Reports and publish only task-independent behavior: {detail}"
+            )
 
     @staticmethod
     def _changed_paths(parent: Path, candidate: Path) -> set[str]:

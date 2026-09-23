@@ -209,10 +209,6 @@ async def test_runtime_executes_agent_workflow_against_bounded_services(
             epoch_number=2,
             max_challengers=1,
             optimizer_attempt_budget=6,
-            default_trajectories=1,
-            default_attempts_per_trajectory=3,
-            default_runtime_state_policy="retain_across_attempts",
-            first_epoch_same_agent=True,
         ),
         operations,
     )
@@ -221,7 +217,7 @@ async def test_runtime_executes_agent_workflow_against_bounded_services(
     assert list((tmp_path / "workflow-runs").rglob("protocol.jsonl"))
 
 
-@pytest.mark.parametrize("name", ("prompts", "insights", "skills", "tools"))
+@pytest.mark.parametrize("name", ("prompts", "skills", "tools"))
 def test_builder_seals_top_level_adaptive_state_seeds(
     tmp_path: Path,
     name: str,

@@ -31,8 +31,8 @@ operation can select only content already sealed in Runtime CAS (directly or thr
 - CLI: `atrex-kernel-agent-runtime seed-lineage --config ... --campaign ... --spec ...`
 - Admin API: `POST /v1/admin/campaigns/{campaign_id}/lineages`
 
-The request owns the fixed DSL, optional Optimizer/Evolver models, Epoch topology, optional initial Evidence,
-and one discriminated `seed` source. The response reports the new Lineage ID, `agent-v0`, `v0`, source
+The request owns the fixed DSL, optional Optimizer/Evolver models, Workflow command, Runtime resource
+envelope, optional initial Evidence, and one discriminated `seed` source. The response reports the new Lineage ID, `agent-v0`, `v0`, source
 provenance, authoritative Gateway result, and latency.
 
 ## Consequences

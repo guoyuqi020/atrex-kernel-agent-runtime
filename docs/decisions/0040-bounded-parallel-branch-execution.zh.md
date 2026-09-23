@@ -1,25 +1,20 @@
-# 决策 0040：有界并发 Branch 执行
+# 决策 0040：有界并发 Attempt 执行
 
 ## 决策
 
-Evolver 调用保持串行，直到配置的 Challenger Pool 完整。随后 Runtime 并发运行 Active Branch 和
-全部 Challenger Branch，并受部署配置 `max_parallel_branches` 限制（正数，默认 `4`）。每个获准
-运行的 Branch 内仍并发执行配置的 Trajectory，而每条 Trajectory 的 Attempt 保持串行。
+可执行的 Agent Workflow 代码决定有哪些 Branch 和 Trajectory、一个逻辑轮次包含哪些 Attempt，
+以及下一轮使用哪个 Kernel 和 Agent State。Runtime 不再根据 Campaign 参数推断或重建这些拓扑。
 
-受控的仅 Challenger 进化 Workflow 是唯一例外：它有意省略 Active，只运行 `challenger-1`，因此同一
-Epoch 不做 Agent 对照。Challenger 产出的 Kernel 仍与冻结的起点 Kernel 比较决定是否保留，而该
-Challenger 是下一 Epoch 唯一可选 Agent。
+Workflow 通过一次 `run_attempts_parallel` 提交并行批次时，Runtime 同时最多准入
+`max_parallel_attempts` 个 Optimizer Session（正数，默认 `4`）；其余启动项在同一个可信操作内
+等待。该上限只控制部署压力，不改变已冻结的 Workflow 计划、Trajectory 内顺序约束或 Lineage
+身份。
 
-所有 Branch 使用同一个冻结的 Epoch 起始 Kernel 和 Evidence，不能消费兄弟 Branch 的中间结果。
-只有全部 Branch 成功结束后，Runtime 才开始 Agent 选择。
-
-Runtime 在 Branch 任务内部捕获异常，避免 Task Group 默认取消兄弟 Branch。兄弟 Branch 可以完成并
-持久化 Attempt，之后 Runtime 再确定性地抛出失败。基础设施重试耗尽时，在兄弟任务清理后让 Epoch
-失败；意外进程中断仍保留 Running Epoch，供正常续跑。
+Runtime 会分别捕获已准入 Attempt 的失败，避免 Task Group 取消兄弟任务并丢弃结果。兄弟 Attempt
+可以先完成并持久化，Runtime 再确定性传播失败；基础设施恢复仍由 Runtime 负责。
 
 ## 影响
 
-Optimizer Session 最大并发数为
-`min(B, max_parallel_branches) × Y`，其中 `B` 是经校验的 Workflow 实际选择的 Branch 数（普通情况
-为 `1 + K`，仅 Challenger 进化为 `1`）。该上限属于 Runtime 部署策略，不属于不可变 Campaign
-拓扑，因此运维可以按模型、Gateway 与 GPU 容量调整，而不改变 Lineage 身份。
+Workflow 代码可以表达串行搜索、并行 Pool、Active/Challenger 竞争、Kernel 广播和显式 Agent State
+路由，而无需在 Runtime 配置中新增拓扑开关。运维仍可通过 `max_parallel_attempts` 独立限制
+Provider、Gateway 和 GPU 压力。

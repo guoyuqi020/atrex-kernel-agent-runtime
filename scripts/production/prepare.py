@@ -586,7 +586,7 @@ def _runtime_config(
         "gate_policy": gate_policy,
         "max_infrastructure_retries": int(runtime_policy["max_infrastructure_retries"]),
         "bootstrap_max_parallel_lineages": int(runtime_policy["bootstrap_max_parallel_lineages"]),
-        "max_parallel_branches": int(runtime_policy["max_parallel_branches"]),
+        "max_parallel_attempts": int(runtime_policy["max_parallel_attempts"]),
         "roofline_builder": {
             "repository": str(bench),
             "commit": bench_commit,
@@ -768,11 +768,8 @@ def _campaign(
         "problem_generalization_model": None,
         "base_revision": {"commit": core_commit},
         "workflow_command": "workflow/evolve_3.py",
-        "challenger_count": int(schedule["challenger_count"]),
-        "challenger_start_epoch": int(schedule["challenger_start_epoch"]),
-        "first_epoch_same_agent": bool(schedule.get("first_epoch_same_agent", False)),
-        "trajectories_per_branch": int(schedule["trajectories_per_branch"]),
-        "attempts_per_trajectory": int(schedule["attempts_per_trajectory"]),
+        "max_challengers": int(schedule["max_challengers"]),
+        "optimizer_attempt_budget": int(schedule["optimizer_attempt_budget"]),
         "lineages": lineages,
     }
 
@@ -1058,10 +1055,8 @@ def main() -> None:
     print("Production content policy gate: enabled")
     schedule = policy["schedule"]
     print(
-        f"Schedule: bootstrap, then {schedule['attempts_per_trajectory']} "
-        f"Attempts/Trajectory/Epoch; {schedule['trajectories_per_branch']} "
-        f"Trajectories/Branch; {schedule['challenger_count']} Challenger(s) "
-        f"from Epoch {schedule['challenger_start_epoch']}"
+        f"Resource envelope: {schedule['optimizer_attempt_budget']} Optimizer Attempts/Epoch; "
+        f"at most {schedule['max_challengers']} Challenger(s); topology comes from Workflow"
     )
     print(f"Runtime config: {workspace / 'runtime.json'}")
     for dsl in SUPPORTED_DSLS:

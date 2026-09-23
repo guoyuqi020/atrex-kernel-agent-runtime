@@ -39,7 +39,7 @@ class AttemptProgressRenderer:
         *,
         interactive: bool | None = None,
         attempt_detail: Callable[[Attempt], str] | None = None,
-        workflow_topology: Callable[[Epoch, int], tuple[int, int]] | None = None,
+        workflow_topology: Callable[[Epoch, int], tuple[int, int] | None] | None = None,
     ) -> None:
         self._stream = stream
         self._interactive = stream.isatty() if interactive is None else interactive
@@ -86,16 +86,19 @@ class AttemptProgressRenderer:
         lines: list[str] = []
         for epoch_key, epoch in self._epochs.items():
             lines.append(f"Epoch {epoch.number} branch progress ({epoch.lineage_id!s})")
-            for challenger_ordinal in range(epoch.challenger_count + 1):
+            for challenger_ordinal in range(epoch.max_challengers + 1):
                 branch_label = (
                     "active" if challenger_ordinal == 0 else f"challenger-{challenger_ordinal}"
                 )
-                lines.append(f"  {branch_label}")
-                trajectories, attempts = (
-                    (epoch.trajectories_per_branch, epoch.attempts_per_trajectory)
+                topology = (
+                    None
                     if self._workflow_topology is None
                     else self._workflow_topology(epoch, challenger_ordinal)
                 )
+                if topology is None:
+                    continue
+                lines.append(f"  {branch_label}")
+                trajectories, attempts = topology
                 for trajectory_ordinal in range(1, trajectories + 1):
                     completed = self._completed.get(
                         (*epoch_key, challenger_ordinal, trajectory_ordinal),

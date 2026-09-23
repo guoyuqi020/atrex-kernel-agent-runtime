@@ -305,7 +305,7 @@ def test_execution_prompts_separate_optimizer_journal_from_evolver_curation() ->
     for prompt in (attempt, bootstrap):
         assert "Journal" in prompt
         assert "attempt-report" in prompt
-        for directory in ("prompts", "insights", "skills", "tools"):
+        for directory in ("prompts", "skills", "tools"):
             assert f"`{directory}/`" in prompt
         assert "`hooks/`" not in prompt
         assert "README.md" in prompt

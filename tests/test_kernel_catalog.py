@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from conftest import NOW, digest, seed_lineage
+from conftest import NOW, digest, freeze_branch_workflow, seed_lineage
 
 from atrex_runtime.domain.ids import (
     new_attempt_id,
@@ -44,9 +44,8 @@ def test_catalog_joins_kernel_to_agent_attempt_and_durable_measurements(
             challenger_kernel_agent_revision_ids=(),
             starting_kernel_revision_id=seeded.baseline.id,
             evidence_checkpoint=lineage.evidence_checkpoint,
-            challenger_count=0,
-            trajectories_per_branch=lineage.trajectories_per_branch,
-            attempts_per_trajectory=lineage.attempts_per_trajectory,
+            max_challengers=0,
+            optimizer_attempt_budget=lineage.optimizer_attempt_budget,
             status=EpochStatus.RUNNING,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -54,6 +53,7 @@ def test_catalog_joins_kernel_to_agent_attempt_and_durable_measurements(
             completed_at=None,
         )
         registry.insert_epoch(epoch)
+        freeze_branch_workflow(registry, epoch)
         attempt_id = new_attempt_id()
         registry.insert_attempt(
             Attempt(
@@ -140,9 +140,8 @@ def test_agent_catalog_versions_bootstrap_and_attached_challenger(tmp_path: Path
             challenger_kernel_agent_revision_ids=(),
             starting_kernel_revision_id=seeded.baseline.id,
             evidence_checkpoint=lineage.evidence_checkpoint,
-            challenger_count=1,
-            trajectories_per_branch=lineage.trajectories_per_branch,
-            attempts_per_trajectory=lineage.attempts_per_trajectory,
+            max_challengers=1,
+            optimizer_attempt_budget=lineage.optimizer_attempt_budget,
             status=EpochStatus.BUILDING_CHALLENGER,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -150,6 +149,7 @@ def test_agent_catalog_versions_bootstrap_and_attached_challenger(tmp_path: Path
             completed_at=None,
         )
         registry.insert_epoch(epoch)
+        freeze_branch_workflow(registry, epoch)
         challenger = registry.register_kernel_agent_revision(
             KernelAgentRevision(
                 id=new_kernel_agent_revision_id(),
@@ -199,9 +199,8 @@ def _empty_epoch(registry: SqliteRegistry, seeded, *, number: int) -> Epoch:
         challenger_kernel_agent_revision_ids=(),
         starting_kernel_revision_id=lineage.best_kernel_revision_id,
         evidence_checkpoint=lineage.evidence_checkpoint,
-        challenger_count=1,
-        trajectories_per_branch=lineage.trajectories_per_branch,
-        attempts_per_trajectory=lineage.attempts_per_trajectory,
+        max_challengers=1,
+        optimizer_attempt_budget=lineage.optimizer_attempt_budget,
         status=EpochStatus.BUILDING_CHALLENGER,
         winner_kernel_agent_revision_id=None,
         best_kernel_revision_id=None,
@@ -209,6 +208,7 @@ def _empty_epoch(registry: SqliteRegistry, seeded, *, number: int) -> Epoch:
         completed_at=None,
     )
     registry.insert_epoch(epoch)
+    freeze_branch_workflow(registry, epoch)
     return epoch
 
 

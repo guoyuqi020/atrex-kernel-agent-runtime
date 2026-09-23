@@ -34,7 +34,7 @@ Outer-container resource limits are required separately; no Docker container is 
 projection is unchanged: provenance metadata such as `range_evidence` and `value_evidence`
 may still be omitted by the existing Agent formatter.
 
-Both Campaign definitions pin KDA commit `41af4a45ca4155254f3c2e8d501ae28a5fb5bb62`,
+Both Campaign definitions pin KDA commit `6f9a92b7741bf50f6423ac961399a24a269564cf`,
 matching GDN. It bundles neither KernelWiki nor ncu-report-skill; no Skill submodule checkout
 is needed and `allowed_submodules` is empty. Existing workspaces keep their frozen Agent
 revisions. Local uncommitted KDA edits are not included in the Bundle.

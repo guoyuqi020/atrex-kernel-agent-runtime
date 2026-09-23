@@ -42,8 +42,8 @@ designs were removed from the release tree. Current behavior is defined by code,
 - [0030](0030-exploratory-and-authoritative-evaluations.md): exploratory and authoritative evaluation
 - [0032](0032-lineage-kernel-version-labels.md): Kernel `vN` labels
 - [0033](0033-lineage-agent-version-labels.md): Agent `agent-vN` labels
-- [0034](0034-configurable-epoch-topology.md): configurable Epoch topology
-- [0040](0040-bounded-parallel-branch-execution.md): bounded parallel Branch execution
+- [0034](0034-configurable-epoch-topology.md): Agent-owned Epoch Workflow
+- [0040](0040-bounded-parallel-branch-execution.md): bounded parallel Attempt execution
 - [0042](0042-artifact-seeded-lineages.md): Artifact-seeded Lineages
 - [0046](0046-worker-host-network.md): shared host networking for sandboxed Workers
 - [0047](0047-worker-owned-workspace-roots.md): Worker-created Sandbox roots

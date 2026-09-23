@@ -118,10 +118,8 @@ def _campaign_spec(
         "hardware_target": "nvidia-h100",
         "evaluation_contract": "evaluation.json",
         "base_revision": {"commit": "a" * 40},
-        "challenger_count": 1,
-        "challenger_start_epoch": 2,
-        "trajectories_per_branch": 1,
-        "attempts_per_trajectory": 2,
+        "max_challengers": 1,
+        "optimizer_attempt_budget": 4,
         "lineages": {
             dsl.value: {
                 "baseline_kernel": "baseline-kernel",
@@ -707,7 +705,8 @@ def test_campaign_bootstrap_imports_core_once_and_initializes_selected_lineages(
             assert str(result.bootstrap_attempt_id).startswith("attempt_")
             lineage = registry.get_lineage(result.lineage_id)
             assert lineage.status is LineageStatus.READY
-            assert lineage.challenger_start_epoch == 2
+            assert lineage.max_challengers == 1
+            assert lineage.optimizer_attempt_budget == 4
             checkpoint = EvidenceCheckpointV1.from_file(
                 artifacts.verify(lineage.evidence_checkpoint).payload_path / "checkpoint.json"
             )

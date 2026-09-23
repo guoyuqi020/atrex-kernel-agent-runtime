@@ -10,7 +10,7 @@ import anyio
 
 from ..domain.errors import InvalidTransitionError
 from ..domain.ids import ArtifactDigest, CampaignId, LineageId
-from ..domain.models import CampaignStatus, Lineage, LineageStatus
+from ..domain.models import CampaignStatus, EpochStatus, Lineage, LineageStatus
 from ..registry.base import Registry
 from .epoch import EpochController
 from .leases import LineageLeaseManager
@@ -53,12 +53,16 @@ class CampaignScheduler:
         evidence: EvidenceAssembler,
         leases: LineageLeaseManager,
         evolver_commit: str | None = None,
+        observer_poll_seconds: float = 0.25,
     ) -> None:
+        if observer_poll_seconds <= 0:
+            raise ValueError("observer poll interval must be positive")
         self._registry = registry
         self._epochs = epochs
         self._evidence = evidence
         self._leases = leases
         self._evolver_commit = evolver_commit
+        self._observer_poll_seconds = observer_poll_seconds
 
     async def run_lineage_through(
         self,
@@ -114,8 +118,47 @@ class CampaignScheduler:
                         f"Lineage {lineage_id} stopped in {lineage.status}"
                     )
                 return LineageScheduleResult(lineage, tuple(completed))
+            await self._wait_for_observer_checkpoint(lineage)
             result = await self._epochs.run_epoch(lineage_id, lineage.next_epoch_number)
             completed.append(result.epoch.number)
+
+    async def _wait_for_observer_checkpoint(self, lineage: Lineage) -> None:
+        """Wait until the external Isolated control publishes the preceding round."""
+        observer_id = lineage.evolver_observer_lineage_id
+        epoch_number = lineage.next_epoch_number
+        if observer_id is None or epoch_number <= 1:
+            return
+        preceding_number = epoch_number - 1
+        while True:
+            observer = self._registry.get_lineage(observer_id)
+            if observer.status is LineageStatus.FAILED:
+                raise InvalidTransitionError(
+                    f"Evolver observer Lineage {observer_id} failed before Epoch "
+                    f"{preceding_number} became visible"
+                )
+            if observer.status is LineageStatus.CANCELLED:
+                raise InvalidTransitionError(
+                    f"Evolver observer Lineage {observer_id} was cancelled before Epoch "
+                    f"{preceding_number} became visible"
+                )
+            preceding = self._registry.find_epoch(observer_id, preceding_number)
+            boundary = self._registry.find_epoch(observer_id, epoch_number)
+            checkpoint_published = boundary is not None or (
+                observer.next_epoch_number == epoch_number
+                and observer.status in {LineageStatus.READY, LineageStatus.COMPLETED}
+            )
+            if (
+                preceding is not None
+                and preceding.status is EpochStatus.COMPLETED
+                and checkpoint_published
+            ):
+                return
+            if observer.status is LineageStatus.COMPLETED:
+                raise InvalidTransitionError(
+                    f"Evolver observer Lineage {observer_id} completed before publishing "
+                    f"Epoch {preceding_number}"
+                )
+            await anyio.sleep(self._observer_poll_seconds)
 
     async def run_campaign_through(
         self,

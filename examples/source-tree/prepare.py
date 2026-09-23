@@ -74,11 +74,8 @@ def main() -> None:
         "evaluation_contract": "evaluation-contract.json",
         "shape_train": "shape_train.json",
         "base_revision": {"commit": args.optimizer_commit},
-        "challenger_count": 1,
-        "challenger_start_epoch": 2,
-        "first_epoch_same_agent": True,
-        "trajectories_per_branch": 1,
-        "attempts_per_trajectory": args.attempts,
+        "max_challengers": 1,
+        "optimizer_attempt_budget": args.attempts * 2,
         "lineages": {
             args.dsl: {
                 "source_manifest": "source_manifest.json",

@@ -57,8 +57,8 @@ v1，主要需要确定：
 
 从 Example 创建 Campaign schema-v3 文件。输入的 `hardware_target` 用于选择 Agate GPU 环境；
 Bootstrap 会查询远端环境，把返回的架构（例如 `sm_120`）传给 Agent，并只将规范 Agate GPU
-别名用于调度。Campaign 还会选择 Operator、Evaluation Contract、精确 Core
-Commit、Epoch 拓扑、每个 DSL 的 Seed Kernel/Evidence 和可选 Lineage Model。不存在独立的
+别名用于调度。Campaign 还会选择 Operator、Evaluation Contract、精确 Agent Commit、Workflow
+命令、Runtime 资源包络、每个 DSL 的 Seed Kernel/Evidence 和可选 Lineage Model。不存在独立的
 Bootstrap JSON。
 
 配置只保存环境变量名称，不保存 Secret。把真实值注入 Runtime 进程：
@@ -87,8 +87,9 @@ Manager 管理。
 
 导入器封存准确的本地 KDA Commit 并记录来源，不执行 Fetch，同时检查 Bundle 限额。导入含子模块的历史或自定义版本时，仍须在本地准备准确 Commit 并显式配置 URL 白名单；缺失对象、未初始化或未获准的 Submodule、链接和更深层子模块都会被拒绝。默认 Optimizer Bundle 限额为 16,384 文件、128 MiB。已有 Campaign 固定版本和封存的 Skill 快照不变。Example 准备脚本会用本地 KDA HEAD 替换模板 Commit；修改必须先提交，才能成为新的 Base Revision。
 
-Runtime 在工作区根目录播种四个可继承目录后，移除只读实现副本中的重复默认内容。Optimizer 和
-Bootstrap 只能修改 `tools/`；Evolver 在 Revision 之间维护 Prompts、Insights 与 Skills。默认
+Runtime 在工作区根目录播种三个可继承目录后，移除只读实现副本中的重复默认内容。Optimizer 和
+Bootstrap 只能修改 `tools/`；Evolver 只能形成与任务无关的 Prompt、Skill、Tool、实现或 Workflow
+改进，不能替 Optimizer 选择 Kernel 优化方向。默认
 `skills/` 只有索引。Claude/Codex 在下次 Session 的私有安装中发现 Evolver 发布的 Skills；其他
 Backend 可以直接读取 `skills/*/SKILL.md`。Skill 文档按需读取，不拼入初始 Prompt。移除内置 Skill
 不会移除 Gateway 的 Profile、Check 或 Disassemble 接口。工程文档不属于可继承状态。
@@ -150,9 +151,9 @@ atrex-kernel-agent-runtime run-campaign \
   --target-epoch 3
 ```
 
-`--target-epoch` 是绝对编号，重复命令安全。只有确定不再调度时才加 `--finalize`。Runtime 串行创建
-Challenger Pool，再按 `max_parallel_branches` 执行 Branch；同一 Branch 内 Trajectory 可并发，单个
-Trajectory 内 Attempt 串行。
+`--target-epoch` 是绝对编号，重复命令安全。只有确定不再调度时才加 `--finalize`。版本化 Agent
+Workflow 定义 Branch、Trajectory、轮次以及 Kernel/State 路由；Runtime 执行 Workflow 请求的每个
+并行批次，同时最多准入 `max_parallel_attempts` 个 Optimizer Session。
 
 队列模式通过 `POST /v1/admin/tasks` 提交，并运行：
 
@@ -243,16 +244,15 @@ Runtime 会重新校验 Agent 仓库、按目标 Campaign Contract 独立评测 
 
 ## 10. 创建 Ablation Arm
 
-创建一份 Ablation v1 JSON，指定源 Lineage 与控制组拓扑：
+创建一份 Ablation v1 JSON，指定源 Lineage、资源包络与 Workflow：
 
 ```json
 {
   "schema_version": 1,
   "creation_key": "triton-no-evolution",
   "source_lineage_id": "lineage_0123456789abcdef0123456789abcdef",
-  "attempts_per_trajectory": 3,
-  "trajectories_per_branch": 1,
-  "ephemeral_agent_state": true,
+  "optimizer_attempt_budget": 3,
+  "max_challengers": 0,
   "workflow_command": "workflow/isolated.py",
   "optimizer_model": null
 }
@@ -264,16 +264,12 @@ atrex-kernel-agent-runtime seed-ablation-arm \
   --spec ablation.json
 ```
 
-Runtime 从源 Bootstrap Baseline 创建一个独立的单 Lineage Campaign，不创建 Challenger。使用
-`ephemeral_agent_state=true` 可在每次 Attempt 后清空自适应 Prompts/Insights/Skills/Tools；设为 false
-则保留串行 State，只隔离 Evolver 修改缺失的影响。`workflow_command` 指定 Runtime 持有的构造模板；
-Runtime 把被选中的程序物化为派生控制臂唯一的 `workflow/main.py` 入口并封存自己的 `agent-v0`，其他
-消融臂模板不会进入该 Revision。
-
-进化对照臂设置 `challenger_count=1`、`challenger_start_epoch=2`、`first_epoch_same_agent=true`、
-`ephemeral_agent_state=false`。使用返回的 Campaign ID 执行 `run-campaign --target-epoch N`。
-每分支每 Epoch 1 次跑 15 轮、3 次跑 5 轮、5 次跑 3 轮，均为 30 次 Optimizer Attempt。
-首轮两个分支使用同一 Agent，不调用 Evolver；之后生成进化的 Challenger。Bootstrap 直接复用。
+Runtime 从源 Bootstrap Baseline 创建一个独立的单 Lineage Campaign。资源字段只表示上限；
+`workflow_command` 指定 Runtime 持有的构造模板，其代码负责复制/进化时机、Branch/Trajectory
+拓扑与显式 Kernel/State 路由。Runtime 把被选中的程序物化为派生控制臂唯一的
+`workflow/main.py` 入口并封存自己的 `agent-v0`，其他消融臂模板不会进入该 Revision。进化对照臂
+设置 `max_challengers=1` 并选择对应的 evolve Workflow。使用返回的 Campaign ID 执行
+`run-campaign --target-epoch N`；Bootstrap 直接复用。
 
 ## 11. 调试 Agent Workspace
 
@@ -287,24 +283,24 @@ atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$L
 只用于可信调试。Optimizer Runtime Tools 与 Evolver 的只读文件系统输入 Contract 见
 [接口说明](interfaces.zh.md)。
 
-每个 Optimizer Workspace 都包含只读的 `prompts/`（阶段指令）、`insights/`（带适用范围、由 Evidence
-推导的决策指导）和 `skills/`（技能流程），以及可写的 `tools/`（工具脚本）。前三者由 Evolver
-进行版本化修改；Optimizer 修改 Tool 时同步更新 `tools/README.md`。没有继承 State 时，从固定 Core Revision 的对应目录初始化，
+每个 Optimizer Workspace 都包含只读的 `prompts/`（阶段指令）和 `skills/`（与任务无关的技能流程），
+以及可写的 `tools/`（工具脚本）。三者由 Evolver 进行版本化修改；Optimizer 修改 Tool 时同步更新
+`tools/README.md`。没有继承 State 时，从固定 Core Revision 的对应目录初始化，
 不读取宿主机当前源码目录；已有 Checkpoint 优先。缺少种子目录的旧 Core Revision 使用空目录默认值。Session 退出时，Runtime 会封存其
-准确终态，并把 Artifact Digest 记录到生产它的 Attempt。后续串行 Attempt 从该 State 继续，本地缓存
-丢失后也能准确重建。Framework Bootstrap 初始化 `agent-v0` State。Evolver 从最近完成 Epoch 获胜
+准确终态，并把 Artifact Digest 记录到生产它的 Attempt。Workflow 获得不透明的输出 State 引用，并
+决定后续串行 Attempt 是否继承；没有显式路由时，后续 Attempt 从 Trajectory Seed 开始。同一逻辑
+Attempt 的物理重试在本地缓存丢失后仍可重建其最新封存 State。Framework Bootstrap 初始化 `agent-v0` State。Evolver 从最近完成 Epoch 获胜
 分支中、产出最佳 Kernel 的 Trajectory 在该 Epoch 最后一个 Attempt 后的终态 State 开始；下一
 Epoch 的 Active Branch 从完全相同的 State 开始。每个新 Agent
 Revision 都把 Source 与 State 一起封存为
 一个逻辑 Bundle，每条新 Trajectory 获得独立 State 副本。
 Evolver 修改前三类内容时必须同步更新对应 README 中的路径、用途和适用范围；Optimizer 修改工具时还需
-说明调用方法、输入输出、依赖、示例和限制。四目录遵循相同的继承与清空策略。旧快照仅在复制时补齐
+说明调用方法、输入输出、依赖、示例和限制。三目录总是作为同一份显式路由 State 一起传递。旧快照仅在复制时补齐
 缺失目录和索引，不改写已存储 Artifact。这些笔记由 Agent 编写，不替代权威 Journal 和 Gateway 结果。
 
-Insights 不得复述 Runtime Journal 已有的 Kernel 版本、延迟、改动和结果；每条需说明 Evidence ID、
-适用范围、对后续决策的影响、反例和重访条件。静态参考资料放在 Skill references 中。复制旧 State
-时，Runtime 把 `memory/`、`knowledge/` 和更早的 `docs/` 内容合并进 `insights/`；同名冲突会被拒绝，
-封存历史不会被改写。Core 仓库的工程文档目录 `docs/` 不属于 Runtime State，也不会被导入。
+任务专属 Kernel 假设、Direction、测量和结论只保留在 Runtime Journal 与 Report，不进入 Agent
+Revision。Evolver 只能据此形成与任务无关的流程、证据处理、工具、实现或编排改进，不能排序、压制、
+强制或重新打开具体优化方向。旧任务状态目录仍可在封存历史 Artifact 中读取，但不会被新 Session 继承。
 
 Skills 遵循相同的初始化、封存、继承与重置规则。每次 Claude Optimizer 或 Bootstrap
 Session 启动前（包括新的重试），Runtime 将当前 Skills 安装到 `sessions/` 下该 Session 独享的 CLI Home。
@@ -322,8 +318,8 @@ Report-only continuation。continuation 用尽后，Runtime 把物理 Worker Ses
 
 启动 Core 阶段或其 dev-shell 前，Runtime 将实际 Backend、Model、推理强度和 Session Settings
 写入工作区副本 `agent/optimizer/atrex-agent.json`，并设置 `prompt_root: "workspace"`，使 `prompts/...`
-相对于工作区根目录解析。Source 工作副本省略四个初始 State 目录，只保留根级继承版本；其中 Prompt、
-Insights 与 Skills 对 Optimizer 只读，Evolver 的修改由后续新 Session 加载。配置文件对 Agent 仍为只读，
+相对于工作区根目录解析。Source 工作副本省略三个初始 State 目录，只保留根级继承版本；其中 Prompt
+与 Skills 对 Optimizer 只读，Evolver 的修改由后续新 Session 加载。配置文件对 Agent 仍为只读，
 不会创建新的 Source Revision，也不修改原始封存 Artifact。
 
 ## 12. 恢复与维护

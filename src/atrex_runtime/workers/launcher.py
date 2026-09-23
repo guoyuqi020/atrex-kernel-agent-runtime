@@ -471,7 +471,7 @@ class CleanEnvironmentLauncher:
             str(workspace),
             str(workspace),
         ]
-        for name in ("prompts", "insights", "skills"):
+        for name in ("prompts", "skills"):
             source = workspace / name
             if source.is_dir():
                 bwrap.extend(("--ro-bind", str(source), str(source)))
@@ -952,7 +952,7 @@ class BwrapSandboxLauncher:
                 self.settings.workspace_mount.as_posix(),
             )
         )
-        for name in ("prompts", "insights", "skills"):
+        for name in ("prompts", "skills"):
             source = workspace / name
             if source.is_dir():
                 bwrap.extend(

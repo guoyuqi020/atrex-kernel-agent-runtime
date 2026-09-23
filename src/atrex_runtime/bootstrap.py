@@ -134,11 +134,8 @@ class _LineageBootstrapSpec(BaseModel):
     evaluation_contract: Path
     baseline_kernel: Path
     initial_evidence: Path
-    challenger_count: int = Field(ge=0)
-    challenger_start_epoch: int = Field(gt=0)
-    first_epoch_same_agent: bool = False
-    trajectories_per_branch: int = Field(gt=0)
-    attempts_per_trajectory: int = Field(gt=0)
+    max_challengers: int = Field(ge=0)
+    optimizer_attempt_budget: int = Field(gt=0)
     optimizer_model: str | None
     evolver_model: str | None
     problem_generalization_model: str | None
@@ -203,11 +200,8 @@ class CampaignSpecV3(BaseModel):
     )
     base_revision: GitBaseRevisionV1
     workflow_command: str | None = None
-    challenger_count: int = Field(default=1, ge=0)
-    challenger_start_epoch: int = Field(default=1, gt=0)
-    first_epoch_same_agent: bool = False
-    trajectories_per_branch: int = Field(default=1, gt=0)
-    attempts_per_trajectory: int = Field(gt=0)
+    max_challengers: int = Field(default=1, ge=0)
+    optimizer_attempt_budget: int = Field(gt=0)
     lineages: dict[Dsl, CampaignLineageSpecV2]
 
     @field_validator("problem_generalization_model")
@@ -229,8 +223,6 @@ class CampaignSpecV3(BaseModel):
 
     @model_validator(mode="after")
     def _validate_campaign(self) -> CampaignSpecV3:
-        if self.first_epoch_same_agent and self.challenger_count != 1:
-            raise ValueError("first_epoch_same_agent requires exactly one Challenger")
         if not self.lineages:
             raise ValueError("Campaign requires at least one DSL Lineage")
         supplied_contracts = sum(
@@ -259,11 +251,8 @@ class CampaignSpecV3(BaseModel):
             evaluation_contract=self.evaluation_contract,
             baseline_kernel=lineage.baseline_kernel,
             initial_evidence=lineage.initial_evidence,
-            challenger_count=self.challenger_count,
-            challenger_start_epoch=self.challenger_start_epoch,
-            first_epoch_same_agent=self.first_epoch_same_agent,
-            trajectories_per_branch=self.trajectories_per_branch,
-            attempts_per_trajectory=self.attempts_per_trajectory,
+            max_challengers=self.max_challengers,
+            optimizer_attempt_budget=self.optimizer_attempt_budget,
             optimizer_model=lineage.models.optimizer,
             evolver_model=lineage.models.evolver,
             problem_generalization_model=self.problem_generalization_model,
@@ -773,11 +762,8 @@ class CampaignBootstrapper:
                 existing_lineage.campaign_id != campaign_id
                 or existing_lineage.dsl is not spec.dsl
                 or existing_lineage.hardware_target != spec.hardware_target
-                or existing_lineage.challenger_count != spec.challenger_count
-                or existing_lineage.challenger_start_epoch != spec.challenger_start_epoch
-                or existing_lineage.first_epoch_same_agent != spec.first_epoch_same_agent
-                or existing_lineage.trajectories_per_branch != spec.trajectories_per_branch
-                or existing_lineage.attempts_per_trajectory != spec.attempts_per_trajectory
+                or existing_lineage.max_challengers != spec.max_challengers
+                or existing_lineage.optimizer_attempt_budget != spec.optimizer_attempt_budget
                 or existing_lineage.optimizer_model != spec.optimizer_model
                 or existing_lineage.evolver_model != spec.evolver_model
             ):
@@ -855,11 +841,8 @@ class CampaignBootstrapper:
             active_kernel_agent_revision_id=agent.id,
             best_kernel_revision_id=baseline.id,
             evidence_checkpoint=evidence_digest,
-            challenger_count=spec.challenger_count,
-            challenger_start_epoch=spec.challenger_start_epoch,
-            first_epoch_same_agent=spec.first_epoch_same_agent,
-            trajectories_per_branch=spec.trajectories_per_branch,
-            attempts_per_trajectory=spec.attempts_per_trajectory,
+            max_challengers=spec.max_challengers,
+            optimizer_attempt_budget=spec.optimizer_attempt_budget,
             next_epoch_number=1,
             status=LineageStatus.READY,
             optimizer_model=spec.optimizer_model,
@@ -954,22 +937,16 @@ class CampaignBootstrapper:
             existing.campaign_id,
             existing.dsl,
             existing.hardware_target,
-            existing.challenger_count,
-            existing.challenger_start_epoch,
-            existing.first_epoch_same_agent,
-            existing.trajectories_per_branch,
-            existing.attempts_per_trajectory,
+            existing.max_challengers,
+            existing.optimizer_attempt_budget,
             existing.optimizer_model,
             existing.evolver_model,
         ) != (
             expected.campaign_id,
             expected.dsl,
             expected.hardware_target,
-            expected.challenger_count,
-            expected.challenger_start_epoch,
-            expected.first_epoch_same_agent,
-            expected.trajectories_per_branch,
-            expected.attempts_per_trajectory,
+            expected.max_challengers,
+            expected.optimizer_attempt_budget,
             expected.optimizer_model,
             expected.evolver_model,
         ):

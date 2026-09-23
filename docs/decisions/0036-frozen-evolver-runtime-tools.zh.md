@@ -27,7 +27,7 @@ Evolver 直接读取这些文件，只能修改完整 `candidate/` Bundle 和报
 Parent Bundle 组合获胜实现与最近完成 Epoch 最佳 Kernel Trajectory 的终态资源；下一 Epoch Active
 使用相同起始快照。缺失时回退到 Epoch 起始快照、Revision Seed 和打包默认值。
 历史派生先复制完整历史 Bundle，再修改。Evolver 可以融合合格 Agent 的资源并记录贡献来源。
-Runtime 校验所选版本和整个 Bundle 的 Diff，包括四个自适应目录；封存完整 Bundle 与 State Checkpoint。
+Runtime 校验所选版本和整个 Bundle 的 Diff，包括三个自适应目录；封存完整 Bundle 与 State Checkpoint。
 
 删除 Evolver 查询接口、查询 Capability、公开 Helper、Candidate Allowlist 和私有查询 Snapshot。详细历史与
 完整 Evolution Trace 继续保存在 Runtime 现有 Evidence 与 Registry Store 中，只投影紧凑的 Agent 创建报告。

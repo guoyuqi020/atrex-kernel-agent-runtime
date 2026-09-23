@@ -269,11 +269,8 @@ def ablation_arm_result_value(result: AblationArmResult) -> dict[str, object]:
         "campaign_id": result.campaign_id,
         "source_campaign_id": result.source_campaign_id,
         "source_lineage_id": result.source_lineage_id,
-        "trajectories_per_branch": result.trajectories_per_branch,
-        "ephemeral_agent_state": result.ephemeral_agent_state,
-        "challenger_count": result.challenger_count,
-        "challenger_start_epoch": result.challenger_start_epoch,
-        "first_epoch_same_agent": result.first_epoch_same_agent,
+        "optimizer_attempt_budget": result.optimizer_attempt_budget,
+        "max_challengers": result.max_challengers,
         "workflow_command": result.workflow_command,
         "lineage": lineage_seed_result_value(result.lineage),
     }
@@ -481,7 +478,6 @@ def _epoch_value(
                 "program_sha256": item.program_sha256,
                 "trajectories": item.trajectories,
                 "attempts_per_trajectory": item.attempts_per_trajectory,
-                "runtime_state_policy": item.runtime_state_policy.value,
                 "attempt_budget": item.attempt_budget,
             }
             for item in branch_workflows
@@ -500,9 +496,8 @@ def _epoch_value(
             else kernel_version(epoch.best_kernel_revision_id)
         ),
         "evidence_checkpoint": epoch.evidence_checkpoint,
-        "challenger_count": epoch.challenger_count,
-        "trajectories_per_branch": epoch.trajectories_per_branch,
-        "attempts_per_trajectory": epoch.attempts_per_trajectory,
+        "max_challengers": epoch.max_challengers,
+        "optimizer_attempt_budget": epoch.optimizer_attempt_budget,
         "created_at": epoch.created_at,
         "completed_at": epoch.completed_at,
     }

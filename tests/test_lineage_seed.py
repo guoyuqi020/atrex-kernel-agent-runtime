@@ -99,10 +99,8 @@ async def test_artifact_seed_creates_independent_v0_roots_and_is_idempotent(
                     "kernel_artifact_digest": kernel_digest,
                 },
                 "models": {"optimizer": "gpt-5.6", "evolver": "claude-opus"},
-                "challenger_count": 2,
-                "challenger_start_epoch": 2,
-                "trajectories_per_branch": 3,
-                "attempts_per_trajectory": 4,
+                "max_challengers": 2,
+                "optimizer_attempt_budget": 36,
             }
         )
 
@@ -167,8 +165,8 @@ async def test_lineage_baseline_seed_clones_bootstrap_and_reuses_its_measurement
                         "agent_artifact_digest": agent_digest,
                         "kernel_artifact_digest": kernel_digest,
                     },
-                    "challenger_count": 1,
-                    "attempts_per_trajectory": 2,
+                    "max_challengers": 1,
+                    "optimizer_attempt_budget": 4,
                 }
             ),
         )
@@ -182,10 +180,8 @@ async def test_lineage_baseline_seed_clones_bootstrap_and_reuses_its_measurement
                     "source_type": "lineage_baseline",
                     "lineage_id": str(evolution.lineage_id),
                 },
-                "challenger_count": 0,
-                "trajectories_per_branch": 1,
-                "attempts_per_trajectory": 2,
-                "ephemeral_agent_state": True,
+                "max_challengers": 0,
+                "optimizer_attempt_budget": 2,
             }
         )
         ablation = await seeder.seed_lineage(campaign_id, spec)
@@ -203,8 +199,8 @@ async def test_lineage_baseline_seed_clones_bootstrap_and_reuses_its_measurement
         assert ablation.source_kernel_revision_id == evolution.kernel_revision_id
 
         lineage = registry.get_lineage(ablation.lineage_id)
-        assert lineage.ephemeral_agent_state is True
-        assert lineage.challenger_count == 0
+        assert lineage.max_challengers == 0
+        assert lineage.optimizer_attempt_budget == 2
         assert registry.list_lineage_kernels(lineage.id)[0].revision_number == 0
 
         source_bootstrap = (
@@ -233,7 +229,7 @@ async def test_cloned_baseline_rejects_a_separate_initial_evidence_directory() -
                     "lineage_id": "lineage_" + "0" * 32,
                 },
                 "initial_evidence": "/tmp/some-evidence",
-                "attempts_per_trajectory": 2,
+                "optimizer_attempt_budget": 2,
             }
         )
 
@@ -267,7 +263,7 @@ async def test_revision_seed_reuses_content_but_creates_new_revision_identities(
                         "agent_artifact_digest": agent_digest,
                         "kernel_artifact_digest": kernel_digest,
                     },
-                    "attempts_per_trajectory": 1,
+                    "optimizer_attempt_budget": 1,
                 }
             ),
         )
@@ -282,7 +278,7 @@ async def test_revision_seed_reuses_content_but_creates_new_revision_identities(
                         "agent_revision_id": artifact_root.kernel_agent_revision_id,
                         "kernel_revision_id": artifact_root.kernel_revision_id,
                     },
-                    "attempts_per_trajectory": 1,
+                    "optimizer_attempt_budget": 1,
                 }
             ),
         )
@@ -321,7 +317,7 @@ async def test_incorrect_seed_kernel_does_not_publish_lineage(tmp_path: Path) ->
                     "agent_artifact_digest": agent_digest,
                     "kernel_artifact_digest": kernel_digest,
                 },
-                "attempts_per_trajectory": 1,
+                "optimizer_attempt_budget": 1,
             }
         )
 

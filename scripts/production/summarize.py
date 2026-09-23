@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from atrex_runtime.ablation_plan import ABLATION_PLAN_SCHEMA_VERSION
+
 DSLS = ("cuda", "triton", "cutedsl")
 CAMPAIGN_ID = re.compile(r"campaign_[0-9a-f]{32}")
 
@@ -47,17 +49,25 @@ def _load(path: Path) -> dict[str, Any]:
     return value
 
 
-def _validate(value: dict[str, Any], *, dsl: str, phase: str, target_epoch: int | None) -> None:
+def _validate(
+    value: dict[str, Any],
+    *,
+    dsl: str,
+    phase: str,
+    target_epoch: int | None,
+    expected_lineages: int = 1,
+) -> None:
     campaign_id = value.get("campaign_id")
     if not isinstance(campaign_id, str) or CAMPAIGN_ID.fullmatch(campaign_id) is None:
         raise SystemExit(f"{dsl} {phase} result has no valid campaign_id")
     lineages = value.get("lineages")
-    if not isinstance(lineages, list) or len(lineages) != 1:
-        raise SystemExit(f"{dsl} {phase} result must contain exactly one Lineage")
-    lineage = lineages[0]
-    if not isinstance(lineage, dict):
+    if not isinstance(lineages, list) or len(lineages) != expected_lineages:
+        raise SystemExit(
+            f"{dsl} {phase} result must contain exactly {expected_lineages} Lineage(s)"
+        )
+    if not all(isinstance(lineage, dict) for lineage in lineages):
         raise SystemExit(f"{dsl} {phase} result contains an invalid Lineage")
-    if phase == "campaign" and lineage.get("dsl") != dsl:
+    if phase == "campaign" and any(lineage.get("dsl") != dsl for lineage in lineages):
         raise SystemExit(f"{dsl} Campaign result belongs to another DSL")
     if phase == "campaign" and value.get("target_epoch_number") != target_epoch:
         raise SystemExit(f"{dsl} Campaign result has an unexpected target Epoch")
@@ -73,17 +83,14 @@ def _ablation_arms(
     """Collect each control arm's Campaign result so the comparison pairing is durable."""
     schedules = {
         str(arm["label"]): {
-            "first_epoch_same_agent": bool(arm["first_epoch_same_agent"]),
-            "ephemeral_agent_state": bool(arm["ephemeral_agent_state"]),
             "workflow_command": str(arm["workflow_command"]),
+            "observer_label": arm.get("observer_label"),
             **{
                 key: int(arm[key])
                 for key in (
                     "target_epoch_number",
-                    "trajectories_per_branch",
-                    "attempts_per_trajectory",
-                    "challenger_count",
-                    "challenger_start_epoch",
+                    "optimizer_attempt_budget",
+                    "max_challengers",
                     "optimizer_attempt_budget_total",
                     "evolution_count",
                 )
@@ -125,6 +132,7 @@ def _ablation_arms(
             dsl=dsl,
             phase="campaign",
             target_epoch=target_epoch,
+            expected_lineages=1,
         )
         arms.append(
             {
@@ -143,9 +151,15 @@ def main() -> None:
     arguments = _arguments()
     workspace = arguments.workspace.expanduser().resolve()
     ablation_plan = _load(workspace / "ablation.json") if arguments.phase == "campaign" else {}
-    if arguments.phase == "campaign" and ablation_plan.get("schema_version") != 5:
-        raise SystemExit("campaign summary requires Ablation Plan schema 5")
+    if (
+        arguments.phase == "campaign"
+        and ablation_plan.get("schema_version") != ABLATION_PLAN_SCHEMA_VERSION
+    ):
+        raise SystemExit(
+            f"campaign summary requires Ablation Plan schema {ABLATION_PLAN_SCHEMA_VERSION}"
+        )
     results: dict[str, Any] = {}
+    main_evolve_enabled = bool(ablation_plan.get("main_evolve_enabled", True))
     for dsl in DSLS:
         dsl_workspace = workspace / "dsls" / dsl
         campaign_path = dsl_workspace / "campaign.json"
@@ -164,10 +178,24 @@ def main() -> None:
             if arguments.phase == "campaign"
             else []
         )
+        if arguments.phase == "campaign" and not main_evolve_enabled:
+            bootstrap_path = dsl_workspace / "bootstrap-result.json"
+            results[dsl] = {
+                "arm": "evolve-3",
+                "workflow_command": campaign.get("workflow_command"),
+                "result": None,
+                "result_path": None,
+                "status": "disabled",
+                "bootstrap_result_path": (
+                    str(bootstrap_path) if bootstrap_path.is_file() else None
+                ),
+                "ablation": ablation,
+            }
+            continue
         if arguments.allow_partial and not path.is_file():
             bootstrap_path = dsl_workspace / "bootstrap-result.json"
             results[dsl] = {
-                "arm": f"evolve-{campaign['attempts_per_trajectory']}",
+                "arm": "evolve-3",
                 "workflow_command": campaign.get("workflow_command"),
                 "result": None,
                 "result_path": str(path),
@@ -186,7 +214,7 @@ def main() -> None:
             target_epoch=arguments.target_epoch,
         )
         results[dsl] = {
-            "arm": f"evolve-{campaign['attempts_per_trajectory']}",
+            "arm": "evolve-3",
             "workflow_command": campaign.get("workflow_command"),
             "campaign_id": value["campaign_id"],
             "result": value,

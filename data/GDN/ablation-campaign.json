@@ -1,24 +1,21 @@
 {
   "schema_version": 3,
-  "creation_key": "gdn-source-tree-l20d-claude-ablation-workflow-v1",
+  "creation_key": "gdn-source-tree-l20d-claude-ablation-workflow-v2-20260923",
   "operator": "chunk_gated_delta_rule",
   "hardware_target": "L20D",
   "evaluation_contract": "evaluation-contract.json",
   "shape_train": "task/shape_train.json",
   "base_revision": {
-    "commit": "41af4a45ca4155254f3c2e8d501ae28a5fb5bb62"
+    "commit": "6f9a92b7741bf50f6423ac961399a24a269564cf"
   },
   "workflow_command": "workflow/evolve_3.py",
-  "challenger_count": 1,
-  "challenger_start_epoch": 2,
-  "trajectories_per_branch": 1,
-  "attempts_per_trajectory": 3,
+  "max_challengers": 1,
+  "optimizer_attempt_budget": 6,
   "lineages": {
     "cutedsl": {
       "source_manifest": "task/source_manifest.json",
       "source_repository": "source",
       "initial_evidence": "initial-evidence"
     }
-  },
-  "first_epoch_same_agent": true
+  }
 }

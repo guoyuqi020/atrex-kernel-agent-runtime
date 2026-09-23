@@ -377,7 +377,8 @@ async def test_administration_seeds_lineage_from_registered_revisions(
                     "agent_revision_id": result.source_agent_revision_id,
                     "kernel_revision_id": result.source_kernel_revision_id,
                 },
-                "attempts_per_trajectory": 3,
+                "max_challengers": 0,
+                "optimizer_attempt_budget": 3,
             },
         )
 
@@ -386,7 +387,8 @@ async def test_administration_seeds_lineage_from_registered_revisions(
     assert value["kernel_agent"]["version"] == "agent-v0"
     assert value["kernel"]["version"] == "v0"
     assert seeder.calls[0][0] == campaign_id
-    assert seeder.calls[0][1].attempts_per_trajectory == 3
+    assert seeder.calls[0][1].max_challengers == 0
+    assert seeder.calls[0][1].optimizer_attempt_budget == 3
 
 
 @pytest.mark.anyio
@@ -692,9 +694,8 @@ async def test_administration_lists_epoch_winners_by_lineage_and_campaign(
             challenger_kernel_agent_revision_ids=(),
             starting_kernel_revision_id=seeded.baseline.id,
             evidence_checkpoint=lineage.evidence_checkpoint,
-            challenger_count=0,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=1,
+            max_challengers=0,
+            optimizer_attempt_budget=1,
             status=EpochStatus.READY,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -772,7 +773,8 @@ async def test_administration_accepts_campaign_bootstrap_request(tmp_path: Path)
             "hardware_target": "nvidia-h100",
             "evaluation_contract": "/inputs/contract.json",
             "base_revision": {"commit": "a" * 40},
-            "attempts_per_trajectory": 2,
+            "max_challengers": 1,
+            "optimizer_attempt_budget": 4,
             "lineages": lineage_inputs,
         }
 

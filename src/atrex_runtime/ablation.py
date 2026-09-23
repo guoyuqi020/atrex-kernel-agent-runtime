@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .domain.ids import (
     CampaignId,
@@ -44,18 +44,11 @@ class AblationArmSpecV1(BaseModel):
     schema_version: Literal[1] = ABLATION_ARM_SPEC_VERSION
     creation_key: str = Field(min_length=1, max_length=200)
     source_lineage_id: LineageId
-    attempts_per_trajectory: int = Field(gt=0)
-    # One Trajectory isolates a single line. Several reproduce the Active branch mechanism:
-    # every Trajectory sees each prior Epoch's results and restarts from the best Kernel.
-    trajectories_per_branch: int = Field(default=1, gt=0)
-    challenger_count: int = Field(default=0, ge=0)
-    challenger_start_epoch: int = Field(default=2, gt=0)
-    first_epoch_same_agent: bool = False
-    # Resetting Skills and Tools every Attempt ablates Agent-level accumulation as well.
-    # Retaining them preserves serial learning; challenger_count controls evolution separately.
-    ephemeral_agent_state: bool = True
+    optimizer_attempt_budget: int = Field(gt=0)
+    max_challengers: int = Field(default=0, ge=0)
     workflow_command: str | None = None
     optimizer_model: str | None = Field(default=None, min_length=1, max_length=200)
+    evolver_observer_lineage_id: LineageId | None = None
 
     @field_validator("creation_key")
     @classmethod
@@ -65,17 +58,20 @@ class AblationArmSpecV1(BaseModel):
             raise ValueError("ablation arm creation_key is invalid")
         return normalized
 
-    @model_validator(mode="after")
-    def _validate_replica(self) -> Self:
-        if self.first_epoch_same_agent and self.challenger_count != 1:
-            raise ValueError("first_epoch_same_agent requires exactly one Challenger")
-        return self
-
     @field_validator("source_lineage_id", mode="before")
     @classmethod
     def _validate_source_lineage_id(cls, value: object) -> LineageId:
         if not isinstance(value, str):
             raise ValueError("source Lineage ID must be a string")
+        return parse_lineage_id(value)
+
+    @field_validator("evolver_observer_lineage_id", mode="before")
+    @classmethod
+    def _validate_observer_lineage_id(cls, value: object) -> LineageId | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("Evolver observer Lineage ID must be a string or null")
         return parse_lineage_id(value)
 
     @field_validator("optimizer_model")
@@ -121,11 +117,8 @@ class AblationArmResult:
     campaign_id: CampaignId
     source_campaign_id: CampaignId
     source_lineage_id: LineageId
-    trajectories_per_branch: int
-    ephemeral_agent_state: bool
-    challenger_count: int
-    challenger_start_epoch: int
-    first_epoch_same_agent: bool
+    optimizer_attempt_budget: int
+    max_challengers: int
     workflow_command: str | None
     lineage: LineageSeedResult
 
@@ -147,11 +140,14 @@ class AblationArmSeeder:
     async def seed_arm(self, spec: AblationArmSpecV1) -> AblationArmResult:
         """Create or idempotently recover one control arm."""
         source_lineage = self._registry.get_lineage(spec.source_lineage_id)
-        if source_lineage.ephemeral_agent_state:
+        if source_lineage.bootstrap_source_lineage_id is not None:
             raise ValueError("an ablation arm cannot be cloned from another ablation arm")
         source_campaign = self._registry.get_campaign(source_lineage.campaign_id)
         campaign_id = parse_campaign_id(
-            self._derived_id("campaign", f"{source_campaign.id}:{spec.creation_key}")
+            self._derived_id(
+                "campaign",
+                f"{source_campaign.id}:{spec.creation_key}",
+            )
         )
         # The arm is only comparable if it is measured under the identical contract, so its
         # Campaign copies the evolution Campaign's identity instead of bootstrapping its own.
@@ -178,24 +174,18 @@ class AblationArmSeeder:
                     optimizer=spec.optimizer_model or source_lineage.optimizer_model,
                     evolver=source_lineage.evolver_model,
                 ),
-                challenger_count=spec.challenger_count,
-                challenger_start_epoch=spec.challenger_start_epoch,
-                first_epoch_same_agent=spec.first_epoch_same_agent,
-                trajectories_per_branch=spec.trajectories_per_branch,
-                attempts_per_trajectory=spec.attempts_per_trajectory,
-                ephemeral_agent_state=spec.ephemeral_agent_state,
+                max_challengers=spec.max_challengers,
+                optimizer_attempt_budget=spec.optimizer_attempt_budget,
                 workflow_command=spec.workflow_command,
+                evolver_observer_lineage_id=spec.evolver_observer_lineage_id,
             ),
         )
         return AblationArmResult(
             campaign_id=campaign_id,
             source_campaign_id=source_campaign.id,
             source_lineage_id=source_lineage.id,
-            trajectories_per_branch=spec.trajectories_per_branch,
-            ephemeral_agent_state=spec.ephemeral_agent_state,
-            challenger_count=spec.challenger_count,
-            challenger_start_epoch=spec.challenger_start_epoch,
-            first_epoch_same_agent=spec.first_epoch_same_agent,
+            optimizer_attempt_budget=spec.optimizer_attempt_budget,
+            max_challengers=spec.max_challengers,
             workflow_command=spec.workflow_command,
             lineage=lineage,
         )

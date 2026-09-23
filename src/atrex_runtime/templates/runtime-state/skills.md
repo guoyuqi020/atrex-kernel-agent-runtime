@@ -1,8 +1,8 @@
 # Skills index
 
 Store reusable procedures: when to apply a method, its steps, prerequisites, and validation criteria.
-Use a Skill's references for static reference material, insights/ for evidence-derived search
-conclusions, and tools/ for executable scripts.
+Use a Skill's references for task-independent static reference material and tools/ for executable
+scripts. Task-specific search conclusions belong only in the Runtime Journal and reports.
 
 Evolver owns changes to this directory. Optimizer and Bootstrap use it read-only and may add
 reusable executable helpers only under `tools/`.

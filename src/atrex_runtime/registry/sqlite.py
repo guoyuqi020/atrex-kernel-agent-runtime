@@ -66,7 +66,6 @@ from ..domain.models import (
     LineageStatus,
     RuntimeEvent,
     RuntimeMetrics,
-    RuntimeStatePolicy,
     TokenUsage,
     WorkerSession,
     WorkerSessionRole,
@@ -75,7 +74,7 @@ from ..domain.models import (
 from ..sqlite_support import configure_durable_sqlite
 from .stop_migration import migrate_stops
 
-SCHEMA_VERSION = 39
+SCHEMA_VERSION = 42
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -673,6 +672,103 @@ class SqliteRegistry:
                         "runtime_state_policy TEXT NOT NULL DEFAULT 'retain_across_attempts'"
                     )
                 self._connection.execute("PRAGMA user_version = 39")
+            self._migrate()
+            return
+        if version == 39:
+            with self._transaction(migration=True):
+                if "runtime_state_policy" in self._table_columns("epoch_branch_workflows"):
+                    self._connection.execute(
+                        "ALTER TABLE epoch_branch_workflows DROP COLUMN runtime_state_policy"
+                    )
+                if "ephemeral_agent_state" in self._table_columns("lineages"):
+                    self._connection.execute(
+                        "ALTER TABLE lineages DROP COLUMN ephemeral_agent_state"
+                    )
+                self._connection.execute("PRAGMA user_version = 40")
+            self._migrate()
+            return
+        if version == 40:
+            with self._transaction(migration=True):
+                if self._has_tables("lineages"):
+                    lineage_columns = self._table_columns("lineages")
+                    if "max_challengers" not in lineage_columns:
+                        self._connection.execute(
+                            "ALTER TABLE lineages ADD COLUMN max_challengers "
+                            "INTEGER NOT NULL DEFAULT 0 CHECK (max_challengers >= 0)"
+                        )
+                    if "optimizer_attempt_budget" not in lineage_columns:
+                        self._connection.execute(
+                            "ALTER TABLE lineages ADD COLUMN optimizer_attempt_budget "
+                            "INTEGER NOT NULL DEFAULT 1 "
+                            "CHECK (optimizer_attempt_budget > 0)"
+                        )
+                    if {
+                        "challenger_count",
+                        "trajectories_per_branch",
+                        "attempts_per_branch",
+                    }.issubset(lineage_columns):
+                        self._connection.execute(
+                            "UPDATE lineages SET max_challengers = challenger_count, "
+                            "optimizer_attempt_budget = attempts_per_branch "
+                            "* trajectories_per_branch * (1 + challenger_count)"
+                        )
+                    for column in (
+                        "challenger_count",
+                        "challenger_start_epoch",
+                        "first_epoch_same_agent",
+                        "trajectories_per_branch",
+                        "attempts_per_branch",
+                    ):
+                        if column in lineage_columns:
+                            self._connection.execute(
+                                f"ALTER TABLE lineages DROP COLUMN {column}"
+                            )
+                if self._has_tables("epochs"):
+                    epoch_columns = self._table_columns("epochs")
+                    if "max_challengers" not in epoch_columns:
+                        self._connection.execute(
+                            "ALTER TABLE epochs ADD COLUMN max_challengers "
+                            "INTEGER NOT NULL DEFAULT 0 CHECK (max_challengers >= 0)"
+                        )
+                    if "optimizer_attempt_budget" not in epoch_columns:
+                        self._connection.execute(
+                            "ALTER TABLE epochs ADD COLUMN optimizer_attempt_budget "
+                            "INTEGER NOT NULL DEFAULT 1 "
+                            "CHECK (optimizer_attempt_budget > 0)"
+                        )
+                    if {
+                        "challenger_count",
+                        "trajectories_per_branch",
+                        "attempts_per_branch",
+                    }.issubset(epoch_columns):
+                        self._connection.execute(
+                            "UPDATE epochs SET max_challengers = challenger_count, "
+                            "optimizer_attempt_budget = attempts_per_branch "
+                            "* trajectories_per_branch * (1 + challenger_count)"
+                        )
+                    for column in (
+                        "challenger_count",
+                        "trajectories_per_branch",
+                        "attempts_per_branch",
+                    ):
+                        if column in epoch_columns:
+                            self._connection.execute(
+                                f"ALTER TABLE epochs DROP COLUMN {column}"
+                            )
+                self._connection.execute("PRAGMA user_version = 41")
+            self._migrate()
+            return
+        if version == 41:
+            with self._transaction(migration=True):
+                if self._has_tables("lineages") and (
+                    "evolver_observer_lineage_id" not in self._table_columns("lineages")
+                ):
+                    self._connection.execute(
+                        "ALTER TABLE lineages ADD COLUMN evolver_observer_lineage_id TEXT "
+                        "REFERENCES lineages(id)"
+                    )
+                self._connection.execute("PRAGMA user_version = 42")
+            self._migrate()
             return
         if version == 23:
             with self._lock:
@@ -1451,8 +1547,6 @@ class SqliteRegistry:
                         CHECK (trajectories_per_branch > 0),
                     optimizer_model TEXT,
                     evolver_model TEXT,
-                    ephemeral_agent_state INTEGER NOT NULL DEFAULT 0
-                        CHECK (ephemeral_agent_state IN (0, 1)),
                     bootstrap_source_lineage_id TEXT REFERENCES lineages(id)
                 );
                 CREATE TABLE lineage_kernel_versions (
@@ -3287,11 +3381,11 @@ class SqliteRegistry:
                 """INSERT INTO lineages(
                        id, campaign_id, dsl, hardware_target,
                        active_kernel_agent_revision_id, best_kernel_revision_id,
-                       evidence_checkpoint, attempts_per_branch, next_epoch_number, status,
-                       challenger_count, challenger_start_epoch, trajectories_per_branch,
-                       optimizer_model, evolver_model, ephemeral_agent_state,
-                       bootstrap_source_lineage_id, first_epoch_same_agent
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       evidence_checkpoint, optimizer_attempt_budget,
+                       next_epoch_number, status, max_challengers,
+                       optimizer_model, evolver_model, bootstrap_source_lineage_id,
+                       evolver_observer_lineage_id
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     lineage.id,
                     lineage.campaign_id,
@@ -3300,17 +3394,14 @@ class SqliteRegistry:
                     lineage.active_kernel_agent_revision_id,
                     lineage.best_kernel_revision_id,
                     lineage.evidence_checkpoint,
-                    lineage.attempts_per_trajectory,
+                    lineage.optimizer_attempt_budget,
                     lineage.next_epoch_number,
                     lineage.status,
-                    lineage.challenger_count,
-                    lineage.challenger_start_epoch,
-                    lineage.trajectories_per_branch,
+                    lineage.max_challengers,
                     lineage.optimizer_model,
                     lineage.evolver_model,
-                    int(lineage.ephemeral_agent_state),
                     lineage.bootstrap_source_lineage_id,
-                    int(lineage.first_epoch_same_agent),
+                    lineage.evolver_observer_lineage_id,
                 ),
             )
             baseline = self.get_kernel_revision(lineage.best_kernel_revision_id)
@@ -3366,20 +3457,21 @@ class SqliteRegistry:
                 _required_text(row, "best_kernel_revision_id")
             ),
             evidence_checkpoint=parse_artifact_digest(_required_text(row, "evidence_checkpoint")),
-            challenger_count=_required_int(row, "challenger_count"),
-            challenger_start_epoch=_required_int(row, "challenger_start_epoch"),
-            first_epoch_same_agent=bool(_required_int(row, "first_epoch_same_agent")),
-            trajectories_per_branch=_required_int(row, "trajectories_per_branch"),
-            attempts_per_trajectory=_required_int(row, "attempts_per_branch"),
+            max_challengers=_required_int(row, "max_challengers"),
+            optimizer_attempt_budget=_required_int(row, "optimizer_attempt_budget"),
             next_epoch_number=_required_int(row, "next_epoch_number"),
             status=LineageStatus(_required_text(row, "status")),
             optimizer_model=_optional_text(row, "optimizer_model"),
             evolver_model=_optional_text(row, "evolver_model"),
-            ephemeral_agent_state=bool(_required_int(row, "ephemeral_agent_state")),
             bootstrap_source_lineage_id=(
                 None
                 if (bootstrap_source := _optional_text(row, "bootstrap_source_lineage_id")) is None
                 else parse_lineage_id(bootstrap_source)
+            ),
+            evolver_observer_lineage_id=(
+                None
+                if (observer := _optional_text(row, "evolver_observer_lineage_id")) is None
+                else parse_lineage_id(observer)
             ),
         )
 
@@ -3429,12 +3521,10 @@ class SqliteRegistry:
                 raise InvalidTransitionError(
                     f"Lineage {lineage.id} cannot start epoch {epoch.number}"
                 )
-            expected_challenger_count = lineage.challengers_for_epoch(epoch.number)
             if (
                 epoch.evidence_checkpoint != lineage.evidence_checkpoint
-                or epoch.challenger_count != expected_challenger_count
-                or epoch.trajectories_per_branch != lineage.trajectories_per_branch
-                or epoch.attempts_per_trajectory != lineage.attempts_per_trajectory
+                or epoch.max_challengers != lineage.max_challengers
+                or epoch.optimizer_attempt_budget != lineage.optimizer_attempt_budget
             ):
                 raise InvalidTransitionError(
                     f"Epoch {epoch.id} inputs disagree with lineage {lineage.id}"
@@ -3443,11 +3533,11 @@ class SqliteRegistry:
                 """INSERT INTO epochs(
                        id, lineage_id, number, active_kernel_agent_revision_id,
                        challenger_kernel_agent_revision_id, starting_kernel_revision_id,
-                       evidence_checkpoint, attempts_per_branch, status,
+                       evidence_checkpoint, optimizer_attempt_budget, status,
                        winner_kernel_agent_revision_id, best_kernel_revision_id,
                        failure_reason, created_at, completed_at,
-                       challenger_count, trajectories_per_branch
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       max_challengers
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     epoch.id,
                     epoch.lineage_id,
@@ -3460,15 +3550,14 @@ class SqliteRegistry:
                     ),
                     epoch.starting_kernel_revision_id,
                     epoch.evidence_checkpoint,
-                    epoch.attempts_per_trajectory,
+                    epoch.optimizer_attempt_budget,
                     epoch.status,
                     epoch.winner_kernel_agent_revision_id,
                     epoch.best_kernel_revision_id,
                     None,
                     epoch.created_at,
                     epoch.completed_at,
-                    epoch.challenger_count,
-                    epoch.trajectories_per_branch,
+                    epoch.max_challengers,
                 ),
             )
             for challenger_ordinal, revision_id in enumerate(
@@ -3477,11 +3566,7 @@ class SqliteRegistry:
             ):
                 revision = self.get_kernel_agent_revision(revision_id)
                 if revision.id == epoch.active_kernel_agent_revision_id:
-                    proposal_type = (
-                        ChallengerProposalType.REPLICA
-                        if epoch.number == 1 and lineage.first_epoch_same_agent
-                        else ChallengerProposalType.REUSE
-                    )
+                    proposal_type = ChallengerProposalType.REPLICA
                     base_revision_id = revision.id
                 else:
                     if revision.parent_id is None:
@@ -3588,9 +3673,8 @@ class SqliteRegistry:
                 _required_text(row, "starting_kernel_revision_id")
             ),
             evidence_checkpoint=parse_artifact_digest(_required_text(row, "evidence_checkpoint")),
-            challenger_count=_required_int(row, "challenger_count"),
-            trajectories_per_branch=_required_int(row, "trajectories_per_branch"),
-            attempts_per_trajectory=_required_int(row, "attempts_per_branch"),
+            max_challengers=_required_int(row, "max_challengers"),
+            optimizer_attempt_budget=_required_int(row, "optimizer_attempt_budget"),
             status=EpochStatus(_required_text(row, "status")),
             winner_kernel_agent_revision_id=(
                 None if winner is None else parse_kernel_agent_revision_id(winner)
@@ -3632,7 +3716,7 @@ class SqliteRegistry:
             if row is None:
                 raise KeyError(f"Epoch not found: {epoch_id}")
             epoch = self._map_epoch(row)
-            if challenger_ordinal > epoch.challenger_count:
+            if challenger_ordinal > epoch.max_challengers:
                 raise InvalidTransitionError(
                     f"Epoch {epoch_id} does not configure Challenger {challenger_ordinal}"
                 )
@@ -3675,14 +3759,9 @@ class SqliteRegistry:
                     "historical Challenger base was introduced in the current Epoch"
                 )
             if challenger.proposal_type is ChallengerProposalType.REPLICA:
-                lineage = self.get_lineage(epoch.lineage_id)
-                if not (
-                    epoch.number == 1
-                    and lineage.first_epoch_same_agent
-                    and revision.id == base.id == epoch.active_kernel_agent_revision_id
-                ):
+                if revision.id != base.id or revision.id != epoch.active_kernel_agent_revision_id:
                     raise InvalidTransitionError(
-                        "Replica is only valid for the initial same-Agent Epoch"
+                        "Replica must use the current Active Agent"
                     )
                 revision_number = _required_int(base_version, "revision_number")
             elif challenger.proposal_type is ChallengerProposalType.REUSE:
@@ -3736,7 +3815,7 @@ class SqliteRegistry:
             )
             next_status = (
                 EpochStatus.READY
-                if challenger_ordinal == epoch.challenger_count
+                if challenger_ordinal == epoch.max_challengers
                 else EpochStatus.BUILDING_CHALLENGER
             )
             cursor = self._connection.execute(
@@ -3812,8 +3891,8 @@ class SqliteRegistry:
                 """INSERT INTO epoch_branch_workflows(
                        epoch_id, branch, challenger_ordinal, kernel_agent_revision_id,
                        kind, program_sha256, trajectories,
-                       attempts_per_trajectory, runtime_state_policy, created_at
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       attempts_per_trajectory, created_at
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     workflow.epoch_id,
                     workflow.branch,
@@ -3823,7 +3902,6 @@ class SqliteRegistry:
                     workflow.program_sha256,
                     workflow.trajectories,
                     workflow.attempts_per_trajectory,
-                    workflow.runtime_state_policy,
                     workflow.created_at,
                 ),
             )
@@ -3838,7 +3916,6 @@ class SqliteRegistry:
                     "program_sha256": workflow.program_sha256,
                     "trajectories": workflow.trajectories,
                     "attempts_per_trajectory": workflow.attempts_per_trajectory,
-                    "runtime_state_policy": workflow.runtime_state_policy,
                 },
             )
         return workflow
@@ -3888,9 +3965,6 @@ class SqliteRegistry:
             program_sha256=_optional_text(row, "program_sha256"),
             trajectories=_required_int(row, "trajectories"),
             attempts_per_trajectory=_required_int(row, "attempts_per_trajectory"),
-            runtime_state_policy=RuntimeStatePolicy(
-                _required_text(row, "runtime_state_policy")
-            ),
             created_at=_required_text(row, "created_at"),
         )
 
@@ -4007,16 +4081,16 @@ class SqliteRegistry:
                 raise InvalidTransitionError("Challenger pool is not being built")
             if (
                 attached_count < 0
-                or attached_count >= epoch.challenger_count
+                or attached_count >= epoch.max_challengers
                 or attached_count != len(epoch.challenger_kernel_agent_revision_ids)
             ):
                 raise InvalidTransitionError(
                     "no_change must close exactly the already attached Challenger pool"
                 )
             self._connection.execute(
-                """UPDATE epochs SET challenger_count = ?, status = 'ready'
-                   WHERE id = ? AND status = 'building_challenger'""",
-                (attached_count, epoch_id),
+                "UPDATE epochs SET status = 'ready' "
+                "WHERE id = ? AND status = 'building_challenger'",
+                (epoch_id,),
             )
             self._event(
                 "epoch.challenger_pool_closed",
@@ -4053,7 +4127,7 @@ class SqliteRegistry:
                     "Workflow must freeze exactly its attached Challenger set"
                 )
             if epoch.status is not EpochStatus.BUILDING_CHALLENGER:
-                if epoch.challenger_count == attached_count and epoch.status in {
+                if attached_count <= epoch.max_challengers and epoch.status in {
                     EpochStatus.READY,
                     EpochStatus.RUNNING,
                     EpochStatus.SELECTING,
@@ -4061,12 +4135,12 @@ class SqliteRegistry:
                 }:
                     return
                 raise InvalidTransitionError("Epoch Challenger set is already frozen differently")
-            if attached_count > epoch.challenger_count:
+            if attached_count > epoch.max_challengers:
                 raise InvalidTransitionError("Workflow Challenger set exceeds its Runtime limit")
             self._connection.execute(
-                """UPDATE epochs SET challenger_count = ?, status = 'ready'
-                   WHERE id = ? AND status = 'building_challenger'""",
-                (attached_count, epoch_id),
+                "UPDATE epochs SET status = 'ready' "
+                "WHERE id = ? AND status = 'building_challenger'",
+                (epoch_id,),
             )
             self._event(
                 "epoch.workflow_challengers_frozen",
@@ -4283,7 +4357,7 @@ class SqliteRegistry:
             if attached_challengers is None:
                 raise AssertionError("SQLite did not count attached Challengers")
             attached_count = _required_int(attached_challengers, "count")
-            configured_count = _required_int(epoch, "challenger_count")
+            configured_count = _required_int(epoch, "max_challengers")
             if not attempts and attached_count >= configured_count:
                 raise InvalidTransitionError(
                     f"Epoch {epoch_id} has no recoverable failed operation"
@@ -4417,23 +4491,17 @@ class SqliteRegistry:
                 attempt.branch,
                 attempt.challenger_ordinal,
             )
-            trajectories = (
-                epoch.trajectories_per_branch
-                if workflow is None
-                else workflow.trajectories
-            )
-            attempts_per_trajectory = (
-                epoch.attempts_per_trajectory
-                if workflow is None
-                else workflow.attempts_per_trajectory
-            )
+            if workflow is None:
+                raise InvalidTransitionError("Attempt requires a frozen Agent Workflow Branch")
+            trajectories = workflow.trajectories
+            attempts_per_trajectory = workflow.attempts_per_trajectory
             if attempt.trajectory_ordinal > trajectories:
                 raise InvalidTransitionError("Attempt Trajectory exceeds the Epoch budget")
             if attempt.ordinal > attempts_per_trajectory:
                 raise InvalidTransitionError("Attempt iteration exceeds the Trajectory budget")
             if (
                 attempt.branch is BranchRole.CHALLENGER
-                and attempt.challenger_ordinal > epoch.challenger_count
+                and attempt.challenger_ordinal > epoch.max_challengers
             ):
                 raise InvalidTransitionError("Attempt Challenger exceeds the Epoch pool")
             storage_ordinal = self._attempt_storage_ordinal(
@@ -4795,11 +4863,11 @@ class SqliteRegistry:
         attempts_per_trajectory: int,
     ) -> int:
         """Encode a legacy branch-wide unique ordinal without exposing it as semantics."""
-        branch_budget = epoch.trajectories_per_branch * epoch.attempts_per_trajectory
-        branch_offset = (
-            0 if attempt.branch is BranchRole.ACTIVE else attempt.challenger_ordinal
-        ) * branch_budget
-        trajectory_offset = (attempt.trajectory_ordinal - 1) * attempts_per_trajectory
+        if attempts_per_trajectory >= 1_000_000 or attempt.trajectory_ordinal >= 1_000_000:
+            raise ValueError("Workflow topology exceeds durable Attempt ordinal encoding")
+        branch_slot = 0 if attempt.branch is BranchRole.ACTIVE else attempt.challenger_ordinal
+        branch_offset = branch_slot * 1_000_000_000_000
+        trajectory_offset = (attempt.trajectory_ordinal - 1) * 1_000_000
         return branch_offset + trajectory_offset + attempt.ordinal
 
     @staticmethod

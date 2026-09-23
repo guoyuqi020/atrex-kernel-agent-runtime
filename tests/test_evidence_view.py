@@ -32,10 +32,12 @@ from atrex_runtime.workers.evolver_review import materialize_evolver_review
 
 
 def test_optimizer_prompt_enforces_evolver_owned_agent_content() -> None:
-    assert "`prompts/`, `insights/`, and `skills/` belong" in EVIDENCE_PROMPT_TEXT
+    assert "`prompts/` and `skills/` belong" in EVIDENCE_PROMPT_TEXT
     assert "Only `tools/` is adaptive here" in EVIDENCE_PROMPT_TEXT
-    assert "Direction and\nExperiment Journal" in EVIDENCE_PROMPT_TEXT
-    assert "Evolver curates" in EVIDENCE_PROMPT_TEXT
+    assert "Direction and Experiment Journal" in " ".join(EVIDENCE_PROMPT_TEXT.split())
+    assert "Evolver may use that evidence to improve task-independent Agent behavior" in (
+        " ".join(EVIDENCE_PROMPT_TEXT.split())
+    )
 
 
 def _evolver_service_catalog() -> str:
@@ -954,11 +956,12 @@ def test_evolver_view_contains_only_completed_epoch_history(tmp_path: Path) -> N
     assert not (control_root / "evidence-instructions.md").exists()
     assert EVOLVER_EVIDENCE_PROMPT_TEXT
     assert (
-        "Each of the four reusable directories has a mandatory `README.md` index"
+        "Each of the three reusable directories has a mandatory `README.md` index"
         in EVOLVER_EVIDENCE_PROMPT_TEXT
     )
     assert "`candidate/` starts as a writable" in EVOLVER_EVIDENCE_PROMPT_TEXT
-    assert "{prompts,insights,skills,tools}/" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "Prompts contains phase" in EVOLVER_EVIDENCE_PROMPT_TEXT
+    assert "Skills contains reusable, task-independent procedures" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "candidate/runtime-state/" not in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "revision seed" in EVOLVER_EVIDENCE_PROMPT_TEXT
     assert "Tool-to-Skill promotion as evidence-driven curation" in EVOLVER_EVIDENCE_PROMPT_TEXT

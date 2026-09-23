@@ -106,7 +106,6 @@ def _accept_trajectory(process: subprocess.Popen[str]) -> dict[str, object]:
             "branch": arguments["branch"],
             "trajectory_ordinal": arguments["trajectory_ordinal"],
             "attempt_capacity": arguments["attempt_capacity"],
-            "runtime_state_policy": arguments["runtime_state_policy"],
             "kernel_agent_revision_id": "agentrev_" + "0" * 32,
         },
     )
@@ -118,7 +117,27 @@ def _accept_attempt_batch(process: subprocess.Popen[str]) -> dict[str, object]:
     call = json.loads(process.stdout.readline())
     assert call["operation"] == "run_attempts_parallel"
     launches = call["arguments"]["launches"]
-    _respond(process, call, {"attempts": [{"status": "completed"} for _ in launches]})
+    attempts = []
+    for launch in launches:
+        attempt_id = (
+            f"attempt_{int(launch['attempt_ordinal']):016d}"
+            f"{int(launch['trajectory_ordinal']):016d}"
+        )
+        attempts.append(
+            {
+                "attempt_id": attempt_id,
+                "trajectory_ordinal": launch["trajectory_ordinal"],
+                "status": "completed",
+                "accepted": True,
+                "latency_us": 10.0 + int(launch["trajectory_ordinal"]),
+                "trajectory_kernel_revision_id": (
+                    f"kernelrev_{int(launch['attempt_ordinal']):016d}"
+                    f"{int(launch['trajectory_ordinal']):016d}"
+                ),
+                "output_state_from_attempt_id": attempt_id,
+            }
+        )
+    _respond(process, call, {"attempts": attempts})
     return call
 
 
@@ -160,8 +179,8 @@ def test_epoch_sdk_hides_attempt_bookkeeping_and_routes_between_rounds(
                 branch=arguments["branch"],
                 ordinal=arguments["ordinal"],
                 attempt_capacity=arguments["attempt_capacity"],
-                runtime_state_policy=arguments["runtime_state_policy"],
                 kernel_agent_revision_id="agentrev_" + "0" * 32,
+                initial_state=module.AgentStateRef(),
             )
 
         def run_attempts_parallel(self, launches: object) -> list[dict[str, object]]:
@@ -169,11 +188,17 @@ def test_epoch_sdk_hides_attempt_bookkeeping_and_routes_between_rounds(
             self.launch_batches.append(batch)
             return [
                 {
-                    "attempt_id": f"attempt_{launch.ordinal:032d}",
+                    "attempt_id": (
+                        f"attempt_{launch.ordinal:016d}{launch.trajectory.ordinal:016d}"
+                    ),
+                    "trajectory_ordinal": launch.trajectory.ordinal,
                     "accepted": True,
                     "latency_us": 10.0 + launch.trajectory.ordinal,
                     "trajectory_kernel_revision_id": (
                         f"kernelrev_{launch.ordinal:016d}{launch.trajectory.ordinal:016d}"
+                    ),
+                    "output_state_from_attempt_id": (
+                        f"attempt_{launch.ordinal:016d}{launch.trajectory.ordinal:016d}"
                     ),
                 }
                 for launch in batch
@@ -194,19 +219,34 @@ def test_epoch_sdk_hides_attempt_bookkeeping_and_routes_between_rounds(
         branch="active",
         trajectories=2,
         rounds=2,
-        runtime_state_policy="retain_across_attempts",
     )
 
     def broadcast_best(completed: object) -> None:
         best = completed.best_accepted_kernel(pool)
         if best is not None and completed.number < pool.rounds:
-            completed.route_kernel(pool, best)
+            for outcome in completed.outcomes(pool):
+                completed.route_kernel(
+                    pool,
+                    trajectory_ordinal=int(outcome["trajectory_ordinal"]),
+                    kernel_revision_id=best,
+                )
+                completed.route_state(
+                    pool,
+                    trajectory_ordinal=int(outcome["trajectory_ordinal"]),
+                    state=outcome["output_state"],
+                )
 
     rounds = epoch.run_pools([pool], after_round=broadcast_best)
     assert [item.number for item in rounds] == [1, 2]
     assert [launch.ordinal for launch in client.launch_batches[0]] == [1, 1]
     expected = "kernelrev_00000000000000010000000000000001"
     assert all(launch.input_kernel_revision_id == expected for launch in client.launch_batches[1])
+    assert [
+        launch.input_state._source_attempt_id for launch in client.launch_batches[1]
+    ] == [
+        "attempt_00000000000000010000000000000001",
+        "attempt_00000000000000010000000000000002",
+    ]
     assert epoch.complete() == {"status": "completed"}
     assert "AttemptLaunch" not in module.__all__
     assert "WorkflowRuntime" not in module.__all__
@@ -233,37 +273,27 @@ def test_default_workflow_executes_complete_pool_epoch(bundle_name: str) -> None
             "dsl": "triton",
             "epoch_id": "epoch_00000000000000000000000000000000",
             "epoch_number": 2,
-            "first_epoch_same_agent": False,
             "workflow_program_sha256": "a" * 64,
         },
         "limits": {
             "max_challengers": 0,
             "optimizer_attempts": 6,
-            "default_trajectories": 2,
-            "default_attempts_per_trajectory": 3,
-            "default_runtime_state_policy": "retain_across_attempts",
         },
     }
     process.stdin.write(json.dumps(context) + "\n")
     process.stdin.flush()
 
-    created = [_accept_trajectory(process), _accept_trajectory(process)]
-    assert [call["arguments"]["trajectory_ordinal"] for call in created] == [1, 2]
-    assert all(
-        call["arguments"]
-        == {
-            "branch": "active",
-            "trajectory_ordinal": ordinal,
-            "trajectory_count": 2,
-            "attempt_capacity": 3,
-            "runtime_state_policy": "retain_across_attempts",
-        }
-        for ordinal, call in enumerate(created, start=1)
-    )
-    batches = [_accept_attempt_batch(process) for _ in range(3)]
+    created = [_accept_trajectory(process)]
+    assert created[0]["arguments"] == {
+        "branch": "active",
+        "trajectory_ordinal": 1,
+        "trajectory_count": 1,
+        "attempt_capacity": 6,
+    }
+    batches = [_accept_attempt_batch(process) for _ in range(6)]
     assert [
         [launch["attempt_ordinal"] for launch in call["arguments"]["launches"]] for call in batches
-    ] == [[1, 1], [2, 2], [3, 3]]
+    ] == [[1], [2], [3], [4], [5], [6]]
     _finish_workflow(process, context["context"]["epoch_id"])
     process.stdin.close()
     assert process.wait(timeout=5) == 0
@@ -273,17 +303,17 @@ def test_default_workflow_executes_complete_pool_epoch(bundle_name: str) -> None
 @pytest.mark.parametrize(
     ("program", "budget", "expected"),
     (
-        ("isolated.py", 3, (1, 3, "reset_each_attempt")),
-        ("retained.py", 3, (1, 3, "retain_across_attempts")),
-        ("pool_3.py", 6, (2, 3, "reset_each_attempt")),
-        ("pool_retained_3.py", 6, (2, 3, "retain_across_attempts")),
+        ("isolated.py", 3, (1, 3, False)),
+        ("retained.py", 3, (1, 3, True)),
+        ("pool_3.py", 6, (2, 3, False)),
+        ("pool_retained_3.py", 6, (2, 3, True)),
     ),
 )
 def test_control_workflow_program_owns_exact_topology(
     bundle_name: str,
     program: str,
     budget: int,
-    expected: tuple[int, int, str],
+    expected: tuple[int, int, bool],
 ) -> None:
     bundle = RUNTIME_ROOT / "src" / bundle_name
     program_path = RUNTIME_ROOT / "src/atrex_runtime/workflow_templates" / program
@@ -306,30 +336,31 @@ def test_control_workflow_program_owns_exact_topology(
             "dsl": "triton",
             "epoch_id": "epoch_" + "0" * 32,
             "epoch_number": 1,
-            "first_epoch_same_agent": False,
             "workflow_program_sha256": "a" * 64,
         },
         "limits": {
             "max_challengers": 0,
             "optimizer_attempts": budget,
-            "default_trajectories": 9,
-            "default_attempts_per_trajectory": 9,
-            "default_runtime_state_policy": "retain_across_attempts",
         },
     }
     process.stdin.write(json.dumps(context) + "\n")
     process.stdin.flush()
 
-    trajectories, attempts, policy = expected
+    trajectories, attempts, retained = expected
     created = [_accept_trajectory(process) for _ in range(trajectories)]
     assert all(
         call["arguments"]["trajectory_count"] == trajectories
         and call["arguments"]["attempt_capacity"] == attempts
-        and call["arguments"]["runtime_state_policy"] == policy
         for call in created
     )
     batches = [_accept_attempt_batch(process) for _ in range(attempts)]
     assert all(len(call["arguments"]["launches"]) == trajectories for call in batches)
+    for round_index, call in enumerate(batches):
+        routed = [launch["input_state_from_attempt_id"] for launch in call["arguments"]["launches"]]
+        if round_index == 0 or not retained:
+            assert routed == [None] * trajectories
+        else:
+            assert all(isinstance(value, str) and value.startswith("attempt_") for value in routed)
     _finish_workflow(process, context["context"]["epoch_id"])
     process.stdin.close()
     assert process.wait(timeout=5) == 0
@@ -337,59 +368,73 @@ def test_control_workflow_program_owns_exact_topology(
 
 @pytest.mark.parametrize("bundle_name", ("kernel-design-agents", "atrex-kernel-agent-core"))
 @pytest.mark.parametrize(
-    ("program_name", "state_policy", "branches", "epoch_number", "agent_operation"),
+    (
+        "program_name",
+        "retained",
+        "branches",
+        "epoch_number",
+        "agent_operation",
+        "budget",
+    ),
     (
         (
             "evolve_3.py",
-            "retain_across_attempts",
+            True,
             ("active", "challenger-1"),
             2,
             "evolve_agent",
+            6,
         ),
         (
             "evolve_isolated_3.py",
-            "reset_each_attempt",
+            False,
             ("challenger-1",),
             1,
             "replicate_active",
+            3,
         ),
         (
             "evolve_isolated_3.py",
-            "reset_each_attempt",
+            False,
             ("challenger-1",),
             2,
             "evolve_agent",
+            3,
         ),
         (
             "evolve_retained_3.py",
-            "retain_across_attempts",
+            True,
             ("challenger-1",),
             1,
             "replicate_active",
+            3,
         ),
         (
             "evolve_retained_3.py",
-            "retain_across_attempts",
+            True,
             ("challenger-1",),
             2,
             "evolve_agent",
+            3,
         ),
         (
             "evolve_isolated_pool_3.py",
-            "reset_each_attempt",
+            False,
             ("active", "active", "challenger-1", "challenger-1"),
             2,
             "evolve_agent",
+            12,
         ),
     ),
 )
 def test_evolution_workflow_owns_selected_branch_organization(
     bundle_name: str,
     program_name: str,
-    state_policy: str,
+    retained: bool,
     branches: tuple[str, ...],
     epoch_number: int,
     agent_operation: str,
+    budget: int,
 ) -> None:
     bundle = RUNTIME_ROOT / "src" / bundle_name
     program_path = RUNTIME_ROOT / "src/atrex_runtime/workflow_templates" / program_name
@@ -412,15 +457,11 @@ def test_evolution_workflow_owns_selected_branch_organization(
             "dsl": "triton",
             "epoch_id": "epoch_" + "0" * 32,
             "epoch_number": epoch_number,
-            "first_epoch_same_agent": True,
             "workflow_program_sha256": "a" * 64,
         },
         "limits": {
             "max_challengers": 1,
-            "optimizer_attempts": max(6, len(branches) * 3),
-            "default_trajectories": 1,
-            "default_attempts_per_trajectory": 3,
-            "default_runtime_state_policy": "retain_across_attempts",
+            "optimizer_attempts": budget,
         },
     }
     process.stdin.write(json.dumps(context) + "\n")
@@ -440,9 +481,14 @@ def test_evolution_workflow_owns_selected_branch_organization(
     process.stdin.flush()
     created = [_accept_trajectory(process) for _ in branches]
     assert [call["arguments"]["branch"] for call in created] == list(branches)
-    assert all(call["arguments"]["runtime_state_policy"] == state_policy for call in created)
     batches = [_accept_attempt_batch(process) for _ in range(3)]
     assert all(len(call["arguments"]["launches"]) == len(branches) for call in batches)
+    for round_index, call in enumerate(batches):
+        routed = [launch["input_state_from_attempt_id"] for launch in call["arguments"]["launches"]]
+        if round_index == 0 or not retained:
+            assert routed == [None] * len(branches)
+        else:
+            assert all(isinstance(value, str) and value.startswith("attempt_") for value in routed)
     _finish_workflow(process, context["context"]["epoch_id"])
     process.stdin.close()
     assert process.wait(timeout=5) == 0

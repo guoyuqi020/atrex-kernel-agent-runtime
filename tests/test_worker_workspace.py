@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 import pytest
-from conftest import NOW, digest
+from conftest import NOW, digest, freeze_branch_workflow
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.domain.ids import (
@@ -89,9 +89,8 @@ def test_next_active_and_evolver_share_winning_trajectory_terminal_state(
         challenger_kernel_agent_revision_ids=(),
         starting_kernel_revision_id=starting_kernel_id,
         evidence_checkpoint=evidence,
-        challenger_count=0,
-        trajectories_per_branch=1,
-        attempts_per_trajectory=2,
+        max_challengers=0,
+        optimizer_attempt_budget=2,
         status=EpochStatus.COMPLETED,
         winner_kernel_agent_revision_id=winner_id,
         best_kernel_revision_id=best_kernel_id,
@@ -106,9 +105,8 @@ def test_next_active_and_evolver_share_winning_trajectory_terminal_state(
         challenger_kernel_agent_revision_ids=(),
         starting_kernel_revision_id=best_kernel_id,
         evidence_checkpoint=evidence,
-        challenger_count=0,
-        trajectories_per_branch=1,
-        attempts_per_trajectory=1,
+        max_challengers=0,
+        optimizer_attempt_budget=1,
         status=EpochStatus.RUNNING,
         winner_kernel_agent_revision_id=None,
         best_kernel_revision_id=None,
@@ -302,9 +300,8 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
             active_kernel_agent_revision_id=agent_id,
             best_kernel_revision_id=kernel_id,
             evidence_checkpoint=evidence,
-            challenger_count=0,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=2,
+            max_challengers=0,
+            optimizer_attempt_budget=2,
             next_epoch_number=1,
             status=LineageStatus.READY,
         )
@@ -318,9 +315,8 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
             challenger_kernel_agent_revision_ids=(),
             starting_kernel_revision_id=kernel_id,
             evidence_checkpoint=evidence,
-            challenger_count=0,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=2,
+            max_challengers=0,
+            optimizer_attempt_budget=2,
             status=EpochStatus.RUNNING,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -328,6 +324,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
             completed_at=None,
         )
     )
+    freeze_branch_workflow(registry, registry.get_epoch(epoch_id), attempts_per_trajectory=2)
     registry.insert_attempt(
         Attempt(
             id=attempt_id,
@@ -378,6 +375,7 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
         "# Reusable tools\n\n## inspect_kernel.py\n\nRun with Python.\n"
     )
     first.persist_reusable_directories()
+    registry.record_attempt_runtime_state(attempt_id, first.seal_runtime_state(store))
     second = assembler.prepare(request)
     manifest = AttemptInputManifestV9.from_json_bytes(first.manifest_path.read_bytes())
 
@@ -440,7 +438,6 @@ def _single_trajectory_workspace(
     registry: SqliteRegistry,
     store: LocalArtifactStore,
     *,
-    ephemeral_agent_state: bool,
     bootstrap_source_lineage_id: object | None = None,
     first_epoch_same_agent: bool = False,
     core_seed: bool = False,
@@ -550,13 +547,10 @@ def _single_trajectory_workspace(
         active_kernel_agent_revision_id=agent_id,
         best_kernel_revision_id=kernel_id,
         evidence_checkpoint=evidence,
-        challenger_count=1 if first_epoch_same_agent else 0,
-        first_epoch_same_agent=first_epoch_same_agent,
-        trajectories_per_branch=1,
-        attempts_per_trajectory=2,
+        max_challengers=1 if first_epoch_same_agent else 0,
+        optimizer_attempt_budget=4 if first_epoch_same_agent else 2,
         next_epoch_number=1,
         status=LineageStatus.READY,
-        ephemeral_agent_state=ephemeral_agent_state,
         bootstrap_source_lineage_id=bootstrap_source_lineage_id,
     )
     deposit_agent_id = str(agent_id)
@@ -591,7 +585,6 @@ def _single_trajectory_workspace(
                 id=bootstrap_source_lineage_id,
                 active_kernel_agent_revision_id=source_agent_id,
                 best_kernel_revision_id=source_kernel_id,
-                ephemeral_agent_state=False,
                 bootstrap_source_lineage_id=None,
             )
         )
@@ -606,9 +599,8 @@ def _single_trajectory_workspace(
             challenger_kernel_agent_revision_ids=(agent_id,) if first_epoch_same_agent else (),
             starting_kernel_revision_id=kernel_id,
             evidence_checkpoint=evidence,
-            challenger_count=1 if first_epoch_same_agent else 0,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=2,
+            max_challengers=1 if first_epoch_same_agent else 0,
+            optimizer_attempt_budget=4 if first_epoch_same_agent else 2,
             status=EpochStatus.RUNNING,
             winner_kernel_agent_revision_id=None,
             best_kernel_revision_id=None,
@@ -616,6 +608,16 @@ def _single_trajectory_workspace(
             completed_at=None,
         )
     )
+    frozen_epoch = registry.get_epoch(epoch_id)
+    freeze_branch_workflow(registry, frozen_epoch, attempts_per_trajectory=2)
+    if first_epoch_same_agent:
+        freeze_branch_workflow(
+            registry,
+            frozen_epoch,
+            branch=BranchRole.CHALLENGER,
+            challenger_ordinal=1,
+            attempts_per_trajectory=2,
+        )
     registry.insert_attempt(
         Attempt(
             id=attempt_id,
@@ -651,37 +653,35 @@ def _single_trajectory_workspace(
 
 
 @pytest.mark.parametrize("directory", OPTIMIZER_WRITABLE_DIRECTORIES)
-def test_event_only_attempt_never_inherits_agent_state(tmp_path: Path, directory: str) -> None:
-    """The ablation arm must start identical every time, including after a physical retry."""
+def test_physical_retry_resumes_the_same_attempt_state(tmp_path: Path, directory: str) -> None:
+    """Physical recovery resumes one logical Attempt independently of Workflow routing."""
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     store = LocalArtifactStore(tmp_path / "artifacts")
     assembler, request, lineage_id, _attempt_id = _single_trajectory_workspace(
         tmp_path,
         registry,
         store,
-        ephemeral_agent_state=True,
     )
 
     first = assembler.prepare(request)
     assert [p.name for p in (first.root / "skills").iterdir()] == ["README.md"]
     assert (first.root / "tools/README.md").is_file()
-    assert first.persistent_state_root is None
-    assert first.persistent_lock_path is None
+    assert first.persistent_state_root is not None
+    assert first.persistent_lock_path is not None
 
     (first.root / directory / "learned.md").write_text("reuse aligned loads\n")
     (first.root / directory / "README.md").write_text("custom index\n")
     first.persist_reusable_directories()
-    # The Session seals its own post-Session state; a physical retry must still start empty.
+    # Workflow controls State between logical Attempts; Runtime resumes physical retries.
     registry.record_attempt_runtime_state(
         request.attempt_id,
         first.seal_runtime_state(store),
     )
     retried = assembler.prepare(request)
 
-    assert [p.name for p in (retried.root / "skills").iterdir()] == ["README.md"]
-    assert not (retried.root / directory / "learned.md").exists()
-    assert (retried.root / directory / "README.md").read_text() != "custom index\n"
-    assert not (tmp_path / "workspaces/.reusable" / lineage_id).exists()
+    assert (retried.root / directory / "learned.md").read_text() == "reuse aligned loads\n"
+    assert (retried.root / directory / "README.md").read_text() == "custom index\n"
+    assert (tmp_path / "workspaces/.reusable" / lineage_id).exists()
     registry.close()
 
 
@@ -692,7 +692,6 @@ def test_initial_replica_has_independent_persistent_state_and_retry(tmp_path: Pa
             tmp_path,
             registry,
             store,
-            ephemeral_agent_state=False,
             first_epoch_same_agent=True,
         )
         active = assembler.prepare(request)
@@ -745,7 +744,6 @@ def test_a_normal_retry_does_inherit_agent_state(tmp_path: Path, directory: str)
         tmp_path,
         registry,
         store,
-        ephemeral_agent_state=False,
     )
 
     first = assembler.prepare(request)
@@ -773,7 +771,6 @@ def test_retaining_clone_inherits_the_source_lineage_bootstrap_state(tmp_path: P
         tmp_path,
         registry,
         store,
-        ephemeral_agent_state=False,
         bootstrap_source_lineage_id=source_lineage_id,
     )
 
@@ -792,8 +789,8 @@ def test_retaining_clone_inherits_the_source_lineage_bootstrap_state(tmp_path: P
     registry.close()
 
 
-def test_ephemeral_clone_still_ignores_the_source_lineage_bootstrap_state(tmp_path: Path) -> None:
-    """Inheriting for a retaining clone must not leak into the always-empty arms."""
+def test_clone_initial_state_uses_the_source_lineage_bootstrap_state(tmp_path: Path) -> None:
+    """Every Workflow receives the same immutable Trajectory seed before it routes State."""
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     store = LocalArtifactStore(tmp_path / "artifacts")
     source_lineage_id = new_lineage_id()
@@ -801,7 +798,6 @@ def test_ephemeral_clone_still_ignores_the_source_lineage_bootstrap_state(tmp_pa
         tmp_path,
         registry,
         store,
-        ephemeral_agent_state=True,
         bootstrap_source_lineage_id=source_lineage_id,
     )
 
@@ -811,9 +807,8 @@ def test_ephemeral_clone_still_ignores_the_source_lineage_bootstrap_state(tmp_pa
 
     prepared = assembler.prepare(request)
 
-    assert [p.name for p in (prepared.root / "skills").iterdir()] == ["README.md"]
+    assert (prepared.root / "skills/bootstrap.md").read_text() == "shared baseline lesson\n"
     assert (prepared.root / "tools/README.md").is_file()
-    assert not (prepared.root / "tools/refcheck.py").exists()
     registry.close()
 
 
@@ -1020,7 +1015,6 @@ def test_adaptive_state_survives_serial_attempts_and_isolates_trajectories(
             tmp_path,
             registry,
             artifacts,
-            ephemeral_agent_state=False,
         )
         first = assembler.prepare(request)
         for name in REUSABLE_AGENT_DIRECTORIES:
@@ -1060,7 +1054,7 @@ def test_adaptive_state_survives_serial_attempts_and_isolates_trajectories(
                 id=next_id,
                 ordinal=2,
                 attempt_evidence_digest=evidence_digest,
-                input_runtime_state_digest=None,
+                input_runtime_state_digest=checkpoint,
                 runtime_state_digest=None,
             )
         )
@@ -1144,12 +1138,11 @@ def test_legacy_hooks_are_accepted_but_dropped_from_writable_state(tmp_path: Pat
     assert store.verify(digest).digest == digest
 
 
-@pytest.mark.parametrize("reset", (False, True))
-def test_attempt_core_seed_and_retry_precedence(tmp_path: Path, reset: bool) -> None:
+def test_attempt_core_seed_and_retry_precedence(tmp_path: Path) -> None:
     with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
         store = LocalArtifactStore(tmp_path / "artifacts")
         assembler, request, _, _ = _single_trajectory_workspace(
-            tmp_path, registry, store, ephemeral_agent_state=reset, core_seed=True
+            tmp_path, registry, store, core_seed=True
         )
         first = assembler.prepare(request)
         for name in REUSABLE_AGENT_DIRECTORIES:
@@ -1161,7 +1154,7 @@ def test_attempt_core_seed_and_retry_precedence(tmp_path: Path, reset: bool) -> 
         registry.record_attempt_runtime_state(request.attempt_id, first.seal_runtime_state(store))
         retry = assembler.prepare(request)
         for name in REUSABLE_AGENT_DIRECTORIES:
-            expected_seed = reset or name != "tools"
+            expected_seed = name != "tools"
             assert (retry.root / name / "seed.md").exists() is expected_seed
             expected = f"Initial {name} index" if expected_seed else "Pruned seed"
             assert (retry.root / name / "README.md").read_text() == expected
@@ -1191,7 +1184,7 @@ def test_core_initial_state_copies_resources_not_engineering_docs(tmp_path: Path
     assert artifacts.verify(digest).digest == digest
 
 
-def test_old_core_split_cognition_seeds_insights_not_engineering_docs(tmp_path: Path) -> None:
+def test_old_core_task_state_is_not_seeded_into_new_sessions(tmp_path: Path) -> None:
     core = tmp_path / "core"
     (core / "memory").mkdir(parents=True)
     (core / "memory/lesson.md").write_text("Search lesson")
@@ -1203,14 +1196,13 @@ def test_old_core_split_cognition_seeds_insights_not_engineering_docs(tmp_path: 
     root = tmp_path / "workspace"
     initialize_reusable_agent_state(root, core)
 
-    assert (root / "insights/lesson.md").read_text() == "Search lesson"
-    assert (root / "insights/contract.md").read_text() == "DSL contract"
-    assert not (root / "insights/design.md").exists()
-    assert not (root / "memory").exists()
-    assert not (root / "knowledge").exists()
+    for name in ("insights", "memory", "knowledge", "docs"):
+        assert not (root / name).exists()
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        assert (root / name / "README.md").is_file()
 
 
-def test_legacy_split_cognition_migrates_without_rewriting_artifact(tmp_path: Path) -> None:
+def test_legacy_task_state_is_dropped_without_rewriting_artifact(tmp_path: Path) -> None:
     legacy = tmp_path / "legacy"
     (legacy / "memory").mkdir(parents=True)
     (legacy / "memory/README.md").write_text("Search lesson: lesson.md")
@@ -1230,17 +1222,17 @@ def test_legacy_split_cognition_migrates_without_rewriting_artifact(tmp_path: Pa
     copy_reusable_agent_state(source, copied)
     validate_reusable_agent_state_seed(copied, require_complete=True)
     assert not (copied / "docs").exists()
-    assert "Migrated `memory/README.md`" in (copied / "insights/README.md").read_text()
-    assert "Migrated `docs/README.md`" in (copied / "insights/README.md").read_text()
-    assert (copied / "insights/lesson.md").read_text() == "Measured search constraint"
-    assert (copied / "insights/api.md").read_text() == "Measured API constraints"
-    assert (copied / "insights/api.md").stat().st_mode & 0o200
+    assert not (copied / "insights").exists()
+    assert not (copied / "memory").exists()
+    assert not (copied / "docs").exists()
+    for name in REUSABLE_AGENT_DIRECTORIES:
+        assert (copied / name / "README.md").is_file()
     assert (source / "docs/api.md").is_file()
     assert (source / "memory/lesson.md").is_file()
     assert store.verify(digest).digest == digest
 
 
-def test_existing_persistent_split_cognition_is_merged(tmp_path: Path) -> None:
+def test_existing_persistent_task_state_is_removed(tmp_path: Path) -> None:
     state = tmp_path / "state"
     (state / "memory").mkdir(parents=True)
     (state / "memory/lesson.md").write_text("Keep search lesson across retries")
@@ -1250,20 +1242,18 @@ def test_existing_persistent_split_cognition_is_merged(tmp_path: Path) -> None:
     ensure_reusable_directories(state)
     assert not (state / "memory").exists()
     assert not (state / "knowledge").exists()
-    assert (state / "insights/lesson.md").read_text() == "Keep search lesson across retries"
-    assert (state / "insights/reference.md").read_text() == "Keep reference across retries"
+    assert not (state / "insights").exists()
     validate_reusable_agent_state_seed(state, require_complete=True)
 
 
-def test_insight_migration_rejects_conflicting_names(tmp_path: Path) -> None:
+def test_legacy_task_state_removal_ignores_conflicting_names(tmp_path: Path) -> None:
     (tmp_path / "memory").mkdir()
     (tmp_path / "memory/note.md").write_text("Search interpretation")
     (tmp_path / "knowledge").mkdir()
     (tmp_path / "knowledge/note.md").write_text("Different reference interpretation")
-    with pytest.raises(ValueError, match=r"conflicting file note\.md"):
-        ensure_reusable_directories(tmp_path)
-    assert (tmp_path / "memory/note.md").read_text() == "Search interpretation"
-    assert (tmp_path / "knowledge/note.md").read_text() == "Different reference interpretation"
+    ensure_reusable_directories(tmp_path)
+    assert not (tmp_path / "memory").exists()
+    assert not (tmp_path / "knowledge").exists()
 
 
 @pytest.mark.parametrize("name", REUSABLE_AGENT_DIRECTORIES)
@@ -1284,18 +1274,13 @@ def test_reusable_readme_rejects_symlink_or_directory(tmp_path: Path, name: str)
         ensure_reusable_directories(state)
 
 
-@pytest.mark.parametrize("legacy_memory", (False, True))
-def test_evolver_snapshot_preserves_all_state_indexes_read_only(
-    tmp_path: Path, legacy_memory: bool
-) -> None:
+def test_evolver_snapshot_preserves_all_state_indexes_read_only(tmp_path: Path) -> None:
     workspaces = tmp_path / "attempts"
     source = workspaces / ".reusable/lineage/agent/trajectory-00000001"
     ensure_reusable_directories(source)
     for name in REUSABLE_AGENT_DIRECTORIES:
         (source / name / "entry.txt").write_text(name)
         (source / name / "README.md").write_text(f"{name}: entry.txt")
-    if legacy_memory:
-        (source / "insights").rename(source / "memory")
     target = tmp_path / "evolver-view"
     assert materialize_reusable_agent_state_snapshot(
         workspaces,
@@ -1306,11 +1291,5 @@ def test_evolver_snapshot_preserves_all_state_indexes_read_only(
         copied = target / "agent/trajectories/trajectory-00000001" / name
         assert (copied / "entry.txt").read_text() == name
         index = (copied / "README.md").read_text()
-        if legacy_memory and name == "insights":
-            assert "Migrated `memory/README.md`" in index
-            assert "insights: entry.txt" in index
-        else:
-            assert index == f"{name}: entry.txt"
+        assert index == f"{name}: entry.txt"
         assert not (copied.stat().st_mode & 0o222)
-    assert (source / "memory").exists() is legacy_memory
-    assert not (target / "agent/trajectories/trajectory-00000001/memory").exists()

@@ -138,21 +138,17 @@ class LocalAttemptEvidenceAssembler:
         epoch = self._registry.get_epoch(request.epoch_id)
         if epoch.evidence_checkpoint != request.epoch_evidence_checkpoint:
             raise ValueError("Attempt Evidence disagrees with the epoch checkpoint")
-        if request.challenger_ordinal > epoch.challenger_count:
+        if request.challenger_ordinal > epoch.max_challengers:
             raise ValueError("Attempt Evidence Challenger exceeds the Epoch pool")
         workflow = self._registry.get_epoch_branch_workflow(
             epoch.id,
             request.branch,
             request.challenger_ordinal,
         )
-        trajectories = (
-            epoch.trajectories_per_branch if workflow is None else workflow.trajectories
-        )
-        attempts_per_trajectory = (
-            epoch.attempts_per_trajectory
-            if workflow is None
-            else workflow.attempts_per_trajectory
-        )
+        if workflow is None:
+            raise ValueError("Attempt Evidence requires a frozen Agent Workflow Branch")
+        trajectories = workflow.trajectories
+        attempts_per_trajectory = workflow.attempts_per_trajectory
         if request.trajectory_ordinal > trajectories:
             raise ValueError("Attempt Evidence Trajectory exceeds the Branch budget")
         if request.ordinal > attempts_per_trajectory:

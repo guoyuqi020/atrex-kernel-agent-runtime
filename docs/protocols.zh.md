@@ -26,12 +26,15 @@ Kernel Revision 时才消耗 `vN`。
 Campaign 冻结算子、解析后的硬件架构、Agate GPU Selector、Evaluation Contract、公开 Agent
 Problem、Core 来源、Evolver Commit 与策略。只有所有不可变输入一致时，Creation Key 才能幂等复用。
 
-每条 Lineage 持有唯一 DSL、独立 Agent/Kernel 版本树、Model、Epoch 拓扑、Active Agent、Best
-Kernel、公共 Evidence Checkpoint 与 Runtime State 历史。Seed Lineage 会创建新的
+每条 Lineage 持有唯一 DSL、独立 Agent/Kernel 版本树、Model、版本化 Workflow、Runtime 资源上限、
+Active Agent、Best Kernel、公共 Evidence Checkpoint 与 Runtime State 历史。Seed Lineage 会创建新的
 `agent-v0`/`v0` 根；源 Revision ID 只是 Provenance，不共享版本祖先。
 
-Ablation Arm 是从另一 Lineage 的封存 Bootstrap Baseline 创建的独立 Campaign/Lineage，没有
-Challenger；Ephemeral State 行为属于其 Lineage 身份。
+Ablation Arm 是从另一 Lineage 的封存 Bootstrap Baseline 创建的独立 Campaign/Lineage。进化臂可以
+指定一条外部对照 Lineage 作为 Evolver observer；自身 Epoch N 启动前，Runtime 等待 observer 发布
+Epoch N-1，并只暴露该时点的 Evidence 前缀。这不会合并两者的 Agent/Kernel 版本树、Journal、
+可写 State 或 Workflow 执行。Agent Workflow 只定义各自 Lineage 内的 Branch、State 路由和 Kernel
+路由；Runtime 不根据 Arm Label 推断行为。
 
 ## Epoch、Branch、Trajectory 与 Attempt
 
@@ -62,8 +65,10 @@ Attempt、Generalization Subject 或 Evolution Subject 是逻辑 Owner。
 
 固定 Commit 的 Evolver Bundle 用 `atrex-evolver-bundle.json` schema 1 声明入口。
 Runtime 通过 stdin 固定发送 `Run the versioned Evolver Bundle once.`。Evolution Input schema 11
-包含 Parent、DSL、Evidence Checkpoint、工作区路径和冻结 Catalog，不授予 Gateway/Wiki 或 Runtime 查询权限。
-Trace schema 9 保存进程、Usage、Report、Candidate 身份和贡献内容快照；Provider Usage 必需，不设置 Evolver Token 截止。
+包含 Parent、DSL、Evidence Checkpoint、工作区路径和冻结 Catalog，不授予 Gateway/Wiki 或实时 Runtime 查询权限。
+Runtime 只注入不持久化的 `workflow-check` Dry-run Context；该工具以确定性的首 Epoch、后续 Epoch 和
+`no_change` 响应检查 Candidate Workflow，不创建 Epoch、Attempt 或 Registry 记录。Trace schema 9
+保存进程、Usage、Report、Candidate 身份和贡献内容快照；Provider Usage 必需，不设置 Evolver Token 截止。
 
 每个 `input/agents/agent-vN/` 是完整只读 Bundle，可写 `candidate/` 使用相同布局。
 `input/evidence/agent-vN/` 保存汇总及逐 Trajectory 补充资源；仅上一个完成 Epoch 的参赛者暴露
@@ -72,9 +77,10 @@ Trace schema 9 保存进程、Usage、Report、Candidate 身份和贡献内容�
 Evolution Report 声明提案模式、所选 `kernel_agent_revision_id`、假设、预期效果、准确的 Bundle
 相对 `changed_paths`、`contributing_paths` 和未实现能力。从历史派生时先复制完整 Bundle，再修改。
 本地 `evolution-report` 校验 Draft，错误返回 `issues`、`request_schema`、`recovery`，不发布；
-首次有效调用原子生成 `scratch/evolution-report.json`。Session 结束后 Runtime 再独立校验。
+首次有效调用原子生成 `scratch/evolution-report.json`。Session 结束后 Runtime 再独立校验，并在封存
+Candidate 前于同一 Worker Sandbox 内重复 Workflow Dry-run。
 
-每个新 Revision 封存完整 Bundle 和四目录 State Checkpoint，记录 `optimizer_digest`、
+每个新 Revision 封存完整 Bundle 和三目录 State Checkpoint，记录 `optimizer_digest`、
 `runtime_state_digest`；每个新 Trajectory 使用独立副本。Optimizer 的实现权限和 State 继承规则不变。
 
 `contributing_paths` 记录实际吸收内容的、排序且去重的 Workspace 相对文件或目录路径，允许
@@ -132,29 +138,29 @@ Report。
 
 ## Runtime State
 
-版本化 Core Source 包含 `prompts/`、`insights/`、`skills/`、`tools/` 初始种子，没有继承 State 时由 Runtime 复制。运行中积累的 Adaptive State 仍是独立 Artifact：
+版本化 Core Source 包含 `prompts/`、`skills/`、`tools/` 初始种子，没有继承 State 时由 Runtime 复制。运行中积累的 Adaptive State 仍是独立 Artifact：
 
 ```text
 runtime-state/
   trajectories/<N>/
     prompts/README.md
-    insights/README.md
     skills/README.md
     tools/README.md
 ```
 
-Optimizer Workspace 把一条 Trajectory 的 `prompts/`、`insights/`、`skills/` 展示为只读内容，仅
-`tools/` 可写，其 README 必须随内容的新增、修改、重命名和删除同步更新。四目录整体封存，遵循相同的继承与隔离
-规则；Evolver 负责 Prompts、Insights 与 Skills 的版本化修改。没有继承 State 时，从固定 Core Source
-加载四目录初始内容，重置状态的消融臂每次回到该种子。
-Insights 是带适用范围、由 Evidence 推导且会改变后续搜索决策的解释；Runtime Journal 保存事实历史，
-静态参考资料归入 Skill references。旧不可变 State 在物化时会把 `memory/`、`knowledge/` 或更早的
-`docs/` 内容合并进 `insights/`，不会改写原 Artifact；同名冲突会被拒绝。Runtime
+Optimizer Workspace 把一条 Trajectory 的 `prompts/`、`skills/` 展示为只读内容，仅 `tools/` 可写，
+其 README 必须随内容的新增、修改、重命名和删除同步更新。三目录整体封存，遵循相同的继承与隔离规则。
+Evolver 只能把任务 Evidence 转换为与任务无关的 Prompt、Skill、Tool、实现或 Workflow 改进，不能替
+Optimizer 指定 Kernel 优化方向。任务专属假设、Direction、测量和结论保留在 Runtime Journal 与
+Report。旧 `insights/`、`memory/`、`knowledge/` 仍可在不可变历史 Artifact 中读取，但不会带入新
+Session 或 Agent Revision。Runtime
 封存终态内容并为下一个串行 Attempt 恢复。Evolver 获得冻结 Participant/Historical State，并在
-`candidate/{prompts,insights,skills,tools}/` 编写一份扁平 Candidate Seed。新 Agent Revision 同时
+`candidate/{prompts,skills,tools}/` 编写一份扁平 Candidate Seed。新 Agent Revision 同时
 记录 Source 与 State Digest，作为一个逻辑 Bundle；每条新 Trajectory 得到独立副本。
 
-启用 Ephemeral Agent State 的 Ablation Lineage 会让每个 Attempt 从空 Adaptive State 开始。
+Runtime 把每个 Attempt 的终态封存为不透明输出 State。Workflow 可把它显式路由给同一
+Trajectory 的后续轮次；没有显式路由时，后续 Attempt 从不可变 Trajectory Seed 开始。同一逻辑
+Attempt 的物理重试会恢复该 Attempt 最新封存的 State。
 
 ## Evidence 可见性
 
@@ -189,9 +195,10 @@ Campaign Bootstrap 可以提供 `workflow_command`，作为 Runtime 构造模板
 Ablation Arm 在克隆共享 Bootstrap Baseline 时执行同样派生，因此被选择的组织方式来自 Agent
 Revision 代码，而不是控制器侧的 Label 或拓扑预设，同时 Optimizer 和 Evolver 不会收到无关臂实现。
 
-Context 提供 DSL/Epoch 身份与资源包络：最多 Challenger 数、Optimizer Attempt 硬容量、默认拓扑和
-默认 Runtime-State 策略。创建 Pool 时会冻结 Branch 容量与 State 策略；私有 SDK 分配显式 Attempt
-序号，使 Workflow 重启后可以幂等重放已完成逻辑轮次，并让轮次回调重新处理同一份可信结果。普通多
+Context 提供 DSL/Epoch 身份与资源包络：最多 Challenger 数、Optimizer Attempt 硬容量和默认拓扑。
+创建 Pool 时只冻结 Branch 容量。每个 Trajectory 的每一轮默认从不可变初始 State 开始；只有 Workflow
+显式路由已完成 Attempt 的输出 State 时，下一轮才会继承。私有 SDK 分配显式 Attempt 序号，使 Workflow
+重启后可以幂等重放已完成逻辑轮次，并让轮次回调重新处理同一份可信结果。普通多
 Branch 组织必须登记所有已挂接 Branch，并精确用完全部预算。受控的仅 Challenger 进化组织可以省略
 Active、只执行唯一 Challenger，但必须精确用完配置的单 Branch 预算。`epoch.complete()` 会拒绝其他
 Branch 子集、缺失或未完成工作，并且只提交 Runtime 的可信 Kernel 与 Agent 选择。

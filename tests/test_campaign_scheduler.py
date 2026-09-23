@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import anyio
 import pytest
 from conftest import NOW, FakeAttemptEvidence, digest
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.controller import (
     CampaignScheduler,
+    CampaignScheduleResult,
     EpochController,
     EvidenceCheckpointV1,
     LocalEvidenceAssembler,
@@ -42,6 +45,7 @@ from atrex_runtime.ports import (
     BuildChallengerResult,
     KernelAgentCandidate,
     KernelAgentCandidateProposal,
+    RunAgentWorkflowRequest,
     RunAttemptRequest,
     RunAttemptResult,
 )
@@ -132,10 +136,14 @@ def _seed_lineage(
     tmp_path: Path,
     campaign_id: CampaignId,
     dsl: Dsl,
-    challenger_start_epoch: int = 1,
+    *,
+    name: str | None = None,
+    max_challengers: int = 1,
+    observer_lineage_id: LineageId | None = None,
 ) -> LineageId:
     lineage_id = new_lineage_id()
-    initial = tmp_path / f"initial-{dsl.value}"
+    identity = dsl.value if name is None else name
+    initial = tmp_path / f"initial-{identity}"
     initial.mkdir()
     (initial / "baseline.md").write_text(f"{dsl.value} baseline\n", encoding="utf-8")
     evidence = LocalEvidenceAssembler(registry, artifacts).create_initial(lineage_id, initial)
@@ -144,12 +152,12 @@ def _seed_lineage(
         KernelAgentRevision(
             id=agent_id,
             parent_id=None,
-            creation_key=f"bootstrap:{dsl.value}",
+            creation_key=f"bootstrap:{identity}",
             dsl=dsl,
-            optimizer_digest=digest(f"{dsl.value}-optimizer"),
+            optimizer_digest=digest(f"{identity}-optimizer"),
             created_by="bootstrap",
             created_at=NOW,
-            source_provenance_digest=digest(f"{dsl.value}-source"),
+            source_provenance_digest=digest(f"{identity}-source"),
         )
     )
     kernel_id = new_kernel_revision_id()
@@ -157,9 +165,9 @@ def _seed_lineage(
         KernelRevision(
             kernel_id,
             None,
-            digest(f"{dsl.value}-baseline-kernel"),
+            digest(f"{identity}-baseline-kernel"),
             None,
-            KernelEvaluation(True, 100.0, digest(f"{dsl.value}-baseline-gateway")),
+            KernelEvaluation(True, 100.0, digest(f"{identity}-baseline-gateway")),
             NOW,
         )
     )
@@ -172,15 +180,114 @@ def _seed_lineage(
             active_kernel_agent_revision_id=agent_id,
             best_kernel_revision_id=kernel_id,
             evidence_checkpoint=evidence,
-            challenger_count=1,
-            challenger_start_epoch=challenger_start_epoch,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=1,
+            max_challengers=max_challengers,
+            optimizer_attempt_budget=2,
             next_epoch_number=1,
             status=LineageStatus.READY,
+            evolver_observer_lineage_id=observer_lineage_id,
         )
     )
     return lineage_id
+
+
+class SchedulerWorkflow:
+    """Explicit two-Branch Workflow used by scheduler integration tests."""
+
+    async def run(self, request: RunAgentWorkflowRequest, operations: object) -> None:
+        execute = operations.execute_workflow_operation  # type: ignore[attr-defined]
+
+        async def call(operation: str, arguments: Mapping[str, object]):
+            return await execute(
+                operation,
+                {**arguments, "_runtime_workflow_program_sha256": "a" * 64},
+            )
+
+        operation = "replicate_active" if request.epoch_number == 1 else "evolve_agent"
+        await call(operation, {"challenger_ordinal": 1})
+        for branch in ("active", "challenger-1"):
+            await call(
+                "create_trajectory",
+                {
+                    "branch": branch,
+                    "trajectory_ordinal": 1,
+                    "trajectory_count": 1,
+                    "attempt_capacity": 1,
+                },
+            )
+        await call(
+            "run_attempts_parallel",
+            {
+                "launches": [
+                    {
+                        "branch": branch,
+                        "trajectory_ordinal": 1,
+                        "attempt_ordinal": 1,
+                    }
+                    for branch in ("active", "challenger-1")
+                ]
+            },
+        )
+        kernel = await call("select_best_kernel", {})
+        agent = await call("compare_agents", {})
+        await call(
+            "complete_epoch",
+            {
+                "kernel_revision_id": kernel["kernel_revision_id"],
+                "kernel_agent_revision_id": agent["kernel_agent_revision_id"],
+            },
+        )
+
+
+class PairedLineageWorkflow:
+    """Run Active as Isolated and Challenger as isolated evolution."""
+
+    async def run(self, request: RunAgentWorkflowRequest, operations: object) -> None:
+        execute = operations.execute_workflow_operation  # type: ignore[attr-defined]
+
+        async def call(operation: str, arguments: Mapping[str, object]):
+            return await execute(
+                operation,
+                {**arguments, "_runtime_workflow_program_sha256": "b" * 64},
+            )
+
+        branch = "active"
+        if request.max_challengers:
+            branch = "challenger-1"
+            await call(
+                "replicate_active" if request.epoch_number == 1 else "evolve_agent",
+                {"challenger_ordinal": 1},
+            )
+        await call(
+            "create_trajectory",
+            {
+                "branch": branch,
+                "trajectory_ordinal": 1,
+                "trajectory_count": 1,
+                "attempt_capacity": request.optimizer_attempt_budget,
+            },
+        )
+        for attempt_ordinal in range(1, request.optimizer_attempt_budget + 1):
+            await call(
+                "run_attempts_parallel",
+                {
+                    "launches": [
+                        {
+                            "branch": branch,
+                            "trajectory_ordinal": 1,
+                            "attempt_ordinal": attempt_ordinal,
+                        }
+                    ]
+                },
+            )
+        kernel = await call("select_best_kernel", {})
+        agent = await call("compare_agents", {})
+        await call(
+            "complete_epoch",
+            {
+                "kernel_revision_id": kernel["kernel_revision_id"],
+                "kernel_agent_revision_id": agent["kernel_agent_revision_id"],
+            },
+        )
 
 
 def _scheduler(
@@ -190,7 +297,13 @@ def _scheduler(
 ) -> tuple[CampaignScheduler, EpochController, AdvancingEvolver, ImprovingOptimizer]:
     evolver = AdvancingEvolver()
     optimizer = ImprovingOptimizer()
-    controller = EpochController(registry, evolver, optimizer, FakeAttemptEvidence())
+    controller = EpochController(
+        registry,
+        evolver,
+        optimizer,
+        FakeAttemptEvidence(),
+        workflow_runner=SchedulerWorkflow(),
+    )
     scheduler = CampaignScheduler(
         registry,
         controller,
@@ -205,7 +318,7 @@ def _scheduler(
 
 
 @pytest.mark.anyio
-async def test_scheduler_delays_challengers_until_configured_epoch(tmp_path: Path) -> None:
+async def test_scheduler_follows_workflow_owned_evolution_timing(tmp_path: Path) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
         campaign_id = new_campaign_id()
@@ -219,14 +332,7 @@ async def test_scheduler_delays_challengers_until_configured_epoch(tmp_path: Pat
                 NOW,
             )
         )
-        lineage_id = _seed_lineage(
-            registry,
-            artifacts,
-            tmp_path,
-            campaign_id,
-            Dsl.TRITON,
-            challenger_start_epoch=2,
-        )
+        lineage_id = _seed_lineage(registry, artifacts, tmp_path, campaign_id, Dsl.TRITON)
         scheduler, _controller, evolver, optimizer = _scheduler(
             registry,
             artifacts,
@@ -237,10 +343,10 @@ async def test_scheduler_delays_challengers_until_configured_epoch(tmp_path: Pat
 
         assert result.completed_epochs == (1, 2, 3)
         assert len(evolver.calls) == 2
-        assert len(optimizer.calls) == 5
+        assert len(optimizer.calls) == 6
         epochs = registry.list_epochs(lineage_id)
-        assert [epoch.challenger_count for epoch in epochs] == [0, 1, 1]
-        assert [len(registry.list_attempts(epoch.id)) for epoch in epochs] == [1, 2, 2]
+        assert [epoch.max_challengers for epoch in epochs] == [1, 1, 1]
+        assert [len(registry.list_attempts(epoch.id)) for epoch in epochs] == [2, 2, 2]
 
 
 @pytest.mark.anyio
@@ -271,7 +377,7 @@ async def test_scheduler_runs_multiple_dsl_lineages_through_target(tmp_path: Pat
         assert result.campaign_id == campaign_id
         assert [item.lineage.id for item in result.lineages] == [triton, cuda]
         assert all(item.completed_epochs == (1, 2) for item in result.lineages)
-        assert len(evolver.calls) == 4
+        assert len(evolver.calls) == 2
         assert len(optimizer.calls) == 8
         for lineage_id in (triton, cuda):
             lineage = registry.get_lineage(lineage_id)
@@ -284,6 +390,106 @@ async def test_scheduler_runs_multiple_dsl_lineages_through_target(tmp_path: Pat
                 "00000001.json",
                 "00000002.json",
             ]
+
+
+@pytest.mark.anyio
+async def test_external_isolated_observer_blocks_evolution_until_preceding_epoch(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        active_campaign_id = new_campaign_id()
+        challenger_campaign_id = new_campaign_id()
+        for campaign_id in (active_campaign_id, challenger_campaign_id):
+            registry.insert_campaign(
+                Campaign(
+                    campaign_id,
+                    "vector_add",
+                    "nvidia-h100",
+                    digest("contract"),
+                    digest("problem"),
+                    NOW,
+                )
+            )
+        active = _seed_lineage(
+            registry,
+            artifacts,
+            tmp_path,
+            active_campaign_id,
+            Dsl.TRITON,
+            name="paired-active",
+            max_challengers=0,
+        )
+        challenger = _seed_lineage(
+            registry,
+            artifacts,
+            tmp_path,
+            challenger_campaign_id,
+            Dsl.TRITON,
+            name="paired-challenger",
+            max_challengers=1,
+            observer_lineage_id=active,
+        )
+        evolver = AdvancingEvolver()
+        optimizer = ImprovingOptimizer()
+        controller = EpochController(
+            registry,
+            evolver,
+            optimizer,
+            FakeAttemptEvidence(),
+            workflow_runner=PairedLineageWorkflow(),
+        )
+        scheduler = CampaignScheduler(
+            registry,
+            controller,
+            LocalEvidenceAssembler(registry, artifacts),
+            RegistryLineageLeaseManager(
+                registry,
+                lease_seconds=10,
+                heartbeat_seconds=1,
+            ),
+            observer_poll_seconds=0.001,
+        )
+        results: dict[str, CampaignScheduleResult] = {}
+
+        async def run_challenger() -> None:
+            results["challenger"] = await scheduler.run_campaign_through((challenger,), 2)
+
+        async def run_active() -> None:
+            results["active"] = await scheduler.run_campaign_through((active,), 2)
+
+        async with anyio.create_task_group() as tasks:
+            tasks.start_soon(run_challenger)
+            await anyio.sleep(0.01)
+            # Epoch 1 may finish, but Evolution for Epoch 2 must await the external
+            # Isolated control's published Epoch-1 checkpoint.
+            assert evolver.calls == []
+            tasks.start_soon(run_active)
+
+        assert results["active"].campaign_id == active_campaign_id
+        assert results["challenger"].campaign_id == challenger_campaign_id
+        assert results["active"].lineages[0].completed_epochs == (1, 2)
+        assert results["challenger"].lineages[0].completed_epochs == (1, 2)
+        assert len(evolver.calls) == 1
+        request = evolver.calls[0]
+        assert request.epoch_number == 2
+        assert request.observer_lineage_id == active
+        assert request.observer_evidence_checkpoint is not None
+        checkpoint = EvidenceCheckpointV1.from_file(
+            artifacts.verify(request.observer_evidence_checkpoint).payload_path
+            / "checkpoint.json"
+        )
+        assert checkpoint.lineage_id == active
+        assert checkpoint.through_epoch == 1
+        assert {entry.lineage_id for entry in request.observer_agent_catalog} == {active}
+        assert all(
+            entry.epoch_number is None or entry.epoch_number < request.epoch_number
+            for entry in request.observer_kernel_catalog
+        )
+        assert any(entry.epoch_number == 1 for entry in request.observer_kernel_catalog)
+        assert {entry.lineage_id for entry in request.agent_catalog} == {challenger}
+        assert len(registry.list_attempts(registry.find_epoch(active, 1).id)) == 2  # type: ignore[union-attr]
+        assert len(registry.list_attempts(registry.find_epoch(challenger, 1).id)) == 2  # type: ignore[union-attr]
 
 
 @pytest.mark.anyio

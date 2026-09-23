@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
-from conftest import NOW, digest
+from conftest import NOW, digest, freeze_branch_workflow
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.attempt_reports import RuntimeAttemptReportProjector
@@ -215,9 +215,8 @@ def _seed_epoch(
             active_kernel_agent_revision_id=agent_id,
             best_kernel_revision_id=baseline.id,
             evidence_checkpoint=evidence,
-            challenger_count=1,
-            trajectories_per_branch=1,
-            attempts_per_trajectory=3,
+            max_challengers=1,
+            optimizer_attempt_budget=6,
             next_epoch_number=1,
             status=LineageStatus.READY,
         )
@@ -230,9 +229,8 @@ def _seed_epoch(
         challenger_kernel_agent_revision_ids=(agent_id,),
         starting_kernel_revision_id=baseline.id,
         evidence_checkpoint=evidence,
-        challenger_count=1,
-        trajectories_per_branch=1,
-        attempts_per_trajectory=3,
+        max_challengers=1,
+        optimizer_attempt_budget=6,
         status=EpochStatus.RUNNING,
         winner_kernel_agent_revision_id=None,
         best_kernel_revision_id=None,
@@ -240,6 +238,14 @@ def _seed_epoch(
         completed_at=None,
     )
     registry.insert_epoch(epoch)
+    freeze_branch_workflow(registry, epoch, attempts_per_trajectory=3)
+    freeze_branch_workflow(
+        registry,
+        epoch,
+        branch=BranchRole.CHALLENGER,
+        challenger_ordinal=1,
+        attempts_per_trajectory=3,
+    )
     return epoch, baseline, evidence
 
 

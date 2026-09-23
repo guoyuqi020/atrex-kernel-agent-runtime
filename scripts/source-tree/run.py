@@ -147,7 +147,12 @@ def main() -> None:
     parser.add_argument("--config", required=True, type=Path)
     parser.add_argument("--campaign", required=True, type=Path)
     parser.add_argument("--plan", required=True, type=Path)
-    parser.add_argument("--target-epoch", type=int, default=100, help="main arm only")
+    parser.add_argument(
+        "--target-epoch",
+        type=int,
+        default=100,
+        help="compatibility target used only when the frozen plan enables the main arm",
+    )
     args = parser.parse_args()
     if args.target_epoch < 1:
         parser.error("--target-epoch must be positive")
@@ -159,8 +164,6 @@ def main() -> None:
         lineage.source_manifest is None for lineage in spec.lineages.values()
     ):
         parser.error("expected one source-tree DSL Lineage")
-    if not spec.first_epoch_same_agent:
-        parser.error("production ablation requires first_epoch_same_agent=true; use a new Campaign")
     definition = spec.model_dump(mode="json")
     plan = json.loads(args.plan.read_text())
     try:
@@ -200,36 +203,44 @@ def main() -> None:
         if len(bootstrap["lineages"]) != 1:
             raise ValueError("Bootstrap returned more than one Lineage")
         source_id = parse_lineage_id(bootstrap["lineages"][0]["lineage_id"])
-        arms = [
-            {
-                "label": f"evolve-{spec.attempts_per_trajectory}",
-                "kind": "evolve",
-                "campaign_id": bootstrap["campaign_id"],
-                "lineage_id": str(source_id),
-                "target_epoch_number": args.target_epoch,
-                "optimizer_attempt_budget_total": (
-                    args.target_epoch
-                    * spec.attempts_per_trajectory
-                    * spec.trajectories_per_branch
-                    * 2
-                ),
-            }
-        ]
+        arms = []
+        if plan.get("main_evolve_enabled", True):
+            arms.append(
+                {
+                    "label": "evolve-3",
+                    "kind": "evolve",
+                    "campaign_id": bootstrap["campaign_id"],
+                    "lineage_id": str(source_id),
+                    "target_epoch_number": args.target_epoch,
+                    "optimizer_attempt_budget_total": (
+                        args.target_epoch * spec.optimizer_attempt_budget
+                    ),
+                }
+            )
+        seeded_by_label: dict[str, dict[str, Any]] = {}
         for arm in plan["arms"]:
             root = workspace / arm["label"]
             root.mkdir(exist_ok=True)
+            observer_label = arm.get("observer_label")
+            observer_lineage_id = None
+            if observer_label is not None:
+                try:
+                    observer_lineage_id = seeded_by_label[observer_label]["lineage"][
+                        "lineage_id"
+                    ]
+                except KeyError as error:
+                    raise ValueError(
+                        f"observer arm must be seeded first: {observer_label}"
+                    ) from error
             seed_spec = AblationArmSpecV1(
                 creation_key=f"{arm['label']}-{next(iter(spec.lineages)).value}",
                 source_lineage_id=source_id,
+                evolver_observer_lineage_id=observer_lineage_id,
                 **{
                     key: arm[key]
                     for key in (
-                        "attempts_per_trajectory",
-                        "trajectories_per_branch",
-                        "ephemeral_agent_state",
-                        "challenger_count",
-                        "challenger_start_epoch",
-                        "first_epoch_same_agent",
+                        "optimizer_attempt_budget",
+                        "max_challengers",
                         "workflow_command",
                     )
                 },
@@ -241,6 +252,7 @@ def main() -> None:
                 root / "seed-result.json",
                 root / "seed.log",
             )
+            seeded_by_label[arm["label"]] = seeded
             arms.append(
                 {
                     **arm,
@@ -248,7 +260,12 @@ def main() -> None:
                     "lineage_id": seeded["lineage"]["lineage_id"],
                 }
             )
-        run_arms(cli, config, workspace, arms)
+        run_arms(
+            cli,
+            config,
+            workspace,
+            arms,
+        )
 
 
 if __name__ == "__main__":

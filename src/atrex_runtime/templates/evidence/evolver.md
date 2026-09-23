@@ -56,11 +56,19 @@ comparison, retaining source Result identities and separating measured facts fro
 Runtime injects this frozen view. Missing participants, Sessions, history, or State are unavailable;
 do not infer them.
 
+Some Evolutions also expose `input/observer/active/`, identified by
+`observer_active_lineage` in Session context. It is a separate read-only Isolated Lineage, frozen
+through the preceding Epoch. Its `agents/` and `evidence/` trees use the same Source, summary,
+Session, report, Journal, review, and reusable-resource conventions described below. Use it as an
+additional behavioral comparison when improving the Challenger Lineage. It is not a Branch of the
+current Lineage, not a Candidate base, and not a source of shared Kernel or Journal state. Never
+infer same-Epoch Active results, and never rewrite Challenger history from observer records.
+
 ```text
 input/
 ├── agents/agent-vN/
 │   ├── src/ and Agent configuration
-│   └── {prompts,insights,skills,tools}/
+│   └── {prompts,skills,tools}/
 ├── evidence/
 │   ├── latest-epoch-facts.json
 │   ├── journal/
@@ -71,7 +79,7 @@ input/
 │   │   ├── trajectory-comparison.json
 │   │   └── workflow-friction.json
 │   └── agent-vN/
-│       ├── resources/trajectories/trajectory-NNNNNNNN/{prompts,insights,skills,tools}/
+│       ├── resources/trajectories/trajectory-NNNNNNNN/{prompts,skills,tools}/
 │       ├── optimization-summary.json
 │       ├── sessions/trajectory-NNNNNNNN/attempt-NNNNNNNN.conversation.jsonl
 │       └── reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json
@@ -120,9 +128,10 @@ append-only Journal. Read selected `<id>.json` files for full Direction events a
 including entries from Attempts without terminal Reports. Gateway measurements are facts;
 Agent-authored analyses are interpretations. Historical `suggest` records remain readable;
 they are untested recommendations, not facts. Evolver cannot create or change Directions.
-Compare related hypotheses and Experiments across Branches, check interpretations against
-trusted outcomes, and curate evidence-backed attribution corrections in Candidate Insights,
-Prompts, Skills, Tools, or workflow, citing the relevant IDs without rewriting history.
+Compare related hypotheses and Experiments across Branches and check interpretations against
+trusted outcomes. Use that evidence only to diagnose task-independent Agent defects in process,
+tooling, evidence handling, or orchestration. Do not copy task facts into the Candidate or prescribe,
+rank, suppress, merge, reopen, or require a concrete Kernel optimization direction.
 
 The Agent Bundle declares one executable Epoch Workflow through `atrex-bundle.json`; production and
 control Lineages may begin from different selected programs. The selected program and its helpers
@@ -238,11 +247,10 @@ defaults. This is also the next Active's starting snapshot. Other visible Bundle
 seeds. Per-Trajectory learned resources remain available under each Evidence entry's `resources/`;
 they are supplementary observations, not extra Candidate copies. Runtime never merges them automatically.
 
-Each of the four reusable directories has a mandatory `README.md` index. Prompts contains phase
-instructions; Insights contains scoped, evidence-derived conclusions that change later search
-decisions; Skills contains reusable procedures; and Tools contains executable helpers. Optimizer
-and Bootstrap sessions can modify only Tools. This Evolver owns the versioned curation of Prompts,
-Insights, and Skills. Keep all four concise and non-duplicative, and update the relevant index after
+Each of the three reusable directories has a mandatory `README.md` index. Prompts contains phase
+instructions; Skills contains reusable, task-independent procedures; and Tools contains executable
+helpers. Optimizer and Bootstrap sessions can modify only Tools. This Evolver owns the versioned
+curation of all three. Keep them concise and non-duplicative, and update the relevant index after
 additions, changes, removals, or renames.
 
 Treat Tool-to-Skill promotion as evidence-driven curation. Inspect the Tool source, its actual
@@ -258,12 +266,11 @@ Bootstrap session, Runtime installs valid Skill packages into that session's pri
 never modifies Evolver or host/global configuration. Other backends may read workspace resources but
 native Skill discovery is not promised.
 
-Insights must not restate Journal facts such as Kernel versions, latency, changes, or outcomes. They
-must cite supporting identities and state scope, decision effect, contrary evidence, and a revisit
-condition. Static reference material belongs in a Skill's references. These are Agent-authored
-materials, not authoritative results. You may combine supported content
-from eligible Agents and their Trajectories, remove redundant content, and incorporate stable behavior
-into prompts or implementation. Credit contributing revisions. Do not draw from an unevaluated
+Task-specific hypotheses, Kernel directions, measurements, conclusions, and Artifact identities
+belong only to Runtime Journals and Reports. Static, task-independent reference material belongs in
+a Skill's references. You may combine generic procedures from eligible Agents and their
+Trajectories, remove redundant content, and incorporate stable behavior into prompts or
+implementation. Credit contributing revisions. Do not draw from an unevaluated
 `current_epoch_challenger`.
 
 Edit `candidate/prompts/` for later Optimizer sessions; preserve configured prompt paths.

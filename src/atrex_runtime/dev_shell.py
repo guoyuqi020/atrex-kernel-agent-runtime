@@ -34,6 +34,7 @@ from .domain.models import (
     BranchRole,
     Dsl,
     Epoch,
+    EpochBranchWorkflow,
     EpochStatus,
 )
 from .filesystem import make_tree_owner_writable
@@ -589,11 +590,6 @@ class OptimizerDevShell:
         epoch = self._registry.find_epoch(lineage.id, lineage.next_epoch_number)
         now = self._clock()
         if epoch is None:
-            challenger_count = (
-                0
-                if lineage.next_epoch_number < lineage.challenger_start_epoch
-                else lineage.challenger_count
-            )
             epoch = Epoch(
                 id=new_epoch_id(),
                 lineage_id=lineage.id,
@@ -602,11 +598,12 @@ class OptimizerDevShell:
                 challenger_kernel_agent_revision_ids=(),
                 starting_kernel_revision_id=lineage.best_kernel_revision_id,
                 evidence_checkpoint=lineage.evidence_checkpoint,
-                challenger_count=challenger_count,
-                trajectories_per_branch=lineage.trajectories_per_branch,
-                attempts_per_trajectory=lineage.attempts_per_trajectory,
+                max_challengers=lineage.max_challengers,
+                optimizer_attempt_budget=lineage.optimizer_attempt_budget,
                 status=(
-                    EpochStatus.READY if challenger_count == 0 else EpochStatus.BUILDING_CHALLENGER
+                    EpochStatus.READY
+                    if lineage.max_challengers == 0
+                    else EpochStatus.BUILDING_CHALLENGER
                 ),
                 winner_kernel_agent_revision_id=None,
                 best_kernel_revision_id=None,
@@ -623,6 +620,31 @@ class OptimizerDevShell:
             EpochStatus.RUNNING,
         }:
             raise ValueError(f"cannot create a dev-shell Attempt in Epoch {epoch.status.value}")
+        workflow = self._registry.get_epoch_branch_workflow(
+            epoch.id,
+            BranchRole.ACTIVE,
+            0,
+        )
+        if workflow is None:
+            workflow = self._registry.ensure_epoch_branch_workflow(
+                EpochBranchWorkflow(
+                    epoch_id=epoch.id,
+                    branch=BranchRole.ACTIVE,
+                    challenger_ordinal=0,
+                    kernel_agent_revision_id=epoch.active_kernel_agent_revision_id,
+                    kind="dev_shell",
+                    program_sha256=None,
+                    trajectories=1,
+                    attempts_per_trajectory=epoch.optimizer_attempt_budget,
+                    created_at=now,
+                )
+            )
+            self._registry.freeze_epoch_workflow_challengers(
+                epoch.id,
+                len(self._registry.list_epoch_challengers(epoch.id)),
+                "0" * 64,
+            )
+            epoch = self._registry.get_epoch(epoch.id)
         attempt_id = new_attempt_id()
         evidence_request = BuildAttemptEvidenceRequest(
             attempt_id=attempt_id,
@@ -804,6 +826,10 @@ class EvolverDevShell:
             agent_catalog=agent_catalog,
             kernel_catalog=kernel_catalog,
             model=lineage.evolver_model,
+            hardware_target=lineage.hardware_target,
+            epoch_number=epoch.number,
+            max_challengers=epoch.max_challengers,
+            optimizer_attempt_budget=epoch.optimizer_attempt_budget,
         )
 
 

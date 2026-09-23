@@ -60,9 +60,9 @@ The default Optimizer is `src/kernel-design-agents` (KDA). Root/example configs,
 Create a Campaign schema-v3 file from an example. Its `hardware_target` input selects an Agate GPU
 environment. At Bootstrap, Runtime queries that environment and passes the returned architecture
 (such as `sm_120`) to Agents while retaining the canonical Agate GPU alias only for scheduling. The
-Campaign also selects operator, Evaluation
-Contract, exact Core commit, Epoch topology, per-DSL seed Kernel/Evidence, and optional per-Lineage
-models. There is no separate Bootstrap JSON.
+Campaign also selects operator, Evaluation Contract, exact Agent commit, Workflow command, Runtime
+resource envelope, per-DSL seed Kernel/Evidence, and optional per-Lineage models. There is no
+separate Bootstrap JSON.
 
 Runtime config stores environment-variable names, not secret values. Export the values in the
 Runtime process environment:
@@ -91,9 +91,10 @@ To prepare the default Optimizer for a new Campaign:
 
 The importer archives the exact local KDA commit and records its provenance. It performs no fetch and enforces Bundle limits. Importing a historical or custom revision with submodules still requires their exact commits locally and an explicit URL allowlist; missing objects, uninitialized or unapproved submodules, links, and further nested submodules are rejected. Defaults allow 16,384 files and 128 MiB for the Optimizer Bundle. Existing Campaign pins and sealed Skill snapshots are unchanged. Example preparation replaces the template commit with local KDA HEAD; changes must be committed before they can become a new Base Revision.
 
-Runtime seeds the four inherited directories at the workspace root and removes duplicate defaults
+Runtime seeds the three inherited directories at the workspace root and removes duplicate defaults
 from the read-only implementation copy. Optimizer and Bootstrap may modify only `tools/`; Evolver
-curates Prompts, Insights, and Skills between revisions. The default `skills/` contains only its
+may make task-independent changes to Prompts, Skills, Tools, implementation, or Workflow. It cannot
+choose Kernel optimization Directions. The default `skills/` contains only its
 index. Claude/Codex discover Evolver-published Skills through their next session's private
 installation; other backends can read `skills/*/SKILL.md`. Skill documentation is read on demand,
 not appended to the initial prompt. Removing bundled Skills does not remove Gateway Profile, Check,
@@ -162,9 +163,9 @@ atrex-kernel-agent-runtime run-campaign \
 ```
 
 `--target-epoch` is absolute, so repeating the same command is safe. Add `--finalize` only when no
-further Epoch should be scheduled. Runtime builds the configured Challenger pool serially, then
-runs Branches within `max_parallel_branches`; Trajectories within a Branch may run concurrently,
-while Attempts in one Trajectory remain serial.
+further Epoch should be scheduled. The versioned Agent Workflow defines Branches, Trajectories,
+rounds, Kernel routing, and State routing. Runtime executes each Workflow-requested parallel batch
+with at most `max_parallel_attempts` Optimizer Sessions at once.
 
 For queue-based operation, submit `POST /v1/admin/tasks` and run one or more:
 
@@ -261,16 +262,15 @@ Campaign's frozen Core or Evolver commits.
 
 ## 10. Create an ablation arm
 
-Create a small Ablation v1 JSON file naming a source Lineage and its control topology:
+Create a small Ablation v1 JSON file naming a source Lineage, resource envelope, and Workflow:
 
 ```json
 {
   "schema_version": 1,
   "creation_key": "triton-no-evolution",
   "source_lineage_id": "lineage_0123456789abcdef0123456789abcdef",
-  "attempts_per_trajectory": 3,
-  "trajectories_per_branch": 1,
-  "ephemeral_agent_state": true,
+  "optimizer_attempt_budget": 3,
+  "max_challengers": 0,
   "workflow_command": "workflow/isolated.py",
   "optimizer_model": null
 }
@@ -282,18 +282,13 @@ atrex-kernel-agent-runtime seed-ablation-arm \
   --spec ablation.json
 ```
 
-Runtime creates a separate one-Lineage Campaign from the source Bootstrap baseline with no
-Challenger. Use `ephemeral_agent_state=true` to reset adaptive Prompts/Insights/Skills/Tools every
-Attempt; use false to retain serial State and isolate only the absence of Evolver changes.
-`workflow_command` names a Runtime-owned construction template. Runtime materializes the selected
-program as the derived control arm's sole `workflow/main.py` entry and seals its own `agent-v0`;
-other arm templates are not included in that Revision.
-
-For an evolving control, set `challenger_count=1`, `challenger_start_epoch=2`,
-`first_epoch_same_agent=true`, and `ephemeral_agent_state=false`. Use the returned Campaign ID
-with `run-campaign --target-epoch N`. One Attempt per Branch for 15 Epochs, three for five Epochs,
-or five for three Epochs all run 30 Optimizer Attempts. Epoch 1 uses the same Agent in both Branches
-without an Evolver; later Epochs create evolved Challengers. Bootstrap is reused, not rerun.
+Runtime creates a separate one-Lineage Campaign from the source Bootstrap baseline. The resource
+fields are limits only. `workflow_command` names a Runtime-owned construction template whose code
+owns replication/evolution timing, Branch and Trajectory topology, and explicit Kernel/State
+routing. Runtime materializes that program as the derived arm's sole `workflow/main.py` and seals
+its own `agent-v0`; other arm templates are not included in the Revision. For an evolving control,
+set `max_challengers=1` and select an evolve Workflow. Use the returned Campaign ID with
+`run-campaign --target-epoch N`. Bootstrap is reused, not rerun.
 
 ## 11. Debug Agent workspaces
 
@@ -307,32 +302,33 @@ atrex-kernel-agent-runtime evolver-dev-shell --config runtime.json --lineage "$L
 Use them only for trusted debugging. Optimizer Runtime Tools and the Evolver's read-only filesystem
 input contract are documented in [Interface Reference](interfaces.md).
 
-Every Optimizer Workspace contains read-only `prompts/` (phase instructions), `insights/` (scoped,
-evidence-derived decision guidance), and `skills/` (procedures), plus writable `tools/` (scripts).
-Evolver owns versioned changes to the first three; Optimizer updates `tools/README.md` when it
+Every Optimizer Workspace contains read-only `prompts/` (phase instructions) and `skills/`
+(task-independent procedures), plus writable `tools/` (scripts). Evolver owns versioned changes to
+these three; Optimizer updates `tools/README.md` when it
 changes Tools. With no inherited State,
 Runtime initializes these from the corresponding directories in the pinned Core Revision, not the
 host's current checkout. Existing checkpoints take precedence. Older Core revisions without seed
 directories receive empty defaults. At Session exit,
 Runtime seals their exact terminal contents and records the Artifact Digest on the producing
-Attempt. The next serial Attempt continues from that State and can reconstruct it after local cache
-loss. Framework Bootstrap initializes the `agent-v0` State. Evolver starts from the State captured
+Attempt. Workflow receives an opaque output-State reference and decides whether a later serial
+Attempt inherits it; without an explicit route the later Attempt starts from its Trajectory seed.
+A physical retry of the same logical Attempt can reconstruct its latest sealed State after local
+cache loss. Framework Bootstrap initializes the `agent-v0` State. Evolver starts from the State captured
 after the last Attempt of the latest completed Epoch winner's best-Kernel Trajectory. The next
 Epoch's Active Branch starts from the exact same State; every new
 Agent Revision seals its Source
 and State together as one logical Bundle, and each new trajectory receives an independent State
 copy. Evolver updates each changed directory's README with paths, purposes, and applicability;
 Optimizer does the same for Tools, including invocation, inputs, outputs, dependencies, examples,
-and limitations. All four follow the same inheritance/reset policy. Older snapshots gain
+and limitations. All three travel together in each explicitly routed State. Older snapshots gain
 missing directories/indexes only when copied, without changing their stored Artifacts. These notes
 are Agent-authored; the Runtime Journal and Gateway results remain authoritative.
 
-Insights must not restate Kernel versions, latency, changes, outcomes, or other facts available from
-Runtime Journal. Each entry states its evidence identities, scope, decision effect, contrary evidence,
-and revisit condition. Static reference material belongs in a Skill's references. When copied, older
-State `memory/`, `knowledge/`, and legacy `docs/` content is merged into `insights/`; conflicts are
-rejected and sealed historical Artifacts remain unchanged. Engineering documentation under the Core
-repository's `docs/` is unrelated and is never imported as State.
+Task-specific Kernel hypotheses, Directions, measurements, and conclusions belong in Runtime
+Journals and Reports, not in the Agent Revision. Evolver may use them only to justify a generic
+correction to procedure, evidence handling, tooling, implementation, or orchestration, and cannot
+rank, suppress, require, or reopen a concrete optimization Direction. Older task-state directories
+remain readable in sealed historical Artifacts but are not inherited by new Sessions.
 
 Skills follow the same initialization, checkpoint, inheritance and reset policy. Before each
 Claude Optimizer or Bootstrap session (including a fresh retry), Runtime installs the current

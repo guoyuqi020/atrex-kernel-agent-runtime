@@ -416,7 +416,7 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
     workspace = root / "attempt-1/run-1"
     (workspace / ".runtime").mkdir(parents=True)
     (workspace / ".runtime/attempt.json").write_text("{}", encoding="utf-8")
-    for name in ("prompts", "insights", "skills", "tools"):
+    for name in ("prompts", "skills", "tools"):
         (workspace / name).mkdir()
     credentials = tmp_path / "credentials"
     credentials.mkdir()
@@ -488,7 +488,7 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
         "/home/agent/workspace/.runtime",
     ) in set(zip(bwrap, bwrap[1:], bwrap[2:], strict=False))
     mounts = set(zip(bwrap, bwrap[1:], bwrap[2:], strict=False))
-    for name in ("prompts", "insights", "skills"):
+    for name in ("prompts", "skills"):
         assert (
             "--ro-bind",
             str(workspace / name),

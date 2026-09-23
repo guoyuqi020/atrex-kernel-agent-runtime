@@ -41,8 +41,8 @@
 - [0030](0030-exploratory-and-authoritative-evaluations.zh.md)：探索性和权威评测
 - [0032](0032-lineage-kernel-version-labels.zh.md)：Kernel `vN` 标签
 - [0033](0033-lineage-agent-version-labels.zh.md)：Agent `agent-vN` 标签
-- [0034](0034-configurable-epoch-topology.zh.md)：可配置 Epoch 拓扑
-- [0040](0040-bounded-parallel-branch-execution.zh.md)：有界并行 Branch 执行
+- [0034](0034-configurable-epoch-topology.zh.md)：Agent 持有的 Epoch Workflow
+- [0040](0040-bounded-parallel-branch-execution.zh.md)：有界并行 Attempt 执行
 - [0042](0042-artifact-seeded-lineages.zh.md)：Artifact Seed Lineage
 - [0046](0046-worker-host-network.zh.md)：Sandbox Worker 共享宿主网络
 - [0047](0047-worker-owned-workspace-roots.zh.md)：由 Worker 创建 Sandbox Root

@@ -31,12 +31,60 @@ def test_registry_initializes_current_schema(tmp_path: Path) -> None:
             row[1]
             for row in connection.execute("PRAGMA table_info(kernel_agent_revisions)").fetchall()
         }
+        lineage_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(lineages)").fetchall()
+        }
+        workflow_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(epoch_branch_workflows)").fetchall()
+        }
 
     assert row == (SCHEMA_VERSION,)
     assert feedback_table is None
     assert "runtime_state_digest" in attempt_columns
     assert "input_runtime_state_digest" in attempt_columns
     assert "runtime_state_digest" in agent_columns
+    assert "ephemeral_agent_state" not in lineage_columns
+    assert "max_challengers" in lineage_columns
+    assert "optimizer_attempt_budget" in lineage_columns
+    assert "challenger_count" not in lineage_columns
+    assert "challenger_start_epoch" not in lineage_columns
+    assert "first_epoch_same_agent" not in lineage_columns
+    assert "trajectories_per_branch" not in lineage_columns
+    assert "attempts_per_branch" not in lineage_columns
+    assert "runtime_state_policy" not in workflow_columns
+
+
+def test_registry_migrates_legacy_state_policy_columns(tmp_path: Path) -> None:
+    path = tmp_path / "registry.sqlite"
+    with SqliteRegistry(path):
+        pass
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute(
+            "ALTER TABLE lineages ADD COLUMN "
+            "ephemeral_agent_state INTEGER NOT NULL DEFAULT 0"
+        )
+        connection.execute(
+            "ALTER TABLE epoch_branch_workflows ADD COLUMN "
+            "runtime_state_policy TEXT NOT NULL DEFAULT 'retain_across_attempts'"
+        )
+        connection.execute("PRAGMA user_version = 39")
+
+    with SqliteRegistry(path):
+        pass
+
+    with closing(sqlite3.connect(path)) as connection:
+        lineage_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(lineages)").fetchall()
+        }
+        workflow_columns = {
+            row[1]
+            for row in connection.execute("PRAGMA table_info(epoch_branch_workflows)").fetchall()
+        }
+        version = connection.execute("PRAGMA user_version").fetchone()
+    assert version == (SCHEMA_VERSION,)
+    assert "ephemeral_agent_state" not in lineage_columns
+    assert "runtime_state_policy" not in workflow_columns
 
 
 def test_authoritative_abba_batch_cache_survives_registry_reopen(tmp_path: Path) -> None:
@@ -188,7 +236,7 @@ def test_registry_migrates_schema_16_with_stable_agent_version(tmp_path: Path) -
     assert agents[0].disposition == "baseline"
 
 
-def test_registry_migrates_schema_18_with_immediate_challenger_default(
+def test_registry_migrates_schema_18_to_resource_envelope(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "registry.sqlite"
@@ -203,12 +251,13 @@ def test_registry_migrates_schema_18_with_immediate_challenger_default(
 
     with closing(sqlite3.connect(path)) as connection:
         version = connection.execute("PRAGMA user_version").fetchone()
-        start_epoch = connection.execute(
-            "SELECT challenger_start_epoch FROM lineages WHERE id = 'lineage-old'"
+        resource_envelope = connection.execute(
+            "SELECT max_challengers, optimizer_attempt_budget "
+            "FROM lineages WHERE id = 'lineage-old'"
         ).fetchone()
 
     assert version == (SCHEMA_VERSION,)
-    assert start_epoch == (1,)
+    assert resource_envelope == (0, 1)
 
 
 def test_registry_migrates_schema_19_challenger_provenance(tmp_path: Path) -> None:
@@ -374,7 +423,9 @@ def test_registry_migrates_schema_31_preserving_proposals_and_defaults(tmp_path:
             == trace
         )
     with closing(sqlite3.connect(path)) as connection:
-        assert connection.execute("SELECT first_epoch_same_agent FROM lineages").fetchone() == (0,)
+        assert connection.execute(
+            "SELECT max_challengers, optimizer_attempt_budget FROM lineages"
+        ).fetchone() == (0, 1)
         assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
         connection.execute(
             "UPDATE epoch_challengers SET proposal_type='replica', evolution_trace_digest=NULL"

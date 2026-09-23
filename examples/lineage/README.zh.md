@@ -4,17 +4,14 @@
 
 默认连接远端 Agate 服务；可显式覆盖环境变量。
 
-这个示例让一个 DSL Lineage 完整运行且只运行 Epoch 1。默认配置为：
+这个示例让一个 DSL Lineage 完整运行且只运行 Epoch 1。Campaign 向 Agent 自有 Workflow
+授予零个 Challenger Slot 和恰好三个 Optimizer Attempt 的预算。选中的
+`workflow/isolated.py` 程序把预算组织成一条 Trajectory、三个串行 Round，显式把每轮保留的
+Kernel 路由给下一轮，并在每个 Attempt 前重置自适应 State。
 
-- `challenger_count=0`：不启动 Evolver Session，也不创建 Challenger Branch；
-- `trajectories_per_branch=1`：从 Epoch 起始 Kernel 启动一条独立 Trajectory；
-- `attempts_per_trajectory=3`：在这条 Trajectory 内串行运行三个 Optimizer Attempt。
-
-因此，这个 Epoch 恰好会启动三个全新的 Optimizer Session。Kernel 被保留后会成为下一个
-Attempt 的输入；如果被回退，下一个 Attempt 仍从此前保留的 Kernel 开始。
-由于 `challenger_count=0`，Runtime 不会单独解析 Evolver 凭据，也不会导入它的 Git Bundle；
-Optimizer 仍使用 Runtime 默认的 QoderCLI 凭据。如果把 Challenger 数量设为正数，同一凭据已可供
-Evolver 使用。
+因此 Runtime 恰好启动三个全新的 Optimizer Session，但不替 Workflow 决定拓扑或路由。
+Workflow 不请求 Challenger，所以不需要 Evolver Session 或 Evolver Git Bundle。Optimizer
+使用 Runtime 默认的 QoderCLI 凭据。
 
 `run-campaign` 会在每个 Attempt 持久完成后立即向 stderr 输出进度，例如：
 
@@ -87,7 +84,5 @@ bash examples/lineage/inspect.sh
 Candidate 的结果）、Kernel 版本表以及 Lineage Agent Revision 表。`X` 对应 Attempt 历史中
 的行数，并不承诺产生 `X` 个新 Kernel 版本。
 
-运行前可以通过 `ATREX_CHALLENGER_COUNT`、`ATREX_CHALLENGER_START_EPOCH`、
-`ATREX_TRAJECTORIES_PER_BRANCH` 和 `ATREX_ATTEMPTS_PER_TRAJECTORY` 覆盖拓扑参数。
-已有 Lineage 的拓扑不可变；测试不同参数时，请指定新的 `ATREX_LINEAGE_STATE_DIR`，或者先移动
-原示例工作区。
+搜索组织是可执行的 Agent 代码。测试其他组织方式时，应选择另一份 Workflow 实现，并在新的
+Campaign 工作区中为它配置匹配的 `max_challengers` 与 `optimizer_attempt_budget` 资源上限。
