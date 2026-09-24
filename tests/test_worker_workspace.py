@@ -440,9 +440,12 @@ def _single_trajectory_workspace(
     *,
     bootstrap_source_lineage_id: object | None = None,
     first_epoch_same_agent: bool = False,
+    replica_only: bool = False,
     core_seed: bool = False,
 ) -> tuple[LocalAttemptWorkspaceAssembler, RunAttemptRequest, str, str]:
     """Assemble the least Registry state one prepare() call accepts."""
+    if replica_only and not first_epoch_same_agent:
+        raise ValueError("replica_only requires first_epoch_same_agent")
     optimizer = _put_text_artifact(store, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT)
     if core_seed:
         source = tmp_path / "source-optimizer"
@@ -497,14 +500,16 @@ def _single_trajectory_workspace(
     attempt_source = tmp_path / "source-attempt-evidence"
     for name in ("attempts", "traces", "diffs", "reports"):
         (attempt_source / name).mkdir(parents=True, exist_ok=True)
+    attempt_branch = BranchRole.CHALLENGER if replica_only else BranchRole.ACTIVE
+    attempt_challenger_ordinal = 1 if replica_only else 0
     (attempt_source / "context.json").write_text(
         json.dumps(
             {
                 "schema_version": 2,
                 "epoch_id": str(epoch_id),
                 "attempt_id": str(attempt_id),
-                "branch": "active",
-                "challenger_ordinal": 0,
+                "branch": attempt_branch.value,
+                "challenger_ordinal": attempt_challenger_ordinal,
                 "trajectory_ordinal": 1,
                 "ordinal": 1,
                 "epoch_evidence_checkpoint": str(evidence),
@@ -609,7 +614,8 @@ def _single_trajectory_workspace(
         )
     )
     frozen_epoch = registry.get_epoch(epoch_id)
-    freeze_branch_workflow(registry, frozen_epoch, attempts_per_trajectory=2)
+    if not replica_only:
+        freeze_branch_workflow(registry, frozen_epoch, attempts_per_trajectory=2)
     if first_epoch_same_agent:
         freeze_branch_workflow(
             registry,
@@ -622,8 +628,8 @@ def _single_trajectory_workspace(
         Attempt(
             id=attempt_id,
             epoch_id=epoch_id,
-            branch=BranchRole.ACTIVE,
-            challenger_ordinal=0,
+            branch=attempt_branch,
+            challenger_ordinal=attempt_challenger_ordinal,
             trajectory_ordinal=1,
             ordinal=1,
             kernel_agent_revision_id=agent_id,
@@ -733,6 +739,26 @@ def test_initial_replica_has_independent_persistent_state_and_retry(tmp_path: Pa
         assert not (active_retry.root / "tools/replica.py").exists()
         assert (replica_retry.root / "tools/replica.py").is_file()
         assert not (replica_retry.root / "tools/active.py").exists()
+
+
+def test_challenger_only_initial_replica_uses_its_own_first_state_slot(
+    tmp_path: Path,
+) -> None:
+    """A replica-only Workflow does not require an unexecuted Active Branch plan."""
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        store = LocalArtifactStore(tmp_path / "artifacts")
+        assembler, request, _lineage, _agent = _single_trajectory_workspace(
+            tmp_path,
+            registry,
+            store,
+            first_epoch_same_agent=True,
+            replica_only=True,
+        )
+
+        prepared = assembler.prepare(request)
+
+        assert prepared.persistent_state_root is not None
+        assert prepared.persistent_state_root.name == "trajectory-00000001"
 
 
 @pytest.mark.parametrize("directory", OPTIMIZER_WRITABLE_DIRECTORIES)

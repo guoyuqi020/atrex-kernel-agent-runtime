@@ -429,16 +429,16 @@ class LocalAttemptWorkspaceAssembler:
             and attempt.branch is BranchRole.CHALLENGER
             and attempt.kernel_agent_revision_id == epoch.active_kernel_agent_revision_id
         ):
-            # One Agent ID owns two independent Branches in this Epoch. Reserve
-            # the second range of its state slots for the replica, not Active's cache.
+            # A replica may run beside an Active Branch or by itself. Only the former
+            # needs a slot offset: a Challenger-only Workflow has no Active state range
+            # to avoid, so its first Trajectory correctly owns slot one.
             active_workflow = self._registry.get_epoch_branch_workflow(
                 epoch.id,
                 BranchRole.ACTIVE,
                 0,
             )
-            if active_workflow is None:
-                raise ValueError("replica Agent State requires an Active Workflow Branch")
-            state_trajectory += active_workflow.trajectories
+            if active_workflow is not None:
+                state_trajectory += active_workflow.trajectories
         persistent_state, persistent_lock = self._persistent_root(
             lineage_id=lineage.id,
             revision=revision,

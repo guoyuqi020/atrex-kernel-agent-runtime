@@ -56,6 +56,40 @@ def test_check_agent_workflow_exercises_first_later_and_no_change_paths(
     assert all(item["optimizer_attempts"] == 6 for item in scenarios)
 
 
+@pytest.mark.parametrize(
+    ("template", "max_challengers", "optimizer_attempt_budget"),
+    (
+        ("isolated.py", 0, 3),
+        ("retained.py", 0, 3),
+        ("pool_3.py", 0, 6),
+        ("pool_retained_3.py", 0, 6),
+        ("evolve_3.py", 1, 6),
+        ("evolve_isolated_3.py", 1, 3),
+        ("evolve_retained_3.py", 1, 3),
+        ("evolve_isolated_pool_3.py", 1, 12),
+    ),
+)
+def test_packaged_workflow_templates_pass_the_candidate_dry_run(
+    tmp_path: Path,
+    template: str,
+    max_challengers: int,
+    optimizer_attempt_budget: int,
+) -> None:
+    main = (ROOT / "src/atrex_runtime/workflow_templates" / template).read_text(
+        encoding="utf-8"
+    )
+
+    result = check_agent_workflow(
+        _candidate(tmp_path, main),
+        dsl="triton",
+        epoch_number=4,
+        max_challengers=max_challengers,
+        optimizer_attempt_budget=optimizer_attempt_budget,
+    )
+
+    assert result["status"] == "valid"
+
+
 def test_check_agent_workflow_reports_the_failing_runtime_path(tmp_path: Path) -> None:
     candidate = _candidate(
         tmp_path,
