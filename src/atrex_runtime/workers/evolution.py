@@ -89,7 +89,7 @@ _TASK_EVIDENCE_IDENTITY_PATTERNS = (
     re.compile(r"\bsha256:[0-9a-f]{32,64}\b", re.IGNORECASE),
 )
 
-EVOLUTION_INPUT_VERSION: Literal[11] = 11
+EVOLUTION_INPUT_VERSION: Literal[12] = 12
 EVOLUTION_TRACE_VERSION: Literal[9] = 9
 EVOLUTION_FAILURE_VERSION: Literal[6] = 6
 EVOLVER_LAUNCH_INSTRUCTION = "Run the versioned Evolver Bundle once."
@@ -228,41 +228,49 @@ def _active_next_epoch_runtime_state_seed(
     return None
 
 
-class EvolutionPathsV2(BaseModel):
+class EvolutionPathsV3(BaseModel):
     """Fixed paths exposed to an Evolver process."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     agents: Literal["input/agents"] = "input/agents"
     evidence: Literal["input/evidence"] = "input/evidence"
+    references: Literal["input/references"] = "input/references"
     candidate: Literal["candidate"] = "candidate"
     scratch: Literal["scratch"] = "scratch"
     output: Literal["scratch/evolution-report.json"] = "scratch/evolution-report.json"
 
 
-class EvolutionObserverV1(BaseModel):
-    """One independent read-only Lineage exposed only as Evolver context."""
+class EvolutionReferenceV1(BaseModel):
+    """One independent read-only Lineage exposed as a named Evolver reference."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    name: str = Field(pattern=r"^[a-z][a-z0-9-]{0,63}$")
     lineage_id: LineageId
-    relationship: Literal["independent_active_lineage"] = "independent_active_lineage"
+    relationship: Literal["independent_control_lineage"] = "independent_control_lineage"
     evidence_checkpoint: ArtifactDigest
-    path: Literal["input/observer/active"] = "input/observer/active"
+    path: str = Field(min_length=1, max_length=100)
 
     @field_validator("lineage_id", mode="before")
     @classmethod
     def _validate_lineage_id(cls, value: object) -> LineageId:
         if not isinstance(value, str):
-            raise ValueError("observer lineage_id must be a string")
+            raise ValueError("reference lineage_id must be a string")
         return parse_lineage_id(value)
 
     @field_validator("evidence_checkpoint", mode="before")
     @classmethod
     def _validate_evidence_checkpoint(cls, value: object) -> ArtifactDigest:
         if not isinstance(value, str):
-            raise ValueError("observer Evidence checkpoint must be a string")
+            raise ValueError("reference Evidence checkpoint must be a string")
         return parse_artifact_digest(value)
+
+    @model_validator(mode="after")
+    def _validate_path(self) -> Self:
+        if self.path != f"input/references/{self.name}":
+            raise ValueError("reference path must match its manifest name")
+        return self
 
 
 class VisibleAgentRevisionV2(BaseModel):
@@ -329,19 +337,19 @@ class VisibleAgentRevisionV2(BaseModel):
 
 
 class EvolutionInputManifestV11(BaseModel):
-    """Immutable parent, Agent pool, and lineage evidence for one Evolution session."""
+    """Historical protocol retained for reading already sealed Evolution traces."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[11] = EVOLUTION_INPUT_VERSION
+    schema_version: Literal[11] = 11
     parent_revision_id: KernelAgentRevisionId
     evidence_checkpoint: ArtifactDigest
     idempotency_key: str = Field(min_length=1, max_length=300)
     dsl: Dsl
     optimizer_digest: ArtifactDigest
     visible_agents: tuple[VisibleAgentRevisionV2, ...]
-    observer: EvolutionObserverV1 | None = None
-    paths: EvolutionPathsV2 = EvolutionPathsV2()
+    observer: dict[str, object] | None = None
+    paths: dict[str, str]
 
     @field_validator("parent_revision_id", mode="before")
     @classmethod
@@ -377,6 +385,54 @@ class EvolutionInputManifestV11(BaseModel):
             or parent.optimizer_digest != self.optimizer_digest
         ):
             raise ValueError("visible parent disagrees with the Evolution parent")
+        return self
+
+
+class EvolutionInputManifestV12(BaseModel):
+    """Immutable parent, Agent pool, Evidence, and named references for one Evolution."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal[12] = EVOLUTION_INPUT_VERSION
+    parent_revision_id: KernelAgentRevisionId
+    evidence_checkpoint: ArtifactDigest
+    idempotency_key: str = Field(min_length=1, max_length=300)
+    dsl: Dsl
+    optimizer_digest: ArtifactDigest
+    visible_agents: tuple[VisibleAgentRevisionV2, ...]
+    references: tuple[EvolutionReferenceV1, ...] = ()
+    paths: EvolutionPathsV3 = EvolutionPathsV3()
+
+    @field_validator("parent_revision_id", mode="before")
+    @classmethod
+    def _validate_parent_id(cls, value: object) -> KernelAgentRevisionId:
+        if not isinstance(value, str):
+            raise ValueError("parent_revision_id must be a string")
+        return parse_kernel_agent_revision_id(value)
+
+    @field_validator("evidence_checkpoint", "optimizer_digest", mode="before")
+    @classmethod
+    def _validate_digest(cls, value: object) -> ArtifactDigest:
+        if not isinstance(value, str):
+            raise ValueError("Evolution artifact digest must be a string")
+        return parse_artifact_digest(value)
+
+    @model_validator(mode="after")
+    def _validate_catalogs(self) -> Self:
+        if not self.visible_agents:
+            raise ValueError("visible_agents must contain the parent Agent revision")
+        revision_ids = [item.revision_id for item in self.visible_agents]
+        if len(set(revision_ids)) != len(revision_ids):
+            raise ValueError("visible_agents cannot contain duplicate Agent revisions")
+        parents = [item for item in self.visible_agents if item.parent]
+        if len(parents) != 1 or parents[0].revision_id != self.parent_revision_id:
+            raise ValueError("visible_agents must identify exactly one Parent")
+        if parents[0].optimizer_digest != self.optimizer_digest:
+            raise ValueError("Parent optimizer digest disagrees with the manifest")
+        names = [item.name for item in self.references]
+        lineage_ids = [item.lineage_id for item in self.references]
+        if len(set(names)) != len(names) or len(set(lineage_ids)) != len(lineage_ids):
+            raise ValueError("references cannot contain duplicate names or Lineages")
         return self
 
     def canonical_json_bytes(self) -> bytes:
@@ -442,6 +498,26 @@ class EvolutionOutput(BaseModel):
                 raise ValueError("contributing_paths entries must be strings")
             relative = PurePosixPath(item)
             parts = relative.parts
+            standard_source = (
+                len(parts) >= 3
+                and parts[0] == "input"
+                and parts[1] in {"agents", "evidence"}
+                and parts[2].startswith("agent-v")
+                and parts[2][7:].isdigit()
+                and (parts[1] != "evidence" or (len(parts) >= 4 and parts[3] == "resources"))
+            )
+            reference_source = (
+                len(parts) >= 6
+                and parts[:2] == ("input", "references")
+                and re.fullmatch(r"[a-z][a-z0-9-]{0,63}", parts[2]) is not None
+                and parts[3] in {"agents", "evidence"}
+                and parts[4].startswith("agent-v")
+                and parts[4][7:].isdigit()
+                and (
+                    (parts[3] == "agents" and parts[5] == "source")
+                    or (parts[3] == "evidence" and parts[5] == "resources")
+                )
+            )
             if (
                 not item
                 or len(item) > 1000
@@ -449,16 +525,12 @@ class EvolutionOutput(BaseModel):
                 or "\x00" in item
                 or relative.as_posix() != item
                 or ".." in parts
-                or len(parts) < 3
-                or parts[0] != "input"
-                or parts[1] not in {"agents", "evidence"}
-                or not parts[2].startswith("agent-v")
-                or not parts[2][7:].isdigit()
-                or (parts[1] == "evidence" and (len(parts) < 4 or parts[3] != "resources"))
+                or not (standard_source or reference_source)
             ):
                 raise ValueError(
                     "contributing_paths must name canonical workspace-relative paths under "
-                    "input/agents/agent-vN or input/evidence/agent-vN/resources"
+                    "input/agents/agent-vN, input/evidence/agent-vN/resources, or a "
+                    "manifest-declared input/references/NAME Source/Resources path"
                 )
             normalized.append(item)
         if len(set(normalized)) != len(normalized):
@@ -599,7 +671,7 @@ class EvolutionTraceV9(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     schema_version: Literal[9] = EVOLUTION_TRACE_VERSION
-    input: EvolutionInputManifestV11
+    input: EvolutionInputManifestV11 | EvolutionInputManifestV12
     agent: EvolutionAgentDescriptorV3
     process_returncode: Literal[0]
     stdout: str
@@ -689,7 +761,7 @@ class EvolutionFailureTraceV6(BaseModel):
 
     schema_version: Literal[6] = EVOLUTION_FAILURE_VERSION
     status: Literal["failed"] = "failed"
-    input: EvolutionInputManifestV11
+    input: EvolutionInputManifestV11 | EvolutionInputManifestV12
     phase: Literal["session", "candidate_validation"]
     error_type: str = Field(min_length=1, max_length=200)
     error_message: str = Field(min_length=1, max_length=2048)
@@ -745,7 +817,7 @@ class EvolutionWorkspaceAssembler:
         control_root.mkdir(parents=True, mode=0o700)
         agents_root = run_root / "input/agents"
         evidence_root = run_root / "input/evidence"
-        observer_root = run_root / "input/observer/active"
+        references_root = run_root / "input/references"
         evolution_reports_root = run_root / "input/evolution-reports"
         candidate_root = run_root / "candidate"
         scratch_root = run_root / "scratch"
@@ -839,50 +911,71 @@ class EvolutionWorkspaceAssembler:
                 )
             )
 
-        observer_versions: dict[str, KernelAgentRevisionId] = {}
-        observer_sources: dict[KernelAgentRevisionId, Path] = {}
-        observer_catalog: dict[KernelAgentRevisionId, KernelAgentCatalogEntry] = {}
-        observer_pool_versions: set[str] = set()
-        observer_pool_active: KernelAgentRevisionId | None = None
-        observer_evidence_payload: Path | None = None
-        if request.observer_lineage_id is not None:
-            observer_checkpoint = request.observer_evidence_checkpoint
-            if observer_checkpoint is None:
-                raise AssertionError("observer Lineage has no Evidence checkpoint")
-            observer_artifact = self._artifacts.verify(observer_checkpoint)
-            if observer_artifact.kind is not ArtifactKind.EVIDENCE:
-                raise ValueError("Evolution observer Evidence has the wrong Artifact kind")
-            observer_catalog = {
-                entry.revision.id: entry for entry in request.observer_agent_catalog
+        reference_versions: dict[str, dict[str, KernelAgentRevisionId]] = {}
+        reference_sources: dict[tuple[str, KernelAgentRevisionId], Path] = {}
+        reference_catalogs: dict[
+            str, dict[KernelAgentRevisionId, KernelAgentCatalogEntry]
+        ] = {}
+        reference_pool_active: dict[str, KernelAgentRevisionId | None] = {}
+        reference_evidence_payloads: dict[str, Path] = {}
+        for reference in request.references:
+            reference_artifact = self._artifacts.verify(reference.evidence_checkpoint)
+            if reference_artifact.kind is not ArtifactKind.EVIDENCE:
+                raise ValueError(
+                    f"Evolution reference {reference.name!r} Evidence has the wrong Artifact kind"
+                )
+            reference_catalog = {
+                entry.revision.id: entry for entry in reference.agent_catalog
             }
-            observer_evidence_payload = observer_artifact.payload_path
-            observer_pool = _last_completed_epoch_pool(observer_artifact.payload_path)
-            observer_pool_active = None if observer_pool is None else observer_pool[0]
-            observer_pool_ids = (
-                set() if observer_pool is None else {observer_pool[0], *observer_pool[1]}
+            if not reference_catalog:
+                raise ValueError(
+                    f"Evolution reference {reference.name!r} has no visible Agent revisions"
+                )
+            if any(
+                entry.revision.dsl is not revision.dsl
+                for entry in reference_catalog.values()
+            ):
+                raise ValueError(
+                    f"Evolution reference {reference.name!r} disagrees with the parent DSL"
+                )
+            reference_catalogs[reference.name] = reference_catalog
+            reference_evidence_payloads[reference.name] = reference_artifact.payload_path
+            reference_pool = _last_completed_epoch_pool(reference_artifact.payload_path)
+            reference_pool_active[reference.name] = (
+                None if reference_pool is None else reference_pool[0]
             )
-            if not observer_pool_ids <= observer_catalog.keys():
-                raise ValueError("Evolution observer Branch pool is outside its Agent catalog")
-            observer_agents_root = observer_root / "agents"
-            observer_agents_root.mkdir(parents=True, mode=0o700)
-            for entry in request.observer_agent_catalog:
+            reference_pool_ids = (
+                set() if reference_pool is None else {reference_pool[0], *reference_pool[1]}
+            )
+            if not reference_pool_ids <= reference_catalog.keys():
+                raise ValueError(
+                    f"Evolution reference {reference.name!r} Branch pool is outside its "
+                    "Agent catalog"
+                )
+            reference_root = references_root / reference.name
+            reference_agents_root = reference_root / "agents"
+            reference_agents_root.mkdir(parents=True, mode=0o700)
+            versions: dict[str, KernelAgentRevisionId] = {}
+            reference_pool_versions: set[str] = set()
+            for entry in reference.agent_catalog:
                 version = f"agent-v{entry.revision_number}"
-                observer_versions[version] = entry.revision.id
-                source = observer_agents_root / version / "source"
+                versions[version] = entry.revision.id
+                source = reference_agents_root / version / "source"
                 self._artifacts.materialize(entry.revision.optimizer_digest, source)
-                observer_sources[entry.revision.id] = source
-                if entry.revision.id in observer_pool_ids:
-                    observer_pool_versions.add(version)
+                reference_sources[(reference.name, entry.revision.id)] = source
+                if entry.revision.id in reference_pool_ids:
+                    reference_pool_versions.add(version)
+            reference_versions[reference.name] = versions
             assemble_evolver_evidence_view(
-                observer_root / "evidence",
-                control_root=control_root / ".runtime/observer-active",
-                lineage_payload=observer_artifact.payload_path,
-                lineage_checkpoint=observer_checkpoint,
+                reference_root / "evidence",
+                control_root=control_root / ".runtime/references" / reference.name,
+                lineage_payload=reference_artifact.payload_path,
+                lineage_checkpoint=reference.evidence_checkpoint,
                 artifacts=self._artifacts,
                 agent_versions={
-                    version: str(revision_id) for version, revision_id in observer_versions.items()
+                    version: str(revision_id) for version, revision_id in versions.items()
                 },
-                pool_versions=frozenset(observer_pool_versions),
+                pool_versions=frozenset(reference_pool_versions),
             )
         used_evolution_numbers = {
             revision_number
@@ -969,40 +1062,40 @@ class EvolutionWorkspaceAssembler:
             destination.chmod(0o700)
             shutil.move(source_state, destination / "resources")
             make_tree_read_only(destination)
-        for version, revision_id in observer_versions.items():
-            destination = observer_root / "evidence" / version
-            destination.chmod(0o700)
-            resources = destination / "resources"
-            trajectories = resources / "trajectories"
-            trajectories.mkdir(parents=True, mode=0o700)
-            entry = observer_catalog[revision_id]
-            observer_revision = entry.revision
-            seed = resolve_revision_runtime_state_seed(self._artifacts, observer_revision)
-            if revision_id == observer_pool_active:
-                if observer_evidence_payload is None:
-                    raise AssertionError("observer Evidence payload disappeared")
-                seed = (
-                    _active_next_epoch_runtime_state_seed(
-                        observer_evidence_payload,
-                        revision_id,
-                        self._artifacts,
+        for reference in request.references:
+            versions = reference_versions[reference.name]
+            catalog = reference_catalogs[reference.name]
+            for version, revision_id in versions.items():
+                destination = references_root / reference.name / "evidence" / version
+                destination.chmod(0o700)
+                resources = destination / "resources"
+                trajectories = resources / "trajectories"
+                trajectories.mkdir(parents=True, mode=0o700)
+                referenced_revision = catalog[revision_id].revision
+                seed = resolve_revision_runtime_state_seed(
+                    self._artifacts, referenced_revision
+                )
+                if revision_id == reference_pool_active[reference.name]:
+                    seed = (
+                        _active_next_epoch_runtime_state_seed(
+                            reference_evidence_payloads[reference.name],
+                            revision_id,
+                            self._artifacts,
+                        )
+                        or seed
                     )
-                    or seed
-                )
-            trajectory = trajectories / "trajectory-00000001"
-            trajectory.mkdir(mode=0o700)
-            if seed is None:
-                initialize_reusable_agent_state(
-                    trajectory,
-                    observer_sources[revision_id],
-                )
-            else:
-                copy_reusable_agent_state(
-                    seed,
-                    trajectory,
-                    optimizer_source=observer_sources[revision_id],
-                )
-            make_tree_read_only(destination)
+                trajectory = trajectories / "trajectory-00000001"
+                trajectory.mkdir(mode=0o700)
+                source = reference_sources[(reference.name, revision_id)]
+                if seed is None:
+                    initialize_reusable_agent_state(trajectory, source)
+                else:
+                    copy_reusable_agent_state(
+                        seed,
+                        trajectory,
+                        optimizer_source=source,
+                    )
+                make_tree_read_only(destination)
         if reusable_state_staging.exists():
             if any(reusable_state_staging.iterdir()):
                 raise ValueError(
@@ -1040,8 +1133,8 @@ class EvolutionWorkspaceAssembler:
         make_tree_owner_writable(candidate_root)
         make_tree_read_only(agents_root)
         make_tree_read_only(evolution_reports_root)
-        if observer_root.exists():
-            make_tree_read_only(observer_root)
+        references_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        make_tree_read_only(references_root)
 
         next_optimizer_contract_root: Path | None = None
         if self._next_optimizer_contract_policy is not None:
@@ -1061,23 +1154,21 @@ class EvolutionWorkspaceAssembler:
                 relative_path=Path("input/next-session-contract"),
             )
 
-        manifest = EvolutionInputManifestV11(
+        manifest = EvolutionInputManifestV12(
             parent_revision_id=revision.id,
             evidence_checkpoint=request.evidence_checkpoint,
             idempotency_key=request.idempotency_key,
             dsl=revision.dsl,
             optimizer_digest=revision.optimizer_digest,
             visible_agents=tuple(visible_agents),
-            observer=(
-                None
-                if request.observer_lineage_id is None
-                else EvolutionObserverV1(
-                    lineage_id=request.observer_lineage_id,
-                    evidence_checkpoint=cast(
-                        ArtifactDigest,
-                        request.observer_evidence_checkpoint,
-                    ),
+            references=tuple(
+                EvolutionReferenceV1(
+                    name=reference.name,
+                    lineage_id=reference.lineage_id,
+                    evidence_checkpoint=reference.evidence_checkpoint,
+                    path=f"input/references/{reference.name}",
                 )
+                for reference in request.references
             ),
         )
         manifest_path = control_state_root / "evolution-input.json"
@@ -1876,7 +1967,7 @@ class EvolverBundleRunner(EvolverRunner):
                     token_usage=result.token_usage,
                 )
             trace = EvolutionFailureTraceV6(
-                input=EvolutionInputManifestV11.model_validate_json(
+                input=EvolutionInputManifestV12.model_validate_json(
                     prepared.manifest_path.read_bytes()
                 ),
                 phase=phase,
@@ -1902,7 +1993,7 @@ class EvolverBundleRunner(EvolverRunner):
             prepared.output_path,
             max_bytes=self._max_output_manifest_bytes,
         )
-        manifest = EvolutionInputManifestV11.model_validate_json(
+        manifest = EvolutionInputManifestV12.model_validate_json(
             prepared.manifest_path.read_bytes()
         )
         contributions = self._seal_contributions(prepared, manifest, output, request)
@@ -2016,7 +2107,7 @@ class EvolverBundleRunner(EvolverRunner):
             else self._seal_session_trace(result.session_trace_path)
         )
         trace = EvolutionTraceV9(
-            input=EvolutionInputManifestV11.model_validate_json(
+            input=EvolutionInputManifestV12.model_validate_json(
                 prepared.manifest_path.read_bytes()
             ),
             agent=result.agent,
@@ -2058,13 +2149,36 @@ class EvolverBundleRunner(EvolverRunner):
     def _seal_contributions(
         self,
         prepared: PreparedEvolution,
-        manifest: EvolutionInputManifestV11,
+        manifest: EvolutionInputManifestV12,
         output: EvolutionOutput,
         request: BuildChallengerRequest,
     ) -> tuple[EvolutionContributionSnapshot, ...]:
         """Revalidate provenance without trusting Evolver's helper, then freeze it."""
         snapshots: list[EvolutionContributionSnapshot] = []
         revisions = {entry.revision.id: entry.revision for entry in request.agent_catalog}
+        references_by_name = {reference.name: reference for reference in request.references}
+        reference_roots: list[
+            tuple[PurePosixPath, PurePosixPath, KernelAgentRevision]
+        ] = []
+        for manifest_reference in manifest.references:
+            request_reference = references_by_name.get(manifest_reference.name)
+            if (
+                request_reference is None
+                or request_reference.lineage_id != manifest_reference.lineage_id
+                or request_reference.evidence_checkpoint
+                != manifest_reference.evidence_checkpoint
+            ):
+                raise ValueError("Evolution manifest contains an unrequested reference")
+            for entry in request_reference.agent_catalog:
+                version = f"agent-v{entry.revision_number}"
+                root = PurePosixPath(manifest_reference.path)
+                reference_roots.append(
+                    (
+                        root / "agents" / version / "source",
+                        root / "evidence" / version / "resources",
+                        entry.revision,
+                    )
+                )
         for index, relative in enumerate(output.contributing_paths):
             label = f"contributing_paths[{index}]"
             path = PurePosixPath(relative)
@@ -2077,11 +2191,29 @@ class EvolverBundleRunner(EvolverRunner):
                 ),
                 None,
             )
-            if owner is None or owner.relationship == "current_epoch_challenger":
+            reference_owner = next(
+                (
+                    revision
+                    for source_root, resources_root, revision in reference_roots
+                    if path.is_relative_to(source_root)
+                    or path.is_relative_to(resources_root)
+                ),
+                None,
+            )
+            if owner is None and reference_owner is None:
                 raise ValueError(
-                    f"{label} can only credit completed Lineage history or Parent resources"
+                    f"{label} can only credit completed Lineage history, Parent resources, "
+                    "or a manifest-declared read-only reference"
                 )
-            revision = revisions.get(owner.revision_id)
+            if owner is not None and owner.relationship == "current_epoch_challenger":
+                raise ValueError(
+                    f"{label} cannot credit an uncompleted current-Epoch Challenger"
+                )
+            revision = (
+                reference_owner
+                if reference_owner is not None
+                else revisions.get(cast(VisibleAgentRevisionV2, owner).revision_id)
+            )
             if revision is None or revision.dsl != request.parent_revision.dsl:
                 raise ValueError(f"{label} is outside the same-DSL Agent catalog")
             source = prepared.root
@@ -2119,7 +2251,7 @@ class EvolverBundleRunner(EvolverRunner):
             snapshots.append(
                 EvolutionContributionSnapshot(
                     path=relative,
-                    revision_id=owner.revision_id,
+                    revision_id=revision.id,
                     snapshot_digest=digest,
                 )
             )

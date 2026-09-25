@@ -11,6 +11,7 @@ import anyio
 
 from ..domain.errors import InfrastructureError, InvalidTransitionError
 from ..domain.ids import (
+    ArtifactDigest,
     AttemptId,
     EpochId,
     KernelAgentRevisionId,
@@ -37,6 +38,7 @@ from ..domain.models import (
     EpochChallenger,
     EpochSelection,
     EpochStatus,
+    EpochSuccessorEvolution,
     KernelAgentRevision,
     KernelEvaluation,
     KernelRevision,
@@ -48,6 +50,7 @@ from ..ports import (
     AttemptEvidenceAssembler,
     BuildAttemptEvidenceRequest,
     BuildChallengerRequest,
+    EvolutionReference,
     EvolverRunner,
     KernelAgentNoChangeProposal,
     KernelAgentReuseProposal,
@@ -85,6 +88,16 @@ class EpochRunResult:
         return tuple(score for score in self.scores if score.branch is BranchRole.CHALLENGER)
 
 
+@dataclass(frozen=True, slots=True)
+class _BuiltAgentProposal:
+    """One validated Evolver result before it is attached or published."""
+
+    revision: KernelAgentRevision | None
+    proposal_type: ChallengerProposalType | None
+    base_revision_id: KernelAgentRevisionId | None
+    evolution_trace_digest: ArtifactDigest
+
+
 class _EpochWorkflowOperations(AgentWorkflowOperationHandler):
     """Capability surface exposed to one untrusted executable Epoch Workflow."""
 
@@ -99,6 +112,7 @@ class _EpochWorkflowOperations(AgentWorkflowOperationHandler):
         self._epoch_id = epoch.id
         self._optimizer_attempt_budget = optimizer_attempt_budget
         self._program_sha256: str | None = None
+        self._plan_started = False
         self._selected_kernel_revision_id: str | None = None
         self._selected_agent_revision_id: str | None = None
         self._selection_reason: AgentSelectionReason | None = None
@@ -129,6 +143,19 @@ class _EpochWorkflowOperations(AgentWorkflowOperationHandler):
             return {"kernel_agent_revision_id": agent_revision_id}
         if operation == "evolve_agent":
             ordinal = self._positive_int(public, "challenger_ordinal")
+            if self._plan_started:
+                self._controller._workflow_request_successor_evolution(
+                    self._epoch_id,
+                    ordinal,
+                    optimizer_attempt_budget=self._optimizer_attempt_budget,
+                    program_sha256=program_sha256,
+                )
+                epoch = self._controller._registry.get_epoch(self._epoch_id)
+                return {
+                    "kernel_agent_revision_id": epoch.active_kernel_agent_revision_id,
+                    "created": False,
+                    "scheduled_after_epoch": True,
+                }
             evolved_revision_id = await self._controller._workflow_evolve_agent(
                 self._epoch_id,
                 ordinal,
@@ -138,6 +165,7 @@ class _EpochWorkflowOperations(AgentWorkflowOperationHandler):
                 "created": evolved_revision_id is not None,
             }
         if operation == "create_trajectory":
+            self._plan_started = True
             return self._controller._workflow_create_trajectory(
                 self._epoch_id,
                 public,
@@ -364,7 +392,6 @@ class EpochController:
         *,
         through_ordinal: int | None = None,
     ) -> None:
-        lineage = self._registry.get_lineage(epoch.lineage_id)
         parent = self._registry.get_kernel_agent_revision(epoch.active_kernel_agent_revision_id)
         target_ordinal = epoch.max_challengers
         if through_ordinal is not None:
@@ -376,208 +403,236 @@ class EpochController:
             target_ordinal + 1,
         ):
             creation_key = f"epoch:{epoch.id}:challenger:{challenger_ordinal}"
-            revision = self._registry.find_kernel_agent_revision_by_creation_key(creation_key)
-            proposal_type: ChallengerProposalType
-            base_revision_id: KernelAgentRevisionId
-            evolution_trace_digest = None
-            if revision is None:
-                agent_catalog = tuple(self._registry.list_lineage_agent_revisions(epoch.lineage_id))
-                catalog_by_id = {entry.revision.id: entry for entry in agent_catalog}
-                visible_by_id = {entry.revision.id: entry.revision for entry in agent_catalog}
-                visible_by_id[parent.id] = parent
-                observer_id = lineage.evolver_observer_lineage_id
-                observer = (
-                    None if observer_id is None else self._registry.get_lineage(observer_id)
+            built = await self._build_agent_proposal(
+                epoch,
+                parent=parent,
+                evidence_checkpoint=epoch.evidence_checkpoint,
+                creation_key=creation_key,
+                target_epoch_number=epoch.number,
+            )
+            if built.revision is None:
+                self._registry.close_challenger_pool(
+                    epoch.id,
+                    challenger_ordinal - 1,
+                    built.evolution_trace_digest,
                 )
-                if observer is not None:
-                    if observer.dsl is not lineage.dsl:
-                        raise InvalidTransitionError(
-                            "Evolver observer disagrees with the Challenger DSL"
-                        )
-                    if (
-                        observer.bootstrap_source_lineage_id
-                        != lineage.bootstrap_source_lineage_id
-                    ):
-                        raise InvalidTransitionError(
-                            "Evolver observer and Challenger do not share a Bootstrap Lineage"
-                        )
-                    observer_campaign = self._registry.get_campaign(observer.campaign_id)
-                    challenger_campaign = self._registry.get_campaign(lineage.campaign_id)
-                    if (
-                        observer_campaign.operator,
-                        observer_campaign.hardware_target,
-                        observer_campaign.evaluation_contract_digest,
-                        observer_campaign.agent_problem_digest,
-                    ) != (
-                        challenger_campaign.operator,
-                        challenger_campaign.hardware_target,
-                        challenger_campaign.evaluation_contract_digest,
-                        challenger_campaign.agent_problem_digest,
-                    ):
-                        raise InvalidTransitionError(
-                            "Evolver observer disagrees with the Challenger Campaign contract"
-                        )
-                observer_epoch = (
-                    None
-                    if observer is None
-                    else self._registry.find_epoch(observer.id, epoch.number)
-                )
-                # The external Isolated control may run ahead. Its numbered Epoch input is
-                # immutable and therefore gives the exact through-(N-1) view without leaking
-                # any later observer work into this Evolution.
-                observer_checkpoint = (
-                    None
-                    if observer is None
-                    else (
-                        observer_epoch.evidence_checkpoint
-                        if observer_epoch is not None
-                        else observer.evidence_checkpoint
-                    )
-                )
-                if observer is not None and epoch.number > 1:
-                    preceding = self._registry.find_epoch(observer.id, epoch.number - 1)
-                    if (
-                        preceding is None
-                        or preceding.status is not EpochStatus.COMPLETED
-                        or (
-                            observer_epoch is None
-                            and (
-                                observer.next_epoch_number != epoch.number
-                                or observer.status is not LineageStatus.READY
-                            )
-                        )
-                    ):
-                        raise InvalidTransitionError(
-                            "Evolver observer has not published its preceding-Epoch checkpoint"
-                        )
-                observer_agent_catalog = (
-                    ()
-                    if observer is None
-                    else tuple(
-                        entry
-                        for entry in self._registry.list_lineage_agent_revisions(observer.id)
-                        if entry.introduced_epoch_number is None
-                        or entry.introduced_epoch_number < epoch.number
-                    )
-                )
-                observer_kernel_catalog = (
-                    ()
-                    if observer is None
-                    else tuple(
-                        entry
-                        for entry in self._registry.list_lineage_kernels(observer.id)
-                        if entry.epoch_number is None or entry.epoch_number < epoch.number
-                    )
-                )
-                build = await self._evolver.build_challenger(
-                    BuildChallengerRequest(
-                        parent_revision=parent,
-                        epoch_id=epoch.id,
-                        evidence_checkpoint=epoch.evidence_checkpoint,
-                        idempotency_key=creation_key,
-                        agent_catalog=agent_catalog,
-                        kernel_catalog=tuple(self._registry.list_lineage_kernels(epoch.lineage_id)),
-                        model=lineage.evolver_model,
-                        hardware_target=lineage.hardware_target,
-                        epoch_number=epoch.number,
-                        max_challengers=epoch.max_challengers,
-                        optimizer_attempt_budget=epoch.optimizer_attempt_budget,
-                        observer_lineage_id=observer_id,
-                        observer_evidence_checkpoint=observer_checkpoint,
-                        observer_agent_catalog=observer_agent_catalog,
-                        observer_kernel_catalog=observer_kernel_catalog,
-                    )
-                )
-                evolution_trace_digest = build.evolution_trace_digest
-                if isinstance(build.proposal, KernelAgentNoChangeProposal):
-                    self._registry.close_challenger_pool(
-                        epoch.id,
-                        challenger_ordinal - 1,
-                        evolution_trace_digest,
-                    )
-                    return
-                if isinstance(build.proposal, KernelAgentReuseProposal):
-                    revision = visible_by_id.get(build.proposal.candidate_revision_id)
-                    if revision is None:
-                        raise ValueError("Evolver reused an Agent outside frozen lineage history")
-                    if revision.id == parent.id:
-                        raise ValueError("Evolver cannot reuse the current Active Agent")
-                    if catalog_by_id[revision.id].introduced_epoch_id == epoch.id:
-                        raise ValueError("Evolver cannot reuse a current-Epoch Challenger")
-                    proposal_type = ChallengerProposalType.REUSE
-                    base_revision_id = revision.id
-                else:
-                    proposal = build.proposal
-                    base = visible_by_id.get(proposal.base_revision_id)
-                    if base is None:
-                        raise ValueError("Evolver used a base outside frozen lineage history")
-                    proposal_type = ChallengerProposalType(proposal.proposal_type)
-                    if proposal_type is ChallengerProposalType.EVOLVED and base.id != parent.id:
-                        raise ValueError("evolved proposal base is not the current Active Agent")
-                    if (
-                        proposal_type is ChallengerProposalType.EVOLVE_FROM_HISTORY
-                        and base.id == parent.id
-                    ):
-                        raise ValueError(
-                            "evolve_from_history proposal used the current Active Agent"
-                        )
-                    if (
-                        proposal_type is ChallengerProposalType.EVOLVE_FROM_HISTORY
-                        and catalog_by_id[base.id].introduced_epoch_id == epoch.id
-                    ):
-                        raise ValueError(
-                            "evolve_from_history proposal used a current-Epoch Challenger"
-                        )
-                    candidate = proposal.candidate
-                    if candidate.dsl is not parent.dsl or base.dsl is not parent.dsl:
-                        raise ValueError("Evolver changed the lineage DSL")
-                    if candidate.runtime_state_digest is None:
-                        raise ValueError(
-                            "Evolver produced an incomplete Agent Bundle without Runtime State"
-                        )
-                    if (
-                        candidate.optimizer_digest == base.optimizer_digest
-                        and candidate.runtime_state_digest == base.runtime_state_digest
-                    ):
-                        raise ValueError(
-                            "Evolver produced no Agent source or runtime-state changes"
-                        )
-                    base_revision_id = base.id
-                    revision = self._registry.register_kernel_agent_revision(
-                        KernelAgentRevision(
-                            id=new_kernel_agent_revision_id(),
-                            parent_id=base.id,
-                            creation_key=creation_key,
-                            dsl=candidate.dsl,
-                            optimizer_digest=candidate.optimizer_digest,
-                            created_by="evolver",
-                            created_at=self._clock(),
-                            evolution_trace_digest=build.evolution_trace_digest,
-                            runtime_state_digest=candidate.runtime_state_digest,
-                        )
-                    )
-            else:
-                if revision.parent_id is None or revision.evolution_trace_digest is None:
-                    raise InvalidTransitionError("Recovered Evolver revision lacks provenance")
-                base_revision_id = revision.parent_id
-                proposal_type = (
-                    ChallengerProposalType.EVOLVED
-                    if base_revision_id == parent.id
-                    else ChallengerProposalType.EVOLVE_FROM_HISTORY
-                )
-                evolution_trace_digest = revision.evolution_trace_digest
-            assert evolution_trace_digest is not None
+                return
+            if built.proposal_type is None or built.base_revision_id is None:
+                raise AssertionError("Evolver proposal lost its provenance")
             self._registry.attach_challenger(
                 EpochChallenger(
                     epoch_id=epoch.id,
                     challenger_ordinal=challenger_ordinal,
-                    kernel_agent_revision_id=revision.id,
-                    proposal_type=proposal_type,
-                    base_revision_id=base_revision_id,
-                    evolution_trace_digest=evolution_trace_digest,
+                    kernel_agent_revision_id=built.revision.id,
+                    proposal_type=built.proposal_type,
+                    base_revision_id=built.base_revision_id,
+                    evolution_trace_digest=built.evolution_trace_digest,
                 )
             )
             epoch = self._registry.get_epoch(epoch.id)
+
+    async def _build_agent_proposal(
+        self,
+        epoch: Epoch,
+        *,
+        parent: KernelAgentRevision,
+        evidence_checkpoint: ArtifactDigest,
+        creation_key: str,
+        target_epoch_number: int,
+    ) -> _BuiltAgentProposal:
+        """Run/recover Evolver against the exact Evidence visible at one boundary."""
+        lineage = self._registry.get_lineage(epoch.lineage_id)
+        revision = self._registry.find_kernel_agent_revision_by_creation_key(creation_key)
+        if revision is not None:
+            if revision.parent_id is None or revision.evolution_trace_digest is None:
+                raise InvalidTransitionError("Recovered Evolver revision lacks provenance")
+            return _BuiltAgentProposal(
+                revision=revision,
+                proposal_type=(
+                    ChallengerProposalType.EVOLVED
+                    if revision.parent_id == parent.id
+                    else ChallengerProposalType.EVOLVE_FROM_HISTORY
+                ),
+                base_revision_id=revision.parent_id,
+                evolution_trace_digest=revision.evolution_trace_digest,
+            )
+
+        agent_catalog = tuple(self._registry.list_lineage_agent_revisions(epoch.lineage_id))
+        catalog_by_id = {entry.revision.id: entry for entry in agent_catalog}
+        visible_by_id = {entry.revision.id: entry.revision for entry in agent_catalog}
+        visible_by_id[parent.id] = parent
+        observer_id = lineage.evolver_observer_lineage_id
+        observer = None if observer_id is None else self._registry.get_lineage(observer_id)
+        if observer is not None:
+            if observer.dsl is not lineage.dsl:
+                raise InvalidTransitionError("Evolver observer disagrees with the Challenger DSL")
+            if observer.bootstrap_source_lineage_id != lineage.bootstrap_source_lineage_id:
+                raise InvalidTransitionError(
+                    "Evolver observer and Challenger do not share a Bootstrap Lineage"
+                )
+            observer_campaign = self._registry.get_campaign(observer.campaign_id)
+            challenger_campaign = self._registry.get_campaign(lineage.campaign_id)
+            if (
+                observer_campaign.operator,
+                observer_campaign.hardware_target,
+                observer_campaign.evaluation_contract_digest,
+                observer_campaign.agent_problem_digest,
+            ) != (
+                challenger_campaign.operator,
+                challenger_campaign.hardware_target,
+                challenger_campaign.evaluation_contract_digest,
+                challenger_campaign.agent_problem_digest,
+            ):
+                raise InvalidTransitionError(
+                    "Evolver observer disagrees with the Challenger Campaign contract"
+                )
+        observer_boundary = (
+            None
+            if observer is None
+            else self._registry.find_epoch(observer.id, target_epoch_number)
+        )
+        # A boundary Epoch freezes the exact checkpoint through N-1. If it does not yet
+        # exist, the observer Lineage itself must be READY at that same boundary.
+        observer_checkpoint = (
+            None
+            if observer is None
+            else (
+                observer_boundary.evidence_checkpoint
+                if observer_boundary is not None
+                else observer.evidence_checkpoint
+            )
+        )
+        if observer is not None and target_epoch_number > 1:
+            preceding = self._registry.find_epoch(observer.id, target_epoch_number - 1)
+            if (
+                preceding is None
+                or preceding.status is not EpochStatus.COMPLETED
+                or (
+                    observer_boundary is None
+                    and (
+                        observer.next_epoch_number != target_epoch_number
+                        or observer.status is not LineageStatus.READY
+                    )
+                )
+            ):
+                raise InvalidTransitionError(
+                    "Evolver observer has not published its preceding-Epoch checkpoint"
+                )
+        observer_agent_catalog = (
+            ()
+            if observer is None
+            else tuple(
+                entry
+                for entry in self._registry.list_lineage_agent_revisions(observer.id)
+                if entry.introduced_epoch_number is None
+                or entry.introduced_epoch_number < target_epoch_number
+            )
+        )
+        observer_kernel_catalog = (
+            ()
+            if observer is None
+            else tuple(
+                entry
+                for entry in self._registry.list_lineage_kernels(observer.id)
+                if entry.epoch_number is None or entry.epoch_number < target_epoch_number
+            )
+        )
+        build = await self._evolver.build_challenger(
+            BuildChallengerRequest(
+                parent_revision=parent,
+                epoch_id=epoch.id,
+                evidence_checkpoint=evidence_checkpoint,
+                idempotency_key=creation_key,
+                agent_catalog=agent_catalog,
+                kernel_catalog=tuple(self._registry.list_lineage_kernels(epoch.lineage_id)),
+                model=lineage.evolver_model,
+                hardware_target=lineage.hardware_target,
+                epoch_number=target_epoch_number,
+                max_challengers=epoch.max_challengers,
+                optimizer_attempt_budget=epoch.optimizer_attempt_budget,
+                references=(
+                    ()
+                    if observer_id is None or observer_checkpoint is None
+                    else (
+                        EvolutionReference(
+                            name="control",
+                            lineage_id=observer_id,
+                            evidence_checkpoint=observer_checkpoint,
+                            agent_catalog=observer_agent_catalog,
+                            kernel_catalog=observer_kernel_catalog,
+                        ),
+                    )
+                ),
+            )
+        )
+        if isinstance(build.proposal, KernelAgentNoChangeProposal):
+            return _BuiltAgentProposal(
+                revision=None,
+                proposal_type=None,
+                base_revision_id=None,
+                evolution_trace_digest=build.evolution_trace_digest,
+            )
+        if isinstance(build.proposal, KernelAgentReuseProposal):
+            revision = visible_by_id.get(build.proposal.candidate_revision_id)
+            if revision is None:
+                raise ValueError("Evolver reused an Agent outside frozen lineage history")
+            if revision.id == parent.id:
+                raise ValueError("Evolver cannot reuse the current Active Agent")
+            introduced = catalog_by_id[revision.id].introduced_epoch_number
+            if introduced is not None and introduced >= target_epoch_number:
+                raise ValueError("Evolver cannot reuse a current-boundary Agent")
+            return _BuiltAgentProposal(
+                revision=revision,
+                proposal_type=ChallengerProposalType.REUSE,
+                base_revision_id=revision.id,
+                evolution_trace_digest=build.evolution_trace_digest,
+            )
+
+        proposal = build.proposal
+        base = visible_by_id.get(proposal.base_revision_id)
+        if base is None:
+            raise ValueError("Evolver used a base outside frozen lineage history")
+        proposal_type = ChallengerProposalType(proposal.proposal_type)
+        if proposal_type is ChallengerProposalType.EVOLVED and base.id != parent.id:
+            raise ValueError("evolved proposal base is not the current Active Agent")
+        if proposal_type is ChallengerProposalType.EVOLVE_FROM_HISTORY and base.id == parent.id:
+            raise ValueError("evolve_from_history proposal used the current Active Agent")
+        introduced = catalog_by_id[base.id].introduced_epoch_number
+        if (
+            proposal_type is ChallengerProposalType.EVOLVE_FROM_HISTORY
+            and introduced is not None
+            and introduced >= target_epoch_number
+        ):
+            raise ValueError("evolve_from_history used a current-boundary Agent")
+        candidate = proposal.candidate
+        if candidate.dsl is not parent.dsl or base.dsl is not parent.dsl:
+            raise ValueError("Evolver changed the lineage DSL")
+        if candidate.runtime_state_digest is None:
+            raise ValueError("Evolver produced an incomplete Agent Bundle without Runtime State")
+        if (
+            candidate.optimizer_digest == base.optimizer_digest
+            and candidate.runtime_state_digest == base.runtime_state_digest
+        ):
+            raise ValueError("Evolver produced no Agent source or runtime-state changes")
+        revision = self._registry.register_kernel_agent_revision(
+            KernelAgentRevision(
+                id=new_kernel_agent_revision_id(),
+                parent_id=base.id,
+                creation_key=creation_key,
+                dsl=candidate.dsl,
+                optimizer_digest=candidate.optimizer_digest,
+                created_by="evolver",
+                created_at=self._clock(),
+                evolution_trace_digest=build.evolution_trace_digest,
+                runtime_state_digest=candidate.runtime_state_digest,
+            )
+        )
+        return _BuiltAgentProposal(
+            revision=revision,
+            proposal_type=proposal_type,
+            base_revision_id=base.id,
+            evolution_trace_digest=build.evolution_trace_digest,
+        )
 
     def _workflow_replicate_active(
         self,
@@ -639,6 +694,64 @@ class EpochController:
         if challenger_ordinal > len(epoch.challenger_kernel_agent_revision_ids):
             return None
         return epoch.challenger_kernel_agent_revision_ids[challenger_ordinal - 1]
+
+    def _workflow_request_successor_evolution(
+        self,
+        epoch_id: EpochId,
+        challenger_ordinal: int,
+        *,
+        optimizer_attempt_budget: int,
+        program_sha256: str,
+    ) -> EpochSuccessorEvolution:
+        """Persist an Evolver request to run after this Epoch's Evidence is published."""
+        epoch = self._registry.get_epoch(epoch_id)
+        if challenger_ordinal > epoch.max_challengers:
+            raise ValueError("Successor Evolution exceeds the Runtime Challenger limit")
+        self._workflow_validate_selection_ready(
+            epoch.id,
+            optimizer_attempt_budget=optimizer_attempt_budget,
+            program_sha256=program_sha256,
+        )
+        return self._registry.request_epoch_successor_evolution(
+            epoch.id,
+            challenger_ordinal,
+            program_sha256,
+        )
+
+    async def run_post_epoch_evolution(
+        self,
+        epoch_id: EpochId,
+    ) -> EpochSuccessorEvolution | None:
+        """Build and publish the Agent that will run the following Epoch."""
+        request = self._registry.get_epoch_successor_evolution(epoch_id)
+        if request is None or request.status == "completed":
+            return request
+        epoch = self._registry.get_epoch(epoch_id)
+        if epoch.status is not EpochStatus.COMPLETED:
+            raise InvalidTransitionError(
+                "Successor Evolution cannot run before Epoch completion"
+            )
+        lineage = self._registry.get_lineage(epoch.lineage_id)
+        if lineage.status is not LineageStatus.READY:
+            raise InvalidTransitionError(
+                "Successor Evolution cannot run before Epoch Evidence is published"
+            )
+        parent = self._registry.get_kernel_agent_revision(
+            lineage.active_kernel_agent_revision_id
+        )
+        built = await self._build_agent_proposal(
+            epoch,
+            parent=parent,
+            evidence_checkpoint=lineage.evidence_checkpoint,
+            creation_key=f"epoch:{epoch.id}:successor:{request.challenger_ordinal}",
+            target_epoch_number=epoch.number + 1,
+        )
+        next_revision = parent if built.revision is None else built.revision
+        return self._registry.complete_epoch_successor_evolution(
+            epoch.id,
+            next_revision.id,
+            built.evolution_trace_digest,
+        )
 
     def _workflow_create_trajectory(
         self,

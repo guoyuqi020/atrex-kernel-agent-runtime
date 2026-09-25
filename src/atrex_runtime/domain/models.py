@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 from .ids import (
     ArtifactDigest,
@@ -542,6 +543,35 @@ class EpochChallenger:
             and self.base_revision_id != self.kernel_agent_revision_id
         ):
             raise ValueError("reused Challenger base must be the reused revision")
+
+
+@dataclass(frozen=True, slots=True)
+class EpochSuccessorEvolution:
+    """A Workflow-requested Evolution that prepares the following Epoch's Agent."""
+
+    epoch_id: EpochId
+    challenger_ordinal: int
+    program_sha256: str
+    status: Literal["requested", "completed"]
+    next_kernel_agent_revision_id: KernelAgentRevisionId | None
+    evolution_trace_digest: ArtifactDigest | None
+    requested_at: str
+    completed_at: str | None
+
+    def __post_init__(self) -> None:
+        if self.challenger_ordinal <= 0:
+            raise ValueError("Successor Evolution ordinal must be positive")
+        if len(self.program_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in self.program_sha256
+        ):
+            raise ValueError("Successor Evolution Workflow SHA-256 is invalid")
+        completed = self.status == "completed"
+        if completed != (self.next_kernel_agent_revision_id is not None):
+            raise ValueError("completed Successor Evolution requires its next Agent")
+        if completed != (self.evolution_trace_digest is not None):
+            raise ValueError("completed Successor Evolution requires its trace")
+        if completed != (self.completed_at is not None):
+            raise ValueError("completed Successor Evolution requires its completion time")
 
 
 @dataclass(frozen=True, slots=True)

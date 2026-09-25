@@ -103,11 +103,11 @@ Agent Revision 复制到相互隔离的 Active 和 Challenger 副本分支，不
 python3 scripts/source-tree/task.py ablation
 ```
 
-该入口并行启动十五个独立 Campaign Scheduler：Isolated、Retained、Pool-3、Pool-Retained-3
-和 Isolated-Evolve 各三个独立重复。默认目标为 Epoch 5，保证每条 Trajectory 恰好执行 15 个
-Bootstrap 之后的 Optimizer Attempt。主 Evolve-3、Retained-Evolve 和 Isolated-Pool-Evolve
-的实现保留但停用。
-两个 Pool 臂在唯一 Active Branch 中各运行两条 Trajectory。各臂只共享 `v0`，不共享
+该入口并行启动七个独立 Campaign Scheduler：三个 Retained 重复、一个包含三条 Trajectory
+的 Pool-Retained，以及三个 Retained-Evolve 重复。默认目标为 Epoch 5，保证每条 Trajectory
+恰好执行 15 个 Bootstrap 之后的 Optimizer Attempt。Isolated、Pool-3、主 Evolve-3、
+Isolated-Evolve 和 Isolated-Pool-Evolve 的实现保留但停用。
+唯一的 Pool 臂在 Active Branch 中运行三条 Trajectory。各臂只共享 `v0`，不共享
 后续历史和可写 State。结果及逐臂日志位于 `workspaces/FA4/ablation-run/`。不要同时运行
 `campaign` 与 `ablation`，也不要为同一个 Campaign 启动两个 Scheduler。
 

@@ -56,13 +56,13 @@ comparison, retaining source Result identities and separating measured facts fro
 Runtime injects this frozen view. Missing participants, Sessions, history, or State are unavailable;
 do not infer them.
 
-Some Evolutions also expose `input/observer/active/`, identified by
-`observer_active_lineage` in Session context. It is a separate read-only Isolated Lineage, frozen
-through the preceding Epoch. Its `agents/` and `evidence/` trees use the same Source, summary,
-Session, report, Journal, review, and reusable-resource conventions described below. Use it as an
-additional behavioral comparison when improving the Challenger Lineage. It is not a Branch of the
-current Lineage, not a Candidate base, and not a source of shared Kernel or Journal state. Never
-infer same-Epoch Active results, and never rewrite Challenger history from observer records.
+Some Evolutions also expose named entries under `input/references/`, listed explicitly in Session
+context. Each entry is a separate read-only control Lineage frozen at the exact Evidence boundary
+selected by Runtime. Its `agents/` and `evidence/` trees use the same Source, summary, Session,
+report, Journal, review, and reusable-resource conventions described below. Use it as an additional
+behavioral comparison when improving the Parent Lineage. It is not a current Branch, Candidate
+base, or source of shared Kernel or Journal state. Never infer results beyond that frozen boundary,
+and never rewrite local history from reference records.
 
 ```text
 input/
@@ -83,6 +83,9 @@ input/
 │       ├── optimization-summary.json
 │       ├── sessions/trajectory-NNNNNNNN/attempt-NNNNNNNN.conversation.jsonl
 │       └── reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json
+├── references/<name>/
+│   ├── agents/agent-vN/source/
+│   └── evidence/                     # frozen independent control Lineage view
 └── evolution-reports/evo-N.json
 ```
 
@@ -140,6 +143,11 @@ Runtime executes the Active Revision's Workflow once per Epoch and exposes only 
 create an Active replica, invoke Evolver for a Challenger, run an exact Branch/Trajectory/Attempt
 organization, select the trusted best Kernel, compare Agents, and commit the Epoch. This is enough
 to implement organizations such as one-Agent pooling or Active-versus-Challenger evolution in code.
+In the bundled SDK, calling `epoch.evolve_agent(ordinal)` before creating a Pool materializes a
+Challenger for the current Epoch. Calling it after all Pools have finished instead records a durable
+post-Epoch request: Runtime first commits the current Epoch and publishes its cumulative Evidence,
+then invokes Evolver and installs the result as the next Epoch's Active Agent. A post-Epoch request
+must still be followed by `epoch.complete()` and is replay-safe after interruption.
 The fixed Optimizer Attempt budget must be spent exactly. Runtime still owns Worker execution,
 Gateway evaluation, retries, comparison, promotion, recovery, and durable state. Use Conversation
 and outcome evidence before changing Workflow code; a changed Workflow is evaluated only after its

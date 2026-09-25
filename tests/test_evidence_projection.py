@@ -39,7 +39,7 @@ from atrex_runtime.registry.base import Registry
 from atrex_runtime.workers.evolution import (
     EvolutionAgentDescriptorV3,
     EvolutionCandidateTraceV3,
-    EvolutionInputManifestV11,
+    EvolutionInputManifestV12,
     EvolutionOutput,
     EvolutionTraceV9,
     VisibleAgentRevisionV2,
@@ -373,7 +373,7 @@ def test_derived_evidence_projects_evolver_session_as_untrusted_annotation(
         runtime_state_digest=digest("runtime-state"),
     )
     trace = EvolutionTraceV9(
-        input=EvolutionInputManifestV11(
+        input=EvolutionInputManifestV12(
             parent_revision_id=parent_id,
             evidence_checkpoint=digest("evidence"),
             idempotency_key="evolve:1",

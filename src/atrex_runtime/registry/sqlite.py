@@ -12,7 +12,7 @@ from contextvars import ContextVar, Token
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import cast
+from typing import Literal, cast
 
 from ..direction_genealogy import suggested_direction_id
 from ..domain.errors import InvalidTransitionError
@@ -55,6 +55,7 @@ from ..domain.models import (
     EpochRecovery,
     EpochSelection,
     EpochStatus,
+    EpochSuccessorEvolution,
     KernelAgentCatalogEntry,
     KernelAgentRevision,
     KernelCatalogEntry,
@@ -74,7 +75,7 @@ from ..domain.models import (
 from ..sqlite_support import configure_durable_sqlite
 from .stop_migration import migrate_stops
 
-SCHEMA_VERSION = 42
+SCHEMA_VERSION = 43
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -447,6 +448,7 @@ class SqliteRegistry:
             "SELECT source_provenance_digest AS digest FROM kernel_agent_revisions",
             "SELECT evolution_trace_digest AS digest FROM kernel_agent_revisions",
             "SELECT evolution_trace_digest AS digest FROM epoch_challengers",
+            "SELECT evolution_trace_digest AS digest FROM epoch_successor_evolutions",
             "SELECT evolution_trace_digest AS digest FROM epoch_suggested_directions",
             "SELECT artifact_digest AS digest FROM kernel_revisions",
             "SELECT gateway_result_digest AS digest FROM kernel_revisions",
@@ -768,6 +770,33 @@ class SqliteRegistry:
                         "REFERENCES lineages(id)"
                     )
                 self._connection.execute("PRAGMA user_version = 42")
+            self._migrate()
+            return
+        if version == 42:
+            with self._transaction(migration=True):
+                self._connection.execute(
+                    """CREATE TABLE IF NOT EXISTS epoch_successor_evolutions (
+                           epoch_id TEXT PRIMARY KEY REFERENCES epochs(id),
+                           challenger_ordinal INTEGER NOT NULL
+                               CHECK (challenger_ordinal > 0),
+                           program_sha256 TEXT NOT NULL,
+                           status TEXT NOT NULL CHECK (status IN ('requested', 'completed')),
+                           next_kernel_agent_revision_id TEXT
+                               REFERENCES kernel_agent_revisions(id),
+                           evolution_trace_digest TEXT,
+                           requested_at TEXT NOT NULL,
+                           completed_at TEXT,
+                           CHECK ((status = 'requested'
+                                      AND next_kernel_agent_revision_id IS NULL
+                                      AND evolution_trace_digest IS NULL
+                                      AND completed_at IS NULL)
+                                  OR (status = 'completed'
+                                      AND next_kernel_agent_revision_id IS NOT NULL
+                                      AND evolution_trace_digest IS NOT NULL
+                                      AND completed_at IS NOT NULL))
+                       )"""
+                )
+                self._connection.execute("PRAGMA user_version = 43")
             self._migrate()
             return
         if version == 23:
@@ -2814,22 +2843,38 @@ class SqliteRegistry:
                        ORDER BY e.number DESC LIMIT 1""",
                     (lineage_id, revision.id),
                 ).fetchone()
+                successor_row = self._connection.execute(
+                    """SELECT e.* FROM epoch_successor_evolutions ese
+                       JOIN epochs e ON e.id = ese.epoch_id
+                       WHERE e.lineage_id = ?
+                         AND ese.next_kernel_agent_revision_id = ?
+                         AND ese.status = 'completed'
+                       ORDER BY e.number DESC LIMIT 1""",
+                    (lineage_id, revision.id),
+                ).fetchone()
             participation = (
                 None if participation_row is None else self._map_epoch(participation_row)
             )
-            disposition_epoch = participation or introduced_epoch
-            if disposition_epoch is None:
+            successor_epoch = (
+                None if successor_row is None else self._map_epoch(successor_row)
+            )
+            disposition_epoch = participation or successor_epoch or introduced_epoch
+            if introduced_epoch is None:
                 disposition = "baseline"
-            elif disposition_epoch.status is EpochStatus.COMPLETED:
-                disposition = (
-                    "promoted"
-                    if disposition_epoch.winner_kernel_agent_revision_id == revision.id
-                    else "rejected"
-                )
-            elif disposition_epoch.status is EpochStatus.FAILED:
-                disposition = "failed"
             else:
-                disposition = "challenger"
+                assert disposition_epoch is not None
+                if successor_epoch is not None:
+                    disposition = "promoted"
+                elif disposition_epoch.status is EpochStatus.COMPLETED:
+                    disposition = (
+                        "promoted"
+                        if disposition_epoch.winner_kernel_agent_revision_id == revision.id
+                        else "rejected"
+                    )
+                elif disposition_epoch.status is EpochStatus.FAILED:
+                    disposition = "failed"
+                else:
+                    disposition = "challenger"
             entries.append(
                 KernelAgentCatalogEntry(
                     revision=revision,
@@ -3850,6 +3895,209 @@ class SqliteRegistry:
                 (epoch_id,),
             ).fetchall()
         return [self._map_epoch_challenger(row) for row in rows]
+
+    def request_epoch_successor_evolution(
+        self,
+        epoch_id: EpochId,
+        challenger_ordinal: int,
+        program_sha256: str,
+    ) -> EpochSuccessorEvolution:
+        """Persist one Workflow request to evolve the Agent after this Epoch."""
+        if challenger_ordinal <= 0:
+            raise ValueError("Successor Evolution ordinal must be positive")
+        if len(program_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in program_sha256
+        ):
+            raise ValueError("Successor Evolution Workflow SHA-256 is invalid")
+        with self._transaction():
+            existing = self._connection.execute(
+                "SELECT * FROM epoch_successor_evolutions WHERE epoch_id = ?",
+                (epoch_id,),
+            ).fetchone()
+            if existing is not None:
+                request = self._map_epoch_successor_evolution(existing)
+                if (
+                    request.challenger_ordinal != challenger_ordinal
+                    or request.program_sha256 != program_sha256
+                ):
+                    raise InvalidTransitionError(
+                        "Epoch Successor Evolution is already requested differently"
+                    )
+                return request
+            epoch = self.get_epoch(epoch_id)
+            if epoch.status is not EpochStatus.RUNNING:
+                raise InvalidTransitionError(
+                    "Successor Evolution must be requested after Attempts and before selection"
+                )
+            if challenger_ordinal > epoch.max_challengers:
+                raise ValueError("Successor Evolution exceeds the Runtime Challenger limit")
+            requested_at = self._clock()
+            self._connection.execute(
+                """INSERT INTO epoch_successor_evolutions(
+                       epoch_id, challenger_ordinal, program_sha256, status,
+                       next_kernel_agent_revision_id, evolution_trace_digest,
+                       requested_at, completed_at
+                   ) VALUES (?, ?, ?, 'requested', NULL, NULL, ?, NULL)""",
+                (epoch_id, challenger_ordinal, program_sha256, requested_at),
+            )
+            self._event(
+                "epoch.successor_evolution_requested",
+                epoch_id,
+                {
+                    "challenger_ordinal": challenger_ordinal,
+                    "program_sha256": program_sha256,
+                },
+            )
+            return EpochSuccessorEvolution(
+                epoch_id=epoch_id,
+                challenger_ordinal=challenger_ordinal,
+                program_sha256=program_sha256,
+                status="requested",
+                next_kernel_agent_revision_id=None,
+                evolution_trace_digest=None,
+                requested_at=requested_at,
+                completed_at=None,
+            )
+
+    def get_epoch_successor_evolution(
+        self,
+        epoch_id: EpochId,
+    ) -> EpochSuccessorEvolution | None:
+        """Return the deferred Evolution request/result for one Epoch."""
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT * FROM epoch_successor_evolutions WHERE epoch_id = ?",
+                (epoch_id,),
+            ).fetchone()
+        return None if row is None else self._map_epoch_successor_evolution(row)
+
+    def complete_epoch_successor_evolution(
+        self,
+        epoch_id: EpochId,
+        next_kernel_agent_revision_id: KernelAgentRevisionId,
+        evolution_trace_digest: ArtifactDigest,
+    ) -> EpochSuccessorEvolution:
+        """Atomically publish a deferred Evolution as the following Epoch's Agent."""
+        trace = parse_artifact_digest(str(evolution_trace_digest))
+        with self._transaction():
+            row = self._connection.execute(
+                "SELECT * FROM epoch_successor_evolutions WHERE epoch_id = ?",
+                (epoch_id,),
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"Epoch Successor Evolution not found: {epoch_id}")
+            request = self._map_epoch_successor_evolution(row)
+            if request.status == "completed":
+                if (
+                    request.next_kernel_agent_revision_id != next_kernel_agent_revision_id
+                    or request.evolution_trace_digest != trace
+                ):
+                    raise InvalidTransitionError(
+                        "Epoch Successor Evolution already completed differently"
+                    )
+                return request
+            epoch = self.get_epoch(epoch_id)
+            if epoch.status is not EpochStatus.COMPLETED:
+                raise InvalidTransitionError(
+                    "Successor Evolution cannot publish before Epoch completion"
+                )
+            lineage = self.get_lineage(epoch.lineage_id)
+            if lineage.status is not LineageStatus.READY:
+                raise InvalidTransitionError(
+                    "Successor Evolution requires the completed Epoch Evidence checkpoint"
+                )
+            if lineage.next_epoch_number != epoch.number + 1:
+                raise InvalidTransitionError(
+                    "Successor Evolution disagrees with the Lineage Epoch boundary"
+                )
+            revision = self.get_kernel_agent_revision(next_kernel_agent_revision_id)
+            active = self.get_kernel_agent_revision(lineage.active_kernel_agent_revision_id)
+            if revision.dsl is not active.dsl:
+                raise InvalidTransitionError("Successor Evolution changed the Lineage DSL")
+            version = self._connection.execute(
+                """SELECT lineage_id FROM lineage_agent_versions
+                   WHERE kernel_agent_revision_id = ?""",
+                (revision.id,),
+            ).fetchone()
+            if version is None:
+                if revision.created_by != "evolver" or revision.parent_id is None:
+                    raise InvalidTransitionError(
+                        "new Successor Agent lacks Evolver provenance"
+                    )
+                self._link_agent_version(
+                    lineage.id,
+                    revision,
+                    expected_number=None,
+                    introduced_epoch_id=epoch.id,
+                )
+            elif _required_text(version, "lineage_id") != lineage.id:
+                raise InvalidTransitionError(
+                    "Successor Agent belongs to another Lineage"
+                )
+            completed_at = self._clock()
+            changed = self._connection.execute(
+                """UPDATE epoch_successor_evolutions
+                   SET status = 'completed', next_kernel_agent_revision_id = ?,
+                       evolution_trace_digest = ?, completed_at = ?
+                   WHERE epoch_id = ? AND status = 'requested'""",
+                (revision.id, trace, completed_at, epoch.id),
+            ).rowcount
+            if changed != 1:
+                raise InvalidTransitionError("Successor Evolution lost its completion lease")
+            changed = self._connection.execute(
+                """UPDATE lineages SET active_kernel_agent_revision_id = ?
+                   WHERE id = ? AND status = 'ready'
+                     AND active_kernel_agent_revision_id = ?
+                     AND next_epoch_number = ?""",
+                (
+                    revision.id,
+                    lineage.id,
+                    lineage.active_kernel_agent_revision_id,
+                    epoch.number + 1,
+                ),
+            ).rowcount
+            if changed != 1:
+                raise InvalidTransitionError(
+                    "Lineage changed while publishing its Successor Agent"
+                )
+            self._event(
+                "kernel_agent.evolved_for_next_epoch",
+                revision.id,
+                {
+                    "epoch_id": epoch.id,
+                    "previous_revision_id": lineage.active_kernel_agent_revision_id,
+                    "evolution_trace_digest": trace,
+                },
+            )
+            return EpochSuccessorEvolution(
+                epoch_id=epoch.id,
+                challenger_ordinal=request.challenger_ordinal,
+                program_sha256=request.program_sha256,
+                status="completed",
+                next_kernel_agent_revision_id=revision.id,
+                evolution_trace_digest=trace,
+                requested_at=request.requested_at,
+                completed_at=completed_at,
+            )
+
+    @staticmethod
+    def _map_epoch_successor_evolution(row: sqlite3.Row) -> EpochSuccessorEvolution:
+        next_revision = _optional_text(row, "next_kernel_agent_revision_id")
+        trace = _optional_text(row, "evolution_trace_digest")
+        return EpochSuccessorEvolution(
+            epoch_id=parse_epoch_id(_required_text(row, "epoch_id")),
+            challenger_ordinal=_required_int(row, "challenger_ordinal"),
+            program_sha256=_required_text(row, "program_sha256"),
+            status=cast("Literal['requested', 'completed']", _required_text(row, "status")),
+            next_kernel_agent_revision_id=(
+                None if next_revision is None else parse_kernel_agent_revision_id(next_revision)
+            ),
+            evolution_trace_digest=(
+                None if trace is None else parse_artifact_digest(trace)
+            ),
+            requested_at=_required_text(row, "requested_at"),
+            completed_at=_optional_text(row, "completed_at"),
+        )
 
     def ensure_epoch_branch_workflow(
         self, workflow: EpochBranchWorkflow

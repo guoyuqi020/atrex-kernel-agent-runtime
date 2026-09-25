@@ -8,7 +8,7 @@ English | [中文](README.zh.md)
   Core, Runtime Tools, the configured Agent Backend, and a Agate service.
 - [`source-tree/`](source-tree/README.md): prepare a multi-file source Campaign from a GDN-style
   source manifest and an ATREX task, with an immutable adapter and explicit editable roots.
-  Includes the same fifteen enabled Campaign instances as the single-file production ablation suite.
+  Includes the same seven enabled Campaign instances as the single-file production ablation suite.
 - [`lineage/`](lineage/README.md): bootstrap one Triton VecAdd Lineage and run one Epoch with
   configurable Challenger, Trajectory, and serial Attempt counts.
 - [`evolution/`](evolution/README.md): run three Epochs with one Attempt per Branch and create a

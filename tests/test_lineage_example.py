@@ -67,7 +67,7 @@ def test_lineage_prepare_uses_one_epoch_with_three_serial_attempts(tmp_path: Pat
     assert spec.max_challengers == 0
     assert spec.optimizer_attempt_budget == 3
     assert settings.campaign is not None
-    assert settings.campaign.evolver.commit == ("2ac444b793bedcbc1c317ecb4d5a1cecf4ccf801")
+    assert settings.campaign.evolver.commit == ("7d9b705102dbba5ab0897fc1cd414b53a5586326")
     assert "not-persisted-ak" not in serialized
     assert "not-persisted-sk" not in serialized
 

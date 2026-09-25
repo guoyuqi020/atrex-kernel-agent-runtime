@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Retained-Evolve: run only one replicated/evolved Challenger with retained State."""
+"""Retained-Evolve: retain State and evolve a successor after every completed Epoch."""
 
 from __future__ import annotations
 
@@ -12,12 +12,8 @@ from runtime import (  # type: ignore[import-not-found]
 
 
 def run_epoch(epoch: EpochRuntime) -> None:
-    epoch_number = int(epoch.context["epoch_number"])
-    challenger = epoch.replicate_active(1) if epoch_number == 1 else epoch.evolve_agent(1)
-    branch = "challenger-1" if challenger is not None else "active"
-
     pool = epoch.create_pool(
-        branch=branch,
+        branch="active",
         trajectories=1,
         rounds=int(epoch.limits["optimizer_attempts"]),
     )
@@ -37,6 +33,9 @@ def run_epoch(epoch: EpochRuntime) -> None:
         current.route_state(pool, trajectory_ordinal=1, state=state)
 
     epoch.run_pools([pool], after_round=carry_state)
+    # Runtime executes this request only after the current Epoch is complete and its
+    # cumulative Evidence has been published. The result becomes next Epoch's Active.
+    epoch.evolve_agent(1)
     epoch.complete()
 
 

@@ -33,6 +33,34 @@ from .domain.models import (
 
 
 @dataclass(frozen=True, slots=True)
+class EvolutionReference:
+    """One independent read-only Lineage made available to an Evolver."""
+
+    name: str
+    lineage_id: LineageId
+    evidence_checkpoint: ArtifactDigest
+    agent_catalog: tuple[KernelAgentCatalogEntry, ...] = ()
+    kernel_catalog: tuple[KernelCatalogEntry, ...] = ()
+
+    def __post_init__(self) -> None:
+        if (
+            not self.name
+            or len(self.name) > 64
+            or not self.name[0].islower()
+            or not self.name[0].isalpha()
+            or any(
+                character not in "abcdefghijklmnopqrstuvwxyz0123456789-"
+                for character in self.name
+            )
+        ):
+            raise ValueError("Evolution reference name must be lowercase kebab-case")
+        if any(entry.lineage_id != self.lineage_id for entry in self.agent_catalog):
+            raise ValueError("Evolution reference Agent catalog disagrees with its Lineage")
+        if any(entry.lineage_id != self.lineage_id for entry in self.kernel_catalog):
+            raise ValueError("Evolution reference Kernel catalog disagrees with its Lineage")
+
+
+@dataclass(frozen=True, slots=True)
 class BuildChallengerRequest:
     """Immutable input to one idempotent Evolver invocation."""
 
@@ -47,10 +75,7 @@ class BuildChallengerRequest:
     epoch_number: int = 2
     max_challengers: int = 1
     optimizer_attempt_budget: int = 6
-    observer_lineage_id: LineageId | None = None
-    observer_evidence_checkpoint: ArtifactDigest | None = None
-    observer_agent_catalog: tuple[KernelAgentCatalogEntry, ...] = ()
-    observer_kernel_catalog: tuple[KernelCatalogEntry, ...] = ()
+    references: tuple[EvolutionReference, ...] = ()
 
     def __post_init__(self) -> None:
         if self.epoch_number <= 0:
@@ -61,16 +86,12 @@ class BuildChallengerRequest:
             raise ValueError("Evolution Optimizer Attempt budget must be positive")
         if not self.hardware_target.strip() or "\x00" in self.hardware_target:
             raise ValueError("Evolution hardware target is invalid")
-        observer_values = (
-            self.observer_lineage_id,
-            self.observer_evidence_checkpoint,
-        )
-        if (observer_values[0] is None) is not (observer_values[1] is None):
-            raise ValueError("Evolution observer identity and Evidence must be provided together")
-        if self.observer_lineage_id is None and (
-            self.observer_agent_catalog or self.observer_kernel_catalog
-        ):
-            raise ValueError("Evolution observer catalogs require an observer Lineage")
+        names = [reference.name for reference in self.references]
+        if len(set(names)) != len(names):
+            raise ValueError("Evolution references cannot reuse a name")
+        lineage_ids = [reference.lineage_id for reference in self.references]
+        if len(set(lineage_ids)) != len(lineage_ids):
+            raise ValueError("Evolution references cannot reuse a Lineage")
 
 
 @dataclass(frozen=True, slots=True)

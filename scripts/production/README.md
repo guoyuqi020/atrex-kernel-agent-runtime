@@ -27,40 +27,36 @@ round, evolution, Kernel-routing, and State-routing decisions described below. R
 resource envelope and trusted evaluation/promotion policy; it does not reconstruct this schedule
 from arm labels or topology parameters.
 
-The current plan disables the legacy `evolve-3`, `retained-evolve`, and
+The current plan disables `isolated`, `pool-3`, and the legacy `evolve-3`, `isolated-evolve`, and
 `isolated-pool-evolve` experiments without removing their Workflow implementations. Each DSL runs
-15 independent control Campaigns. They share one frozen Bootstrap v0 and do not repeat baseline
+7 independent Campaigns. They share one frozen Bootstrap v0 and do not repeat baseline
 measurement.
 Each enabled topology has three independent replicas. Default schedules run 5 Epochs with 3 serial
 Attempts per Trajectory per Epoch:
 
 | Arm | Parallel structure | Total Optimizer Attempts | Retain Runtime State | Evolutions |
 |---|---|---:|---|---:|
-| `ablation-isolated-01/02/03` | One Trajectory per replica | 15 each | no | 0 |
 | `ablation-retained-01/02/03` | One Trajectory per replica | 15 each | yes | 0 |
-| `ablation-pool-3-01/02/03` | Two Trajectories per replica | 30 each | no | 0 |
-| `ablation-pool-retained-3-01/02/03` | Two Trajectories per replica | 30 each | yes | 0 |
-| `ablation-isolated-evolve-01/02/03` | Challenger only; observes matching Isolated replica | 15 each | no | 4 each |
+| `ablation-pool-retained-3` | One Pool with three Trajectories | 45 | yes | 0 |
+| `ablation-retained-evolve-01/02/03` | One Active Trajectory; observes matching Retained replica | 15 each | yes | 5 each |
 
 Runtime State includes Memory/Knowledge/Skills/Tools. Resetting State restores the pinned Core's initial
-contents; it does not erase Kernel progress or Runtime history. Isolated and Retained instances
-share only the Bootstrap baseline, not subsequent history or mutable State.
+contents; it does not erase Kernel progress or Runtime history. Enabled instances share only the
+Bootstrap baseline, not subsequent history or mutable State.
 
-Pool Trajectories run independently within each Epoch and share completed history at the next Epoch,
-restarting from the selected best Kernel. Pool-Retained also inherits its producing Trajectory's
-terminal State; State is selected, not merged or synchronized live. Source stays fixed in all controls.
-Both Pool arms always use two Trajectories and three Attempts per Epoch.
+The three Pool-Retained Trajectories run independently within each Epoch, restart from the selected best Kernel,
+and inherit their own terminal State. State is selected, not merged or synchronized live. Source stays
+fixed in all controls. The single Pool uses three Trajectories and three Attempts per Trajectory per Epoch.
 
-Isolated-Evolve runs the replicated/evolved Challenger without a same-Epoch Active comparator and
-resets State before every Attempt. Replica `XX` observes the existing `isolated-XX` Lineage instead
-of running a duplicate Active. Epoch 1 runs concurrently with that Isolated control. Before Epoch N
-starts for N > 1, the scheduler waits until `isolated-XX` has published Epoch N-1; the Evolver then
-receives that exact read-only prefix. It still evolves only from its own previous Challenger. Kernels,
-Journals, mutable State, and version ancestry never cross between the Lineages. Bootstrap and Evolver
-Sessions are excluded from Attempt counts.
+Retained-Evolve runs one Active Trajectory and retains its State across serial Attempts. After Epoch N
+completes and its cumulative Evidence is published, Runtime waits for `retained-XX` to publish the same
+Epoch, then Evolver builds the Agent used by Epoch N+1 from both read-only histories. It evolves only
+its own current Agent; Kernels, Journals, mutable State, and version ancestry never cross between the
+Lineages. Evolution also runs after the requested final Epoch, leaving a durable successor ready for a
+later resume. Bootstrap and Evolver Sessions are excluded from Attempt counts.
 
-Each enabled arm owns a Lineage-local `agent-v0` that freezes `evolve_isolated_3.py`, `isolated.py`,
-`retained.py`, `pool_3.py`, or `pool_retained_3.py`. Disabled Workflow templates remain available. The
+Each enabled arm owns a Lineage-local `agent-v0` that freezes `evolve_retained_3.py`, `retained.py`,
+or `pool_retained_3.py`. Disabled Workflow templates remain available. The
 Optimizer source and shared
 Bootstrap Kernel remain controlled; Runtime no longer infers arm organization from its label.
 

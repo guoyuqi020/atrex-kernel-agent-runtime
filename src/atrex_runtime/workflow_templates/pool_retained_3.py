@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pool-Retained-3 arm: two State-retaining Trajectories with three Attempts each."""
+"""Pool-Retained-3 arm: three State-retaining Trajectories with three Attempts each."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from runtime import (  # type: ignore[import-not-found]
 def run_epoch(epoch: EpochRuntime) -> None:
     pool = epoch.create_pool(
         branch="active",
-        trajectories=2,
+        trajectories=3,
         rounds=3,
     )
 

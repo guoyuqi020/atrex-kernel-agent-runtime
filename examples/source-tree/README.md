@@ -41,21 +41,21 @@ to the deployment's configured base repository. Output must be a new directory. 
 generated Campaign unchanged, rather than rerunning preparation over an existing workspace.
 
 Default: CuteDSL only, with the same enabled matrix as single-file production: three independent
-replicas each of Isolated, Retained, Pool-3, Pool-Retained-3, and Isolated-Evolve.
-The legacy single-Lineage Evolve-3, Retained-Evolve, and Isolated-Pool-Evolve Workflows remain
-available but are disabled.
+Retained replicas, one Pool-Retained instance with three Trajectories, and three independent
+Retained-Evolve replicas. Isolated, Pool-3, the legacy single-Lineage Evolve-3, Isolated-Evolve,
+and Isolated-Pool-Evolve Workflows remain available but are disabled.
 The generated
 `ablation.json` and checked-in `ablation.example.json`
 use the shared production plan builder, not a second set of scheduling rules.
 All Lineages start from one frozen source-tree v0; controls never repeat Bootstrap/evaluation.
-Each runs 100 Epochs with three serial Attempts per trajectory. Isolated, Retained, and
-Isolated-Evolve replicas have one trajectory (300 Attempts each); both pools have two (600 each). Isolated/Pool reset
-adaptive State; Retained/Pool-Retained keep it. Pool trajectories share the winning Kernel
-at Epoch boundaries; Pool-Retained also inherits the winning trajectory's terminal State.
-The three Isolated-Evolve replicas run only their replicated/evolved Challenger, reset State per
-Attempt, and perform no same-Epoch Active comparison. Each observes the matching Isolated replica
-only through its preceding Epoch and waits if that observer is behind. Total: 6,300 Optimizer Attempts; no external
-original-AKA run. Arms have independent later history/state.
+Each runs 100 Epochs with three serial Attempts per trajectory. Retained and Retained-Evolve
+replicas have one trajectory (300 Attempts each); the Pool-Retained instance has three (900 total).
+All enabled arms retain adaptive State. Pool trajectories share the winning Kernel at Epoch
+boundaries while retaining their own terminal State.
+The three Retained-Evolve replicas each run one Active Trajectory and perform no same-Epoch Agent
+comparison. After Epoch N, each waits for the matching Retained replica's Epoch N Evidence and then
+evolves the Agent used by Epoch N+1. The final Epoch also leaves a durable successor. Total: 2,700
+Optimizer Attempts; no external original-AKA run. Arms have independent later history/state.
 
 The runner saves per-arm seed IDs, logs/results and `campaign-results.json` under `run/`.
 Actual Session/Artifact storage remains in the supplied Runtime. Failures do not cancel

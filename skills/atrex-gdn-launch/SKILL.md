@@ -48,28 +48,25 @@ description: 在 Lima Ubuntu 中准备、启动或恢复本次 GDN 多文件源�
 
 ## 识别实验，而不是只数分支
 
-十二臂消融入口是 `python scripts/gdn/run.py ablation --workspace WORKSPACE`：
+七臂消融入口是 `python scripts/gdn/run.py ablation --workspace WORKSPACE`：
 
 - L20D；`chunk_gated_delta_rule`；只跑 CuteDSL；Optimizer/Evolver 都为 Claude backend。
   实际模型名称来自配置/环境，不把 CLI 名称当成模型名称。
-- 12 个 Campaign：`evolve-3`、`ablation-isolated-01/02`、
-  `ablation-isolated-evolve-01/02`、`ablation-retained-evolve-01/02`、`ablation-retained-01/02`、
-  `ablation-isolated-pool-evolve-3`、`ablation-pool-3`、`ablation-pool-retained-3`。
-- 默认 100 个 Epoch，每轨迹每轮 3 次 Attempt。主臂及两个 Pool 各 600 次；
-  八个独立对照各 300 次，Isolated-Pool-Evolve 为 1,200 次，共 5,400 次 Optimizer Attempt，
+- 7 个 Campaign：`ablation-retained-01/02/03`、一个三 Trajectory 的
+  `ablation-pool-retained-3`、`ablation-retained-evolve-01/02/03`。
+- 默认 100 个 Epoch，每轨迹每轮 3 次 Attempt。三个 Retained 和三个 Retained-Evolve
+  各 300 次，单个 Pool-Retained 为 900 次，共 2,700 次 Optimizer Attempt，
   不含 Bootstrap/Evolver。
-- 主臂首轮是同一 Agent 的两个独立分支，之后比较 Active 与进化 Challenger。两个
-  Isolated-Evolve 与 Retained-Evolve 首轮只运行 Active 副本，Epoch 2–100 只运行进化
-  Challenger，不运行同轮 Active；每臂 99 次 Evolution，前者每个 Attempt 前重置 State，后者
-  在三个串行 Attempt 间继承 State。
-  Isolated-Pool-Evolve 同时运行 Active/Challenger，每边两条 Trajectory，但每个 Attempt 前重置
-  Optimizer 产出的自适应 State。
+- Retained-Evolve 每轮运行自身当前 Active，不做同轮 Agent 对比；Epoch N 完成后生成
+  Epoch N+1 使用的 Agent，每臂 100 次 Evolution，并在三个串行 Attempt 间继承 State。
+  每次 Evolution 只读观察编号相同的 Retained 截至同一 Epoch 的证据；两条
+  Lineage 的 Kernel、Journal、可写 State 和版本祖先保持隔离。
   Active/Challenger、Trajectory、Direction 都不是独立消融臂。
-- 只做一次完整 Bootstrap，再由 `seed-ablation-arm` 派生十一个对照：
+- 只做一次完整 Bootstrap，再由 `seed-ablation-arm` 派生七个消融臂：
   共享冻结 v0、初始 Agent/证据与评测契约，不导入之后的跨臂历史。
 - `ablation` 使用自己的 creation key 与 `workspaces/GDN/ablation/` 输出，不接管旧试跑。
   `run.py campaign` 是单 Campaign 入口，也用于恢复旧试跑；用户要求单路线时使用它，
-  不强制启动十二臂消融。以下数量描述十二臂模式，不适用于单 Campaign。
+  不强制启动七臂消融。以下数量描述七臂模式，不适用于单 Campaign。
 
 不要把 `--target-epoch 100` 解释为“再追加一百轮”。它是绝对目标，且在消融入口中只控制主臂；
 新计划的对照臂固定每轨迹 300 次 Attempt。已有工作区保留其冻结计划；恢复旧 5 轮实验时，

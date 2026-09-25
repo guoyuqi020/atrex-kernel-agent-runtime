@@ -146,10 +146,10 @@ Runtime service running and use:
 python3 scripts/source-tree/task.py ablation
 ```
 
-This starts fifteen independent Campaign schedulers: three replicas each of Isolated, Retained,
-Pool-3, Pool-Retained-3, and Isolated-Evolve. The default target is Epoch 5, giving every Trajectory
-exactly 15 post-Bootstrap Optimizer Attempts. Main Evolve-3, Retained-Evolve, and
-Isolated-Pool-Evolve remain implemented but are disabled.
+This starts seven independent Campaign schedulers: three Retained replicas, one Pool-Retained
+instance with three Trajectories, and three Retained-Evolve replicas. The default target is Epoch 5,
+giving every Trajectory exactly 15 post-Bootstrap Optimizer Attempts. Isolated, Pool-3, main
+Evolve-3, Isolated-Evolve, and Isolated-Pool-Evolve remain implemented but are disabled.
 All arms share `v0`, but do not share later history or writable State. Results and per-arm logs live
 under `workspaces/FA4/ablation-run/`. Never run `campaign` and `ablation`, or two schedulers for the
 same Campaign, concurrently.

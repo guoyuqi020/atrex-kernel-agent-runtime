@@ -37,35 +37,33 @@ Runtime 只约束资源边界与可信评测/晋升策略，不根据消融臂�
 - 每个启用臂默认运行至 Epoch 5；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
 
-当前计划停用旧的 `evolve-3`、`retained-evolve` 和 `isolated-pool-evolve`，但保留其 Workflow 实现。
-每个 DSL 启动 15 个独立对照 Campaign。
+当前计划停用 `isolated`、`pool-3`，以及旧的 `evolve-3`、`isolated-evolve` 和
+`isolated-pool-evolve`，但保留其 Workflow 实现。每个 DSL 启动 7 个独立 Campaign。
 所有臂共享同一份冻结的 Bootstrap v0，
 不重复 Bootstrap 或 Baseline 测量。每条 Trajectory 每个 Epoch 串行执行 3 个 Attempt：
 
 | 臂 | 并行结构 | Optimizer Attempts 总数 | 保留 Runtime State | Evolution 次数 |
 |---|---|---:|---|---:|
-| `ablation-isolated-01/02/03` | 每个重复一条 Trajectory | 各 15 | 否 | 0 |
 | `ablation-retained-01/02/03` | 每个重复一条 Trajectory | 各 15 | 是 | 0 |
-| `ablation-pool-3-01/02/03` | 每个重复两条 Trajectory | 各 30 | 否 | 0 |
-| `ablation-pool-retained-3-01/02/03` | 每个重复两条 Trajectory | 各 30 | 是 | 0 |
-| `ablation-isolated-evolve-01/02/03` | 仅 Challenger；旁观对应 Isolated 重复 | 各 15 | 否 | 各 4 |
+| `ablation-pool-retained-3` | 一个 Pool，三条 Trajectory | 45 | 是 | 0 |
+| `ablation-retained-evolve-01/02/03` | 一条 Active Trajectory；旁观对应 Retained 重复 | 各 15 | 是 | 各 5 |
 
 Runtime State 包含 Memory/Knowledge/Skills/Tools。重置 State 时，每个目录恢复到固定 Core Revision 的初始内容，
-不清除 Kernel 进展或 Runtime 历史。Isolated 和 Retained 实例只共享 Bootstrap Baseline，
+不清除 Kernel 进展或 Runtime 历史。各启用实例只共享 Bootstrap Baseline，
 不共享后续历史或可写 State。
 
-Pool 的 Trajectory 在同一 Epoch 内独立运行，在下一 Epoch 共享已完成历史，并从选出的最佳 Kernel
-重新开始。Pool-Retained 还继承该 Kernel 产出 Trajectory 的终态 State；State 选择继承，不合并，
-也不实时同步。所有对照臂的 Source 固定。两个 Pool 臂始终使用两条 Trajectory、每 Epoch 三次 Attempt。
+三条 Pool-Retained Trajectory 在同一 Epoch 内独立运行，从选出的最佳 Kernel 继续，并继承各自的终态
+State；State 选择继承，不合并，也不实时同步。所有对照臂的 Source 固定。唯一的 Pool 使用三条
+Trajectory，每条 Trajectory 每 Epoch 串行执行三次 Attempt。
 
-Isolated-Evolve 只运行复制/进化得到的 Challenger，不运行同轮 Active，并在每个 Attempt 前重置
-State。编号为 `XX` 的重复直接旁观已有的 `isolated-XX`，不重复运行 Active。Epoch 1 可与对应
-Isolated 并行；N > 1 时，调度器先等待 `isolated-XX` 发布 Epoch N-1，再向 Evolver 提供该时点的
-只读证据前缀。Challenger 仍只从自己的上一版本继续进化；两条 Lineage 不共享 Kernel、Journal、
-可写 State 或版本祖先。Bootstrap 和 Evolver Session 不计入 Attempt。
+Retained-Evolve 运行一条 Active Trajectory，并在串行 Attempt 间继承 State。Epoch N 完成并发布
+累积 Evidence 后，Runtime 等待 `retained-XX` 也发布同一 Epoch，再让 Evolver 同时读取两侧只读
+历史，生成 Epoch N+1 使用的 Agent。它只进化自身当前 Agent；两条 Lineage 不共享 Kernel、
+Journal、可写 State 或版本祖先。请求的最后一个 Epoch 结束后也会执行 Evolution，把可供后续恢复
+的 successor 持久化。Bootstrap 和 Evolver Session 不计入 Attempt。
 
-每个启用臂都持有 Lineage-local `agent-v0`，并冻结 `evolve_isolated_3.py`、`isolated.py`、
-`retained.py`、`pool_3.py` 或 `pool_retained_3.py`。停用模板仍保留。
+每个启用臂都持有 Lineage-local `agent-v0`，并冻结 `evolve_retained_3.py`、`retained.py` 或
+`pool_retained_3.py`。停用模板仍保留。
 Optimizer Source 与共享
 Bootstrap Kernel 仍受控；Runtime 不再根据臂 Label 推断组织拓扑。
 

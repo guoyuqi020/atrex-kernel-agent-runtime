@@ -290,6 +290,54 @@ class PairedLineageWorkflow:
         )
 
 
+class PostEpochEvolutionWorkflow:
+    """Run Active, then request a successor after this Epoch's Evidence is sealed."""
+
+    async def run(self, request: RunAgentWorkflowRequest, operations: object) -> None:
+        execute = operations.execute_workflow_operation  # type: ignore[attr-defined]
+
+        async def call(operation: str, arguments: Mapping[str, object]):
+            return await execute(
+                operation,
+                {**arguments, "_runtime_workflow_program_sha256": "c" * 64},
+            )
+
+        await call(
+            "create_trajectory",
+            {
+                "branch": "active",
+                "trajectory_ordinal": 1,
+                "trajectory_count": 1,
+                "attempt_capacity": request.optimizer_attempt_budget,
+            },
+        )
+        for attempt_ordinal in range(1, request.optimizer_attempt_budget + 1):
+            await call(
+                "run_attempts_parallel",
+                {
+                    "launches": [
+                        {
+                            "branch": "active",
+                            "trajectory_ordinal": 1,
+                            "attempt_ordinal": attempt_ordinal,
+                        }
+                    ]
+                },
+            )
+        if request.max_challengers:
+            scheduled = await call("evolve_agent", {"challenger_ordinal": 1})
+            assert scheduled["scheduled_after_epoch"] is True
+        kernel = await call("select_best_kernel", {})
+        agent = await call("compare_agents", {})
+        await call(
+            "complete_epoch",
+            {
+                "kernel_revision_id": kernel["kernel_revision_id"],
+                "kernel_agent_revision_id": agent["kernel_agent_revision_id"],
+            },
+        )
+
+
 def _scheduler(
     registry: SqliteRegistry,
     artifacts: LocalArtifactStore,
@@ -347,6 +395,70 @@ async def test_scheduler_follows_workflow_owned_evolution_timing(tmp_path: Path)
         epochs = registry.list_epochs(lineage_id)
         assert [epoch.max_challengers for epoch in epochs] == [1, 1, 1]
         assert [len(registry.list_attempts(epoch.id)) for epoch in epochs] == [2, 2, 2]
+
+
+@pytest.mark.anyio
+async def test_scheduler_evolves_successor_from_completed_epoch_evidence(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        campaign_id = new_campaign_id()
+        registry.insert_campaign(
+            Campaign(
+                campaign_id,
+                "vector_add",
+                "nvidia-h100",
+                digest("contract"),
+                digest("problem"),
+                NOW,
+            )
+        )
+        lineage_id = _seed_lineage(registry, artifacts, tmp_path, campaign_id, Dsl.TRITON)
+        evolver = AdvancingEvolver()
+        optimizer = ImprovingOptimizer()
+        controller = EpochController(
+            registry,
+            evolver,
+            optimizer,
+            FakeAttemptEvidence(),
+            workflow_runner=PostEpochEvolutionWorkflow(),
+        )
+        scheduler = CampaignScheduler(
+            registry,
+            controller,
+            LocalEvidenceAssembler(registry, artifacts),
+            RegistryLineageLeaseManager(
+                registry,
+                lease_seconds=10,
+                heartbeat_seconds=1,
+            ),
+        )
+
+        result = await scheduler.run_lineage_through(lineage_id, 2)
+
+        assert result.completed_epochs == (1, 2)
+        assert [request.epoch_number for request in evolver.calls] == [2, 3]
+        epochs = registry.list_epochs(lineage_id)
+        assert epochs[1].active_kernel_agent_revision_id != (
+            epochs[0].active_kernel_agent_revision_id
+        )
+        assert result.lineage.active_kernel_agent_revision_id != (
+            epochs[1].active_kernel_agent_revision_id
+        )
+        for epoch, request in zip(epochs, evolver.calls, strict=True):
+            successor = registry.get_epoch_successor_evolution(epoch.id)
+            assert successor is not None
+            assert successor.status == "completed"
+            checkpoint = EvidenceCheckpointV1.from_file(
+                artifacts.verify(request.evidence_checkpoint).payload_path
+                / "checkpoint.json"
+            )
+            assert checkpoint.through_epoch == epoch.number
+
+        resumed = await scheduler.run_lineage_through(lineage_id, 2)
+        assert resumed.completed_epochs == ()
+        assert len(evolver.calls) == 2
 
 
 @pytest.mark.anyio
@@ -473,23 +585,103 @@ async def test_external_isolated_observer_blocks_evolution_until_preceding_epoch
         assert len(evolver.calls) == 1
         request = evolver.calls[0]
         assert request.epoch_number == 2
-        assert request.observer_lineage_id == active
-        assert request.observer_evidence_checkpoint is not None
+        assert len(request.references) == 1
+        reference = request.references[0]
+        assert reference.name == "control"
+        assert reference.lineage_id == active
         checkpoint = EvidenceCheckpointV1.from_file(
-            artifacts.verify(request.observer_evidence_checkpoint).payload_path
+            artifacts.verify(reference.evidence_checkpoint).payload_path
             / "checkpoint.json"
         )
         assert checkpoint.lineage_id == active
         assert checkpoint.through_epoch == 1
-        assert {entry.lineage_id for entry in request.observer_agent_catalog} == {active}
+        assert {entry.lineage_id for entry in reference.agent_catalog} == {active}
         assert all(
             entry.epoch_number is None or entry.epoch_number < request.epoch_number
-            for entry in request.observer_kernel_catalog
+            for entry in reference.kernel_catalog
         )
-        assert any(entry.epoch_number == 1 for entry in request.observer_kernel_catalog)
+        assert any(entry.epoch_number == 1 for entry in reference.kernel_catalog)
         assert {entry.lineage_id for entry in request.agent_catalog} == {challenger}
         assert len(registry.list_attempts(registry.find_epoch(active, 1).id)) == 2  # type: ignore[union-attr]
         assert len(registry.list_attempts(registry.find_epoch(challenger, 1).id)) == 2  # type: ignore[union-attr]
+
+
+@pytest.mark.anyio
+async def test_post_epoch_evolution_waits_for_matching_observer_epoch(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        observer_campaign_id = new_campaign_id()
+        evolved_campaign_id = new_campaign_id()
+        for campaign_id in (observer_campaign_id, evolved_campaign_id):
+            registry.insert_campaign(
+                Campaign(
+                    campaign_id,
+                    "vector_add",
+                    "nvidia-h100",
+                    digest("contract"),
+                    digest("problem"),
+                    NOW,
+                )
+            )
+        observer = _seed_lineage(
+            registry,
+            artifacts,
+            tmp_path,
+            observer_campaign_id,
+            Dsl.TRITON,
+            name="post-epoch-observer",
+            max_challengers=0,
+        )
+        evolved = _seed_lineage(
+            registry,
+            artifacts,
+            tmp_path,
+            evolved_campaign_id,
+            Dsl.TRITON,
+            name="post-epoch-evolved",
+            max_challengers=1,
+            observer_lineage_id=observer,
+        )
+        evolver = AdvancingEvolver()
+        controller = EpochController(
+            registry,
+            evolver,
+            ImprovingOptimizer(),
+            FakeAttemptEvidence(),
+            workflow_runner=PostEpochEvolutionWorkflow(),
+        )
+        scheduler = CampaignScheduler(
+            registry,
+            controller,
+            LocalEvidenceAssembler(registry, artifacts),
+            RegistryLineageLeaseManager(
+                registry,
+                lease_seconds=10,
+                heartbeat_seconds=1,
+            ),
+            observer_poll_seconds=0.001,
+        )
+
+        async with anyio.create_task_group() as tasks:
+            tasks.start_soon(scheduler.run_campaign_through, (evolved,), 1)
+            await anyio.sleep(0.01)
+            assert evolver.calls == []
+            tasks.start_soon(scheduler.run_campaign_through, (observer,), 1)
+
+        assert len(evolver.calls) == 1
+        request = evolver.calls[0]
+        assert request.epoch_number == 2
+        assert len(request.references) == 1
+        reference = request.references[0]
+        assert reference.name == "control"
+        assert reference.lineage_id == observer
+        checkpoint = EvidenceCheckpointV1.from_file(
+            artifacts.verify(reference.evidence_checkpoint).payload_path
+            / "checkpoint.json"
+        )
+        assert checkpoint.through_epoch == 1
 
 
 @pytest.mark.anyio

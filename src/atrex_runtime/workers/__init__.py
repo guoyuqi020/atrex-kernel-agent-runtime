@@ -10,6 +10,7 @@ from .evidence_view import (
 from .evolution import (
     EVOLUTION_INPUT_VERSION,
     EvolutionInputManifestV11,
+    EvolutionInputManifestV12,
     EvolutionOutput,
     EvolutionProcessConfig,
     EvolutionSessionResult,
@@ -85,6 +86,7 @@ __all__ = [
     "EvidenceViewManifestV1",
     "EvidenceVisibilityV1",
     "EvolutionInputManifestV11",
+    "EvolutionInputManifestV12",
     "EvolutionOutput",
     "EvolutionProcessConfig",
     "EvolutionSessionResult",

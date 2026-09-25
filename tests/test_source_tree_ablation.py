@@ -30,9 +30,9 @@ def test_source_tree_arms_keep_topology_with_one_hundred_epochs(relative: str) -
     assert single_file["optimizer_attempt_budget_per_trajectory"] == 15
     assert all(arm["target_epoch_number"] == 5 for arm in single_file["arms"])
     assert plan["main_evolve_enabled"] is False
-    assert len(plan["arms"]) == 15
+    assert len(plan["arms"]) == 7
     assert all(arm["target_epoch_number"] == 100 for arm in plan["arms"])
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 6300
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 2700
     campaign = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/ablation-campaign.json")
     for key in ("max_challengers", "optimizer_attempt_budget"):
         assert getattr(campaign, key) == policy["schedule"][key]
@@ -149,7 +149,8 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
 
         def poll(self):
             # Every arm must start before the first wait: no accidental serialization.
-            assert len(processes) % 15 == 0
+            arm_count = len(json.loads(plan_path.read_text())["arms"])
+            assert len(processes) % arm_count == 0
             return 1 if fail == "arm" and self.campaign.endswith("1".zfill(32)) else 0
 
     def run_json(cli, arguments, output, log):
@@ -173,18 +174,18 @@ def test_bootstrap_once_shared_seed_parallel_launch_and_resume(tmp_path, monkeyp
     test = launch_fixture(tmp_path, monkeypatch)
     test.module.main()
     summary = json.loads((test.workspace / "campaign-results.json").read_text())
-    assert len(summary["arms"]) == 15
+    assert len(summary["arms"]) == 7
     assert all(arm["status"] == "completed" for arm in summary["arms"])
-    assert len(test.calls) == 16  # one Bootstrap, fifteen measurement-free seed operations
-    assert len(test.processes) == 15
-    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 15
+    assert len(test.calls) == 8  # one Bootstrap, seven measurement-free seed operations
+    assert len(test.processes) == 7
+    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 7
     for arm in summary["arms"]:
         assert Path(arm["result_path"]).is_file()
         assert "attempt finished" in Path(arm["log"]).read_text()
     test.module.main()
     resumed = json.loads((test.workspace / "campaign-results.json").read_text())
     assert resumed == summary
-    assert len(test.processes) == 30
+    assert len(test.processes) == 14
 
 
 def test_source_tree_runner_defaults_all_arms_to_one_hundred_epochs(tmp_path, monkeypatch):
@@ -192,7 +193,7 @@ def test_source_tree_runner_defaults_all_arms_to_one_hundred_epochs(tmp_path, mo
     test.module.main()
     arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
     assert all(arm["target_epoch_number"] == 100 for arm in arms)
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 6300
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 2700
 
 
 def test_existing_five_epoch_plan_is_not_rewritten(tmp_path, monkeypatch):
@@ -222,8 +223,9 @@ def test_failure_is_reported_without_silently_losing_other_arms(tmp_path, monkey
     else:
         summary = json.loads((test.workspace / "campaign-results.json").read_text())
         statuses = [arm["status"] for arm in summary["arms"]]
-        assert statuses.count("failed") == (1 if fail == "arm" else 15)
-        assert statuses.count("completed") == (14 if fail == "arm" else 0)
+        arm_count = len(json.loads(test.plan.read_text())["arms"])
+        assert statuses.count("failed") == (1 if fail == "arm" else arm_count)
+        assert statuses.count("completed") == (arm_count - 1 if fail == "arm" else 0)
 
 
 def test_changed_plan_or_frozen_campaign_rejected_before_execution(tmp_path, monkeypatch):

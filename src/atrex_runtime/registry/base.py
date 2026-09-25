@@ -29,6 +29,7 @@ from ..domain.models import (
     EpochRecovery,
     EpochSelection,
     EpochStatus,
+    EpochSuccessorEvolution,
     KernelAgentCatalogEntry,
     KernelAgentRevision,
     KernelCatalogEntry,
@@ -233,6 +234,24 @@ class Registry(Protocol):
     ) -> None: ...
 
     def list_epoch_challengers(self, epoch_id: EpochId) -> list[EpochChallenger]: ...
+
+    def request_epoch_successor_evolution(
+        self,
+        epoch_id: EpochId,
+        challenger_ordinal: int,
+        program_sha256: str,
+    ) -> EpochSuccessorEvolution: ...
+
+    def get_epoch_successor_evolution(
+        self, epoch_id: EpochId
+    ) -> EpochSuccessorEvolution | None: ...
+
+    def complete_epoch_successor_evolution(
+        self,
+        epoch_id: EpochId,
+        next_kernel_agent_revision_id: KernelAgentRevisionId,
+        evolution_trace_digest: ArtifactDigest,
+    ) -> EpochSuccessorEvolution: ...
 
     def ensure_epoch_branch_workflow(
         self, workflow: EpochBranchWorkflow

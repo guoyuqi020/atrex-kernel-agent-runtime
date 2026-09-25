@@ -32,19 +32,20 @@ python scripts/source-tree/run.py \
   --workspace workspaces/gdn-source-tree/run --target-epoch 100
 ```
 
-默认只用 CuteDSL，但与单文件生产一样启用 Isolated、Retained、Pool-3、Pool-Retained-3 和
-Isolated-Evolve 各三个独立重复。旧的 Evolve-3、
-Retained-Evolve 和 Isolated-Pool-Evolve Workflow 实现保留但停用。
+默认只用 CuteDSL，但与单文件生产一样启用三个 Retained 重复、一个含三条 Trajectory 的
+Pool-Retained，以及三个 Retained-Evolve 重复。Isolated、Pool-3、旧的 Evolve-3、
+Isolated-Evolve 和 Isolated-Pool-Evolve Workflow 实现保留但停用。
 生成的 `ablation.json` 及仓库中的 `ablation.example.json`
 与单文件共享计划生成器。各臂复用一次 Bootstrap 的冻结源码树 v0，对照臂不重复评测。
 
-默认每臂 100 个 Epoch、每轨迹每轮 3 次 Attempt。Isolated、Retained 和 Isolated-Evolve
-每实例一条轨迹，各 300 次；两个 Pool 各两条轨迹，各 600 次。Isolated/Pool 重置自适应 State，
-Retained/Pool-Retained 保留。Pool 在 Epoch 边界共享最佳 Kernel；Pool-Retained
-还继承获胜轨迹的终态 State，不做合并。不同臂不共享后续历史或可写文件。
-三个 Isolated-Evolve 只运行复制/进化得到的 Challenger，每个 Attempt 重置 State，不做同轮
-Active 对比；每个重复只旁观对应 Isolated 截至上一 Epoch 的证据，observer 较慢时等待。
-全套共 6,300 次 Optimizer Attempt，不启动外部原版 AKA。
+默认每臂 100 个 Epoch、每轨迹每轮 3 次 Attempt。Retained 和 Retained-Evolve
+每实例一条轨迹，各 300 次；唯一的 Pool-Retained 有三条轨迹，共 900 次。
+所有启用臂均保留自适应 State。Pool 在 Epoch 边界共享最佳 Kernel，各轨迹继续继承自己的终态
+State，不做合并。不同臂不共享后续历史或可写文件。
+三个 Retained-Evolve 各运行一条 Active Trajectory，不做同轮 Agent 对比。Epoch N 结束后，
+它们等待对应 Retained 的 Epoch N Evidence，再生成 Epoch N+1 使用的 Agent；最后一轮也会留下
+可供后续继续运行的 successor。
+全套共 2,700 次 Optimizer Attempt，不启动外部原版 AKA。
 
 `run/` 保存各臂 seed 身份、日志、结果和 `campaign-results.json` 汇总；真正的 Session/Artifact
 仍在配置的 Runtime storage。一个臂失败不取消其他臂，重复运行恢复相同身份。

@@ -1,39 +1,9 @@
 {
-  "schema_version": 9,
+  "schema_version": 10,
   "enabled": true,
   "main_evolve_enabled": false,
   "optimizer_attempt_budget_per_trajectory": 300,
   "arms": [
-    {
-      "kind": "isolated",
-      "label": "ablation-isolated-01",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/isolated.py",
-      "max_challengers": 0,
-      "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 0
-    },
-    {
-      "kind": "isolated",
-      "label": "ablation-isolated-02",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/isolated.py",
-      "max_challengers": 0,
-      "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 0
-    },
-    {
-      "kind": "isolated",
-      "label": "ablation-isolated-03",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/isolated.py",
-      "max_challengers": 0,
-      "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 0
-    },
     {
       "kind": "retained",
       "label": "ablation-retained-01",
@@ -65,97 +35,47 @@
       "evolution_count": 0
     },
     {
-      "kind": "pooled",
-      "label": "ablation-pool-3-01",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/pool_3.py",
-      "max_challengers": 0,
-      "optimizer_attempt_budget": 6,
-      "optimizer_attempt_budget_total": 600,
-      "evolution_count": 0
-    },
-    {
-      "kind": "pooled",
-      "label": "ablation-pool-3-02",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/pool_3.py",
-      "max_challengers": 0,
-      "optimizer_attempt_budget": 6,
-      "optimizer_attempt_budget_total": 600,
-      "evolution_count": 0
-    },
-    {
-      "kind": "pooled",
-      "label": "ablation-pool-3-03",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/pool_3.py",
-      "max_challengers": 0,
-      "optimizer_attempt_budget": 6,
-      "optimizer_attempt_budget_total": 600,
-      "evolution_count": 0
-    },
-    {
       "kind": "pool-retained",
-      "label": "ablation-pool-retained-3-01",
+      "label": "ablation-pool-retained-3",
       "target_epoch_number": 100,
       "workflow_command": "workflow/pool_retained_3.py",
       "max_challengers": 0,
-      "optimizer_attempt_budget": 6,
-      "optimizer_attempt_budget_total": 600,
+      "optimizer_attempt_budget": 9,
+      "optimizer_attempt_budget_total": 900,
       "evolution_count": 0
     },
     {
-      "kind": "pool-retained",
-      "label": "ablation-pool-retained-3-02",
+      "kind": "retained-evolve",
+      "label": "ablation-retained-evolve-01",
       "target_epoch_number": 100,
-      "workflow_command": "workflow/pool_retained_3.py",
-      "max_challengers": 0,
-      "optimizer_attempt_budget": 6,
-      "optimizer_attempt_budget_total": 600,
-      "evolution_count": 0
-    },
-    {
-      "kind": "pool-retained",
-      "label": "ablation-pool-retained-3-03",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/pool_retained_3.py",
-      "max_challengers": 0,
-      "optimizer_attempt_budget": 6,
-      "optimizer_attempt_budget_total": 600,
-      "evolution_count": 0
-    },
-    {
-      "kind": "isolated-evolve",
-      "label": "ablation-isolated-evolve-01",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/evolve_isolated_3.py",
+      "workflow_command": "workflow/evolve_retained_3.py",
       "max_challengers": 1,
       "optimizer_attempt_budget": 3,
       "optimizer_attempt_budget_total": 300,
-      "evolution_count": 99,
-      "observer_label": "ablation-isolated-01"
+      "evolution_count": 100,
+      "observer_label": "ablation-retained-01"
     },
     {
-      "kind": "isolated-evolve",
-      "label": "ablation-isolated-evolve-02",
+      "kind": "retained-evolve",
+      "label": "ablation-retained-evolve-02",
       "target_epoch_number": 100,
-      "workflow_command": "workflow/evolve_isolated_3.py",
+      "workflow_command": "workflow/evolve_retained_3.py",
       "max_challengers": 1,
       "optimizer_attempt_budget": 3,
       "optimizer_attempt_budget_total": 300,
-      "evolution_count": 99,
-      "observer_label": "ablation-isolated-02"
+      "evolution_count": 100,
+      "observer_label": "ablation-retained-02"
     },
     {
-      "kind": "isolated-evolve",
-      "label": "ablation-isolated-evolve-03",
+      "kind": "retained-evolve",
+      "label": "ablation-retained-evolve-03",
       "target_epoch_number": 100,
-      "workflow_command": "workflow/evolve_isolated_3.py",
+      "workflow_command": "workflow/evolve_retained_3.py",
       "max_challengers": 1,
       "optimizer_attempt_budget": 3,
       "optimizer_attempt_budget_total": 300,
-      "evolution_count": 99,
-      "observer_label": "ablation-isolated-03"
+      "evolution_count": 100,
+      "observer_label": "ablation-retained-03"
     }
   ]
 }

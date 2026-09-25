@@ -62,6 +62,7 @@ class _DryRunServices:
         self.attempt_count = 0
         self.selected_kernel: str | None = None
         self.selected_agent: str | None = None
+        self.successor_evolution_requested = False
         self.completed = False
 
     def execute(self, operation: str, arguments: Mapping[str, object]) -> dict[str, object]:
@@ -73,6 +74,16 @@ class _DryRunServices:
                 raise ValueError(
                     f"Challenger {ordinal} exceeds max_challengers={self.max_challengers}"
                 )
+            if operation == "evolve_agent" and self.trajectories:
+                self._require_work_complete()
+                if self.successor_evolution_requested:
+                    raise ValueError("Successor Evolution was requested more than once")
+                self.successor_evolution_requested = True
+                return {
+                    "kernel_agent_revision_id": "agentrev_" + "0" * 32,
+                    "created": False,
+                    "scheduled_after_epoch": True,
+                }
             if ordinal in self.challengers:
                 raise ValueError(f"Challenger {ordinal} was materialized more than once")
             if operation == "evolve_agent" and self.evolution == "no_change":

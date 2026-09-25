@@ -43,7 +43,7 @@ python scripts/gdn/run.py ablation
 
 This starts tasks only, as the same container user as `campaign`, without sudo/systemd.
 `ablation-campaign.json` uses a new `gdn-source-tree-l20d-claude-ablation` creation key;
-it neither changes nor takes over the existing trial. After one full Bootstrap, fifteen Lineages
+it neither changes nor takes over the existing trial. After one full Bootstrap, seven Lineages
 reuse the new experiment's exact v0, Agent, edit boundaries, contract and initial evidence.
 No repeated baseline measurement or old trial experience is imported.
 
@@ -51,22 +51,21 @@ No repeated baseline measurement or old trial experience is imported.
 
 | Campaign instance | Agent Workflow behavior | Optimizer Attempts | Retain State | Evolutions |
 |---|---|---:|---|---:|
-| `ablation-isolated-01/02/03` | One trajectory × 3 per replica | 300 each | no | 0 |
 | `ablation-retained-01/02/03` | One trajectory × 3 per replica | 300 each | yes | 0 |
-| `ablation-pool-3-01/02/03` | Two trajectories × 3 per replica | 600 each | no | 0 |
-| `ablation-pool-retained-3-01/02/03` | Two trajectories × 3 per replica | 600 each | yes | 0 |
-| `ablation-isolated-evolve-01/02/03` | Challenger only; observes matching Isolated replica | 300 each | no | 99 each |
+| `ablation-pool-retained-3` | Three trajectories × 3 | 900 | yes | 0 |
+| `ablation-retained-evolve-01/02/03` | One Active trajectory; observes matching Retained replica | 300 each | yes | 100 each |
 
-Fifteen Campaigns, 100 Epochs each, 6,300 Optimizer Attempts excluding Bootstrap/Evolver. Legacy Evolve-3,
-Retained-Evolve, and Isolated-Pool-Evolve remain implemented but are disabled.
+Seven Campaigns, 100 Epochs each, 2,700 Optimizer Attempts excluding Bootstrap/Evolver. Isolated,
+Pool-3, Evolve-3, Isolated-Evolve, and Isolated-Pool-Evolve remain implemented but are disabled.
 No external original-AKA control is launched. Resetting State preserves Kernel progress and
 Runtime journals. Pools restart from the best Kernel at Epoch boundaries; Pool-Retained also
 inherits that trajectory's terminal State, without merging. Arms share no subsequent history
 or writable files.
 
-Each Isolated-Evolve replica evolves only from itself and additionally reads its matching Isolated
-replica through the preceding Epoch. It waits when that observer is behind; the two histories and
-mutable states remain separate.
+Each Retained-Evolve replica runs its current Agent for Epoch N, retains State across serial Attempts,
+then evolves the Agent for Epoch N+1 after both its own Evidence and the matching Retained replica's
+Epoch N Evidence are published. It waits when that observer is behind; the histories and mutable
+states remain separate. The final Epoch also produces a durable successor for later continuation.
 
 Outputs live under `workspaces/GDN/ablation/`: frozen inputs, Bootstrap, `campaign-results.json`,
 and per-arm `campaign-result.json` / `campaign.log` (plus control seed definitions/results).
@@ -196,7 +195,8 @@ three Challenger Attempts per Epoch). The per-Trajectory Attempt count matches s
 production; its Epoch target is unchanged. The Active-only first Epoch is unchanged, giving
 597 Optimizer Attempts for a single Campaign.
 The target is absolute: rerunning after Epoch 100 reports the completed result rather than adding
-100 more Epochs. No Evolver is launched solely for an unused Epoch 101.
+100 more Epochs. Each completed Epoch launches one post-Epoch Evolution, including the final Epoch;
+the last successor is retained for a later continuation.
 The Attempt count is frozen when a Lineage is registered. Existing one-Attempt Lineages are not
 changed by editing this config: use a new Campaign creation key for the new schedule, retaining
 the old history. Do not overwrite Registry rows or treat an old Campaign as a three-Attempt run.

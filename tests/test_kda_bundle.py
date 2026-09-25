@@ -306,7 +306,7 @@ def test_default_workflow_executes_complete_pool_epoch(bundle_name: str) -> None
         ("isolated.py", 3, (1, 3, False)),
         ("retained.py", 3, (1, 3, True)),
         ("pool_3.py", 6, (2, 3, False)),
-        ("pool_retained_3.py", 6, (2, 3, True)),
+        ("pool_retained_3.py", 9, (3, 3, True)),
     ),
 )
 def test_control_workflow_program_owns_exact_topology(
@@ -402,22 +402,6 @@ def test_control_workflow_program_owns_exact_topology(
             3,
         ),
         (
-            "evolve_retained_3.py",
-            True,
-            ("challenger-1",),
-            1,
-            "replicate_active",
-            3,
-        ),
-        (
-            "evolve_retained_3.py",
-            True,
-            ("challenger-1",),
-            2,
-            "evolve_agent",
-            3,
-        ),
-        (
             "evolve_isolated_pool_3.py",
             False,
             ("active", "active", "challenger-1", "challenger-1"),
@@ -489,6 +473,60 @@ def test_evolution_workflow_owns_selected_branch_organization(
             assert routed == [None] * len(branches)
         else:
             assert all(isinstance(value, str) and value.startswith("attempt_") for value in routed)
+    _finish_workflow(process, context["context"]["epoch_id"])
+    process.stdin.close()
+    assert process.wait(timeout=5) == 0
+
+
+@pytest.mark.parametrize("bundle_name", ("kernel-design-agents", "atrex-kernel-agent-core"))
+@pytest.mark.parametrize("epoch_number", (1, 2))
+def test_retained_evolution_runs_after_current_epoch_work(
+    bundle_name: str,
+    epoch_number: int,
+) -> None:
+    bundle = RUNTIME_ROOT / "src" / bundle_name
+    program_path = RUNTIME_ROOT / "src/atrex_runtime/workflow_templates/evolve_retained_3.py"
+    process = subprocess.Popen(
+        (sys.executable, str(program_path)),
+        cwd=bundle / "workflow",
+        env={**os.environ, "PYTHONPATH": str(bundle / "workflow")},
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    assert process.stdin is not None
+    assert process.stdout is not None
+    context = {
+        "schema_version": 1,
+        "operation": "run_epoch",
+        "context": {
+            "kernel_agent_revision_id": "agentrev_" + "0" * 32,
+            "dsl": "triton",
+            "epoch_id": "epoch_" + "0" * 32,
+            "epoch_number": epoch_number,
+            "workflow_program_sha256": "a" * 64,
+        },
+        "limits": {"max_challengers": 1, "optimizer_attempts": 3},
+    }
+    process.stdin.write(json.dumps(context) + "\n")
+    process.stdin.flush()
+
+    created = _accept_trajectory(process)
+    assert created["arguments"]["branch"] == "active"
+    for _ in range(3):
+        _accept_attempt_batch(process)
+    evolve = json.loads(process.stdout.readline())
+    assert evolve["operation"] == "evolve_agent"
+    _respond(
+        process,
+        evolve,
+        {
+            "kernel_agent_revision_id": "agentrev_" + "0" * 32,
+            "created": False,
+            "scheduled_after_epoch": True,
+        },
+    )
     _finish_workflow(process, context["context"]["epoch_id"])
     process.stdin.close()
     assert process.wait(timeout=5) == 0

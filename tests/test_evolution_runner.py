@@ -30,13 +30,14 @@ from atrex_runtime.domain.models import (
 from atrex_runtime.ports import (
     BuildChallengerRequest,
     BuildChallengerResult,
+    EvolutionReference,
     KernelAgentCandidateProposal,
     KernelAgentNoChangeProposal,
     KernelAgentReuseProposal,
 )
 from atrex_runtime.registry.sqlite import SqliteRegistry
 from atrex_runtime.workers.evolution import (
-    EvolutionInputManifestV11,
+    EvolutionInputManifestV12,
     EvolutionOutput,
     EvolutionProcessConfig,
     EvolutionSessionResult,
@@ -607,14 +608,14 @@ def test_evolution_workspace_copies_full_parent_to_writable_candidate(tmp_path: 
     assert not (prepared.candidate_root / "source").exists()
     assert not (prepared.candidate_root / "runtime-state").exists()
     assert (prepared.candidate_root / "docs/design.md").read_text() == "parent design\n"
-    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+    manifest = EvolutionInputManifestV12.model_validate_json(prepared.manifest_path.read_bytes())
 
     assert manifest.parent_revision_id == request.parent_revision.id
     assert len(manifest.visible_agents) == 1
     assert manifest.visible_agents[0].relationship == "active"
     assert manifest.visible_agents[0].challenger_ordinal is None
     assert manifest.visible_agents[0].created_by == "bootstrap"
-    assert manifest.schema_version == 11
+    assert manifest.schema_version == 12
     assert prepared.manifest_path == prepared.control_root / ".runtime/evolution-input.json"
     assert not (prepared.root / ".runtime").exists()
     assert list((prepared.root / "input/evolution-reports").iterdir()) == []
@@ -678,7 +679,7 @@ def test_evolution_workspace_exposes_next_optimizer_contract_read_only(
     assert not (prepared.root / "scratch/candidate-base.json").exists()
 
 
-def test_evolution_workspace_exposes_independent_active_lineage_as_read_only_observer(
+def test_evolution_workspace_exposes_independent_control_as_named_read_only_reference(
     tmp_path: Path,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
@@ -704,12 +705,17 @@ def test_evolution_workspace_exposes_independent_active_lineage_as_read_only_obs
     (future_state / "tools/future.md").write_text("must not leak\n")
     request = replace(
         request,
-        observer_lineage_id=observer_lineage_id,
-        observer_evidence_checkpoint=_evidence(
-            artifacts,
-            tmp_path / "observer-evidence",
+        references=(
+            EvolutionReference(
+                name="control",
+                lineage_id=observer_lineage_id,
+                evidence_checkpoint=_evidence(
+                    artifacts,
+                    tmp_path / "observer-evidence",
+                ),
+                agent_catalog=(observer_entry,),
+            ),
         ),
-        observer_agent_catalog=(observer_entry,),
     )
 
     prepared = EvolutionWorkspaceAssembler(
@@ -717,22 +723,24 @@ def test_evolution_workspace_exposes_independent_active_lineage_as_read_only_obs
         artifacts,
         attempt_workspaces_root=attempt_workspaces,
     ).prepare(request)
-    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+    manifest = EvolutionInputManifestV12.model_validate_json(prepared.manifest_path.read_bytes())
 
-    assert manifest.observer is not None
-    assert manifest.observer.lineage_id == observer_lineage_id
-    assert manifest.observer.relationship == "independent_active_lineage"
-    observer = prepared.root / "input/observer/active"
-    assert (observer / "agents/agent-v0/source/prompts/episode.md").is_file()
-    assert (observer / "evidence/agent-v0/optimization-summary.json").is_file()
-    assert (observer / "evidence/agent-v0/resources/trajectories").is_dir()
+    assert len(manifest.references) == 1
+    reference = manifest.references[0]
+    assert reference.name == "control"
+    assert reference.lineage_id == observer_lineage_id
+    assert reference.relationship == "independent_control_lineage"
+    control = prepared.root / "input/references/control"
+    assert (control / "agents/agent-v0/source/prompts/episode.md").is_file()
+    assert (control / "evidence/agent-v0/optimization-summary.json").is_file()
+    assert (control / "evidence/agent-v0/resources/trajectories").is_dir()
     assert not (
-        observer / "evidence/agent-v0/resources/trajectories/trajectory-00000001/tools/future.md"
+        control / "evidence/agent-v0/resources/trajectories/trajectory-00000001/tools/future.md"
     ).exists()
-    assert (observer / "evidence/latest-epoch-facts.json").is_file()
-    assert not (observer.stat().st_mode & 0o200)
-    assert not (observer / "agents/agent-v0/source").stat().st_mode & 0o200
-    assert not (observer / "evidence/agent-v0/resources").stat().st_mode & 0o200
+    assert (control / "evidence/latest-epoch-facts.json").is_file()
+    assert not (control.stat().st_mode & 0o200)
+    assert not (control / "agents/agent-v0/source").stat().st_mode & 0o200
+    assert not (control / "evidence/agent-v0/resources").stat().st_mode & 0o200
 
 
 def test_evolution_workspace_copies_active_revision_runtime_state_seed(tmp_path: Path) -> None:
@@ -935,7 +943,7 @@ def test_evolution_workspace_pools_the_last_completed_epoch_challenger_winner(
     request, parent, loser = _pool_request(artifacts, tmp_path, winner="challenger")
 
     prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
-    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+    manifest = EvolutionInputManifestV12.model_validate_json(prepared.manifest_path.read_bytes())
 
     by_id = {item.revision_id: item for item in manifest.visible_agents}
     assert by_id[loser.id].relationship == "active"
@@ -982,7 +990,7 @@ def test_evolution_workspace_pools_the_last_completed_epoch_active_winner(
     request, parent, loser = _pool_request(artifacts, tmp_path, winner="active")
 
     prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
-    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+    manifest = EvolutionInputManifestV12.model_validate_json(prepared.manifest_path.read_bytes())
 
     by_id = {item.revision_id: item for item in manifest.visible_agents}
     assert by_id[parent.id].relationship == "active"
@@ -1029,7 +1037,7 @@ def test_evolution_workspace_keys_same_ordinal_challengers_by_distinct_versions(
     )
 
     prepared = EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts).prepare(request)
-    manifest = EvolutionInputManifestV11.model_validate_json(prepared.manifest_path.read_bytes())
+    manifest = EvolutionInputManifestV12.model_validate_json(prepared.manifest_path.read_bytes())
 
     by_id = {item.revision_id: item for item in manifest.visible_agents}
     assert by_id[loser.id].relationship == "challenger"
@@ -1153,7 +1161,7 @@ def test_evolution_workspace_separates_current_epoch_challenger_from_the_pool(
     ).read_text() == "print('challenger')\n"
     assert not (os.stat(reusable / "agent-v0").st_mode & 0o200)
     assert not (os.stat(current_epoch).st_mode & 0o200)
-    agent_catalog = EvolutionInputManifestV11.model_validate_json(
+    agent_catalog = EvolutionInputManifestV12.model_validate_json(
         prepared.manifest_path.read_bytes()
     ).visible_agents
     relationship_by_id = {item.revision_id: item.relationship for item in agent_catalog}
@@ -1822,6 +1830,87 @@ async def test_contribution_snapshot_preserves_exact_parent_trajectory_resources
 
 
 @pytest.mark.anyio
+async def test_reference_resource_contribution_is_validated_and_snapshotted(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    request = _request(artifacts, tmp_path / "parent")
+    control = _parent(artifacts, tmp_path / "control")
+    state = tmp_path / "control-state"
+    initialize_reusable_agent_state(
+        state,
+        artifacts.verify(control.optimizer_digest).payload_path,
+    )
+    (state / "tools/mkdev.py").write_text("print('control helper')\n")
+    control = replace(
+        control,
+        runtime_state_digest=artifacts.put_directory(
+            state,
+            ArtifactKind.KERNEL_AGENT_RUNTIME_STATE,
+        ),
+    )
+    control_lineage_id = new_lineage_id()
+    control_entry = replace(
+        _baseline_catalog_entry(control),
+        lineage_id=control_lineage_id,
+    )
+    request = replace(
+        request,
+        references=(
+            EvolutionReference(
+                name="control",
+                lineage_id=control_lineage_id,
+                evidence_checkpoint=_evidence(
+                    artifacts, tmp_path / "control-evidence"
+                ),
+                agent_catalog=(control_entry,),
+            ),
+        ),
+    )
+    relative = (
+        "input/references/control/evidence/agent-v0/resources/trajectories/"
+        "trajectory-00000001/tools/mkdev.py"
+    )
+    sessions = SubprocessEvolutionSessionDriver(
+        CleanEnvironmentLauncher(Path("/usr/bin/env")),
+        EvolutionProcessConfig(
+            bundle_commit="0" * 40,
+            bundle_tree="1" * 40,
+            bundle_artifact_digest=digest("evolver-bundle"),
+            command_argv=(
+                str(Path(sys.executable).resolve()),
+                str(_agent_script(tmp_path, contributing=(relative,))),
+            ),
+            agent_backend="claude",
+            isolated_home_environment_keys=(),
+            session_trace_relative_path=None,
+            token_usage_report_relative_path="scratch/token-usage.json",
+            environment=(),
+            timeout_seconds=10,
+            terminate_grace_seconds=1,
+            max_diagnostic_bytes=4096,
+        ),
+    )
+    build = await EvolverBundleRunner(
+        EvolutionWorkspaceAssembler(tmp_path / "evolutions", artifacts),
+        sessions,
+        artifacts,
+        FakeRuntimeEventRecorder([]),
+        kernel_agent_limits=kernel_agent_limits(),
+        max_output_manifest_bytes=8192,
+    ).build_challenger(request)
+
+    trace = json.loads(
+        (artifacts.verify(build.evolution_trace_digest).payload_path / "value.json").read_text()
+    )
+    snapshot = trace["contributions"][0]
+    assert snapshot["path"] == relative
+    assert snapshot["revision_id"] == control.id
+    frozen = artifacts.verify(snapshot["snapshot_digest"])
+    assert (frozen.payload_path / "mkdev.py").read_text() == "print('control helper')\n"
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize(
     "relative",
     [
@@ -1881,7 +1970,7 @@ async def test_fixed_runner_rejects_crediting_a_current_epoch_challenger(
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
 
-    with pytest.raises(ValueError, match="only credit completed Lineage history"):
+    with pytest.raises(ValueError, match="cannot credit an uncompleted current-Epoch Challenger"):
         await _build_with_contributor(
             artifacts,
             tmp_path,

@@ -382,7 +382,7 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
             "isolated": ("workflow/isolated.py", 3),
             "pooled": ("workflow/pool_3.py", 6),
             "retained": ("workflow/retained.py", 3),
-            "pool-retained": ("workflow/pool_retained_3.py", 6),
+            "pool-retained": ("workflow/pool_retained_3.py", 9),
         }
         seeded = {
             kind: await arms.seed_arm(
