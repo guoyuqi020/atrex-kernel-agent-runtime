@@ -552,8 +552,22 @@ class LocalAttemptWorkspaceAssembler:
         if previous is None or previous.status is not EpochStatus.COMPLETED:
             raise ValueError("Previous Epoch is unavailable for Active Runtime State seeding")
         winner = previous.winner_kernel_agent_revision_id
-        if winner is None or winner != epoch.active_kernel_agent_revision_id:
-            raise ValueError("Active Agent disagrees with the previous Epoch winner")
+        if winner is None:
+            raise ValueError("Previous Epoch has no winning Active Agent")
+        if winner != epoch.active_kernel_agent_revision_id:
+            successor = self._registry.get_epoch_successor_evolution(previous.id)
+            if (
+                successor is None
+                or successor.status != "completed"
+                or successor.next_kernel_agent_revision_id
+                != epoch.active_kernel_agent_revision_id
+            ):
+                raise ValueError("Active Agent disagrees with the previous Epoch winner")
+            # Post-Epoch Evolution starts from the winning Trajectory and seals its
+            # resulting Source and adaptive State together in the successor revision.
+            # Returning no override lets prepare() use that exact evolved State rather
+            # than replacing it with the predecessor's pre-Evolution checkpoint.
+            return None
 
         best_kernel_producer_attempt_id: str | None = None
         if previous.best_kernel_revision_id is not None:

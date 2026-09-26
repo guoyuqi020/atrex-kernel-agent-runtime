@@ -29,6 +29,7 @@ from atrex_runtime.domain.models import (
     Dsl,
     Epoch,
     EpochStatus,
+    EpochSuccessorEvolution,
     KernelAgentRevision,
     KernelEvaluation,
     KernelRevision,
@@ -193,6 +194,108 @@ def test_next_active_and_evolver_share_winning_trajectory_terminal_state(
     )
 
     assert assembler._active_branch_seed(next_epoch) == terminal_state
+
+
+def test_next_active_uses_post_epoch_successor_runtime_state(tmp_path: Path) -> None:
+    """A completed successor is the next Active and owns its evolved State."""
+    winner_id = new_kernel_agent_revision_id()
+    successor_id = new_kernel_agent_revision_id()
+    lineage_id = new_lineage_id()
+    previous_epoch_id = new_epoch_id()
+    next_epoch_id = new_epoch_id()
+    kernel_id = new_kernel_revision_id()
+    evidence = digest("successor-evidence")
+    previous = Epoch(
+        id=previous_epoch_id,
+        lineage_id=lineage_id,
+        number=1,
+        active_kernel_agent_revision_id=winner_id,
+        challenger_kernel_agent_revision_ids=(),
+        starting_kernel_revision_id=kernel_id,
+        evidence_checkpoint=evidence,
+        max_challengers=1,
+        optimizer_attempt_budget=1,
+        status=EpochStatus.COMPLETED,
+        winner_kernel_agent_revision_id=winner_id,
+        best_kernel_revision_id=kernel_id,
+        created_at=NOW,
+        completed_at=NOW,
+    )
+    next_epoch = replace(
+        previous,
+        id=next_epoch_id,
+        number=2,
+        active_kernel_agent_revision_id=successor_id,
+        status=EpochStatus.RUNNING,
+        winner_kernel_agent_revision_id=None,
+        best_kernel_revision_id=None,
+        completed_at=None,
+    )
+    registry = Mock()
+    registry.find_epoch.return_value = previous
+    registry.get_epoch_successor_evolution.return_value = EpochSuccessorEvolution(
+        epoch_id=previous_epoch_id,
+        challenger_ordinal=1,
+        program_sha256="a" * 64,
+        status="completed",
+        next_kernel_agent_revision_id=successor_id,
+        evolution_trace_digest=digest("successor-evolution"),
+        requested_at=NOW,
+        completed_at=NOW,
+    )
+    assembler = LocalAttemptWorkspaceAssembler(
+        tmp_path / "workspaces",
+        registry,
+        LocalArtifactStore(tmp_path / "artifacts"),
+    )
+
+    assert assembler._active_branch_seed(next_epoch) is None
+    registry.list_attempts.assert_not_called()
+
+
+def test_next_active_rejects_revision_without_completed_successor(tmp_path: Path) -> None:
+    winner_id = new_kernel_agent_revision_id()
+    unexpected_id = new_kernel_agent_revision_id()
+    lineage_id = new_lineage_id()
+    previous = Epoch(
+        id=new_epoch_id(),
+        lineage_id=lineage_id,
+        number=1,
+        active_kernel_agent_revision_id=winner_id,
+        challenger_kernel_agent_revision_ids=(),
+        starting_kernel_revision_id=new_kernel_revision_id(),
+        evidence_checkpoint=digest("unexpected-active-evidence"),
+        max_challengers=1,
+        optimizer_attempt_budget=1,
+        status=EpochStatus.COMPLETED,
+        winner_kernel_agent_revision_id=winner_id,
+        best_kernel_revision_id=None,
+        created_at=NOW,
+        completed_at=NOW,
+    )
+    next_epoch = replace(
+        previous,
+        id=new_epoch_id(),
+        number=2,
+        active_kernel_agent_revision_id=unexpected_id,
+        status=EpochStatus.RUNNING,
+        winner_kernel_agent_revision_id=None,
+        completed_at=None,
+    )
+    registry = Mock()
+    registry.find_epoch.return_value = previous
+    registry.get_epoch_successor_evolution.return_value = None
+    assembler = LocalAttemptWorkspaceAssembler(
+        tmp_path / "workspaces",
+        registry,
+        LocalArtifactStore(tmp_path / "artifacts"),
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="Active Agent disagrees with the previous Epoch winner",
+    ):
+        assembler._active_branch_seed(next_epoch)
 
 
 def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) -> None:
