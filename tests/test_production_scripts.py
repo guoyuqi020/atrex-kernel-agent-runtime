@@ -894,6 +894,79 @@ def test_production_runner_prints_schedule_through_actual_shell(tmp_path: Path) 
             assert f"ablation-{kind}-{attempts}=" not in result.stdout
 
 
+def test_production_runner_rejects_invalid_ablation_plan_before_bootstrap(
+    tmp_path: Path,
+) -> None:
+    runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
+    labels_start = runner.index("ablation_arm_labels() {")
+    labels_function = runner[labels_start : runner.index("\nseed_arm() (", labels_start)]
+    pipeline_start = runner.index("run_dsl_pipeline() (")
+    pipeline_function = runner[
+        pipeline_start : runner.index("\necho\nattempts_per_epoch=", pipeline_start)
+    ]
+    plan = _ablation_plan(json.loads((PRODUCTION / "policy.json").read_text()))
+    plan_path = tmp_path / "ablation.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    environment = {
+        **os.environ,
+        "PYTHONPATH": str(ROOT / "src"),
+        "atrex_prod_python": sys.executable,
+        "atrex_prod_ablation_plan": str(plan_path),
+    }
+    valid = subprocess.run(
+        ("bash", "-euc", labels_function + "\nablation_arm_labels"),
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert valid.stdout.splitlines() == [arm["label"] for arm in plan["arms"]]
+
+    plan["schema_version"] -= 1
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    marker = tmp_path / "bootstrap-called"
+    shell = (
+        labels_function
+        + "\n"
+        + pipeline_function
+        + '\nbootstrap_one() { touch "$BOOTSTRAP_MARKER"; }\n'
+        + "run_dsl_pipeline cuda\n"
+    )
+    invalid = subprocess.run(
+        ("bash", "-euc", shell),
+        env={**environment, "BOOTSTRAP_MARKER": str(marker)},
+        capture_output=True,
+        text=True,
+    )
+    assert invalid.returncode != 0
+    assert "unsupported ablation plan schema" in invalid.stderr
+    assert not marker.exists()
+
+
+def test_production_runner_reuses_completed_bootstrap(tmp_path: Path) -> None:
+    runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
+    bootstrap_start = runner.index("bootstrap_one() (")
+    bootstrap_function = runner[
+        bootstrap_start : runner.index("\ncampaign_id_for() {", bootstrap_start)
+    ]
+    result_path = tmp_path / "bootstrap-result.json"
+    result_path.write_text('{"campaign_id": "existing"}', encoding="utf-8")
+    shell = (
+        bootstrap_function
+        + '\natrex_prod_dsl_paths() { atrex_prod_bootstrap_result="$RESULT_PATH"; }\n'
+        + 'atrex_prod_cli=false\nbootstrap_one cuda\n'
+    )
+    result = subprocess.run(
+        ("bash", "-euc", shell),
+        env={**os.environ, "RESULT_PATH": str(result_path)},
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert "Reusing completed Bootstrap" in result.stdout
+    assert json.loads(result_path.read_text())["campaign_id"] == "existing"
+
+
 def test_services_start_initializes_control_plane() -> None:
     service = (PRODUCTION / "services.sh").read_text(encoding="utf-8")
 

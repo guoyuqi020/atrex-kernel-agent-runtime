@@ -207,6 +207,10 @@ bootstrap_one() (
   set -o pipefail
   local dsl="$1"
   atrex_prod_dsl_paths "${dsl}"
+  if [[ -f "${atrex_prod_bootstrap_result}" ]]; then
+    echo "[${dsl}] Reusing completed Bootstrap: ${atrex_prod_bootstrap_result}"
+    return 0
+  fi
   local temporary="${atrex_prod_bootstrap_result}.tmp.${BASHPID}"
   rm -f -- "${temporary}"
   : >"${atrex_prod_bootstrap_log}"
@@ -248,8 +252,9 @@ ablation_arm_labels() {
   fi
   "${atrex_prod_python}" -c '
 import json, re, sys
+from atrex_runtime.ablation_plan import ABLATION_PLAN_SCHEMA_VERSION
 value = json.load(open(sys.argv[1], encoding="utf-8"))
-if value.get("schema_version") != 9:
+if value.get("schema_version") != ABLATION_PLAN_SCHEMA_VERSION:
     raise SystemExit(f"unsupported ablation plan schema: {sys.argv[1]}")
 if not value.get("enabled"):
     raise SystemExit(0)
@@ -388,6 +393,15 @@ run_one() (
 
 run_dsl_pipeline() (
   local dsl="$1"
+  local arm_labels
+  if ! arm_labels="$(ablation_arm_labels)"; then
+    echo "[${dsl}] Pipeline could not read the ablation plan." >&2
+    return 1
+  fi
+  local arms=()
+  if [[ -n "${arm_labels}" ]]; then
+    mapfile -t arms <<< "${arm_labels}"
+  fi
   if ! bootstrap_one "${dsl}"; then
     echo "[${dsl}] Pipeline stopped after Bootstrap failure; other DSLs continue." >&2
     return 1
@@ -397,12 +411,7 @@ run_dsl_pipeline() (
     echo "[${dsl}] Pipeline could not resolve its bootstrapped Campaign ID." >&2
     return 1
   fi
-  local arms=()
   local label
-  if ! mapfile -t arms < <(ablation_arm_labels); then
-    echo "[${dsl}] Pipeline could not read the ablation plan." >&2
-    return 1
-  fi
   # Seeding reuses the Bootstrap baseline's measurement, so it costs no GPU time and is
   # cheap to do serially before the Campaigns fan out.
   for label in "${arms[@]}"; do
