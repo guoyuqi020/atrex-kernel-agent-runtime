@@ -161,10 +161,23 @@ class EvaluateRequestV2(_CandidateRequestV2, EvaluateParametersV2):
     """Evaluate a sealed candidate with contract inputs or explicit exploratory overrides."""
 
     operation: Literal["evaluate"]
+    latency_prediction: Literal["improved", "retained", "degraded"] | None = Field(
+        default=None,
+        description=(
+            "Predict the geometric-mean latency change before seeing this result. For ABBA, "
+            "compare candidate B with baseline A; otherwise compare this candidate with the "
+            "Kernel at the start of this Attempt. improved means latency decreases by more "
+            "than 1%; retained means a change within +/-1% (inclusive); degraded means "
+            "latency increases by more than 1%. This prediction is recorded for human "
+            "assessment and is not returned with Evaluate results."
+        ),
+    )
     baseline: CandidateBundleV2 | None = None
 
     @model_validator(mode="after")
     def _validate_baseline(self) -> EvaluateRequestV2:
+        if self.mode == "full" and self.latency_prediction is None:
+            raise ValueError("full evaluate requires latency_prediction")
         if self.comparison is not None and self.baseline is None:
             raise ValueError(
                 "comparison requires a baseline source uploaded from comparison.baseline_path"
@@ -573,6 +586,18 @@ def _agent_operation_schema(
         schema["allOf"] = [
             {"not": {"required": ["input_py", "input_path"]}},
             {"not": {"required": ["shapes", "shapes_path"]}},
+            {
+                "if": {
+                    "properties": {"mode": {"const": "correctness_only"}},
+                    "required": ["mode"],
+                },
+                "else": {
+                    "properties": {
+                        "latency_prediction": {"enum": ["improved", "retained", "degraded"]}
+                    },
+                    "required": ["latency_prediction"],
+                },
+            },
         ]
         properties["candidate_path"] = {
             "type": "string",

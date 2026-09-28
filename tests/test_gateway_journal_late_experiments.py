@@ -117,6 +117,7 @@ async def test_closed_direction_accepts_late_profile_evidence(
         )
         payload = json.loads(_request(attempt))
         payload.update(idempotency_key="late-evidence-profile", operation="profile", level="sol")
+        payload.pop("latency_prediction")
         profiled = await service.execute(capability.token, json.dumps(payload).encode())
         await update(direction_id, close_action)
         second = await propose("next-direction")

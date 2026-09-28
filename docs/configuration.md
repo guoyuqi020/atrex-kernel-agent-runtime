@@ -118,6 +118,17 @@ QoderCLI uses provider credits; other supported Backends use provider token buck
 the provider-native terminal usage report. Bootstrap uses `bootstrap_timeout_seconds`; ordinary
 Attempts use `timeout_seconds`.
 
+`campaign.optimizer.tool_modules` independently enables the `directions` and `experiments`
+Runtime tool families. It defaults to `["directions", "experiments"]`; use either one-element
+array or `[]` to omit the other family or both. The setting applies to Bootstrap and optimization
+Attempts. The live Session contract exposes only enabled commands. With Directions alone, closures
+need no Experiment support IDs; with Experiments alone, `record-experiment` omits `direction_id`.
+Session Prompts follow this setting: they retain the common workspace and evaluation guidance,
+but include instructions only for enabled Journal tools. The default setting keeps the original
+Prompts unchanged. Existing Sessions keep the contract and Prompt they started with.
+Without Experiments, historical `adopt` is unavailable; nomination requires a newly measured
+candidate in the current Attempt. An identical historical Evaluate may be rejected as a duplicate.
+
 ### Evolver
 
 `campaign.evolver` additionally pins the Evolver repository and full commit plus import/Bundle

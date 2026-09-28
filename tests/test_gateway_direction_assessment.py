@@ -171,6 +171,7 @@ async def test_diagnostic_result_and_hypothesis_judgment_are_independent(
     )
     request = json.loads(_request(history.current))
     request.update(operation="check", idempotency_key="diagnostic")
+    request.pop("latency_prediction")
     result = await history.service.execute(history.capability.token, json.dumps(request).encode())
     receipt = (
         await history.journal(

@@ -110,6 +110,16 @@ QoderCLI 使用 Provider Credit；其他受支持 Backend 使用 Provider Token 
 Provider 原生终态 Usage Report。Bootstrap 使用 `bootstrap_timeout_seconds`，普通 Attempt 使用
 `timeout_seconds`。
 
+`campaign.optimizer.tool_modules` 可独立启用 `directions` 和 `experiments` 两组 Runtime
+工具。默认是 `["directions", "experiments"]`；也可以只填其中一项，或填 `[]` 全部关闭。
+该配置同时适用于 Bootstrap 和优化 Attempt，Session 实时契约仅列出已启用的命令。仅启用
+Directions 时，关闭 Direction 不要求 Experiment 支持 ID；仅启用 Experiments 时，
+`record-experiment` 不填写 `direction_id`。
+Session 提示词也随此配置调整：保留通用的工作区和评测说明，只展示已启用 Journal 工具的
+操作要求。默认配置仍使用原始提示词；已启动的 Session 沿用启动时的契约与提示词。
+关闭 Experiments 后不能使用历史 `adopt`；提名需要在当前 Attempt 测得候选版本。
+完全相同的历史 Evaluate 可能被判定为重复任务。
+
 ### Evolver
 
 `campaign.evolver` 还固定 Evolver 仓库与完整 Commit，以及 Import/Bundle 上限。它记录 Provider

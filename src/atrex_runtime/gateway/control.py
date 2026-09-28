@@ -1220,7 +1220,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     generation,
                     idempotency_key,
                     experiment["experiment_id"],
-                    experiment["direction_id"],
+                    experiment["direction_id"] or "",
                     payload,
                     experiment["recorded_at"],
                 ),

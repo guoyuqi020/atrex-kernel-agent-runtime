@@ -71,6 +71,10 @@ _COMMAND_BINDINGS: dict[str, dict[str, object]] = {
         "kind": "local-discovery",
     },
 }
+_MODULE_COMMANDS = {
+    "directions": frozenset({"update-direction", "list-directions", "load-direction"}),
+    "experiments": frozenset({"record-experiment", "list-experiments", "load-experiment"}),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,8 +87,13 @@ class SessionContractPolicy:
     usage_budget: float
     max_attempt_report_bytes: int
     wiki_available: bool = False
+    tool_modules: tuple[Literal["directions", "experiments"], ...] = ("directions", "experiments")
 
     def __post_init__(self) -> None:
+        if len(self.tool_modules) != len(set(self.tool_modules)) or set(self.tool_modules) - set(
+            _MODULE_COMMANDS
+        ):
+            raise ValueError("Runtime contract tool modules are invalid")
         if self.agent_backend not in {"claude", "codex", "qodercli", "pi"}:
             raise ValueError("Runtime contract Agent backend is unsupported")
         if (
@@ -108,6 +117,7 @@ def materialize_session_contract(
     usage_budget: float,
     max_attempt_report_bytes: int,
     wiki_available: bool,
+    tool_modules: tuple[Literal["directions", "experiments"], ...] = ("directions", "experiments"),
     relative_path: Path = RUNTIME_CONTRACT_RELATIVE_PATH,
 ) -> Path:
     """Create one immutable, credential-free contract for the current Session.
@@ -130,6 +140,14 @@ def materialize_session_contract(
         raise ValueError("Runtime contract limits must be positive")
     if usage_unit not in {"provider_tokens", "credits"}:
         raise ValueError("Runtime contract usage unit is unsupported")
+    if len(tool_modules) != len(set(tool_modules)) or set(tool_modules) - set(_MODULE_COMMANDS):
+        raise ValueError("Runtime contract tool modules are invalid")
+    enabled_commands = set().union(*(_MODULE_COMMANDS[module] for module in tool_modules))
+    bindings = {
+        name: binding
+        for name, binding in _COMMAND_BINDINGS.items()
+        if name not in set().union(*_MODULE_COMMANDS.values()) or name in enabled_commands
+    }
 
     destination.mkdir(parents=True, mode=0o700)
     try:
@@ -148,10 +166,8 @@ def materialize_session_contract(
                     ),
                     "policy": "query_on_demand_do_not_copy_into_prompts",
                 },
-                "bindings": _COMMAND_BINDINGS,
-                "gateway": gateway_agent_request_schema(
-                    allowed_operations=_GATEWAY_OPERATIONS
-                ),
+                "bindings": bindings,
+                "gateway": gateway_agent_request_schema(allowed_operations=_GATEWAY_OPERATIONS),
             },
         )
         write_canonical_json(
@@ -167,6 +183,7 @@ def materialize_session_contract(
                     "gateway": True,
                     "wiki": wiki_available,
                 },
+                "tool_modules": list(tool_modules),
                 "paths": {
                     "read_only": ["agent/", "input/", "prompts/", "skills/"],
                     "writable": ["scratch/", "tools/", "work/"],

@@ -6,6 +6,7 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
+from typing import Literal
 
 import anyio
 
@@ -76,8 +77,14 @@ class CoreOptimizerProcessConfig:
     reasoning_effort: str = "max"
     session_settings: str = ""
     report_completion_retries: int = 2
+    tool_modules: tuple[Literal["directions", "experiments"], ...] = ("directions", "experiments")
 
     def __post_init__(self) -> None:
+        if len(self.tool_modules) != len(set(self.tool_modules)) or set(self.tool_modules) - {
+            "directions",
+            "experiments",
+        }:
+            raise ValueError("Optimizer tool modules are invalid")
         if not self.command_prefix:
             raise ValueError("Optimizer command prefix cannot be empty")
         if (
@@ -202,9 +209,7 @@ class CoreOptimizerSessionDriver:
                     max_bytes=self._config.max_attempt_report_bytes,
                 )
                 if any(experiment.action == "baseline" for experiment in report.experiments):
-                    raise ValueError(
-                        "Experiment action baseline is only valid during Bootstrap"
-                    )
+                    raise ValueError("Experiment action baseline is only valid during Bootstrap")
             except ValueError as error:
                 report_error = str(error)
             else:
@@ -248,8 +253,7 @@ class CoreOptimizerSessionDriver:
             return self._artifacts.put_directory(
                 working,
                 ArtifactKind.KERNEL,
-                exclude=lambda relative, directory: directory
-                or relative.as_posix() != selected,
+                exclude=lambda relative, directory: directory or relative.as_posix() != selected,
             )
         return self._artifacts.put_directory(
             working,
@@ -319,9 +323,7 @@ class CoreOptimizerSessionDriver:
             {
                 "ATREX_ATTEMPT_MANIFEST": str(prepared.manifest_path),
                 "ATREX_ATTEMPT_REPORT_PATH": str(attempt_report_path),
-                "ATREX_EVIDENCE_PROMPT_PATH": str(
-                    prepared.root / EVIDENCE_PROMPT_RELATIVE_PATH
-                ),
+                "ATREX_EVIDENCE_PROMPT_PATH": str(prepared.root / EVIDENCE_PROMPT_RELATIVE_PATH),
                 "ATREX_GATEWAY_CAPABILITY": config.gateway_capability,
                 "ATREX_GATEWAY_PROXY_URL": config.gateway_endpoint,
                 "ATREX_CORRECTNESS_POLICY_JSON": prepared.correctness_policy_json,
@@ -348,6 +350,7 @@ class CoreOptimizerSessionDriver:
                 usage_unit=environment["ATREX_USAGE_UNIT"],
                 usage_budget=float(environment["ATREX_USAGE_BUDGET"]),
                 max_attempt_report_bytes=self._config.max_attempt_report_bytes,
+                tool_modules=self._config.tool_modules,
                 wiki_available=(
                     config.wiki_endpoint is not None and config.wiki_capability is not None
                 ),

@@ -111,6 +111,7 @@ async def test_adoption_does_not_cover_changed_candidate(history: _History) -> N
     report = await _adopt(history)
     request = json.loads(_request(history.current))
     request.update(operation="attempt_report", report=report, idempotency_key="changed-candidate")
+    request.pop("latency_prediction")
     # This is the other historical Kernel, not the one adopted in the Journal.
     with pytest.raises(ValueError, match="record an adopt Experiment"):
         await history.service.execute(history.capability.token, json.dumps(request).encode())

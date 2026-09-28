@@ -400,9 +400,7 @@ def build_optimizer_session_contract_policy(
 ) -> SessionContractPolicy:
     """Describe the exact next-Optimizer limits visible to an Evolver."""
     worker = campaign.optimizer
-    usage_unit: UsageUnit = (
-        "credits" if worker.agent_backend == "qodercli" else "provider_tokens"
-    )
+    usage_unit: UsageUnit = "credits" if worker.agent_backend == "qodercli" else "provider_tokens"
     return SessionContractPolicy(
         agent_backend=worker.agent_backend,
         session_timeout_seconds=worker.timeout_seconds,
@@ -414,6 +412,7 @@ def build_optimizer_session_contract_policy(
         ),
         max_attempt_report_bytes=worker.max_attempt_report_bytes,
         wiki_available=False,
+        tool_modules=worker.tool_modules,
     )
 
 
@@ -549,6 +548,7 @@ def build_core_process_config(
         token_usage_report_relative_path=worker.token_usage_report_relative_path,
         max_attempt_report_bytes=worker.max_attempt_report_bytes,
         report_completion_retries=worker.report_completion_retries,
+        tool_modules=worker.tool_modules,
         timeout_seconds=worker.timeout_seconds if timeout_seconds is None else timeout_seconds,
         terminate_grace_seconds=worker.terminate_grace_seconds,
         max_diagnostic_bytes=worker.max_diagnostic_bytes,

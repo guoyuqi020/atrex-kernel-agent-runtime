@@ -127,6 +127,7 @@ def _request(attempt: Attempt, *, path: str = "kernel.py") -> bytes:
             "attempt_id": attempt.id,
             "idempotency_key": "evaluate-candidate-1",
             "operation": "evaluate",
+            "latency_prediction": "retained",
             "candidate": {
                 "files": [
                     {
@@ -270,6 +271,7 @@ def _service(
     candidate_production: Any = None,
     *,
     attempts_per_trajectory: int = 1,
+    tool_modules: tuple[str, ...] = ("directions", "experiments"),
 ) -> tuple[
     SqliteRegistry,
     SqliteGatewayControl,
@@ -318,6 +320,7 @@ def _service(
         limits,
         registry,
         candidate_production=candidate_production,
+        tool_modules=tool_modules,
         clock=lambda: NOW_DATETIME,
     )
     return registry, control, attempt, capability, service, adapter
@@ -451,6 +454,7 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
     assert response.kernel_artifact_digest is not None
     assert len(adapter.requests) == 1
     adapter_request = adapter.requests[0]
+    assert "latency_prediction" not in adapter_request.parameters
     assert adapter_request.candidate_path is not None
     assert (adapter_request.candidate_path / "kernel.py").read_text() == "def kernel(): pass\n"
     assert await control.get_outcome(attempt.id) is None
@@ -474,6 +478,8 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
         "gateway.operation_completed",
         "gateway.evaluation_recorded",
     ]
+    assert gateway_events[0].payload["latency_prediction"] == "retained"
+    assert "latency_prediction" not in response.model_dump(mode="json")
     assert all(event.aggregate_id == attempt.id for event in gateway_events)
     assert all(event.payload["schema_version"] == 1 for event in gateway_events)
     assert gateway_events[-1].payload["correlation"] == {
@@ -1215,6 +1221,7 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
         profile_result={"status": "succeeded", "kernels": []},
     )
     profile_request = json.loads(_request(attempt))
+    profile_request.pop("latency_prediction")
     profile_request.update(
         {
             "idempotency_key": "journal-profile-candidate-1",
@@ -1671,6 +1678,7 @@ async def test_invalid_request_returns_corresponding_machine_readable_schema(
     registry, control, attempt, capability_value, service, _adapter = _service(tmp_path)
     app = GatewayProxyAsgiApp(service, GatewayProxyLimits(64 * 1024, 8, 16 * 1024))
     payload = json.loads(_request(attempt))
+    payload.pop("latency_prediction")
     payload["operation"] = "dev"
     payload.pop("candidate")
     body = json.dumps(payload).encode()
@@ -1757,6 +1765,7 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
         profile_result={"status": "succeeded", "kernels": []},
     )
     profile_request = json.loads(_request(attempt))
+    profile_request.pop("latency_prediction")
     profile_request.update(
         {
             "idempotency_key": "profile-candidate-1",
@@ -1920,6 +1929,7 @@ async def test_attempt_report_api_seals_canonical_contributing_trials(tmp_path: 
             "idempotency_key": "canonical-report",
             "report": report,
         }
+        payload.pop("latency_prediction")
         accepted = await service.execute(
             capability.token,
             json.dumps(payload).encode(),

@@ -16,6 +16,7 @@ async def test_result_identity_is_per_invocation_and_reread_returns_kernel(tmp_p
     try:
         payload = json.loads(_request(attempt))
         payload.update(operation="profile", level="sol", idempotency_key="profile-one")
+        payload.pop("latency_prediction")
         first = await service.execute(capability.token, json.dumps(payload).encode())
         replay = await service.execute(capability.token, json.dumps(payload).encode())
         payload["idempotency_key"] = "profile-two"

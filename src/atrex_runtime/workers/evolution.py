@@ -913,9 +913,7 @@ class EvolutionWorkspaceAssembler:
 
         reference_versions: dict[str, dict[str, KernelAgentRevisionId]] = {}
         reference_sources: dict[tuple[str, KernelAgentRevisionId], Path] = {}
-        reference_catalogs: dict[
-            str, dict[KernelAgentRevisionId, KernelAgentCatalogEntry]
-        ] = {}
+        reference_catalogs: dict[str, dict[KernelAgentRevisionId, KernelAgentCatalogEntry]] = {}
         reference_pool_active: dict[str, KernelAgentRevisionId | None] = {}
         reference_evidence_payloads: dict[str, Path] = {}
         for reference in request.references:
@@ -924,17 +922,12 @@ class EvolutionWorkspaceAssembler:
                 raise ValueError(
                     f"Evolution reference {reference.name!r} Evidence has the wrong Artifact kind"
                 )
-            reference_catalog = {
-                entry.revision.id: entry for entry in reference.agent_catalog
-            }
+            reference_catalog = {entry.revision.id: entry for entry in reference.agent_catalog}
             if not reference_catalog:
                 raise ValueError(
                     f"Evolution reference {reference.name!r} has no visible Agent revisions"
                 )
-            if any(
-                entry.revision.dsl is not revision.dsl
-                for entry in reference_catalog.values()
-            ):
+            if any(entry.revision.dsl is not revision.dsl for entry in reference_catalog.values()):
                 raise ValueError(
                     f"Evolution reference {reference.name!r} disagrees with the parent DSL"
                 )
@@ -1072,9 +1065,7 @@ class EvolutionWorkspaceAssembler:
                 trajectories = resources / "trajectories"
                 trajectories.mkdir(parents=True, mode=0o700)
                 referenced_revision = catalog[revision_id].revision
-                seed = resolve_revision_runtime_state_seed(
-                    self._artifacts, referenced_revision
-                )
+                seed = resolve_revision_runtime_state_seed(self._artifacts, referenced_revision)
                 if revision_id == reference_pool_active[reference.name]:
                     seed = (
                         _active_next_epoch_runtime_state_seed(
@@ -1150,6 +1141,7 @@ class EvolutionWorkspaceAssembler:
                 usage_unit=policy.usage_unit,
                 usage_budget=policy.usage_budget,
                 max_attempt_report_bytes=policy.max_attempt_report_bytes,
+                tool_modules=policy.tool_modules,
                 wiki_available=policy.wiki_available,
                 relative_path=Path("input/next-session-contract"),
             )
@@ -2157,16 +2149,13 @@ class EvolverBundleRunner(EvolverRunner):
         snapshots: list[EvolutionContributionSnapshot] = []
         revisions = {entry.revision.id: entry.revision for entry in request.agent_catalog}
         references_by_name = {reference.name: reference for reference in request.references}
-        reference_roots: list[
-            tuple[PurePosixPath, PurePosixPath, KernelAgentRevision]
-        ] = []
+        reference_roots: list[tuple[PurePosixPath, PurePosixPath, KernelAgentRevision]] = []
         for manifest_reference in manifest.references:
             request_reference = references_by_name.get(manifest_reference.name)
             if (
                 request_reference is None
                 or request_reference.lineage_id != manifest_reference.lineage_id
-                or request_reference.evidence_checkpoint
-                != manifest_reference.evidence_checkpoint
+                or request_reference.evidence_checkpoint != manifest_reference.evidence_checkpoint
             ):
                 raise ValueError("Evolution manifest contains an unrequested reference")
             for entry in request_reference.agent_catalog:
@@ -2195,8 +2184,7 @@ class EvolverBundleRunner(EvolverRunner):
                 (
                     revision
                     for source_root, resources_root, revision in reference_roots
-                    if path.is_relative_to(source_root)
-                    or path.is_relative_to(resources_root)
+                    if path.is_relative_to(source_root) or path.is_relative_to(resources_root)
                 ),
                 None,
             )
@@ -2206,9 +2194,7 @@ class EvolverBundleRunner(EvolverRunner):
                     "or a manifest-declared read-only reference"
                 )
             if owner is not None and owner.relationship == "current_epoch_challenger":
-                raise ValueError(
-                    f"{label} cannot credit an uncompleted current-Epoch Challenger"
-                )
+                raise ValueError(f"{label} cannot credit an uncompleted current-Epoch Challenger")
             revision = (
                 reference_owner
                 if reference_owner is not None

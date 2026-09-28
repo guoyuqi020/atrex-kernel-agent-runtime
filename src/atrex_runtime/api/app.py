@@ -283,6 +283,11 @@ def build_runtime_application(
                     if settings.campaign is None
                     else settings.campaign.optimizer.max_attempt_report_bytes
                 ),
+                tool_modules=(
+                    ("directions", "experiments")
+                    if settings.campaign is None
+                    else settings.campaign.optimizer.tool_modules
+                ),
             ),
             limits,
         )

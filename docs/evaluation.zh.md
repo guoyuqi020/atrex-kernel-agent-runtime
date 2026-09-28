@@ -86,6 +86,11 @@ Evaluate，无需通过修改注释来制造不同 Digest。
 Agate 的 Python `_make_inputs` 生成器；`shapes` 提供以整数字符串为键的非空 JSON Object，每条
 Shape Record 都是与生成器兼容的 Object。两个组件可以独立覆盖；未指定的组件继续使用封存
 Contract 中的值。可信 Reference、容差和 Gate Policy 继续生效，Agent 不会因此获得私有输入。
+每次完整 `evaluate`（包括 ABBA）都须在测量前填写 `latency_prediction`：`improved` 表示
+几何平均延迟降低超过 1%，`retained` 表示变化在 ±1% 以内（含边界），`degraded` 表示
+延迟升高超过 1%。ABBA 比较候选 B 与基线 A；普通 Evaluate 比较候选与本次 Attempt
+开始时的 Kernel。Runtime 将预测保存在私有事件中供人工评测，不向评测器传递，也不包含在
+Agent 可见结果中。`correctness_only` 没有延迟结果，因此无需填写预测。
 
 Core 与 Kernel Design Agent 还支持 `input_path`、`shapes_path`，读取 Workspace 相对路径的 UTF-8 文件并将内容作为
 `input_py`、`shapes` 上传。输入源码上限为 128 KiB，Shape 文件上限为 256 KiB；文件必须位于真实
@@ -93,7 +98,7 @@ Workspace 目录下且为普通文件，绝对路径、路径穿越、符号链�
 同一组件的内联形式与路径形式互斥。请求幂等键按文件内容计算，不依赖本地文件名。
 
 ```json
-{"operation": "evaluate"}
+{"operation": "evaluate", "latency_prediction": "retained"}
 ```
 
 ```json
@@ -108,7 +113,7 @@ Workspace 目录下且为普通文件，绝对路径、路径穿越、符号链�
 并记录实际 `mode` 和 `input_scope`（任一组件被覆盖时为 `custom`，否则为 `contract`）。
 仅正确性结果不包含性能测量。这些调用不能替代 `candidate_ready`、Kernel Retention 或 Agent
 Promotion 所要求的可信 Contract 完整评测。需要完整评测时应省略输入覆盖，并设置
-`mode: "full"` 或省略 `mode`；原有默认请求与结果格式保持不变。
+`mode: "full"` 或省略 `mode`，并填写预测；结果格式保持不变。
 
 ### 自定义输入文件示例
 
@@ -164,7 +169,8 @@ def _make_inputs(num_elements: int) -> dict[str, torch.Tensor]:
 python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/evaluate-custom.json
 ```
 
-工具路径若不同，以 Session 提示的路径为准。省略 `mode` 即进行正确性与性能评测；
+工具路径若不同，以 Session 提示的路径为准。省略 `mode` 即进行正确性与性能评测，
+此时还须填写 `latency_prediction`；
 这两个文件也适用于下文的 ABBA 比较。通常建议成对提供：
 只覆盖 Shapes 时，字段必须与保留的生成器兼容；只覆盖生成器时，函数必须接受保留的 Shapes
 所传参数。任何一种方式都不会暴露未覆盖的私有组件。自定义输入仍须满足公开 ABI，
@@ -185,11 +191,11 @@ Workspace 相对路径，指向普通 `.py` 文件或 Kernel Bundle 目录。单
 不改变上传内容不会产生新的比较。
 
 ```json
-{"operation": "evaluate", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py"}}
+{"operation": "evaluate", "latency_prediction": "improved", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py"}}
 ```
 
 ```json
-{"operation": "evaluate", "candidate_path": "scratch/candidate-kernel", "comparison": {"method": "abba", "baseline_path": "scratch/baseline-kernel", "repeats": 2}, "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
+{"operation": "evaluate", "latency_prediction": "retained", "candidate_path": "scratch/candidate-kernel", "comparison": {"method": "abba", "baseline_path": "scratch/baseline-kernel", "repeats": 2}, "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
 ```
 
 `comparison.repeats` 默认 2，表示每侧的观测次数，生成 A、B、B、A 顺序。取值范围为 2–20，但 Schedule

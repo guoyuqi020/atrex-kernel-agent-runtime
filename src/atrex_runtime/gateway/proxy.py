@@ -123,6 +123,22 @@ _RUNTIME_JOURNAL_OPERATIONS = frozenset(
         GatewayOperation.JOURNAL_SNAPSHOT,
     }
 )
+_DIRECTION_MODULE_OPERATIONS = frozenset(
+    {
+        GatewayOperation.DIRECTION_HISTORY,
+        GatewayOperation.DIRECTION_UPDATE,
+        GatewayOperation.DIRECTIONS_LIST,
+        GatewayOperation.DIRECTION_LOAD,
+    }
+)
+_EXPERIMENT_MODULE_OPERATIONS = frozenset(
+    {
+        GatewayOperation.EXPERIMENT_HISTORY,
+        GatewayOperation.EXPERIMENT_RECORD,
+        GatewayOperation.EXPERIMENTS_LIST,
+        GatewayOperation.EXPERIMENT_LOAD,
+    }
+)
 _AGENT_GATEWAY_OPERATIONS = frozenset(
     operation
     for operation in GatewayOperation
@@ -727,10 +743,19 @@ class GatewayProxyService:
         *,
         contexts: AgateEvaluationContextResolver | None = None,
         max_attempt_report_bytes: int = 1_048_576,
+        tool_modules: tuple[Literal["directions", "experiments"], ...] = (
+            "directions",
+            "experiments",
+        ),
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         if type(max_attempt_report_bytes) is not int or max_attempt_report_bytes <= 0:
             raise ValueError("max_attempt_report_bytes must be a positive integer")
+        if len(tool_modules) != len(set(tool_modules)) or set(tool_modules) - {
+            "directions",
+            "experiments",
+        }:
+            raise ValueError("Gateway tool modules are invalid")
         self._control = control
         self._artifacts = artifacts
         self._adapter = adapter
@@ -740,8 +765,9 @@ class GatewayProxyService:
         self._candidate_production = candidate_production
         self._contexts = contexts
         self._max_attempt_report_bytes = max_attempt_report_bytes
+        self._tool_modules = tool_modules
         self._clock = clock
-        self._journals = RuntimeJournalService(control, artifacts)
+        self._journals = RuntimeJournalService(control, artifacts, tool_modules=tool_modules)
 
     async def _execute_measurement(
         self,
@@ -824,6 +850,10 @@ class GatewayProxyService:
             raise ValueError("Gateway Proxy request exceeds byte limit")
         request = _REQUEST_ADAPTER.validate_json(payload)
         operation = GatewayOperation(request.operation)
+        if operation in _DIRECTION_MODULE_OPERATIONS and "directions" not in self._tool_modules:
+            raise ValueError("Direction tools are disabled for this Runtime")
+        if operation in _EXPERIMENT_MODULE_OPERATIONS and "experiments" not in self._tool_modules:
+            raise ValueError("Experiment tools are disabled for this Runtime")
         is_runtime_query = operation in _RUNTIME_LOCAL_OPERATIONS
         is_runtime_journal = operation in _RUNTIME_JOURNAL_OPERATIONS
         if operation_scope == "gateway" and is_runtime_query:
@@ -941,6 +971,8 @@ class GatewayProxyService:
             "request_digest": request_digest,
             "kernel_artifact_digest": candidate_digest,
         }
+        if isinstance(request, EvaluateRequestV2) and request.latency_prediction is not None:
+            event_base["latency_prediction"] = request.latency_prediction
         if adapter_request.is_comparison:
             event_base.update(
                 {
@@ -1219,6 +1251,8 @@ class GatewayProxyService:
     ) -> GatewayAdapterResult:
         if candidate_digest is None:
             raise InfrastructureError("Attempt report sealed no candidate")
+        if set(request.report.tool_modules) != set(self._tool_modules):
+            raise ValueError("Attempt report tool modules disagree with Runtime configuration")
         report_value = request.report.model_dump(mode="json")
         report_bytes = len(canonical_json_bytes(report_value))
         if report_bytes > self._max_attempt_report_bytes:
@@ -1238,7 +1272,8 @@ class GatewayProxyService:
                     f"work/kernel tree, sealed as {candidate_digest}. No Agent evaluate covers it; "
                     "custom inputs or correctness_only checks do not qualify; "
                     "record an adopt Experiment referencing a compatible successful historical "
-                    'full-Evaluate Trial, or run {"operation": "evaluate"}, then submit again. '
+                    "full-Evaluate Trial, or run Evaluate with latency_prediction, then submit "
+                    "again. "
                     "Agent ABBA does not replace full Evaluate; Runtime authoritative ABBA "
                     "runs only after the terminal report is handed off"
                 )
@@ -1747,6 +1782,7 @@ class GatewayProxyService:
             "idempotency_key",
             "candidate",
             "baseline",
+            "latency_prediction",
             "job_id",
             "level",
             "kernel_regex",

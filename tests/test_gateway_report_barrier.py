@@ -41,6 +41,7 @@ def _report(attempt: Any, status: str = "blocked") -> bytes:
             blocker="Unable to finish baseline" if status == "blocked" else None,
         )
     value.update(operation="attempt_report", idempotency_key="terminal-report", report=report)
+    value.pop("latency_prediction")
     return json.dumps(value).encode()
 
 
@@ -191,6 +192,7 @@ async def test_other_gateway_calls_release_barrier_on_every_exit(
 
     request = json.loads(_request(attempt))
     request.update(operation=operation, **fields)
+    request.pop("latency_prediction")
     if operation == "env":
         request.pop("candidate")
     monkeypatch.setattr(adapter, "execute", delayed)

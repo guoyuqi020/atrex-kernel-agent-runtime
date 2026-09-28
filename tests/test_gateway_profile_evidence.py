@@ -32,6 +32,7 @@ async def test_profile_without_experiment_can_be_handed_off(tmp_path: Path) -> N
         )
         payload = json.loads(_request(attempt))
         payload.update(idempotency_key="profile-1", operation="profile", level="sol")
+        payload.pop("latency_prediction")
         profiled = await service.execute(capability.token, json.dumps(payload).encode())
         identity = {
             "kernel_artifact_digest": profiled.kernel_artifact_digest,
@@ -114,6 +115,7 @@ async def test_profile_without_experiment_can_be_handed_off(tmp_path: Path) -> N
         cast(dict[str, Any], report["profile_evidence"])["supporting_results"] = [reference]
         payload = json.loads(_request(attempt))
         payload.update(operation="attempt_report", idempotency_key="report", report=report)
+        payload.pop("latency_prediction")
         accepted = await service.execute(
             capability.token,
             json.dumps(payload).encode(),

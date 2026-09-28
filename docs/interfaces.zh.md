@@ -68,7 +68,7 @@
   `http_status`，不再输出 Python Traceback。
 - Core 和 Kernel Design Agent 的本地 Evaluate 文件错误通过 `issues[].path` 精确指向
   出错字段，并附上对应的本地 `request_schema`。Evaluate 包含规范的
-  `full`/`correctness_only` 模式、内联/文件参数及形式互斥约束，同时提供针对该字段的有界
+  `full`/`correctness_only` 模式、完整评测所需的 `latency_prediction`、内联/文件参数及形式互斥约束，同时提供针对该字段的有界
   `recovery` 步骤。Evaluate 支持可选 `candidate_path`；其 `comparison` 对象要求
   `method: "abba"` 及 `baseline_path`，`repeats` 范围为 2–20。启用比较时 `mode` 必须为
   `full`。嵌套字段错误指向 `comparison.method`、`comparison.baseline_path` 或
@@ -114,7 +114,11 @@ Agate Shape Record Object，每条记录也是 Object）。两个输入组件可
 Shapes 继续复用私有 Contract，Reference 和可信评测策略保持不变。`correctness_only` 不测性能、
 不自动 Profile。自定义输入或仅正确性调用仍保留 Kernel Trial 和 Result Artifact 身份，其嵌套
 `result` 记录 `mode` 与 `input_scope`（`custom` 或 `contract`）。这些调用不能满足
-`candidate_ready` 前所需的可信 Contract 完整评测；默认 `{"operation":"evaluate"}` 行为不变。
+`candidate_ready` 前所需的可信 Contract 完整评测。完整 Evaluate 还须填写
+`latency_prediction`：`improved` 表示几何平均延迟降低超过 1%，`retained` 表示变化在
+±1% 以内（含边界），`degraded` 表示延迟升高超过 1%。普通 Evaluate 与本次 Attempt
+开始时的 Kernel 比较；ABBA 则比较 B 与 A。Runtime 把预测记录在私有事件中供人工评测，
+不传给评测器，也不包含在 Agent 可见结果中。`correctness_only` 无需填写。
 
 完整文件内容见[自定义输入文件示例](evaluation.zh.md#自定义输入文件示例)，其中说明了
 `input_kwargs` → `_make_inputs`、返回字典 → `Model.forward`、`init_kwargs` → Model 构造函数
@@ -222,7 +226,8 @@ python3 src/runtime_tools.py <command> --request scratch/request.json
 ```
 
 使用 `{"operation":"evaluate","mode":"correctness_only"}` 可仅检查 Contract 输入的正确性；
-使用 `{"operation":"evaluate"}` 则执行默认的可信 Contract 完整评测。
+使用 `{"operation":"evaluate","latency_prediction":"retained"}` 则执行可信 Contract
+完整评测（应根据实际预期替换示例中的预测）。
 
 若覆盖文件在本地加载失败，先按 `issues[].path` 与 `recovery` 修正指定路径、普通文件内容、
 UTF-8 编码、Shape JSON Object 或内联/路径冲突，再重试。附带的 `request_schema` 描述 Agent
@@ -238,7 +243,7 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 文件参数，让两侧共用自定义输入生成器和 Shapes。
 
 ```json
-{"operation": "evaluate", "candidate_path": "scratch/candidate.py", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py", "repeats": 2}}
+{"operation": "evaluate", "latency_prediction": "improved", "candidate_path": "scratch/candidate.py", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py", "repeats": 2}}
 ```
 
 | 命令 | Agent 提供的请求 |
@@ -253,6 +258,13 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis 和 Action 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
+
+Direction 与 Experiment 两组命令由 `campaign.optimizer.tool_modules` 独立启用。关闭的命令
+不会出现在 Session 实时契约中，直接调用也会被拒绝。仅启用 Directions 时，关闭 Direction
+需要 `analysis` 和 `hypothesis_status`，但不需要 `supporting_experiment_ids`；仅启用
+Experiments 时，`record-experiment` 不填写 `direction_id`，Finding 仍引用其 Experiment；
+关闭 Experiments 时，Finding 不填写 `supporting_experiment_ids`。终态 Report 记录启用
+的模块，并为关闭的模块附上空 Journal。
 
 `load-direction`、更新已有 Direction 的 `update-direction` 和 `record-experiment` 找不到 Direction ID
 时，错误会回显请求 ID、标明错误字段，并仅从当前 Attempt 可见历史中提供最多三个单字符编辑距离的候选

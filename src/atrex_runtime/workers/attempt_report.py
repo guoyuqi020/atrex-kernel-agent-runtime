@@ -6,7 +6,15 @@ from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationInfo,
+    field_serializer,
+    field_validator,
+    model_validator,
+)
 
 from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest, parse_attempt_id
 
@@ -55,7 +63,7 @@ class AttemptExperimentV8(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     experiment_id: str = Field(pattern=r"^experiment_[0-9a-f]{32}$")
-    direction_id: str = Field(pattern=r"^direction_[0-9a-f]{32}$")
+    direction_id: str | None = Field(pattern=r"^direction_[0-9a-f]{32}$")
     sequence: int = Field(gt=0)
     recorded_at: str = Field(min_length=1)
     name: str = Field(min_length=1)
@@ -279,7 +287,7 @@ class AttemptFindingV1(BaseModel):
     root_cause: str = Field(min_length=1)
     resolution: str = Field(min_length=1)
     lesson: str = Field(min_length=1)
-    supporting_experiment_ids: tuple[str, ...] = Field(min_length=1, max_length=32)
+    supporting_experiment_ids: tuple[str, ...] = Field(default=(), max_length=32)
 
     @field_validator("category", "observation", "root_cause", "resolution", "lesson")
     @classmethod
@@ -324,7 +332,12 @@ class AttemptDirectionEventV1(BaseModel):
     hypothesis_status: Literal["unresolved", "supported", "refuted"] | None = None
     relationship: (
         Literal[
-            "retry", "refinement", "reimplementation", "correction", "port", "combination",
+            "retry",
+            "refinement",
+            "reimplementation",
+            "correction",
+            "port",
+            "combination",
             "adoption",
         ]
         | None
@@ -391,14 +404,16 @@ class AttemptDirectionEventV1(BaseModel):
                 self.action in {"complete", "abandon", "block", "defer"}
                 and not self.supporting_experiment_ids
             ):
-                # Old Runtime-owned journals permitted unmeasured block/defer. Read
-                # those unchanged, but never enable this context on an Agent request.
-                historical_closure = (
+                trusted_legacy = (
                     self.action in {"block", "defer"}
                     and isinstance(info.context, dict)
                     and info.context.get("trusted_direction_history") is True
                 )
-                if not historical_closure:
+                directions_only = (
+                    isinstance(info.context, dict)
+                    and info.context.get("experiments_enabled") is False
+                )
+                if not trusted_legacy and not directions_only:
                     raise ValueError(f"Direction {self.action} requires supporting Experiments")
         if len(set(self.supporting_experiment_ids)) != len(self.supporting_experiment_ids):
             raise ValueError("Direction supporting Experiment IDs must be unique")
@@ -435,8 +450,31 @@ class AttemptReportV12(BaseModel):
         Annotated[str, Field(pattern=r"^sha256:[0-9a-f]{64}$")], ...
     ] = Field(default=(), max_length=64)
     blocker: str | None
+    # Old sealed reports predate modular tools and used both modules.
+    tool_modules: tuple[Literal["directions", "experiments"], ...] = ("directions", "experiments")
     experiments: tuple[AttemptExperimentV8, ...]
     direction_events: tuple[AttemptDirectionEventV1, ...]
+
+    @field_validator("direction_events", mode="plain")
+    @classmethod
+    def _parse_modular_direction_events(
+        cls, value: object, info: ValidationInfo
+    ) -> tuple[AttemptDirectionEventV1, ...]:
+        if not isinstance(value, (list, tuple)):
+            raise ValueError("Attempt report direction_events must be an array")
+        modules = info.data.get("tool_modules", ("directions", "experiments"))
+        context = dict(info.context) if isinstance(info.context, dict) else {}
+        if "experiments" not in modules:
+            context["experiments_enabled"] = False
+        return tuple(
+            AttemptDirectionEventV1.model_validate(event, context=context) for event in value
+        )
+
+    @field_serializer("direction_events")
+    def _serialize_direction_events(
+        self, value: tuple[AttemptDirectionEventV1, ...]
+    ) -> list[dict[str, object]]:
+        return [event.model_dump(mode="json") for event in value]
 
     @field_validator("hypothesis", "analysis")
     @classmethod
@@ -472,16 +510,31 @@ class AttemptReportV12(BaseModel):
         return value
 
     @model_validator(mode="after")
-    def _validate_terminal_state(self) -> AttemptReportV12:
+    def _validate_terminal_state(self, info: ValidationInfo) -> AttemptReportV12:
+        if len(self.tool_modules) != len(set(self.tool_modules)):
+            raise ValueError("Attempt report tool modules cannot repeat")
+        directions_enabled = "directions" in self.tool_modules
+        experiments_enabled = "experiments" in self.tool_modules
+        if not directions_enabled and self.direction_events:
+            raise ValueError("Attempt report has Direction events with Directions disabled")
+        if not experiments_enabled and self.experiments:
+            raise ValueError("Attempt report has Experiments with Experiments disabled")
         if self.status == "candidate_ready":
             if self.final_candidate is None:
                 raise ValueError("candidate_ready requires final_candidate")
             if self.blocker is not None:
                 raise ValueError("candidate_ready cannot declare a blocker")
-            if not self.experiments or not self.findings or not self.direction_events:
-                raise ValueError(
-                    "candidate_ready requires non-empty experiments, findings, and direction_events"
-                )
+            if (
+                not self.findings
+                or (experiments_enabled and not self.experiments)
+                or (directions_enabled and not self.direction_events)
+            ):
+                if directions_enabled and experiments_enabled:
+                    raise ValueError(
+                        "candidate_ready requires non-empty experiments, findings, "
+                        "and direction_events"
+                    )
+                raise ValueError("candidate_ready requires findings and each enabled Journal")
         elif self.status == "pivot":
             if self.final_candidate is not None:
                 raise ValueError("pivot cannot nominate final_candidate")
@@ -513,8 +566,12 @@ class AttemptReportV12(BaseModel):
                 f"direction_ids={sorted(str(value) for value in advanced_direction_ids)}"
             )
         experiment_direction_ids = {experiment.direction_id for experiment in self.experiments}
-        if not experiment_direction_ids.issubset(direction_events):
+        if directions_enabled and not experiment_direction_ids.issubset(direction_events):
             raise ValueError("Experiment references a Direction absent from this Attempt")
+        if not directions_enabled and any(
+            experiment.direction_id is not None for experiment in self.experiments
+        ):
+            raise ValueError("Experiment cannot reference a Direction when Directions are disabled")
         in_progress_direction_ids = sorted(
             str(direction_id)
             for direction_id, events in direction_events.items()
@@ -526,8 +583,27 @@ class AttemptReportV12(BaseModel):
                 f"{in_progress_direction_ids}"
             )
         for finding in self.findings:
+            if experiments_enabled and not finding.supporting_experiment_ids:
+                raise ValueError("Finding requires supporting Experiments")
+            if not experiments_enabled and finding.supporting_experiment_ids:
+                raise ValueError("Finding cannot reference disabled Experiments")
             if not set(finding.supporting_experiment_ids).issubset(experiment_ids):
                 raise ValueError("Finding references an Experiment outside this Attempt report")
+        if experiments_enabled:
+            for event in self.direction_events:
+                if (
+                    event.action in {"complete", "abandon", "block", "defer"}
+                    and not event.supporting_experiment_ids
+                ):
+                    trusted_legacy = (
+                        event.action in {"block", "defer"}
+                        and isinstance(info.context, dict)
+                        and info.context.get("trusted_direction_history") is True
+                    )
+                    if not trusted_legacy:
+                        raise ValueError(
+                            f"Direction {event.action} requires supporting Experiments"
+                        )
         return self
 
     @classmethod

@@ -561,6 +561,31 @@ def test_report_field_set_matches_the_pinned_core_contract() -> None:
     finally:
         sys.path.remove(str(core_src))
 
-    # Runtime attaches these four itself; every other field is Agent-supplied.
-    runtime_owned = {"schema_version", "attempt_id", "experiments", "direction_events"}
+    # Runtime attaches these fields itself; every other field is Agent-supplied.
+    runtime_owned = {
+        "schema_version",
+        "attempt_id",
+        "tool_modules",
+        "experiments",
+        "direction_events",
+    }
     assert set(AttemptReportV12.model_fields) - runtime_owned == set(_REPORT_FIELDS)
+
+
+@pytest.mark.parametrize(
+    "modules", [(), ("directions",), ("experiments",), ("directions", "experiments")]
+)
+def test_attempt_report_accepts_each_tool_module_combination(modules: tuple[str, ...]) -> None:
+    value = _value(new_attempt_id())
+    value["tool_modules"] = modules
+    if "directions" not in modules:
+        value["direction_events"] = []
+        if "experiments" in modules:
+            value["experiments"][0]["direction_id"] = None  # type: ignore[index]
+    if "experiments" not in modules:
+        value["experiments"] = []
+        value["findings"][0].pop("supporting_experiment_ids")  # type: ignore[index]
+        if "directions" in modules:
+            value["direction_events"][-1]["supporting_experiment_ids"] = []  # type: ignore[index]
+    report = AttemptReportV12.model_validate(value)
+    assert set(report.tool_modules) == set(modules)

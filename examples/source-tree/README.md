@@ -41,20 +41,17 @@ to the deployment's configured base repository. Output must be a new directory. 
 generated Campaign unchanged, rather than rerunning preparation over an existing workspace.
 
 Default: CuteDSL only, with the same enabled matrix as single-file production: three independent
-Retained replicas, one Pool-Retained instance with three Trajectories, and three independent
-Retained-Evolve replicas. Isolated, Pool-3, the legacy single-Lineage Evolve-3, Isolated-Evolve,
-and Isolated-Pool-Evolve Workflows remain available but are disabled.
+Retained replicas and one Pool-Retained instance with three Trajectories. Isolated, Pool-3,
+Evolve-3, Isolated-Evolve, Isolated-Pool-Evolve, and Retained-Evolve Workflows remain available but are disabled.
 The generated
 `ablation.json` and checked-in `ablation.example.json`
 use the shared production plan builder, not a second set of scheduling rules.
 All Lineages start from one frozen source-tree v0; controls never repeat Bootstrap/evaluation.
-Each runs 100 Epochs with three serial Attempts per trajectory. Retained and Retained-Evolve
+Each runs 100 Epochs with three serial Attempts per trajectory. Retained
 replicas have one trajectory (300 Attempts each); the Pool-Retained instance has three (900 total).
 All enabled arms retain adaptive State. Pool trajectories share the winning Kernel at Epoch
 boundaries while retaining their own terminal State.
-The three Retained-Evolve replicas each run one Active Trajectory and perform no same-Epoch Agent
-comparison. After Epoch N, each waits for the matching Retained replica's Epoch N Evidence and then
-evolves the Agent used by Epoch N+1. The final Epoch also leaves a durable successor. Total: 2,700
+Total: 1,800
 Optimizer Attempts; no external original-AKA run. Arms have independent later history/state.
 
 The runner saves per-arm seed IDs, logs/results and `campaign-results.json` under `run/`.
@@ -63,8 +60,8 @@ other arms; rerunning resumes the same identities. Do not change frozen inputs t
 New control plans spend 300 Attempts per trajectory. `--target-epoch` is retained only for
 compatibility with plans that enable the main arm.
 Existing workspaces retain their frozen plan; explicitly use `--target-epoch 5` to resume an
-old five-Epoch experiment without extending its main arm. Single-file defaults are unchanged.
-This can run twenty-one Optimizers concurrently; provision sufficient host memory. Nothing starts
+old five-Epoch experiment without extending its main arm.
+This can run six Optimizers concurrently; provision sufficient host memory. Nothing starts
 during preparation. To run only the main arm, use the raw `bootstrap` and `run-campaign`
 CLI commands instead of this runner.
 
@@ -73,10 +70,15 @@ Direction/Experiment Journal and standard report, then independently finalizes v
 Runtime Gate controls staging, repeats and clocks. The original manifest's
 `measurement`, `bringup`, and Repository Horizon lifecycle settings do not override it.
 
-Inside an Optimizer workspace, existing Core/KDA Runtime Tools work unchanged:
+Inside an Optimizer workspace, Core/KDA Runtime Tools accept these requests. Every full
+`evaluate` needs `latency_prediction`: choose `improved` for more than 1% lower geometric-mean
+latency, `retained` for a change within ±1% (inclusive), or `degraded` for more than 1% higher
+latency. ABBA compares B with A; ordinary Evaluate compares with the Kernel at the start of this
+Attempt. `correctness_only` does not need a prediction. Runtime keeps the prediction for human
+assessment without including it in the Agent result:
 
 ```json
-{"operation":"evaluate"}
+{"operation":"evaluate","latency_prediction":"retained"}
 ```
 
 ```json
@@ -84,10 +86,10 @@ Inside an Optimizer workspace, existing Core/KDA Runtime Tools work unchanged:
 ```
 
 ```json
-{"operation":"evaluate","baseline_path":"scratch/previous-kernel-tree","comparison":{"method":"abba","repeats":2}}
+{"operation":"evaluate","latency_prediction":"improved","comparison":{"method":"abba","baseline_path":"scratch/previous-kernel-tree","repeats":2}}
 ```
 
-Copy the **entire** historical Kernel Artifact for `baseline_path`. The fixed adapter is
+Copy the **entire** historical Kernel Artifact for `comparison.baseline_path`. The fixed adapter is
 `work/kernel/kernel.py`; editable files remain at their original paths directly below
 `work/kernel/`. The same tools support source-tree diagnostics on NVIDIA:
 

@@ -102,6 +102,13 @@ SOL profiling. `input_py` supplies an Agate-compatible Python `_make_inputs` gen
 is an object compatible with that generator. Either component can be overridden independently;
 an omitted component continues to come from the sealed Contract. The trusted reference,
 tolerances, and gate policy remain in force, and the private inputs are never returned to the Agent.
+Every full `evaluate`, including ABBA, requires `latency_prediction` before the measurement:
+`improved` means geometric-mean latency decreases by more than 1%, `retained` means the change
+is within ±1% (inclusive), and `degraded` means latency increases by more than 1%. ABBA compares
+candidate B with baseline A; ordinary Evaluate compares the candidate with the Kernel at the
+start of this Attempt. Runtime keeps the prediction in private events for human assessment; it
+is not sent to the evaluator or included in Agent-visible results. `correctness_only` does not
+require a prediction because it has no timing result.
 
 Core and Kernel Design Agent additionally accept `input_path` and `shapes_path` as workspace-relative UTF-8 files and
 uploads their contents as `input_py` and `shapes`. The input source limit is 128 KiB and the Shape
@@ -111,7 +118,7 @@ of the same component are mutually exclusive. Contents, rather than local file n
 the request's idempotency key.
 
 ```json
-{"operation": "evaluate"}
+{"operation": "evaluate", "latency_prediction": "retained"}
 ```
 
 ```json
@@ -127,7 +134,7 @@ identities, and record the effective `mode` and `input_scope` (`custom` when eit
 overridden, otherwise `contract`). Correctness-only results contain no performance measurements.
 These calls cannot replace the full trusted-contract evaluation required for `candidate_ready`,
 Kernel retention, or Agent promotion. Omit overrides and use `mode: "full"` (or omit `mode`) for that
-evaluation; the existing default request and result format remain unchanged.
+evaluation; full Evaluate requires a prediction, while its result format remains unchanged.
 
 ### Custom input file example
 
@@ -184,7 +191,8 @@ Save `scratch/evaluate-custom.json`, then invoke the session's `gateway-execute`
 python3 agent/optimizer/src/runtime_tools.py gateway-execute --request scratch/evaluate-custom.json
 ```
 
-Use the tool path printed in your Session if it differs. Omit `mode` for correctness plus timing;
+Use the tool path printed in your Session if it differs. Omit `mode` for correctness plus timing,
+and include `latency_prediction` in that full request;
 the same two files also work with the ABBA comparison
 below. Usually supply both files together. A Shapes-only override requires keys compatible with
 the retained generator, and a generator-only override must accept the retained Shapes' arguments;
@@ -208,11 +216,11 @@ request identity; renaming a source without changing its uploaded contents does 
 comparison.
 
 ```json
-{"operation": "evaluate", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py"}}
+{"operation": "evaluate", "latency_prediction": "improved", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py"}}
 ```
 
 ```json
-{"operation": "evaluate", "candidate_path": "scratch/candidate-kernel", "comparison": {"method": "abba", "baseline_path": "scratch/baseline-kernel", "repeats": 2}, "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
+{"operation": "evaluate", "latency_prediction": "retained", "candidate_path": "scratch/candidate-kernel", "comparison": {"method": "abba", "baseline_path": "scratch/baseline-kernel", "repeats": 2}, "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
 ```
 
 `comparison.repeats` defaults to 2 and counts observations per side, producing A, B, B, A. Its accepted range

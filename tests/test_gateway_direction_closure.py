@@ -188,6 +188,7 @@ async def test_closure_requires_its_own_experiment_and_a_gateway_result(
         )
         request = json.loads(_request(attempt))
         request.update(operation="attempt_report", idempotency_key="handoff", report=report)
+        request.pop("latency_prediction")
         published = await service.execute(capability.token, json.dumps(request).encode())
         assert published.result["status"] == "registered"
         assert adapter.requests  # A real proxy Result was produced by the fake Gateway.

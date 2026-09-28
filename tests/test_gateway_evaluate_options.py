@@ -105,6 +105,8 @@ async def test_exploration_is_recorded_but_cannot_authorize_candidate_submission
         )
     try:
         request = {**json.loads(_request(attempt)), **parameters}
+        if mode == "correctness_only":
+            request.pop("latency_prediction")
         payload = json.dumps(request).encode()
         response = await service.execute(capability.token, payload)
         replay = await service.execute(capability.token, payload)

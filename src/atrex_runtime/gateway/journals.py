@@ -107,9 +107,12 @@ class RuntimeJournalService:
 
     control: SqliteGatewayControl
     artifacts: LocalArtifactStore
+    tool_modules: tuple[str, ...] = ("directions", "experiments")
 
     def validate_report_journal(self, report: AttemptReportV12) -> None:
         """An empty or edited report must not erase a live authoritative Journal."""
+        if set(report.tool_modules) != set(self.tool_modules):
+            raise ValueError("Attempt report tool modules disagree with Runtime Journal")
         if any(event.action == "suggest" for event in report.direction_events):
             raise DirectionSuggestionForbiddenError("report.direction_events.action")
         in_progress = sorted(
@@ -128,7 +131,7 @@ class RuntimeJournalService:
         declared = [
             event for event in report.direction_events if event.hypothesis_status is not None
         ]
-        if declared:
+        if declared and "experiments" in self.tool_modules:
             available = {
                 str(item["experiment_id"]): item
                 for item in self._visible_experiments(report.attempt_id)
@@ -155,7 +158,7 @@ class RuntimeJournalService:
             return
         expected_events = tuple(
             AttemptDirectionEventV1.model_validate(
-                item, context={"trusted_direction_history": True}
+                item, context={"trusted_direction_history": True, "experiments_enabled": False}
             )
             for item in events
         )
@@ -306,7 +309,7 @@ class RuntimeJournalService:
     def _current_direction_events(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
         return tuple(
             AttemptDirectionEventV1.model_validate(
-                event, context={"trusted_direction_history": True}
+                event, context={"trusted_direction_history": True, "experiments_enabled": False}
             ).model_dump(mode="json")
             for event in self.control.list_direction_events(attempt_id)
         )
@@ -392,7 +395,7 @@ class RuntimeJournalService:
             source = list(live) if live else reports.get(visible_attempt_id, [])
             values.extend(
                 AttemptDirectionEventV1.model_validate(
-                    item, context={"trusted_direction_history": True}
+                    item, context={"trusted_direction_history": True, "experiments_enabled": False}
                 ).model_dump(mode="json")
                 for item in source
             )
@@ -651,7 +654,11 @@ class RuntimeJournalService:
                     "instead of changing ancestry in a lifecycle update"
                 )
             expected_fields = (
-                _DIRECTION_CLOSURE_FIELDS
+                (
+                    _DIRECTION_CLOSURE_FIELDS
+                    if "experiments" in self.tool_modules
+                    else _DIRECTION_UPDATE_FIELDS | {"hypothesis_status"}
+                )
                 if action in _DIRECTION_CLOSURES
                 else _DIRECTION_UPDATE_FIELDS
             )
@@ -698,7 +705,7 @@ class RuntimeJournalService:
                 if in_progress:
                     raise DirectionConcurrencyError(direction_id, in_progress)
             supporting = []
-            if action in _DIRECTION_CLOSURES:
+            if action in _DIRECTION_CLOSURES and "experiments" in self.tool_modules:
                 supporting = self._closure_support(
                     request.attempt_id,
                     direction_id,
@@ -723,7 +730,10 @@ class RuntimeJournalService:
                 "supporting_experiment_ids": supporting,
                 "hypothesis_status": value.get("hypothesis_status"),
             }
-        validated = AttemptDirectionEventV1.model_validate(event).model_dump(mode="json")
+        validated = AttemptDirectionEventV1.model_validate(
+            event,
+            context={"experiments_enabled": "experiments" in self.tool_modules},
+        ).model_dump(mode="json")
         recorded = self.control.append_direction_event(
             request.attempt_id,
             request.idempotency_key,
@@ -738,25 +748,33 @@ class RuntimeJournalService:
         authorization: GatewayAuthorization,
     ) -> dict[str, JsonValue]:
         value = dict(request.request)
-        if set(value) != _EXPERIMENT_FIELDS:
-            raise ValueError(f"Experiment fields must be exactly {sorted(_EXPERIMENT_FIELDS)}")
-        for field in _EXPERIMENT_FIELDS - {"action", "before", "after"}:
-            _text(value.get(field), f"Experiment {field}")
-        direction_id = str(value["direction_id"])
-        direction = self._require_direction(
-            request.attempt_id, direction_id, field_path="request.direction_id"
+        expected_fields = (
+            _EXPERIMENT_FIELDS
+            if "directions" in self.tool_modules
+            else _EXPERIMENT_FIELDS - {"direction_id"}
         )
-        if direction["status"] not in {
-            "in_progress",
-            "completed",
-            "abandoned",
-            "blocked",
-            "deferred",
-        }:
-            raise ValueError(
-                "Experiment Direction must be in progress or closed; "
-                f"current status is {direction['status']}"
+        if set(value) != expected_fields:
+            raise ValueError(f"Experiment fields must be exactly {sorted(expected_fields)}")
+        for field in expected_fields - {"action", "before", "after"}:
+            _text(value.get(field), f"Experiment {field}")
+        if "directions" in self.tool_modules:
+            direction_id = str(value["direction_id"])
+            direction = self._require_direction(
+                request.attempt_id, direction_id, field_path="request.direction_id"
             )
+            if direction["status"] not in {
+                "in_progress",
+                "completed",
+                "abandoned",
+                "blocked",
+                "deferred",
+            }:
+                raise ValueError(
+                    "Experiment Direction must be in progress or closed; "
+                    f"current status is {direction['status']}"
+                )
+        else:
+            value["direction_id"] = None
         # Late evidence appends to the Journal without reopening research or
         # rewriting the Direction's lifecycle events.
         allow_baseline = self._is_bootstrap(request.attempt_id)

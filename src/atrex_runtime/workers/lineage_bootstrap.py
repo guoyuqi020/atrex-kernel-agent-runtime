@@ -388,7 +388,11 @@ class CoreLineageBootstrapSessionDriver:
                     raise ValueError(
                         "Bootstrap Attempt report may contain only one baseline Experiment"
                     )
-                if report.status == "candidate_ready" and baseline_count != 1:
+                if (
+                    report.status == "candidate_ready"
+                    and "experiments" in report.tool_modules
+                    and baseline_count != 1
+                ):
                     raise ValueError(
                         "Bootstrap candidate_ready report requires exactly one baseline Experiment"
                     )
@@ -479,6 +483,7 @@ class CoreLineageBootstrapSessionDriver:
                 usage_unit=environment["ATREX_USAGE_UNIT"],
                 usage_budget=float(environment["ATREX_USAGE_BUDGET"]),
                 max_attempt_report_bytes=self._config.max_attempt_report_bytes,
+                tool_modules=self._config.tool_modules,
                 wiki_available=(
                     config.wiki_endpoint is not None and config.wiki_capability is not None
                 ),

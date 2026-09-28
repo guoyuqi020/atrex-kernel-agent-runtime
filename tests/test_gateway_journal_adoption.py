@@ -123,6 +123,8 @@ async def history(tmp_path: Path, request: pytest.FixtureRequest) -> AsyncIterat
     try:
         kind = getattr(request, "param", "full")
         payload = json.loads(_request(first))
+        if kind == "profile":
+            payload.pop("latency_prediction")
         if kind == "incorrect":
             adapter.result = GatewayAdapterResult(
                 status="completed",

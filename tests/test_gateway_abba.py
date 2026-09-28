@@ -51,6 +51,7 @@ def _abba_value(attempt: Attempt | None = None) -> dict[str, Any]:
     return {
         **value,
         "operation": "evaluate",
+        "latency_prediction": "improved",
         "idempotency_key": "abba-uploaded-pair",
         "baseline": _bundle(BASELINE_SOURCE),
         "comparison": {"method": "abba", "repeats": 2},
@@ -142,6 +143,7 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
             "comparison": {"method": "abba", "repeats": 2},
             **parameters,
         }
+        assert "latency_prediction" not in forwarded.parameters
         assert forwarded.baseline_candidate_digest is not None
         assert forwarded.candidate_digest is not None
         assert forwarded.baseline_candidate_digest != forwarded.candidate_digest
@@ -189,6 +191,7 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
         assert "input_py" not in response.result
         assert "shapes" not in response.result
         assert "private_raw_result" not in response.result
+        assert "latency_prediction" not in response.model_dump(mode="json")
         assert response.result_artifact_digest is not None
         public = artifacts.verify(response.result_artifact_digest)
         assert public.kind is ArtifactKind.RESULT_ARTIFACT
@@ -219,6 +222,7 @@ async def test_abba_seals_both_sources_and_replays_the_bound_public_result(
             "gateway.operation_submitted",
             "gateway.operation_completed",
         ]
+        assert events[0].payload["latency_prediction"] == "improved"
         assert all(
             event.payload["baseline_kernel_artifact_digest"] == forwarded.baseline_candidate_digest
             and event.payload["kernel_artifact_digest"] == forwarded.candidate_digest
@@ -507,6 +511,7 @@ def test_abba_protocol_defaults_and_agent_schema_require_uploaded_sources() -> N
     assert request.comparison is not None
     assert request.comparison.method == "abba"
     assert request.comparison.repeats == 2
+    assert request.latency_prediction == "improved"
     assert request.mode == "full"
     assert request.is_contract_evaluation is False
     document: Any = gateway_agent_request_schema("evaluate")
@@ -516,6 +521,10 @@ def test_abba_protocol_defaults_and_agent_schema_require_uploaded_sources() -> N
     assert "baseline" in document["runtime_owned_fields"]
     assert properties["operation"]["const"] == "evaluate"
     assert properties["mode"]["enum"] == ["full", "correctness_only"]
+    assert "latency_prediction" in properties
+    assert any(
+        rule.get("else", {}).get("required") == ["latency_prediction"] for rule in schema["allOf"]
+    )
     assert "repeats" not in properties
     assert "baseline_path" not in properties
     comparison = properties["comparison"]
@@ -540,6 +549,24 @@ def test_abba_protocol_defaults_and_agent_schema_require_uploaded_sources() -> N
     assert "CandidateBundleV2" not in schema.get("$defs", {})
     assert schema["additionalProperties"] is False
     assert "abba" not in gateway_agent_request_schema()["operations"]
+
+
+def test_full_evaluate_requires_prediction_but_correctness_only_does_not() -> None:
+    full = _abba_value()
+    full.pop("latency_prediction")
+    with pytest.raises(ValidationError, match="latency_prediction"):
+        EvaluateRequestV2.model_validate(full)
+
+    full["latency_prediction"] = "unknown"
+    with pytest.raises(ValidationError, match="latency_prediction"):
+        EvaluateRequestV2.model_validate(full)
+
+    correctness_only = _abba_value()
+    correctness_only.pop("latency_prediction")
+    correctness_only.pop("comparison")
+    correctness_only.pop("baseline")
+    correctness_only["mode"] = "correctness_only"
+    assert EvaluateRequestV2.model_validate(correctness_only).latency_prediction is None
 
 
 @pytest.mark.parametrize(

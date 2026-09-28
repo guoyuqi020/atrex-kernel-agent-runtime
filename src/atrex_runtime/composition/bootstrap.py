@@ -801,8 +801,11 @@ class CoreLineageBaselineGenerator:
                 observation.operation is GatewayOperation.EVALUATE
                 and observation.gateway_result_digest == gateway_result
                 and observation.result_artifact_digest is not None
-                and (str(candidate_digest), observation.result_artifact_digest)
-                in referenced_bindings
+                and (
+                    "experiments" not in report.tool_modules
+                    or (str(candidate_digest), observation.result_artifact_digest)
+                    in referenced_bindings
+                )
                 for observation in trial.observations
             )
 
@@ -820,8 +823,7 @@ class CoreLineageBaselineGenerator:
         )
         if evaluation is None:
             raise ValueError(
-                "Bootstrap candidate has no correct Agent Evaluate referenced by its Experiment "
-                "Journal"
+                "Bootstrap candidate has no correct Agent Evaluate bound to its exact Kernel"
             )
         return evaluation.gateway_result_digest, evaluation.recovery_generation
 

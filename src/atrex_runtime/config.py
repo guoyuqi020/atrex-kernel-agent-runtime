@@ -270,6 +270,7 @@ class CoreOptimizerWorkerSettings(BaseModel):
     token_usage_report_relative_path: str
     max_attempt_report_bytes: int = Field(gt=0)
     report_completion_retries: int = Field(default=2, strict=True, ge=0, le=10)
+    tool_modules: tuple[Literal["directions", "experiments"], ...] = ("directions", "experiments")
     timeout_seconds: float = Field(gt=0)
     bootstrap_timeout_seconds: float = Field(default=14_400.0, gt=0)
     terminate_grace_seconds: float = Field(gt=0)
@@ -279,6 +280,8 @@ class CoreOptimizerWorkerSettings(BaseModel):
 
     @model_validator(mode="after")
     def _validate_launcher(self) -> CoreOptimizerWorkerSettings:
+        if len(self.tool_modules) != len(set(self.tool_modules)):
+            raise ValueError("Optimizer tool modules cannot repeat")
         if not self.command_prefix[0]:
             raise ValueError("Optimizer command-prefix executable cannot be empty")
         if any("\x00" in argument for argument in self.command_prefix):

@@ -75,7 +75,8 @@ tables and progress messages are operator presentation.
   Python traceback.
 - Local Evaluate file errors in Core and Kernel Design Agent identify the failing path
   in `issues[].path`. Evaluate's local `request_schema` includes the canonical
-  `full`/`correctness_only` modes, inline/file parameters, and mutually exclusive forms, plus bounded
+  `full`/`correctness_only` modes, the full-mode `latency_prediction`, inline/file parameters,
+  and mutually exclusive forms, plus bounded
   field-specific `recovery` steps. Evaluate accepts optional `candidate_path` and a nested
   `comparison` object requiring `method: "abba"` and `baseline_path`, with `repeats` bounded to
   2–20. A comparison requires `mode: "full"`. Nested errors identify `comparison.method`,
@@ -132,7 +133,12 @@ and trusted evaluation policy remain unchanged. `correctness_only` omits perform
 and automatic profiling. Custom or correctness-only calls keep their Kernel Trial and Result
 Artifact identities, and their nested `result` records `mode` and `input_scope` (`custom` or
 `contract`). They do not satisfy the full trusted-contract evaluation required before
-`candidate_ready`; the default `{"operation":"evaluate"}` behavior remains unchanged.
+`candidate_ready`. Full Evaluate also requires `latency_prediction`: `improved` for a geometric-
+mean latency decrease greater than 1%, `retained` for a change within ±1% (inclusive), or
+`degraded` for an increase greater than 1%. Ordinary Evaluate compares with the Kernel at the
+start of this Attempt; ABBA compares B with A. Runtime records the prediction in private events
+for human assessment, without forwarding it to the evaluator or Agent-visible results.
+`correctness_only` does not require it.
 
 See the [paired input and Shape file example](evaluation.md#custom-input-file-example) for complete
 contents and the mapping from `input_kwargs` to `_make_inputs`, its return dictionary to
@@ -248,7 +254,8 @@ inline contents produce the same key. For example:
 ```
 
 Use `{"operation":"evaluate","mode":"correctness_only"}` to check contract inputs without
-timing, or `{"operation":"evaluate"}` for the default full trusted-contract evaluation.
+timing, or `{"operation":"evaluate","latency_prediction":"retained"}` for a full
+trusted-contract evaluation (replace the example prediction with the actual expectation).
 
 If loading an override fails locally, use its `issues[].path` and `recovery` to repair the named
 path, regular-file contents, UTF-8 encoding, Shape JSON object, or inline/path conflict before
@@ -266,7 +273,7 @@ paths are removed before content-based idempotency is computed; the wire `compar
 helpers are supported for a shared custom input generator and Shapes.
 
 ```json
-{"operation": "evaluate", "candidate_path": "scratch/candidate.py", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py", "repeats": 2}}
+{"operation": "evaluate", "latency_prediction": "improved", "candidate_path": "scratch/candidate.py", "comparison": {"method": "abba", "baseline_path": "scratch/baseline.py", "repeats": 2}}
 ```
 
 | Command | Agent-authored request |
@@ -281,6 +288,14 @@ helpers are supported for a shared custom input generator and Shapes.
 | `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, hypothesis, change, evidence, analysis, and action from frozen history plus the current live Journal, then returns only status, file, and count. |
 | `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
 | `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
+
+The Direction and Experiment command families are independently enabled by
+`campaign.optimizer.tool_modules`. Disabled commands are absent from the live Session contract
+and rejected if called directly. With Directions alone, closures require `analysis` and
+`hypothesis_status` but no `supporting_experiment_ids`. With Experiments alone,
+`record-experiment` omits `direction_id`; Findings still cite their Experiments. With Experiments
+disabled, Findings omit `supporting_experiment_ids`. The terminal Report records the enabled
+modules and attaches empty Journals for disabled families.
 
 If `load-direction`, a lifecycle `update-direction`, or `record-experiment` cannot resolve a
 Direction ID, the error echoes the requested ID and identifies the failing field. It suggests at
