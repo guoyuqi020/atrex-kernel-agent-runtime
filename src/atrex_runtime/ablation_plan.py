@@ -54,9 +54,8 @@ def build_ablation_plan(
         return value
 
     if enabled:
-        # The active matrix uses three independent replicas for every enabled topology. The
-        # Isolated and reset-State Pool controls remain available as Workflow templates, but this
-        # plan intentionally schedules only their retained-State counterparts.
+        # The active matrix uses three independent Retained replicas and one retained-State
+        # Pool. Other topologies remain available as Workflow templates.
         arms.extend(
             arm(
                 kind="retained",
@@ -77,23 +76,6 @@ def build_ablation_plan(
                 trajectory_multiplier=3,
                 workflow_command="workflow/pool_retained_3.py",
             )
-        )
-        # Run one evolving Agent with retained Runtime State. Evolution happens after each
-        # completed Epoch and observes the corresponding Retained control through that same
-        # Epoch. The Lineages otherwise keep independent Kernels, Agent revisions, Runtime State,
-        # Journals, and sessions.
-        arms.extend(
-            arm(
-                kind="retained-evolve",
-                label=f"ablation-retained-evolve-{ordinal:02d}",
-                attempts_per_epoch=3,
-                trajectory_multiplier=1,
-                workflow_command="workflow/evolve_retained_3.py",
-                max_challengers=1,
-                evolves_after_each_epoch=True,
-                observer_label=f"ablation-retained-{ordinal:02d}",
-            )
-            for ordinal in range(1, ABLATION_REPLICA_COUNT + 1)
         )
     return {
         "schema_version": ABLATION_PLAN_SCHEMA_VERSION,

@@ -43,39 +43,6 @@
       "optimizer_attempt_budget": 9,
       "optimizer_attempt_budget_total": 900,
       "evolution_count": 0
-    },
-    {
-      "kind": "retained-evolve",
-      "label": "ablation-retained-evolve-01",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/evolve_retained_3.py",
-      "max_challengers": 1,
-      "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 100,
-      "observer_label": "ablation-retained-01"
-    },
-    {
-      "kind": "retained-evolve",
-      "label": "ablation-retained-evolve-02",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/evolve_retained_3.py",
-      "max_challengers": 1,
-      "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 100,
-      "observer_label": "ablation-retained-02"
-    },
-    {
-      "kind": "retained-evolve",
-      "label": "ablation-retained-evolve-03",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/evolve_retained_3.py",
-      "max_challengers": 1,
-      "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 100,
-      "observer_label": "ablation-retained-03"
     }
   ]
 }

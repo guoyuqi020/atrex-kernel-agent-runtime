@@ -43,7 +43,7 @@ python scripts/gdn/run.py ablation
 
 This starts tasks only, as the same container user as `campaign`, without sudo/systemd.
 `ablation-campaign.json` uses a new `gdn-source-tree-l20d-claude-ablation` creation key;
-it neither changes nor takes over the existing trial. After one full Bootstrap, seven Lineages
+it neither changes nor takes over the existing trial. After one full Bootstrap, four Lineages
 reuse the new experiment's exact v0, Agent, edit boundaries, contract and initial evidence.
 No repeated baseline measurement or old trial experience is imported.
 
@@ -53,19 +53,13 @@ No repeated baseline measurement or old trial experience is imported.
 |---|---|---:|---|---:|
 | `ablation-retained-01/02/03` | One trajectory × 3 per replica | 300 each | yes | 0 |
 | `ablation-pool-retained-3` | Three trajectories × 3 | 900 | yes | 0 |
-| `ablation-retained-evolve-01/02/03` | One Active trajectory; observes matching Retained replica | 300 each | yes | 100 each |
 
-Seven Campaigns, 100 Epochs each, 2,700 Optimizer Attempts excluding Bootstrap/Evolver. Isolated,
-Pool-3, Evolve-3, Isolated-Evolve, and Isolated-Pool-Evolve remain implemented but are disabled.
+Four Campaigns, 100 Epochs each, 1,800 Optimizer Attempts excluding Bootstrap. Isolated,
+Pool-3, Evolve-3, Isolated-Evolve, Isolated-Pool-Evolve, and Retained-Evolve remain implemented but are disabled.
 No external original-AKA control is launched. Resetting State preserves Kernel progress and
 Runtime journals. Pools restart from the best Kernel at Epoch boundaries; Pool-Retained also
 inherits that trajectory's terminal State, without merging. Arms share no subsequent history
 or writable files.
-
-Each Retained-Evolve replica runs its current Agent for Epoch N, retains State across serial Attempts,
-then evolves the Agent for Epoch N+1 after both its own Evidence and the matching Retained replica's
-Epoch N Evidence are published. It waits when that observer is behind; the histories and mutable
-states remain separate. The final Epoch also produces a durable successor for later continuation.
 
 Outputs live under `workspaces/GDN/ablation/`: frozen inputs, Bootstrap, `campaign-results.json`,
 and per-arm `campaign-result.json` / `campaign.log` (plus control seed definitions/results).
@@ -77,7 +71,7 @@ Existing workspaces keep their frozen control budgets; to resume an old five-Epo
 extending the main arm, pass `--target-epoch 5` explicitly.
 Changed frozen inputs require a new workspace and creation key.
 
-Up to twenty-one Optimizer workers run concurrently. On memory-limited Lima, finish the old trial
+Up to six Optimizer workers run concurrently. On memory-limited Lima, finish the old trial
 before explicitly launching this suite. Adding these configs does not start/stop/restart tasks.
 
 ## Contents and provenance

@@ -30,9 +30,9 @@ def test_source_tree_arms_keep_topology_with_one_hundred_epochs(relative: str) -
     assert single_file["optimizer_attempt_budget_per_trajectory"] == 15
     assert all(arm["target_epoch_number"] == 5 for arm in single_file["arms"])
     assert plan["main_evolve_enabled"] is False
-    assert len(plan["arms"]) == 7
+    assert len(plan["arms"]) == 4
     assert all(arm["target_epoch_number"] == 100 for arm in plan["arms"])
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 2700
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 1800
     campaign = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/ablation-campaign.json")
     for key in ("max_challengers", "optimizer_attempt_budget"):
         assert getattr(campaign, key) == policy["schedule"][key]
@@ -174,18 +174,18 @@ def test_bootstrap_once_shared_seed_parallel_launch_and_resume(tmp_path, monkeyp
     test = launch_fixture(tmp_path, monkeypatch)
     test.module.main()
     summary = json.loads((test.workspace / "campaign-results.json").read_text())
-    assert len(summary["arms"]) == 7
+    assert len(summary["arms"]) == 4
     assert all(arm["status"] == "completed" for arm in summary["arms"])
-    assert len(test.calls) == 8  # one Bootstrap, seven measurement-free seed operations
-    assert len(test.processes) == 7
-    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 7
+    assert len(test.calls) == 5  # one Bootstrap, four measurement-free seed operations
+    assert len(test.processes) == 4
+    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 4
     for arm in summary["arms"]:
         assert Path(arm["result_path"]).is_file()
         assert "attempt finished" in Path(arm["log"]).read_text()
     test.module.main()
     resumed = json.loads((test.workspace / "campaign-results.json").read_text())
     assert resumed == summary
-    assert len(test.processes) == 14
+    assert len(test.processes) == 8
 
 
 def test_source_tree_runner_defaults_all_arms_to_one_hundred_epochs(tmp_path, monkeypatch):
@@ -193,7 +193,7 @@ def test_source_tree_runner_defaults_all_arms_to_one_hundred_epochs(tmp_path, mo
     test.module.main()
     arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
     assert all(arm["target_epoch_number"] == 100 for arm in arms)
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 2700
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 1800
 
 
 def test_existing_five_epoch_plan_is_not_rewritten(tmp_path, monkeypatch):

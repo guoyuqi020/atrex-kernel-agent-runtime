@@ -40,7 +40,7 @@ python scripts/gdn/run.py ablation
 
 只启动任务，不管理服务；以与 `campaign` 相同的容器用户运行，不需要 sudo/systemd。
 使用 `ablation-campaign.json` 的新 key `gdn-source-tree-l20d-claude-ablation`，
-不会修改或接管当前试跑。一次完整 Bootstrap 后，七条消融 Lineage 共享新实验的冻结 v0、Agent、
+不会修改或接管当前试跑。一次完整 Bootstrap 后，四条消融 Lineage 共享新实验的冻结 v0、Agent、
 修改边界、评测契约和初始证据；不重复 Baseline 测量，不导入旧试跑经验。
 
 `ablation.json` 与单文件生产使用相同的计划生成器，默认每臂 100 个 Epoch：
@@ -49,18 +49,12 @@ python scripts/gdn/run.py ablation
 |---|---|---:|---|---:|
 | `ablation-retained-01/02/03` | 每个重复 1 条轨迹 × 3 次 | 各 300 | 是 | 0 |
 | `ablation-pool-retained-3` | 3 条轨迹 × 3 次 | 900 | 是 | 0 |
-| `ablation-retained-evolve-01/02/03` | 一条 Active 轨迹；旁观对应 Retained 重复 | 各 300 | 是 | 各 100 |
 
-共 **7 个 Campaign、2,700 次 Optimizer Attempt**，不含 Bootstrap 和 Evolver。Isolated、
-Pool-3、Evolve-3、Isolated-Evolve 和 Isolated-Pool-Evolve
+共 **4 个 Campaign、1,800 次 Optimizer Attempt**，不含 Bootstrap。Isolated、
+Pool-3、Evolve-3、Isolated-Evolve、Isolated-Pool-Evolve 和 Retained-Evolve
 实现保留但停用。这里不启动外部原版 AKA 对照。
 重置 State 不会删除 Kernel 进展或 Runtime Journal；Pool 在 Epoch 边界共享最佳 Kernel，
 Pool-Retained 还继承该轨迹的终态 State，不做合并。不同臂不共享后续历史或可写文件。
-
-每个 Retained-Evolve 重复在 Epoch N 运行当前 Agent、在串行 Attempt 间继承 State；自身 Evidence
-与对应 Retained 的 Epoch N Evidence 均发布后，再生成 Epoch N+1 的 Agent。若 Retained 较慢，
-Evolve 侧等待；两者不共享 Kernel、Journal、可写 State 或版本祖先。最后一个 Epoch 也会生成并
-持久化 successor，供后续继续运行。
 
 输出在 `workspaces/GDN/ablation/`：Bootstrap、冻结输入、`campaign-results.json` 汇总，以及每臂
 同名目录中的 `campaign-result.json` / `campaign.log`；对照臂还保存 seed 定义和结果。
@@ -70,7 +64,7 @@ Attempt 进度实时写入各臂日志，臂完成时打印时间戳。失败不
 已有工作区仍保留冻结的对照臂预算；恢复旧 5 轮实验且不扩展主臂时，显式传入 `--target-epoch 5`。
 修改冻结输入需新 Workspace 和 creation key。
 
-默认最多并行 21 个 Optimizer Worker；Lima 资源有限，建议结束旧试跑后再显式启动。
+默认最多并行 6 个 Optimizer Worker；Lima 资源有限，建议结束旧试跑后再显式启动。
 添加配置不会自动启动、停止或重启任何任务。
 
 ## 内容与来源
