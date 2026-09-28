@@ -110,6 +110,10 @@ QoderCLI 使用 Provider Credit；其他受支持 Backend 使用 Provider Token 
 Provider 原生终态 Usage Report。Bootstrap 使用 `bootstrap_timeout_seconds`，普通 Attempt 使用
 `timeout_seconds`。
 
+Claude Optimizer Session 通过 `PreToolUse` hook，只为 Runtime CLI 的 Bash 调用设置 Agent
+Session 时限并保持前台等待。其他 Bash 调用仍使用常规默认超时，Claude 后台 subagent 也可继续
+使用。HTTP 读取超时会以相同请求身份重新连接；Agent 与 Core 的 Session 硬超时仍然生效。
+
 `campaign.optimizer.tool_modules` 可独立启用 `directions` 和 `experiments` 两组 Runtime
 工具。默认是 `["directions", "experiments"]`；也可以只填其中一项，或填 `[]` 全部关闭。
 该配置同时适用于 Bootstrap 和优化 Attempt，Session 实时契约仅列出已启用的命令。仅启用

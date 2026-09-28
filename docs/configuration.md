@@ -118,6 +118,11 @@ QoderCLI uses provider credits; other supported Backends use provider token buck
 the provider-native terminal usage report. Bootstrap uses `bootstrap_timeout_seconds`; ordinary
 Attempts use `timeout_seconds`.
 
+Claude Optimizer Sessions use a `PreToolUse` hook to give Runtime CLI Bash calls the Agent Session
+allowance and keep them in the foreground. Other Bash calls retain their usual default timeout,
+and Claude background subagents remain available. HTTP read timeouts reattach with the same
+request identity; the Agent and Core Session wall-time limits still apply.
+
 `campaign.optimizer.tool_modules` independently enables the `directions` and `experiments`
 Runtime tool families. It defaults to `["directions", "experiments"]`; use either one-element
 array or `[]` to omit the other family or both. The setting applies to Bootstrap and optimization
