@@ -50,6 +50,7 @@ from atrex_runtime.ports import (
     RunAttemptResult,
 )
 from atrex_runtime.registry.sqlite import SqliteRegistry
+from atrex_runtime.workers.workspace import LocalAttemptWorkspaceAssembler
 
 
 @dataclass
@@ -455,6 +456,12 @@ async def test_scheduler_evolves_successor_from_completed_epoch_evidence(
                 / "checkpoint.json"
             )
             assert checkpoint.through_epoch == epoch.number
+
+        # The next Optimizer workspace must accept the published successor as
+        # Active and keep its evolved State, rather than requiring the prior winner.
+        assert LocalAttemptWorkspaceAssembler(
+            tmp_path / "attempt-workspaces", registry, artifacts
+        )._active_branch_seed(epochs[1]) is None
 
         resumed = await scheduler.run_lineage_through(lineage_id, 2)
         assert resumed.completed_epochs == ()
