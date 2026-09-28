@@ -106,6 +106,9 @@ def test_session_contract_exposes_only_enabled_tool_modules(
     assert environment["tool_modules"] == list(modules)
     assert ("update-direction" in tools) == ("directions" in modules)
     assert ("list-directions" in tools) == ("directions" in modules)
+    assert ("find-kernel-directions" in tools) == ("directions" in modules)
     assert ("record-experiment" in tools) == ("experiments" in modules)
     assert ("list-experiments" in tools) == ("experiments" in modules)
+    assert ("find-kernel-experiments" in tools) == ("experiments" in modules)
+    assert tools["kernel-pareto-frontier"]["operation"] == "kernel_pareto_frontier"
     assert "attempt-report" in tools

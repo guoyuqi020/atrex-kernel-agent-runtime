@@ -3,15 +3,23 @@
 from __future__ import annotations
 
 import json
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from test_attempt_report import _value as _report_value
-from test_gateway_proxy import _request, _service
+from test_gateway_proxy import NOW_DATETIME, _insert_attempt, _request, _service
+
+from atrex_runtime.domain.models import Dsl
+from atrex_runtime.gateway import GatewayCapabilityPolicy, GatewayOperation
 
 
 def _journal_payload(
-    attempt_id: str, operation: str, key: str, request: dict | None = None
+    attempt_id: str,
+    operation: str,
+    key: str,
+    request: dict | None = None,
+    kernel_artifact_digest: str | None = None,
 ) -> bytes:
     return json.dumps(
         {
@@ -20,6 +28,11 @@ def _journal_payload(
             "idempotency_key": key,
             "operation": operation,
             **({"request": request} if request is not None else {}),
+            **(
+                {"kernel_artifact_digest": kernel_artifact_digest}
+                if kernel_artifact_digest is not None
+                else {}
+            ),
         }
     ).encode()
 
@@ -53,6 +66,46 @@ async def _submit_report(service, attempt, capability, modules: tuple[str, ...])
 
 
 @pytest.mark.anyio
+async def test_one_gateway_serves_different_lineage_tool_modules(tmp_path: Path) -> None:
+    registry, control, first, first_capability, service, _ = _service(tmp_path)
+    second = _insert_attempt(registry, dsl=Dsl.CUDA)
+    second_capability = control.issue(
+        second.id,
+        GatewayCapabilityPolicy(
+            frozenset(GatewayOperation), 4, NOW_DATETIME + timedelta(hours=1)
+        ),
+    )
+    for attempt, modules in ((first, []), (second, ["experiments"])):
+        lineage_id = registry.get_epoch(attempt.epoch_id).lineage_id
+        registry._connection.execute(
+            "UPDATE lineages SET tool_modules_json = ? WHERE id = ?",
+            (json.dumps(modules), lineage_id),
+        )
+    assert control.tool_modules_for_attempt(first.id, ("directions", "experiments")) == ()
+    assert control.tool_modules_for_attempt(second.id, ("directions", "experiments")) == (
+        "experiments",
+    )
+    with pytest.raises(ValueError, match="Experiment tools are disabled"):
+        await service.execute(
+            first_capability.token,
+            _journal_payload(first.id, "experiments_list", "first-experiments"),
+            operation_scope="journal",
+        )
+    response = await service.execute(
+        second_capability.token,
+        _journal_payload(second.id, "experiments_list", "second-experiments"),
+        operation_scope="journal",
+    )
+    assert response.result["experiments"] == []
+    with pytest.raises(ValueError, match="Direction tools are disabled"):
+        await service.execute(
+            second_capability.token,
+            _journal_payload(second.id, "directions_list", "second-directions"),
+            operation_scope="journal",
+        )
+
+
+@pytest.mark.anyio
 async def test_experiments_only_records_without_direction(tmp_path: Path) -> None:
     _, control, attempt, capability, service, _ = _service(tmp_path, tool_modules=("experiments",))
     evaluated = await service.execute(capability.token, _request(attempt))
@@ -78,6 +131,28 @@ async def test_experiments_only_records_without_direction(tmp_path: Path) -> Non
     )
     assert recorded.result["status"] == "recorded"
     assert control.list_experiments(attempt.id)[0]["direction_id"] is None
+    experiments = await service.execute(
+        capability.token,
+        _journal_payload(
+            attempt.id,
+            "kernel_experiments_find",
+            "experiments-only-kernel-lookup",
+            kernel_artifact_digest=evaluated.kernel_artifact_digest,
+        ),
+        operation_scope="journal",
+    )
+    assert experiments.result["experiment_ids"] == [recorded.result["experiment_id"]]
+    with pytest.raises(ValueError, match="Direction tools are disabled"):
+        await service.execute(
+            capability.token,
+            _journal_payload(
+                attempt.id,
+                "kernel_directions_find",
+                "experiments-only-direction-lookup",
+                kernel_artifact_digest=evaluated.kernel_artifact_digest,
+            ),
+            operation_scope="journal",
+        )
     await _submit_report(service, attempt, capability, ("experiments",))
     with pytest.raises(ValueError, match="Direction tools are disabled"):
         await service.execute(
@@ -135,7 +210,29 @@ async def test_directions_only_closes_without_experiment(tmp_path: Path) -> None
         operation_scope="journal",
     )
     assert closed.result["status"] == "recorded"
-    await service.execute(capability.token, _request(attempt))
+    evaluated = await service.execute(capability.token, _request(attempt))
+    directions = await service.execute(
+        capability.token,
+        _journal_payload(
+            attempt.id,
+            "kernel_directions_find",
+            "directions-only-kernel-lookup",
+            kernel_artifact_digest=evaluated.kernel_artifact_digest,
+        ),
+        operation_scope="journal",
+    )
+    assert directions.result["direction_ids"] == []
+    with pytest.raises(ValueError, match="Experiment tools are disabled"):
+        await service.execute(
+            capability.token,
+            _journal_payload(
+                attempt.id,
+                "kernel_experiments_find",
+                "directions-only-experiment-lookup",
+                kernel_artifact_digest=evaluated.kernel_artifact_digest,
+            ),
+            operation_scope="journal",
+        )
     await _submit_report(service, attempt, capability, ("directions",))
     with pytest.raises(ValueError, match="Experiment tools are disabled"):
         await service.execute(
@@ -148,6 +245,12 @@ async def test_directions_only_closes_without_experiment(tmp_path: Path) -> None
 @pytest.mark.anyio
 async def test_no_modules_rejects_both_journals(tmp_path: Path) -> None:
     _, _, attempt, capability, service, _ = _service(tmp_path, tool_modules=())
+    frontier = await service.execute(
+        capability.token,
+        _journal_payload(attempt.id, "kernel_pareto_frontier", "no-modules-frontier"),
+        operation_scope="runtime",
+    )
+    assert frontier.result["best_by_shape"] == {}
     await service.execute(capability.token, _request(attempt))
     await _submit_report(service, attempt, capability, ())
     for operation, scope, message in (

@@ -362,6 +362,12 @@ class ResultArtifactReadRequestV2(_GatewayRequestV2):
         return str(parse_artifact_digest(value))
 
 
+class KernelParetoFrontierRequestV2(_GatewayRequestV2):
+    """Read the per-Shape latency envelope of visible full contract Evaluations."""
+
+    operation: Literal["kernel_pareto_frontier"]
+
+
 class DirectionHistoryRequestV2(_GatewayRequestV2):
     """Read frozen Direction journals visible to one optimization Attempt."""
 
@@ -414,6 +420,29 @@ class ExperimentLoadRequestV2(_GatewayRequestV2):
     experiment_id: str = Field(pattern=r"^experiment_[0-9a-f]{32}$")
 
 
+class _KernelJournalFindRequestV2(_GatewayRequestV2):
+    """Lookup a visible Journal association for one exact Kernel Artifact."""
+
+    kernel_artifact_digest: str = Field(max_length=80)
+
+    @field_validator("kernel_artifact_digest")
+    @classmethod
+    def _validate_kernel_artifact_digest(cls, value: str) -> str:
+        return str(parse_artifact_digest(value))
+
+
+class KernelExperimentsFindRequestV2(_KernelJournalFindRequestV2):
+    """Find visible Experiments citing one exact Kernel Artifact."""
+
+    operation: Literal["kernel_experiments_find"]
+
+
+class KernelDirectionsFindRequestV2(_KernelJournalFindRequestV2):
+    """Find Directions associated through visible Experiments with one Kernel Artifact."""
+
+    operation: Literal["kernel_directions_find"]
+
+
 class JournalSnapshotRequestV2(_GatewayRequestV2):
     """Read the current Attempt's authoritative Journal for terminal reporting."""
 
@@ -436,6 +465,7 @@ type GatewayProxyRequestV2 = Annotated[
     | AttemptReportStatusRequestV2
     | KernelArtifactReadRequestV2
     | ResultArtifactReadRequestV2
+    | KernelParetoFrontierRequestV2
     | DirectionHistoryRequestV2
     | ExperimentHistoryRequestV2
     | DirectionUpdateRequestV2
@@ -444,6 +474,8 @@ type GatewayProxyRequestV2 = Annotated[
     | ExperimentRecordRequestV2
     | ExperimentsListRequestV2
     | ExperimentLoadRequestV2
+    | KernelExperimentsFindRequestV2
+    | KernelDirectionsFindRequestV2
     | JournalSnapshotRequestV2,
     Field(discriminator="operation"),
 ]
@@ -458,6 +490,7 @@ _RUNTIME_QUERY_OPERATION_NAMES = frozenset(
         "attempt_report_status",
         "kernel_artifact_read",
         "result_artifact_read",
+        "kernel_pareto_frontier",
         "direction_history",
         "experiment_history",
     }
@@ -470,6 +503,8 @@ _RUNTIME_JOURNAL_OPERATION_NAMES = frozenset(
         "experiment_record",
         "experiments_list",
         "experiment_load",
+        "kernel_experiments_find",
+        "kernel_directions_find",
         "journal_snapshot",
     }
 )
@@ -489,6 +524,7 @@ _GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
     "attempt_report_status": AttemptReportStatusRequestV2,
     "kernel_artifact_read": KernelArtifactReadRequestV2,
     "result_artifact_read": ResultArtifactReadRequestV2,
+    "kernel_pareto_frontier": KernelParetoFrontierRequestV2,
     "direction_history": DirectionHistoryRequestV2,
     "experiment_history": ExperimentHistoryRequestV2,
     "direction_update": DirectionUpdateRequestV2,
@@ -497,6 +533,8 @@ _GATEWAY_REQUEST_MODELS: dict[str, type[_GatewayRequestV2]] = {
     "experiment_record": ExperimentRecordRequestV2,
     "experiments_list": ExperimentsListRequestV2,
     "experiment_load": ExperimentLoadRequestV2,
+    "kernel_experiments_find": KernelExperimentsFindRequestV2,
+    "kernel_directions_find": KernelDirectionsFindRequestV2,
     "journal_snapshot": JournalSnapshotRequestV2,
 }
 
@@ -687,6 +725,7 @@ class GatewayProxyResponseV2(BaseModel):
         "attempt_report_status",
         "kernel_artifact_read",
         "result_artifact_read",
+        "kernel_pareto_frontier",
         "direction_history",
         "experiment_history",
         "direction_update",
@@ -695,6 +734,8 @@ class GatewayProxyResponseV2(BaseModel):
         "experiment_record",
         "experiments_list",
         "experiment_load",
+        "kernel_experiments_find",
+        "kernel_directions_find",
         "journal_snapshot",
     ]
     status: Literal["completed", "queued", "failed", "cancelled"]

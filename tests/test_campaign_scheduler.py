@@ -451,10 +451,15 @@ async def test_scheduler_evolves_successor_from_completed_epoch_evidence(
             successor = registry.get_epoch_successor_evolution(epoch.id)
             assert successor is not None
             assert successor.status == "completed"
+            assert request.references == ()
+            assert {entry.revision.id for entry in request.agent_catalog} <= {
+                entry.revision.id for entry in registry.list_lineage_agent_revisions(lineage_id)
+            }
             checkpoint = EvidenceCheckpointV1.from_file(
                 artifacts.verify(request.evidence_checkpoint).payload_path
                 / "checkpoint.json"
             )
+            assert checkpoint.lineage_id == lineage_id
             assert checkpoint.through_epoch == epoch.number
 
         # The next Optimizer workspace must accept the published successor as

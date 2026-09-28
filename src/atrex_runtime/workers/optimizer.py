@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
 from ..domain.errors import (
     IncompleteTerminalReportError,
@@ -67,12 +67,15 @@ class OptimizerSessionConfig:
     gateway_capability: str | None = None
     wiki_endpoint: str | None = None
     wiki_capability: str | None = None
+    tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
 
     def __post_init__(self) -> None:
         if (self.gateway_endpoint is None) != (self.gateway_capability is None):
             raise ValueError("Gateway endpoint and capability must be set together")
         if (self.wiki_endpoint is None) != (self.wiki_capability is None):
             raise ValueError("Wiki endpoint and capability must be set together")
+        if self.tool_modules is not None and len(self.tool_modules) != len(set(self.tool_modules)):
+            raise ValueError("Optimizer tool modules cannot repeat")
         keys = [key for key, _value in self.environment]
         if len(keys) != len(set(keys)):
             raise ValueError("Optimizer environment contains duplicate keys")
@@ -212,6 +215,7 @@ class SessionOptimizerRunner(OptimizerRunner):
                     gateway_capability=authority.capability,
                     wiki_endpoint=authority.endpoint if self._wiki_enabled else None,
                     wiki_capability=authority.capability if self._wiki_enabled else None,
+                    tool_modules=request.tool_modules,
                 ),
             )
         except InfrastructureError as error:

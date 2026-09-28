@@ -27,28 +27,23 @@ round, evolution, Kernel-routing, and State-routing decisions described below. R
 resource envelope and trusted evaluation/promotion policy; it does not reconstruct this schedule
 from arm labels or topology parameters.
 
-The current plan disables `isolated`, `pool-3`, `evolve-3`, `isolated-evolve`,
-`isolated-pool-evolve`, and `retained-evolve` without removing their Workflow implementations.
-Each DSL runs 4 independent Campaigns. They share one frozen Bootstrap v0 and do not repeat baseline
-measurement. The Retained topology has three independent replicas. Default schedules run 5 Epochs with 3 serial
+The current plan enables four Retained tool configurations, with three replicas each. Pool-Retained, Broadcast,
+Retained-Evolve, and the other control Workflows remain implemented but are disabled in new plans.
+Each DSL runs 12 independent Campaigns. They share one frozen Bootstrap v0 and do not repeat baseline
+measurement. Each Retained configuration has three independent replicas. Default schedules run 5 Epochs with 3 serial
 Attempts per Trajectory per Epoch:
 
 | Arm | Parallel structure | Total Optimizer Attempts | Retain Runtime State | Evolutions |
 |---|---|---:|---|---:|
 | `ablation-retained-01/02/03` | One Trajectory per replica | 15 each | yes | 0 |
-| `ablation-pool-retained-3` | One Pool with three Trajectories | 45 | yes | 0 |
+| `ablation-retained-no-modules-01/02/03` | Direction and Experiment tools off | 15 each | yes | 0 |
+| `ablation-retained-experiments-01/02/03` | Experiment tools only | 15 each | yes | 0 |
+| `ablation-retained-directions-01/02/03` | Direction tools only | 15 each | yes | 0 |
 
 Runtime State includes Memory/Knowledge/Skills/Tools. Resetting State restores the pinned Core's initial
 contents; it does not erase Kernel progress or Runtime history. Enabled instances share only the
-Bootstrap baseline, not subsequent history or mutable State.
-
-The three Pool-Retained Trajectories run independently within each Epoch, restart from the selected best Kernel,
-and inherit their own terminal State. State is selected, not merged or synchronized live. Source stays
-fixed in all controls. The single Pool uses three Trajectories and three Attempts per Trajectory per Epoch.
-
-Each enabled arm owns a Lineage-local `agent-v0` that freezes `retained.py` or
-`pool_retained_3.py`. Disabled Workflow templates remain available. The
-Optimizer source and shared
+Bootstrap baseline, not subsequent history or mutable State. Each enabled arm owns a Lineage-local
+`agent-v0` that freezes `retained.py`; disabled Workflow templates remain available. The Optimizer source and shared
 Bootstrap Kernel remain controlled; Runtime no longer infers arm organization from its label.
 
 The Bootstrap-only source Campaign lives at `dsls/DSL/`; enabled arms are under `dsls/DSL/ablation-*/`.

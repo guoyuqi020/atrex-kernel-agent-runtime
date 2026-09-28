@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument("role", choices=("serve", "campaign", "ablation"))
     parser.add_argument("--workspace", type=Path, default=repository / "workspaces/GDN")
     parser.add_argument("--service-workspace", type=Path, help="verify the saved service binding")
-    parser.add_argument("--target-epoch", type=int, default=100)
+    parser.add_argument("--target-epoch", type=int, default=5)
     args = parser.parse_args()
     if sys.platform != "linux":
         raise SystemExit("Run inside Lima Ubuntu with the Linux venv.")

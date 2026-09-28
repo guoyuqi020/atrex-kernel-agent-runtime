@@ -150,7 +150,7 @@ def main() -> None:
     parser.add_argument(
         "--target-epoch",
         type=int,
-        default=100,
+        default=5,
         help="compatibility target used only when the frozen plan enables the main arm",
     )
     args = parser.parse_args()
@@ -236,6 +236,8 @@ def main() -> None:
                 creation_key=f"{arm['label']}-{next(iter(spec.lineages)).value}",
                 source_lineage_id=source_id,
                 evolver_observer_lineage_id=observer_lineage_id,
+                trajectory_visibility=arm.get("trajectory_visibility", "isolated"),
+                tool_modules=arm.get("tool_modules"),
                 **{
                     key: arm[key]
                     for key in (

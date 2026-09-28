@@ -1,6 +1,6 @@
 ---
 name: atrex-gdn-launch
-description: 在 Lima Ubuntu 中准备、启动或恢复本次 GDN 多文件源码树优化与十二臂消融实验（L20D、CuteDSL、Claude）。用于“启动 GDN 源码树优化”“跑 GDN 消融”“恢复 GDN 实验”；仅询问运行状态时使用状态检查流程，不启动任务。
+description: 在 Lima Ubuntu 中准备、启动或恢复 GDN 多文件源码树优化与消融实验（L20D、CuteDSL、Claude）。用于“启动 GDN 源码树优化”“跑 GDN 消融”“恢复 GDN 实验”；仅询问运行状态时使用状态检查流程，不启动任务。
 ---
 
 # GDN 源码树优化启动
@@ -48,29 +48,26 @@ description: 在 Lima Ubuntu 中准备、启动或恢复本次 GDN 多文件源�
 
 ## 识别实验，而不是只数分支
 
-七臂消融入口是 `python scripts/gdn/run.py ablation --workspace WORKSPACE`：
+消融入口是 `python scripts/gdn/run.py ablation --workspace WORKSPACE`：
 
 - L20D；`chunk_gated_delta_rule`；只跑 CuteDSL；Optimizer/Evolver 都为 Claude backend。
   实际模型名称来自配置/环境，不把 CLI 名称当成模型名称。
-- 7 个 Campaign：`ablation-retained-01/02/03`、一个三 Trajectory 的
-  `ablation-pool-retained-3`、`ablation-retained-evolve-01/02/03`。
-- 默认 100 个 Epoch，每轨迹每轮 3 次 Attempt。三个 Retained 和三个 Retained-Evolve
-  各 300 次，单个 Pool-Retained 为 900 次，共 2,700 次 Optimizer Attempt，
-  不含 Bootstrap/Evolver。
-- Retained-Evolve 每轮运行自身当前 Active，不做同轮 Agent 对比；Epoch N 完成后生成
-  Epoch N+1 使用的 Agent，每臂 100 次 Evolution，并在三个串行 Attempt 间继承 State。
-  每次 Evolution 只读观察编号相同的 Retained 截至同一 Epoch 的证据；两条
-  Lineage 的 Kernel、Journal、可写 State 和版本祖先保持隔离。
+- 新计划启用 12 个 Campaign：`ablation-retained-01/02/03`（Direction、Experiment 全开），
+  `ablation-retained-no-modules-01/02/03`（全关），`ablation-retained-experiments-01/02/03`
+  （仅 Experiment）和 `ablation-retained-directions-01/02/03`（仅 Direction）。Pool-Retained、Broadcast、
+  Retained-Evolve 的 Workflow 实现保留，但不进入新计划。
+- 默认 5 个 Epoch，每臂一条轨迹、每轮 3 次 Attempt，各 15 次，共 180 次 Optimizer
+  Attempt，不含 Bootstrap。各臂的 Kernel、Journal 和可写 State 保持隔离。
   Active/Challenger、Trajectory、Direction 都不是独立消融臂。
-- 只做一次完整 Bootstrap，再由 `seed-ablation-arm` 派生七个消融臂：
+- 只做一次完整 Bootstrap，再由 `seed-ablation-arm` 派生十二个 Retained 臂：
   共享冻结 v0、初始 Agent/证据与评测契约，不导入之后的跨臂历史。
 - `ablation` 使用自己的 creation key 与 `workspaces/GDN/ablation/` 输出，不接管旧试跑。
   `run.py campaign` 是单 Campaign 入口，也用于恢复旧试跑；用户要求单路线时使用它，
-  不强制启动七臂消融。以下数量描述七臂模式，不适用于单 Campaign。
+  不强制启动消融。以下数量描述新计划，不适用于单 Campaign 或已有冻结计划。
 
-不要把 `--target-epoch 100` 解释为“再追加一百轮”。它是绝对目标，且在消融入口中只控制主臂；
-新计划的对照臂固定每轨迹 300 次 Attempt。已有工作区保留其冻结计划；恢复旧 5 轮实验时，
-显式传入 `--target-epoch 5`，不要用新默认值意外延长旧主臂。完成后重跑应复用结果，不扩展预算。
+不要把 `--target-epoch 5` 解释为“再追加五轮”。它是绝对目标，且在消融入口中只控制主臂；
+新计划的对照臂固定每轨迹 15 次 Attempt。已有工作区保留其冻结计划；恢复旧主臂时，
+显式传入原来的绝对目标轮次。完成后重跑应复用结果，不扩展预算。
 
 ## 启动前检查
 
@@ -97,8 +94,8 @@ description: 在 Lima Ubuntu 中准备、启动或恢复本次 GDN 多文件源�
    HTTP 200 不足以证明是同一部署，要核对进程/服务及配置路径。
    复用健康服务；端口被其他进程占用时不杀进程抢占。
 6. 检查现有 GDN Campaign/ablation runner、Workspace lock、`free -h`、
-   `nproc` 及外层容器资源限制；仅旧 sandbox 模式要求 systemd/cgroup v2。十二臂最多并行 18 个 Optimizer；
-   两份输入各跑十二臂会产生 24 个 Campaign、最多约 36 个 Optimizer，当前并发限制不是全局配额。
+   `nproc` 及外层容器资源限制；仅旧 sandbox 模式要求 systemd/cgroup v2。新计划最多并行 12 个 Optimizer；
+   两份输入各跑一套会产生 6 个 Campaign、最多约 6 个 Optimizer，当前并发限制不是全局配额。
    container 模式没有每 Session 的 memory_max。不要声称 8 GiB Lima 必然足够。
    有旧任务占资源且用户未授权停止/并跑时，报告情况并取得运行安排。
 7. 默认 `container` 模式不要求系统级调度权限；bwrap/namespace 不可用时停止并报告，
@@ -134,7 +131,7 @@ description: 在 Lima Ubuntu 中准备、启动或恢复本次 GDN 多文件源�
 以下以 `workspaces/GDN` 为例；使用 GDN-full 或自定义工作区时替换此前缀。
 
 - `workspaces/GDN/ablation/launch-inputs.json`、`bootstrap-result.json`；
-- `workspaces/GDN/ablation/campaign-results.json`：十二臂 Campaign/Lineage ID、状态和路径；
+- `workspaces/GDN/ablation/campaign-results.json`：各臂 Campaign/Lineage ID、状态和路径；
 - `workspaces/GDN/ablation/<arm>/campaign.log`、`campaign-result.json`；
 - 原始 Session/Artifact 按实际 Runtime config 查找：共享模式位于 SERVICE/state，
   独立模式默认 `workspaces/GDN/state/`，不是各臂日志目录。
@@ -144,5 +141,5 @@ description: 在 Lima Ubuntu 中准备、启动或恢复本次 GDN 多文件源�
 `atrex-production-status` Skill，先读其说明；它对自定义 GDN runner 的进程发现可能不完整，
 且共享 Registry 可能含旧试跑，需按本次汇总 ID 过滤。
 
-最终用中文报告：是否启动、十二臂/旧试跑哪个模式、GPU/DSL/backend、当前阶段、复用的服务、
+最终用中文报告：是否启动、新计划/旧试跑哪个模式、GPU/DSL/backend、当前阶段、复用的服务、
 日志/结果入口，以及任何未解决的资源/权限/配置问题。后续持续监控只有用户要求时才配置。

@@ -22,17 +22,29 @@ from atrex_runtime.bootstrap import CampaignSpecV3
         "examples/source-tree/ablation.example.json",
     ],
 )
-def test_source_tree_arms_keep_topology_with_one_hundred_epochs(relative: str) -> None:
+def test_source_tree_arms_keep_topology_with_five_epochs(relative: str) -> None:
     policy = json.loads((REPOSITORY / "scripts/production/policy.json").read_text())
     plan = json.loads((REPOSITORY / relative).read_text())
-    assert plan == build_ablation_plan(policy, optimizer_attempt_budget_per_trajectory=300)
+    assert plan == build_ablation_plan(policy, optimizer_attempt_budget_per_trajectory=15)
     single_file = build_ablation_plan(policy)
     assert single_file["optimizer_attempt_budget_per_trajectory"] == 15
     assert all(arm["target_epoch_number"] == 5 for arm in single_file["arms"])
     assert plan["main_evolve_enabled"] is False
-    assert len(plan["arms"]) == 4
-    assert all(arm["target_epoch_number"] == 100 for arm in plan["arms"])
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 1800
+    assert len(plan["arms"]) == 12
+    assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 180
+    assert all("observer_label" not in arm for arm in plan["arms"])
+    assert [arm["label"] for arm in plan["arms"]] == [
+        f"ablation-retained-{suffix}{ordinal:02d}"
+        for suffix in ("", "no-modules-", "experiments-", "directions-")
+        for ordinal in range(1, 4)
+    ]
+    assert [arm["tool_modules"] for arm in plan["arms"]] == [
+        modules
+        for modules in (["directions", "experiments"], [], ["experiments"], ["directions"])
+        for _ in range(3)
+    ]
+    assert all(arm["workflow_command"] == "workflow/retained.py" for arm in plan["arms"])
     campaign = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/ablation-campaign.json")
     for key in ("max_challengers", "optimizer_attempt_budget"):
         assert getattr(campaign, key) == policy["schedule"][key]
@@ -42,7 +54,7 @@ def test_source_tree_arms_keep_topology_with_one_hundred_epochs(relative: str) -
     assert campaign.base_revision == old.base_revision
 
 
-def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs=100):
+def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs=5):
     module = _module("scripts/source-tree/run.py")
     config = tmp_path / "runtime.json"
     config.write_text("{}")
@@ -132,7 +144,7 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
             requested_target = int(command[-1])
             assert command[1] == "run-campaign"
             assert requested_target == (
-                (100 if target is None else target)
+                (5 if target is None else target)
                 if self.campaign.endswith("0" * 32)
                 else control_epochs
             )
@@ -174,36 +186,36 @@ def test_bootstrap_once_shared_seed_parallel_launch_and_resume(tmp_path, monkeyp
     test = launch_fixture(tmp_path, monkeypatch)
     test.module.main()
     summary = json.loads((test.workspace / "campaign-results.json").read_text())
-    assert len(summary["arms"]) == 4
+    assert len(summary["arms"]) == 12
     assert all(arm["status"] == "completed" for arm in summary["arms"])
-    assert len(test.calls) == 5  # one Bootstrap, four measurement-free seed operations
-    assert len(test.processes) == 4
-    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 4
+    assert len(test.calls) == 13  # one Bootstrap, twelve measurement-free seed operations
+    assert len(test.processes) == 12
+    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 12
     for arm in summary["arms"]:
         assert Path(arm["result_path"]).is_file()
         assert "attempt finished" in Path(arm["log"]).read_text()
     test.module.main()
     resumed = json.loads((test.workspace / "campaign-results.json").read_text())
     assert resumed == summary
-    assert len(test.processes) == 8
+    assert len(test.processes) == 24
 
 
-def test_source_tree_runner_defaults_all_arms_to_one_hundred_epochs(tmp_path, monkeypatch):
+def test_source_tree_runner_defaults_all_arms_to_five_epochs(tmp_path, monkeypatch):
     test = launch_fixture(tmp_path, monkeypatch, target=None)
     test.module.main()
     arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
-    assert all(arm["target_epoch_number"] == 100 for arm in arms)
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 1800
+    assert all(arm["target_epoch_number"] == 5 for arm in arms)
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 180
 
 
-def test_existing_five_epoch_plan_is_not_rewritten(tmp_path, monkeypatch):
-    test = launch_fixture(tmp_path, monkeypatch, target=5, control_epochs=5)
+def test_existing_one_hundred_epoch_plan_is_not_rewritten(tmp_path, monkeypatch):
+    test = launch_fixture(tmp_path, monkeypatch, target=5, control_epochs=100)
     test.module.main()
     original = (test.workspace / "launch-inputs.json").read_bytes()
     test.module.main()
     assert (test.workspace / "launch-inputs.json").read_bytes() == original
     arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
-    assert all(arm["target_epoch_number"] == 5 for arm in arms)
+    assert all(arm["target_epoch_number"] == 100 for arm in arms)
 
 
 @pytest.mark.parametrize("budget", [None, True, 0, -3, 1.5, "300"])
@@ -265,7 +277,7 @@ def test_gdn_ablation_role_uses_separate_definition_and_output(tmp_path, monkeyp
         assert arguments[1] == str(tmp_path / "scripts/source-tree/run.py")
         assert arguments[arguments.index("--campaign") + 1] == str(root / "ablation-campaign.json")
         assert arguments[arguments.index("--workspace") + 1] == str(root / "ablation")
-        assert arguments[-2:] == ["--target-epoch", "100"]
+        assert arguments[-2:] == ["--target-epoch", "5"]
         raise SystemExit(0)
 
     monkeypatch.setattr(module.os, "execv", execute)

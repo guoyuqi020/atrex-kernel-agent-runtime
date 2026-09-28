@@ -74,7 +74,7 @@ def test_source_tree_preparation_defaults_to_three_attempts(
     assert stopped.value.code == 0
 
 
-@pytest.mark.parametrize(("arguments", "target"), [([], "100"), (["--target-epoch", "2"], "2")])
+@pytest.mark.parametrize(("arguments", "target"), [([], "5"), (["--target-epoch", "2"], "2")])
 def test_gdn_runner_forwards_absolute_epoch_target(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, arguments: list[str], target: str,
 ) -> None:

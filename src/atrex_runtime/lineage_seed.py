@@ -140,6 +140,8 @@ class LineageSeedSpecV1(BaseModel):
     optimizer_attempt_budget: int = Field(gt=0)
     workflow_command: str | None = None
     evolver_observer_lineage_id: LineageId | None = None
+    trajectory_visibility: Literal["isolated", "broadcast"] = "isolated"
+    tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
 
     @field_validator("creation_key")
     @classmethod
@@ -167,6 +169,8 @@ class LineageSeedSpecV1(BaseModel):
 
     @model_validator(mode="after")
     def _validate_seed_combination(self) -> Self:
+        if self.tool_modules is not None and len(self.tool_modules) != len(set(self.tool_modules)):
+            raise ValueError("Lineage seed tool modules cannot repeat")
         if isinstance(self.seed, LineageBaselineSeedV1) and self.initial_evidence is not None:
             raise ValueError("a cloned Lineage baseline already carries its Bootstrap Evidence")
         return self
@@ -422,6 +426,8 @@ class LineageSeeder:
             evolver_model=spec.models.evolver,
             bootstrap_source_lineage_id=roots.source_lineage_id,
             evolver_observer_lineage_id=spec.evolver_observer_lineage_id,
+            trajectory_visibility=spec.trajectory_visibility,
+            tool_modules=spec.tool_modules,
         )
         self._registry.insert_lineage(lineage)
         self._registry.record_runtime_event(
@@ -560,6 +566,10 @@ class LineageSeeder:
         }
         if spec.workflow_command is not None:
             value["workflow_command"] = spec.workflow_command
+        if spec.trajectory_visibility != "isolated":
+            value["trajectory_visibility"] = spec.trajectory_visibility
+        if spec.tool_modules is not None:
+            value["tool_modules"] = list(spec.tool_modules)
         return self._artifacts.put_json(value, ArtifactKind.OPTIMIZER_SOURCE)
 
     def _validate_existing(
@@ -589,6 +599,8 @@ class LineageSeeder:
             lineage.evolver_model,
             lineage.bootstrap_source_lineage_id,
             lineage.evolver_observer_lineage_id,
+            lineage.trajectory_visibility,
+            lineage.tool_modules,
             agent.optimizer_digest,
             agent.source_provenance_digest,
             kernel.artifact_digest,
@@ -601,6 +613,8 @@ class LineageSeeder:
             spec.models.evolver,
             roots.source_lineage_id,
             spec.evolver_observer_lineage_id,
+            spec.trajectory_visibility,
+            spec.tool_modules,
             roots.agent_artifact_digest,
             provenance_digest,
             roots.kernel_artifact_digest,

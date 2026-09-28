@@ -223,6 +223,7 @@ class RunAttemptRequest:
     attempt_evidence_digest: ArtifactDigest
     dsl: Dsl
     model: str | None = None
+    tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)

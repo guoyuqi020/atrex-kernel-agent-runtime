@@ -79,6 +79,7 @@ def test_complete_kda_bundle_can_be_sealed(exported_bundle: Path, tmp_path: Path
         "retained.py",
         "pool_3.py",
         "pool_retained_3.py",
+        "broadcast_3.py",
     ):
         assert not (sealed / "workflow" / name).exists()
     assert not list(sealed.rglob(".git"))
@@ -112,7 +113,9 @@ def _accept_trajectory(process: subprocess.Popen[str]) -> dict[str, object]:
     return call
 
 
-def _accept_attempt_batch(process: subprocess.Popen[str]) -> dict[str, object]:
+def _accept_attempt_batch(
+    process: subprocess.Popen[str], *, latency_offset: float = 0.0
+) -> dict[str, object]:
     assert process.stdout is not None
     call = json.loads(process.stdout.readline())
     assert call["operation"] == "run_attempts_parallel"
@@ -120,8 +123,7 @@ def _accept_attempt_batch(process: subprocess.Popen[str]) -> dict[str, object]:
     attempts = []
     for launch in launches:
         attempt_id = (
-            f"attempt_{int(launch['attempt_ordinal']):016d}"
-            f"{int(launch['trajectory_ordinal']):016d}"
+            f"attempt_{int(launch['attempt_ordinal']):016d}{int(launch['trajectory_ordinal']):016d}"
         )
         attempts.append(
             {
@@ -129,7 +131,7 @@ def _accept_attempt_batch(process: subprocess.Popen[str]) -> dict[str, object]:
                 "trajectory_ordinal": launch["trajectory_ordinal"],
                 "status": "completed",
                 "accepted": True,
-                "latency_us": 10.0 + int(launch["trajectory_ordinal"]),
+                "latency_us": (10.0 + latency_offset + int(launch["trajectory_ordinal"])),
                 "trajectory_kernel_revision_id": (
                     f"kernelrev_{int(launch['attempt_ordinal']):016d}"
                     f"{int(launch['trajectory_ordinal']):016d}"
@@ -171,7 +173,7 @@ def test_epoch_sdk_hides_attempt_bookkeeping_and_routes_between_rounds(
     class FakeClient:
         def __init__(self) -> None:
             self.context = {"epoch_id": "epoch_" + "0" * 32}
-            self.limits = {"optimizer_attempts": 4}
+            self.limits = {"optimizer_attempts": 6}
             self.launch_batches: list[tuple[object, ...]] = []
 
         def create_trajectory(self, **arguments: object) -> object:
@@ -192,8 +194,12 @@ def test_epoch_sdk_hides_attempt_bookkeeping_and_routes_between_rounds(
                         f"attempt_{launch.ordinal:016d}{launch.trajectory.ordinal:016d}"
                     ),
                     "trajectory_ordinal": launch.trajectory.ordinal,
-                    "accepted": True,
-                    "latency_us": 10.0 + launch.trajectory.ordinal,
+                    "accepted": not (launch.ordinal == 2 and launch.trajectory.ordinal == 1),
+                    "latency_us": (
+                        5.0
+                        if launch.ordinal == 2 and launch.trajectory.ordinal == 1
+                        else 10.0 * launch.ordinal + launch.trajectory.ordinal
+                    ),
                     "trajectory_kernel_revision_id": (
                         f"kernelrev_{launch.ordinal:016d}{launch.trajectory.ordinal:016d}"
                     ),
@@ -218,7 +224,7 @@ def test_epoch_sdk_hides_attempt_bookkeeping_and_routes_between_rounds(
     pool = epoch.create_pool(
         branch="active",
         trajectories=2,
-        rounds=2,
+        rounds=3,
     )
 
     def broadcast_best(completed: object) -> None:
@@ -237,13 +243,13 @@ def test_epoch_sdk_hides_attempt_bookkeeping_and_routes_between_rounds(
                 )
 
     rounds = epoch.run_pools([pool], after_round=broadcast_best)
-    assert [item.number for item in rounds] == [1, 2]
+    assert [item.number for item in rounds] == [1, 2, 3]
     assert [launch.ordinal for launch in client.launch_batches[0]] == [1, 1]
     expected = "kernelrev_00000000000000010000000000000001"
     assert all(launch.input_kernel_revision_id == expected for launch in client.launch_batches[1])
-    assert [
-        launch.input_state._source_attempt_id for launch in client.launch_batches[1]
-    ] == [
+    assert rounds[1].best_accepted_kernel(pool) == expected
+    assert all(launch.input_kernel_revision_id == expected for launch in client.launch_batches[2])
+    assert [launch.input_state._source_attempt_id for launch in client.launch_batches[1]] == [
         "attempt_00000000000000010000000000000001",
         "attempt_00000000000000010000000000000002",
     ]
@@ -307,6 +313,7 @@ def test_default_workflow_executes_complete_pool_epoch(bundle_name: str) -> None
         ("retained.py", 3, (1, 3, True)),
         ("pool_3.py", 6, (2, 3, False)),
         ("pool_retained_3.py", 9, (3, 3, True)),
+        ("broadcast_3.py", 9, (3, 3, True)),
     ),
 )
 def test_control_workflow_program_owns_exact_topology(
@@ -353,7 +360,10 @@ def test_control_workflow_program_owns_exact_topology(
         and call["arguments"]["attempt_capacity"] == attempts
         for call in created
     )
-    batches = [_accept_attempt_batch(process) for _ in range(attempts)]
+    batches = [
+        _accept_attempt_batch(process, latency_offset=10.0 * round_index)
+        for round_index in range(attempts)
+    ]
     assert all(len(call["arguments"]["launches"]) == trajectories for call in batches)
     for round_index, call in enumerate(batches):
         routed = [launch["input_state_from_attempt_id"] for launch in call["arguments"]["launches"]]
@@ -361,6 +371,12 @@ def test_control_workflow_program_owns_exact_topology(
             assert routed == [None] * trajectories
         else:
             assert all(isinstance(value, str) and value.startswith("attempt_") for value in routed)
+    if program in ("pool_3.py", "pool_retained_3.py", "broadcast_3.py"):
+        first_best = "kernelrev_00000000000000010000000000000001"
+        assert all(
+            launch["input_kernel_revision_id"] == first_best
+            for launch in batches[2]["arguments"]["launches"]
+        )
     _finish_workflow(process, context["context"]["epoch_id"])
     process.stdin.close()
     assert process.wait(timeout=5) == 0
@@ -514,8 +530,10 @@ def test_retained_evolution_runs_after_current_epoch_work(
 
     created = _accept_trajectory(process)
     assert created["arguments"]["branch"] == "active"
-    for _ in range(3):
-        _accept_attempt_batch(process)
+    batches = [_accept_attempt_batch(process) for _ in range(3)]
+    routed = [batch["arguments"]["launches"][0]["input_state_from_attempt_id"] for batch in batches]
+    assert routed[0] is None
+    assert all(isinstance(value, str) and value.startswith("attempt_") for value in routed[1:])
     evolve = json.loads(process.stdout.readline())
     assert evolve["operation"] == "evolve_agent"
     _respond(

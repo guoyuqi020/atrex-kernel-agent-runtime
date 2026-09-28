@@ -25,6 +25,7 @@ from ..domain.errors import (
     DirectionConcurrencyError,
     DirectionLookupError,
     DirectionSuggestionForbiddenError,
+    DirectionTrajectoryConflictError,
     DuplicateGatewayTaskError,
     GatewayOperationsInProgressError,
     InfrastructureError,
@@ -71,11 +72,13 @@ from .protocol import (
     GatewayProxyRequestV2,
     GatewayProxyResponseV2,
     KernelArtifactReadRequestV2,
+    KernelParetoFrontierRequestV2,
     PollRequestV2,
     ProfileRequestV2,
     ResultArtifactReadRequestV2,
     gateway_agent_request_schema,
 )
+from .result_metrics import gateway_result_projection
 from .stability import (
     MEASUREMENT_REPETITIONS,
     latency_by_shape,
@@ -108,6 +111,7 @@ _RUNTIME_LOCAL_OPERATIONS = frozenset(
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.RESULT_ARTIFACT_READ,
+        GatewayOperation.KERNEL_PARETO_FRONTIER,
         GatewayOperation.DIRECTION_HISTORY,
         GatewayOperation.EXPERIMENT_HISTORY,
     }
@@ -120,6 +124,8 @@ _RUNTIME_JOURNAL_OPERATIONS = frozenset(
         GatewayOperation.EXPERIMENT_RECORD,
         GatewayOperation.EXPERIMENTS_LIST,
         GatewayOperation.EXPERIMENT_LOAD,
+        GatewayOperation.KERNEL_EXPERIMENTS_FIND,
+        GatewayOperation.KERNEL_DIRECTIONS_FIND,
         GatewayOperation.JOURNAL_SNAPSHOT,
     }
 )
@@ -129,6 +135,7 @@ _DIRECTION_MODULE_OPERATIONS = frozenset(
         GatewayOperation.DIRECTION_UPDATE,
         GatewayOperation.DIRECTIONS_LIST,
         GatewayOperation.DIRECTION_LOAD,
+        GatewayOperation.KERNEL_DIRECTIONS_FIND,
     }
 )
 _EXPERIMENT_MODULE_OPERATIONS = frozenset(
@@ -137,6 +144,7 @@ _EXPERIMENT_MODULE_OPERATIONS = frozenset(
         GatewayOperation.EXPERIMENT_RECORD,
         GatewayOperation.EXPERIMENTS_LIST,
         GatewayOperation.EXPERIMENT_LOAD,
+        GatewayOperation.KERNEL_EXPERIMENTS_FIND,
     }
 )
 _AGENT_GATEWAY_OPERATIONS = frozenset(
@@ -163,6 +171,7 @@ _OBSERVATIONAL_OPERATIONS = frozenset(
         GatewayOperation.ENV,
         GatewayOperation.HEALTH,
         GatewayOperation.CONFIG,
+        GatewayOperation.KERNEL_PARETO_FRONTIER,
     }
 )
 _RUNTIME_OWNED_ERROR_FIELDS = frozenset(
@@ -767,7 +776,10 @@ class GatewayProxyService:
         self._max_attempt_report_bytes = max_attempt_report_bytes
         self._tool_modules = tool_modules
         self._clock = clock
-        self._journals = RuntimeJournalService(control, artifacts, tool_modules=tool_modules)
+
+    def _journals_for_attempt(self, attempt_id: AttemptId) -> RuntimeJournalService:
+        modules = self._control.tool_modules_for_attempt(attempt_id, self._tool_modules)
+        return RuntimeJournalService(self._control, self._artifacts, tool_modules=modules)
 
     async def _execute_measurement(
         self,
@@ -850,9 +862,12 @@ class GatewayProxyService:
             raise ValueError("Gateway Proxy request exceeds byte limit")
         request = _REQUEST_ADAPTER.validate_json(payload)
         operation = GatewayOperation(request.operation)
-        if operation in _DIRECTION_MODULE_OPERATIONS and "directions" not in self._tool_modules:
+        tool_modules = self._control.tool_modules_for_attempt(
+            request.attempt_id, self._tool_modules
+        )
+        if operation in _DIRECTION_MODULE_OPERATIONS and "directions" not in tool_modules:
             raise ValueError("Direction tools are disabled for this Runtime")
-        if operation in _EXPERIMENT_MODULE_OPERATIONS and "experiments" not in self._tool_modules:
+        if operation in _EXPERIMENT_MODULE_OPERATIONS and "experiments" not in tool_modules:
             raise ValueError("Experiment tools are disabled for this Runtime")
         is_runtime_query = operation in _RUNTIME_LOCAL_OPERATIONS
         is_runtime_journal = operation in _RUNTIME_JOURNAL_OPERATIONS
@@ -1013,6 +1028,10 @@ class GatewayProxyService:
                 result = self._read_kernel_artifact(request)
             elif isinstance(request, ResultArtifactReadRequestV2):
                 result = self._read_result_artifact(request)
+            elif isinstance(request, KernelParetoFrontierRequestV2):
+                result = GatewayAdapterResult(
+                    "completed", cast(JsonValue, self._kernel_pareto_frontier(request.attempt_id))
+                )
             elif isinstance(request, DirectionHistoryRequestV2):
                 result = self._read_journal_history(request.attempt_id, "direction_events")
             elif isinstance(request, ExperimentHistoryRequestV2):
@@ -1020,7 +1039,12 @@ class GatewayProxyService:
             elif operation in _RUNTIME_JOURNAL_OPERATIONS:
                 result = GatewayAdapterResult(
                     "completed",
-                    cast(JsonValue, self._journals.execute(request, authorization)),
+                    cast(
+                        JsonValue,
+                        self._journals_for_attempt(request.attempt_id).execute(
+                            request, authorization
+                        ),
+                    ),
                 )
             else:
                 result = await self._execute_measurement(adapter_request)
@@ -1251,7 +1275,8 @@ class GatewayProxyService:
     ) -> GatewayAdapterResult:
         if candidate_digest is None:
             raise InfrastructureError("Attempt report sealed no candidate")
-        if set(request.report.tool_modules) != set(self._tool_modules):
+        modules = self._control.tool_modules_for_attempt(request.attempt_id, self._tool_modules)
+        if set(request.report.tool_modules) != set(modules):
             raise ValueError("Attempt report tool modules disagree with Runtime configuration")
         report_value = request.report.model_dump(mode="json")
         report_bytes = len(canonical_json_bytes(report_value))
@@ -1261,7 +1286,7 @@ class GatewayProxyService:
                 f"actual_bytes={report_bytes}, max_bytes={self._max_attempt_report_bytes}. "
                 "Shorten the final report before submitting again."
             )
-        self._journals.validate_report_journal(request.report)
+        self._journals_for_attempt(request.attempt_id).validate_report_journal(request.report)
         if request.report.status == "candidate_ready":
             evaluation = self._control.find_candidate_evaluation(
                 request.attempt_id, candidate_digest
@@ -1457,6 +1482,45 @@ class GatewayProxyService:
             }
         )
         return GatewayAdapterResult("completed", cast(JsonValue, response))
+
+    def _kernel_pareto_frontier(self, attempt_id: AttemptId) -> dict[str, JsonValue]:
+        """Return the observed per-Shape minimum from visible correct contract Evaluations."""
+        _, visible_attempt_ids = self._control.visible_kernel_trial_attempt_ids(attempt_id)
+        winners: dict[str, tuple[float, str, str]] = {}
+        evaluation_count = 0
+        for visible_attempt_id in visible_attempt_ids:
+            for evaluation in self._control.list_evaluations(visible_attempt_id):
+                if evaluation.source is not GatewayEvaluationSource.AGENT or not evaluation.correct:
+                    continue
+                projected = gateway_result_projection(
+                    self._artifacts,
+                    evaluation.gateway_result_digest,
+                    correct=evaluation.correct,
+                    latency_us=evaluation.latency_us,
+                )
+                by_shape = latency_by_shape(projected)
+                if not by_shape:
+                    continue
+                evaluation_count += 1
+                kernel = str(evaluation.kernel_artifact_digest)
+                for shape_id, latency in by_shape.items():
+                    candidate = (latency, kernel, evaluation.id)
+                    previous = winners.get(shape_id)
+                    if previous is None or candidate < previous:
+                        winners[shape_id] = candidate
+        best_by_shape = {
+            shape_id: {"kernel_artifact_digest": kernel, "latency_us": latency}
+            for shape_id, (latency, kernel, _evaluation_id) in sorted(winners.items())
+        }
+        return {
+            "best_by_shape": cast(JsonValue, best_by_shape),
+            "shape_count": len(best_by_shape),
+            "winner_kernel_artifact_digests": cast(
+                JsonValue,
+                sorted({kernel for _latency, kernel, _evaluation_id in winners.values()}),
+            ),
+            "evaluation_count": evaluation_count,
+        }
 
     def _read_journal_history(
         self,
@@ -2049,6 +2113,37 @@ def _invalid_request_response(
                     "instruction": (
                         "The requested Direction was not started. Retry start only after no other "
                         "Direction is in progress"
+                    )
+                },
+            ],
+        )
+    if isinstance(error, DirectionTrajectoryConflictError):
+        response["issues"] = cast(
+            JsonValue,
+            [
+                {
+                    "path": "direction_id",
+                    "code": "direction_trajectory_conflict",
+                    "message": str(error),
+                }
+            ],
+        )
+        response["recovery"] = cast(
+            JsonValue,
+            [
+                {
+                    "tool": "load-direction",
+                    "request": {"direction_id": error.direction_id},
+                    "instruction": (
+                        "Review the inherited Direction before starting an independent "
+                        "implementation"
+                    ),
+                },
+                {
+                    "instruction": (
+                        "Propose a new Direction with relationship=reimplementation and "
+                        "derived_from_direction_ids containing the inherited Direction ID; "
+                        "then start the new Direction. No update event was recorded"
                     )
                 },
             ],

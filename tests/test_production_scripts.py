@@ -65,10 +65,10 @@ def _shape_train_operator(root: Path) -> Path:
 @pytest.mark.parametrize(
     "old_layout",
     [
-        "ablation-pool-retained-3",
+        "changed-budget",
         "single-retained",
-        "without-pool-retained",
-        "removed-frequency-arms",
+        "removed-retained",
+        "added-disabled-arm",
     ],
 )
 def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
@@ -133,7 +133,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert plan["enabled"] is True
     assert plan["main_evolve_enabled"] is False
     assert plan["optimizer_attempt_budget_per_trajectory"] == 15
-    # Each Trajectory spends 15 Attempts after Bootstrap; the Pool runs three.
+    # Each of the four tool-module groups has three 15-Attempt Retained replicas.
     assert [
         (
             arm["kind"],
@@ -145,18 +145,18 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
         )
         for arm in plan["arms"]
     ] == [
-        ("retained", "ablation-retained-01", 0, 3, 5, "workflow/retained.py"),
-        ("retained", "ablation-retained-02", 0, 3, 5, "workflow/retained.py"),
-        ("retained", "ablation-retained-03", 0, 3, 5, "workflow/retained.py"),
         (
-            "pool-retained",
-            "ablation-pool-retained-3",
+            "retained",
+            f"ablation-retained-{suffix}{ordinal:02d}",
             0,
-            9,
+            3,
             5,
-            "workflow/pool_retained_3.py",
-        ),
+            "workflow/retained.py",
+        )
+        for suffix in ("", "no-modules-", "experiments-", "directions-")
+        for ordinal in range(1, 4)
     ]
+    assert all("observer_label" not in arm for arm in plan["arms"])
 
     manifest_path = workspace / "production-manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -170,25 +170,26 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert json.loads(manifest_path.read_text(encoding="utf-8")) == manifest
 
     # Existing runs must not silently acquire another Trajectory or Campaign on resume.
-    if old_layout == "removed-frequency-arms":
-        pool = next(arm for arm in plan["arms"] if arm["kind"] == "pool-retained")
+    if old_layout == "added-disabled-arm":
+        retained = plan["arms"][0]
         plan["arms"].append(
             {
-                **pool,
-                "label": "ablation-pool-retained-1",
-                "optimizer_attempt_budget": 1,
-                "target_epoch_number": 15,
+                **retained,
+                "kind": "pool-retained",
+                "label": "ablation-pool-retained-3",
+                "workflow_command": "workflow/pool_retained_3.py",
+                "optimizer_attempt_budget": 9,
+                "optimizer_attempt_budget_total": 45,
             }
         )
-    elif old_layout == "without-pool-retained":
-        plan["arms"] = [arm for arm in plan["arms"] if arm["kind"] != "pool-retained"]
+    elif old_layout == "removed-retained":
+        plan["arms"] = [arm for arm in plan["arms"] if arm["label"] != "ablation-retained-03"]
     elif old_layout == "single-retained":
         plan["arms"] = [arm for arm in plan["arms"] if arm["label"] != "ablation-retained-02"]
         retained = next(arm for arm in plan["arms"] if arm["label"] == "ablation-retained-01")
         retained["label"] = "ablation-retained"
     else:
-        pool = next(arm for arm in plan["arms"] if arm["label"] == old_layout)
-        pool["optimizer_attempt_budget"] = 1
+        plan["arms"][0]["optimizer_attempt_budget"] = 1
     plan_path = workspace / "ablation.json"
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
     resumed = subprocess.run(command, env=environment, capture_output=True, text=True)
@@ -197,8 +198,8 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert json.loads(plan_path.read_text(encoding="utf-8")) == plan
 
 
-def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
-    """Resource envelopes match the organization implemented by each Workflow."""
+def test_ablation_plan_enables_only_retained_replicas() -> None:
+    """Disabled topologies remain available as templates but absent from new plans."""
     schedule = {"max_challengers": 7, "optimizer_attempt_budget": 99}
     enabled = _ablation_plan({"schedule": {**schedule, "event_only": True}})
     disabled = _ablation_plan({"schedule": {**schedule, "event_only": False}})
@@ -211,19 +212,22 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
     for arm in enabled["arms"]:
         by_kind.setdefault(str(arm["kind"]), []).append(arm)
         assert arm["target_epoch_number"] == 5
-        assert arm["optimizer_attempt_budget_total"] in (15, 45)
+        assert arm["optimizer_attempt_budget_total"] == 15
 
-    assert len(by_kind["retained"]) == 3
-    assert len(by_kind["pool-retained"]) == 1
+    assert len(by_kind["retained"]) == 12
+    assert [arm["tool_modules"] for arm in by_kind["retained"]] == [
+        modules
+        for modules in (["directions", "experiments"], [], ["experiments"], ["directions"])
+        for _ in range(3)
+    ]
     assert all(arm["optimizer_attempt_budget"] == 3 for arm in by_kind["retained"])
-    assert all(arm["max_challengers"] == 0 for arm in enabled["arms"])
-    assert all(arm["evolution_count"] == 0 for arm in enabled["arms"])
-    assert by_kind["pool-retained"][0]["optimizer_attempt_budget"] == 9
-    assert by_kind["pool-retained"][0]["optimizer_attempt_budget_total"] == 45
+    assert all(arm["max_challengers"] == 0 for arm in by_kind["retained"])
+    assert all(arm["evolution_count"] == 0 for arm in by_kind["retained"])
+    assert all("observer_label" not in arm for arm in enabled["arms"])
     assert disabled["arms"] == []
     assert disabled["enabled"] is False
     assert omitted == disabled
-    assert set(by_kind) == {"retained", "pool-retained"}
+    assert set(by_kind) == {"retained"}
 
     with pytest.raises(ValueError, match="cannot spend exactly 16 Attempts"):
         build_ablation_plan(
@@ -232,27 +236,16 @@ def test_ablation_plan_derives_per_trajectory_budget_fixed_pool_sizes() -> None:
         )
 
 
-def test_default_ablation_plan_uses_one_three_trajectory_pool() -> None:
+def test_default_ablation_plan_uses_only_retained_replicas() -> None:
     plan = _ablation_plan(json.loads((PRODUCTION / "policy.json").read_text()))
     assert [arm["label"] for arm in plan["arms"]] == [
-        "ablation-retained-01",
-        "ablation-retained-02",
-        "ablation-retained-03",
-        "ablation-pool-retained-3",
+        f"ablation-retained-{suffix}{ordinal:02d}"
+        for suffix in ("", "no-modules-", "experiments-", "directions-")
+        for ordinal in range(1, 4)
     ]
-    assert [arm["optimizer_attempt_budget"] for arm in plan["arms"]] == [
-        3,
-        3,
-        3,
-        9,
-    ]
+    assert [arm["optimizer_attempt_budget"] for arm in plan["arms"]] == [3] * 12
     assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
-    assert [arm["evolution_count"] for arm in plan["arms"]] == [
-        0,
-        0,
-        0,
-        0,
-    ]
+    assert [arm["evolution_count"] for arm in plan["arms"]] == [0] * 12
 
 
 def test_prepare_seeds_each_dsl_campaign_from_its_own_kernel(tmp_path: Path) -> None:
@@ -589,7 +582,7 @@ def test_summarize_combines_independent_dsl_results(tmp_path: Path) -> None:
 
 
 def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None:
-    """The summary must carry the evolution-versus-control pairing for later comparison."""
+    """The summary keeps each Retained replica's result and missing status."""
     workspace = tmp_path / "workspace"
     for index, dsl in enumerate(("cuda", "triton", "cutedsl"), start=1):
         dsl_workspace = workspace / "dsls" / dsl
@@ -632,9 +625,9 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
             json.dumps({"campaign_id": f"campaign_{index + 100:032x}", "event_only": True}),
             encoding="utf-8",
         )
-        retained_pool = dsl_workspace / "ablation-pool-retained-3"
-        retained_pool.mkdir()
-        (retained_pool / "campaign-result.json").write_text(
+        third = dsl_workspace / "ablation-retained-03"
+        third.mkdir()
+        (third / "campaign-result.json").write_text(
             json.dumps(
                 {
                     "campaign_id": f"campaign_{index + 330:032x}",
@@ -642,9 +635,9 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
                     "lineages": [{"dsl": dsl}],
                 }
             ),
-                encoding="utf-8",
-            )
-        # A third arm that never produced a result must not sink the whole summary.
+            encoding="utf-8",
+        )
+        # An arm without a result must not sink the whole summary.
         (dsl_workspace / "ablation-retained-02").mkdir()
 
     workspace.joinpath("ablation.json").write_text(
@@ -661,8 +654,8 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
                     if arm["label"]
                     in (
                         "ablation-retained-01",
-                        "ablation-pool-retained-3",
                         "ablation-retained-02",
+                        "ablation-retained-03",
                     )
                 ],
             }
@@ -694,8 +687,8 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
         by_arm = {arm["arm"]: arm for arm in entry["ablation"]}
         assert set(by_arm) == {
             "ablation-retained-01",
-            "ablation-pool-retained-3",
             "ablation-retained-02",
+            "ablation-retained-03",
         }
         retained = by_arm["ablation-retained-01"]
         assert retained["campaign_id"] != entry["campaign_id"]
@@ -703,14 +696,14 @@ def test_summarize_pairs_each_dsl_with_its_ablation_arms(tmp_path: Path) -> None
         assert retained["seed_result"]["event_only"] is True
         assert retained["target_epoch_number"] == 5
         assert retained["optimizer_attempt_budget_total"] == 15
-        retained_pool = by_arm["ablation-pool-retained-3"]
-        assert retained_pool["target_epoch_number"] == 5
-        assert retained_pool["max_challengers"] == 0
-        assert retained_pool["optimizer_attempt_budget"] == 9
-        assert retained_pool["optimizer_attempt_budget_total"] == 45
-        assert retained_pool["result"]["target_epoch_number"] == 5
-        assert retained_pool["result"]["lineages"][0]["dsl"] == dsl
-        assert retained_pool["evolution_count"] == 0
+        third = by_arm["ablation-retained-03"]
+        assert third["target_epoch_number"] == 5
+        assert third["max_challengers"] == 0
+        assert third["optimizer_attempt_budget"] == 3
+        assert third["optimizer_attempt_budget_total"] == 15
+        assert third["result"]["target_epoch_number"] == 5
+        assert third["result"]["lineages"][0]["dsl"] == dsl
+        assert third["evolution_count"] == 0
         missing = by_arm["ablation-retained-02"]
         assert missing["status"] == "missing"
         assert missing["target_epoch_number"] == 5
@@ -848,11 +841,12 @@ def test_production_runner_prints_schedule_through_actual_shell(tmp_path: Path) 
         text=True,
     )
     assert "Main evolve-3: disabled" in result.stdout
-    assert "ablation-pool-retained-3=9 Attempts/Epoch x 5 Epochs" in result.stdout
-    assert "max 0 Challenger(s); 45 total; 0 Evolutions" in result.stdout
+    assert "max 0 Challenger(s); 15 total; 0 Evolutions" in result.stdout
     assert "ablation-pool-3-01=" not in result.stdout
     assert "ablation-isolated-01=" not in result.stdout
-    assert "ablation-retained-evolve" not in result.stdout
+    assert "ablation-pool-retained-3=" not in result.stdout
+    assert "ablation-broadcast-3=" not in result.stdout
+    assert "ablation-retained-evolve-" not in result.stdout
     assert "ablation-isolated-evolve" not in result.stdout
     assert "ablation-isolated-pool-evolve" not in result.stdout
     for ordinal in (1, 2, 3):

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Pool-Retained-3: three State-retaining Trajectories sharing the best accepted Kernel so far."""
+"""Three retained Trajectories with live shared Runtime history."""
 
 from __future__ import annotations
 
@@ -12,11 +12,7 @@ from runtime import (  # type: ignore[import-not-found]
 
 
 def run_epoch(epoch: EpochRuntime) -> None:
-    pool = epoch.create_pool(
-        branch="active",
-        trajectories=3,
-        rounds=3,
-    )
+    pool = epoch.create_pool(branch="active", trajectories=3, rounds=3)
 
     def carry_states(current: EpochRound) -> None:
         if current.number >= pool.rounds:
@@ -32,11 +28,7 @@ def run_epoch(epoch: EpochRuntime) -> None:
             state = outcome["output_state"]
             if not isinstance(state, AgentStateRef):
                 raise TypeError("Attempt outcome omitted its Agent State")
-            current.route_state(
-                pool,
-                trajectory_ordinal=ordinal,
-                state=state,
-            )
+            current.route_state(pool, trajectory_ordinal=ordinal, state=state)
 
     epoch.run_pools([pool], after_round=carry_states)
     epoch.complete()

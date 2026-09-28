@@ -37,26 +37,21 @@ Runtime 只约束资源边界与可信评测/晋升策略，不根据消融臂�
 - 每个启用臂默认运行至 Epoch 5；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
 
-当前计划停用 `isolated`、`pool-3`、`evolve-3`、`isolated-evolve`、
-`isolated-pool-evolve` 和 `retained-evolve`，但保留其 Workflow 实现。每个 DSL 启动 4 个独立 Campaign。
+当前计划启用四种 Retained 工具配置，每种三个独立重复臂。Pool-Retained、Broadcast、Retained-Evolve 及其他对照
+Workflow 保留实现，但不进入新计划。每个 DSL 启动 12 个独立 Campaign。
 所有臂共享同一份冻结的 Bootstrap v0，
 不重复 Bootstrap 或 Baseline 测量。每条 Trajectory 每个 Epoch 串行执行 3 个 Attempt：
 
 | 臂 | 并行结构 | Optimizer Attempts 总数 | 保留 Runtime State | Evolution 次数 |
 |---|---|---:|---|---:|
 | `ablation-retained-01/02/03` | 每个重复一条 Trajectory | 各 15 | 是 | 0 |
-| `ablation-pool-retained-3` | 一个 Pool，三条 Trajectory | 45 | 是 | 0 |
+| `ablation-retained-no-modules-01/02/03` | Direction、Experiment 均关闭 | 各 15 | 是 | 0 |
+| `ablation-retained-experiments-01/02/03` | 仅 Experiment | 各 15 | 是 | 0 |
+| `ablation-retained-directions-01/02/03` | 仅 Direction | 各 15 | 是 | 0 |
 
 Runtime State 包含 Memory/Knowledge/Skills/Tools。重置 State 时，每个目录恢复到固定 Core Revision 的初始内容，
-不清除 Kernel 进展或 Runtime 历史。各启用实例只共享 Bootstrap Baseline，
-不共享后续历史或可写 State。
-
-三条 Pool-Retained Trajectory 在同一 Epoch 内独立运行，从选出的最佳 Kernel 继续，并继承各自的终态
-State；State 选择继承，不合并，也不实时同步。所有对照臂的 Source 固定。唯一的 Pool 使用三条
-Trajectory，每条 Trajectory 每 Epoch 串行执行三次 Attempt。
-
-每个启用臂都持有 Lineage-local `agent-v0`，并冻结 `retained.py` 或
-`pool_retained_3.py`。停用模板仍保留。
+不清除 Kernel 进展或 Runtime 历史。各启用实例只共享 Bootstrap Baseline，不共享后续历史或可写 State。
+每个启用臂都持有 Lineage-local `agent-v0`，并冻结 `retained.py`；停用模板仍保留。
 Optimizer Source 与共享
 Bootstrap Kernel 仍受控；Runtime 不再根据臂 Label 推断组织拓扑。
 

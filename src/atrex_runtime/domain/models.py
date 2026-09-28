@@ -466,6 +466,8 @@ class Lineage:
     evolver_model: str | None = None
     bootstrap_source_lineage_id: LineageId | None = None
     evolver_observer_lineage_id: LineageId | None = None
+    trajectory_visibility: Literal["isolated", "broadcast"] = "isolated"
+    tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
 
     def __post_init__(self) -> None:
         if self.max_challengers < 0:
@@ -474,6 +476,13 @@ class Lineage:
             raise ValueError("a lineage cannot inherit its own Bootstrap history")
         if self.evolver_observer_lineage_id == self.id:
             raise ValueError("a lineage cannot observe itself during Evolution")
+        if self.trajectory_visibility not in {"isolated", "broadcast"}:
+            raise ValueError("Lineage trajectory visibility is invalid")
+        if self.tool_modules is not None and (
+            len(self.tool_modules) != len(set(self.tool_modules))
+            or set(self.tool_modules) - {"directions", "experiments"}
+        ):
+            raise ValueError("Lineage tool modules are invalid")
         if self.optimizer_attempt_budget <= 0:
             raise ValueError("a lineage requires a positive Optimizer Attempt budget")
         for role, model in (

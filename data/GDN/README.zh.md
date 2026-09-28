@@ -40,31 +40,32 @@ python scripts/gdn/run.py ablation
 
 只启动任务，不管理服务；以与 `campaign` 相同的容器用户运行，不需要 sudo/systemd。
 使用 `ablation-campaign.json` 的新 key `gdn-source-tree-l20d-claude-ablation`，
-不会修改或接管当前试跑。一次完整 Bootstrap 后，四条消融 Lineage 共享新实验的冻结 v0、Agent、
+不会修改或接管当前试跑。一次完整 Bootstrap 后，十二条消融 Lineage 共享新实验的冻结 v0、Agent、
 修改边界、评测契约和初始证据；不重复 Baseline 测量，不导入旧试跑经验。
 
-`ablation.json` 与单文件生产使用相同的计划生成器，默认每臂 100 个 Epoch：
+`ablation.json` 与单文件生产使用相同的计划生成器，默认每臂 5 个 Epoch：
 
 | Campaign 实例 | 每 Epoch 的结构 | Optimizer Attempts | 保留 State | Evolution |
 |---|---|---:|---|---:|
-| `ablation-retained-01/02/03` | 每个重复 1 条轨迹 × 3 次 | 各 300 | 是 | 0 |
-| `ablation-pool-retained-3` | 3 条轨迹 × 3 次 | 900 | 是 | 0 |
+| `ablation-retained-01/02/03` | 每个重复 1 条轨迹 × 3 次 | 各 15 | 是 | 0 |
+| `ablation-retained-no-modules-01/02/03` | Direction、Experiment 均关闭 | 各 15 | 是 | 0 |
+| `ablation-retained-experiments-01/02/03` | 仅 Experiment | 各 15 | 是 | 0 |
+| `ablation-retained-directions-01/02/03` | 仅 Direction | 各 15 | 是 | 0 |
 
-共 **4 个 Campaign、1,800 次 Optimizer Attempt**，不含 Bootstrap。Isolated、
-Pool-3、Evolve-3、Isolated-Evolve、Isolated-Pool-Evolve 和 Retained-Evolve
-实现保留但停用。这里不启动外部原版 AKA 对照。
-重置 State 不会删除 Kernel 进展或 Runtime Journal；Pool 在 Epoch 边界共享最佳 Kernel，
-Pool-Retained 还继承该轨迹的终态 State，不做合并。不同臂不共享后续历史或可写文件。
+共 **12 个 Campaign、180 次 Optimizer Attempt**，不含 Bootstrap。原有 Retained 标签对应两种工具全开。Pool-Retained、Broadcast、
+Retained-Evolve 及其他对照 Workflow 保留实现，但不进入新计划；也不启动外部原版 AKA 对照。
+十二个 Retained 臂各自保留 State 与 Lineage 历史，下一 Epoch 从本臂选出的最佳 Kernel 开始。
+已有工作区继续使用其冻结计划。
 
 输出在 `workspaces/GDN/ablation/`：Bootstrap、冻结输入、`campaign-results.json` 汇总，以及每臂
 同名目录中的 `campaign-result.json` / `campaign.log`；对照臂还保存 seed 定义和结果。
 汇总含各臂 Campaign/Lineage ID，可供 inspect 使用。Session/Artifact 在共享的 `workspaces/GDN/state/`。
 Attempt 进度实时写入各臂日志，臂完成时打印时间戳。失败不取消其他臂；重复运行复用身份并恢复，
-完成后只报告结果。`--target-epoch` 只改变主臂目标，新计划的对照臂固定每轨迹 300 次 Attempt。
-已有工作区仍保留冻结的对照臂预算；恢复旧 5 轮实验且不扩展主臂时，显式传入 `--target-epoch 5`。
+完成后只报告结果。`--target-epoch` 只改变主臂目标，新计划的对照臂固定每轨迹 15 次 Attempt。
+已有工作区仍保留冻结的对照臂预算；恢复旧主臂时应显式传入原来的绝对目标轮次。
 修改冻结输入需新 Workspace 和 creation key。
 
-默认最多并行 6 个 Optimizer Worker；Lima 资源有限，建议结束旧试跑后再显式启动。
+当前消融计划最多并行 12 个 Optimizer Worker；Lima 资源有限，建议结束旧试跑后再显式启动。
 添加配置不会自动启动、停止或重启任何任务。
 
 ## 内容与来源
@@ -138,7 +139,7 @@ Runtime 服务与 Campaign 进程还需使用一致的 `ATREX_CAPABILITY_SIGNING
 
 也可以使用 `run.py`：在已加载 Agate 环境变量的 Linux 进程中，以同一容器用户、无需 sudo，
 分别运行 `python scripts/gdn/run.py serve` 和
-`python scripts/gdn/run.py campaign --target-epoch 100`。它自动共用持久化的
+`python scripts/gdn/run.py campaign --target-epoch 5`。它自动共用持久化的
 `runtime-secrets.json`（权限 0600，Git 忽略），按顺序执行 Bootstrap 和指定 Epoch，
 将结果写入 `bootstrap-result.json` / `epoch-result.json`；Bootstrap 失败就停止，不启动优化。
 恢复时继续使用原配置及 secrets，不要另起一个并行的同 Campaign 调度器。
@@ -162,10 +163,10 @@ atrex-kernel-agent-runtime serve --config workspaces/GDN/runtime.json
 atrex-kernel-agent-runtime bootstrap \
   --config workspaces/GDN/runtime.json --campaign workspaces/GDN/campaign.json
 
-# 将返回的 campaign_id 填入下面的位置；运行到 Epoch 100。
+# 将返回的 campaign_id 填入下面的位置；运行到 Epoch 5。
 atrex-kernel-agent-runtime run-campaign \
   --config workspaces/GDN/runtime.json \
-  --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 100
+  --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 5
 ```
 
 Bootstrap 让 Claude 先评测原始源码，必要时只修复可修改的文件，记录 Direction/Experiment
@@ -173,12 +174,12 @@ Journal 并提交标准报告，再由 Runtime 独立终评。Campaign key 使�
 `gdn-source-tree-l20d-claude-bootstrap`，与之前的无模型试跑分开；旧 v0 与 Session 记录保留。
 之后再次启动相同 key 时，正常复用新流程产生的 baseline。
 
-默认总共运行 100 个 Epoch，每个分支每 Epoch 串行 3 个 Attempt、1 条 Trajectory；Epoch 1
+默认总共运行 5 个 Epoch，每个分支每 Epoch 串行 3 个 Attempt、1 条 Trajectory；Epoch 1
 只有 Active，Epoch 2 起加入 1 个 Challenger（Active 和 Challenger 每轮各跑 3 个 Attempt）。
 每条 Trajectory 的 Attempt 数与单文件生产默认值一致；单文件的 Epoch 目标不变。
-保留原来的首轮仅 Active 策略，单 Campaign 共 597 次 Optimizer Attempt。
-目标是绝对轮次：完成 Epoch 100 后重复执行只报告已有结果，不额外增加 100 轮，也不会为不运行的
-Epoch 101 再触发 Evolver。
+保留原来的首轮仅 Active 策略，单 Campaign 共 27 次 Optimizer Attempt。
+目标是绝对轮次：完成 Epoch 5 后重复执行只报告已有结果，不额外增加 5 轮，也不会为不运行的
+Epoch 6 再触发 Evolver。
 每轮 Attempt 数在 Lineage 注册时冻结；修改本配置不会改变已有的每轮 1 次 Lineage。
 新调度应使用新的 Campaign creation key，保留旧历史，不要直接修改 Registry，或把旧 Campaign
 当成每轮 3 次继续运行。

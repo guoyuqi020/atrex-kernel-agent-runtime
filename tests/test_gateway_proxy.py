@@ -20,6 +20,7 @@ from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.domain.errors import (
     DirectionConcurrencyError,
     DirectionSuggestionForbiddenError,
+    DirectionTrajectoryConflictError,
     DuplicateGatewayTaskError,
     InvalidTransitionError,
     SuggestedDirectionTransitionError,
@@ -71,9 +72,11 @@ def _insert_attempt(
     registry: SqliteRegistry,
     *,
     attempts_per_trajectory: int = 1,
+    dsl: Dsl = Dsl.TRITON,
 ) -> Attempt:
     seeded = seed_lineage(
         registry,
+        dsl=dsl,
         evidence_checkpoint=digest("evidence"),
         challenger_count=0,
         attempts_per_trajectory=attempts_per_trajectory,
@@ -489,6 +492,83 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
         "campaign_id": registry.get_lineage(
             registry.get_epoch(attempt.epoch_id).lineage_id
         ).campaign_id,
+    }
+    control.close()
+    registry.close()
+
+
+@pytest.mark.anyio
+async def test_kernel_pareto_frontier_tracks_visible_correct_shape_winners(
+    tmp_path: Path,
+) -> None:
+    registry, control, attempt, capability, service, adapter = _service(tmp_path)
+
+    async def frontier() -> dict[str, Any]:
+        response = await service.execute(
+            capability.token,
+            json.dumps(
+                {
+                    "schema_version": 2,
+                    "attempt_id": attempt.id,
+                    "idempotency_key": "frontier-read",
+                    "operation": "kernel_pareto_frontier",
+                }
+            ).encode(),
+            operation_scope="runtime",
+        )
+        return cast(dict[str, Any], response.result)
+
+    async def evaluate(
+        key: str, source: str, by_shape: dict[str, float], *, correct: bool = True
+    ) -> str:
+        adapter.result = GatewayAdapterResult(
+            status="completed",
+            result={"correct": correct, "latency_us_by_shape": by_shape},
+            evaluation=EvaluationV2(correct=correct, latency_us=12.0 if correct else None),
+        )
+        payload = json.loads(_request(attempt))
+        payload["idempotency_key"] = key
+        payload["candidate"]["files"][0]["content_base64"] = base64.b64encode(
+            source.encode()
+        ).decode()
+        result = await service.execute(capability.token, json.dumps(payload).encode())
+        assert result.kernel_artifact_digest is not None
+        return result.kernel_artifact_digest
+
+    assert await frontier() == {
+        "best_by_shape": {},
+        "shape_count": 0,
+        "winner_kernel_artifact_digests": [],
+        "evaluation_count": 0,
+    }
+    first = await evaluate("frontier-evaluate-a", "def kernel(): return 1\n", {"0": 10, "1": 20})
+    assert (await frontier())["best_by_shape"]["0"]["kernel_artifact_digest"] == first
+    second = await evaluate("frontier-evaluate-b", "def kernel(): return 2\n", {"0": 12, "1": 8})
+    await evaluate(
+        "frontier-evaluate-incorrect",
+        "def kernel(): return 3\n",
+        {"0": 1, "1": 1},
+        correct=False,
+    )
+    adapter.result = GatewayAdapterResult(
+        status="completed",
+        result={"correct": True, "latency_us_by_shape": {"0": 0.5, "1": 0.5}},
+    )
+    custom = json.loads(_request(attempt))
+    custom["idempotency_key"] = "frontier-evaluate-custom"
+    custom["input_py"] = "def _make_inputs(**input_kwargs): return {}\n"
+    custom["candidate"]["files"][0]["content_base64"] = base64.b64encode(
+        b"def kernel(): return 4\n"
+    ).decode()
+    await service.execute(capability.token, json.dumps(custom).encode())
+    assert await frontier() == {
+        "best_by_shape": {
+            "0": {"kernel_artifact_digest": first, "latency_us": 10.0},
+            "1": {"kernel_artifact_digest": second, "latency_us": 8.0},
+        },
+        "shape_count": 2,
+        "winner_kernel_artifact_digests": sorted([first, second]),
+        "evaluation_count": 2,
     }
     control.close()
     registry.close()
@@ -1215,6 +1295,12 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     assert evaluated.kernel_artifact_digest is not None
     assert evaluated.kernel_artifact_digest is not None
     assert evaluated.result_artifact_digest is not None
+    unrecorded = await journal(
+        "kernel_experiments_find",
+        "kernel-lookup-before-recording",
+        kernel_artifact_digest=evaluated.kernel_artifact_digest,
+    )
+    assert cast(dict[str, Any], unrecorded.result)["experiment_ids"] == []
     adapter.result = GatewayAdapterResult(
         status="completed",
         result={"status": "succeeded", "result": {"kernels": []}},
@@ -1277,6 +1363,26 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
         "experiment-load-1",
         experiment_id=experiment_id,
     )
+    kernel_experiments = await journal(
+        "kernel_experiments_find",
+        "kernel-lookup-after-recording",
+        kernel_artifact_digest=evaluated.kernel_artifact_digest,
+    )
+    kernel_directions = await journal(
+        "kernel_directions_find",
+        "kernel-direction-lookup-after-recording",
+        kernel_artifact_digest=evaluated.kernel_artifact_digest,
+    )
+    absent_kernel = await journal(
+        "kernel_experiments_find",
+        "kernel-lookup-absent",
+        kernel_artifact_digest=digest("unrecorded-kernel"),
+    )
+    absent_direction = await journal(
+        "kernel_directions_find",
+        "kernel-direction-lookup-absent",
+        kernel_artifact_digest=digest("unrecorded-kernel"),
+    )
     snapshot = await journal("journal_snapshot", "journal-snapshot-1")
 
     assert cast(dict[str, Any], directions.result)["directions"] == [
@@ -1303,6 +1409,18 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     ]
     assert "sequence" not in cast(dict[str, Any], loaded_experiment.result)
     assert cast(dict[str, Any], loaded_experiment.result)["after"] == resolved_subject
+    assert kernel_experiments.result == {
+        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+        "count": 1,
+        "experiment_ids": [experiment_id],
+    }
+    assert kernel_directions.result == {
+        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+        "count": 1,
+        "direction_ids": [direction_id],
+    }
+    assert cast(dict[str, Any], absent_kernel.result)["count"] == 0
+    assert cast(dict[str, Any], absent_direction.result)["direction_ids"] == []
     assert len(cast(dict[str, Any], snapshot.result)["direction_events"]) == 3
     assert len(cast(dict[str, Any], snapshot.result)["experiments"]) == 1
     assert cast(dict[str, Any], snapshot.result)["citable_profile_results"] == [
@@ -1462,6 +1580,31 @@ def test_direction_concurrency_error_is_machine_readable_and_actionable() -> Non
     assert "close it with update-direction" in recovery[1]["instruction"]
     assert "Retry start only after no other Direction is in progress" in recovery[2]["instruction"]
     assert "request_schema" in response
+
+
+def test_direction_trajectory_conflict_requests_independent_direction() -> None:
+    direction_id = "direction_" + "a" * 32
+    payload = json.dumps(
+        {
+            "schema_version": 2,
+            "attempt_id": "attempt_" + "c" * 32,
+            "idempotency_key": "direction-start-competing",
+            "operation": "direction_update",
+            "request": {
+                "action": "start",
+                "direction_id": direction_id,
+                "analysis": "test an independent implementation",
+            },
+        }
+    ).encode()
+    response = _invalid_request_response(
+        payload,
+        DirectionTrajectoryConflictError(direction_id),
+        operation_scope="journal",
+    )
+    assert response["issues"][0]["code"] == "direction_trajectory_conflict"
+    assert response["recovery"][0]["request"] == {"direction_id": direction_id}
+    assert "relationship=reimplementation" in response["recovery"][1]["instruction"]
 
 
 @pytest.mark.parametrize("field_path", ["request.action", "report.direction_events.action"])

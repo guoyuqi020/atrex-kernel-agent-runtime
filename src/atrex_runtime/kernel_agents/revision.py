@@ -33,6 +33,7 @@ KERNEL_AGENT_WORKFLOW_TEMPLATE_NAMES = frozenset(
         "isolated.py",
         "pool_3.py",
         "pool_retained_3.py",
+        "broadcast_3.py",
         "retained.py",
     }
 )

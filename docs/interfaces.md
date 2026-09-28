@@ -281,12 +281,15 @@ helpers are supported for a shared custom input generator and Shapes.
 | `gateway-execute` | One GPU/Agate operation and its parameters; Candidate operations upload the working Kernel by default. Evaluate can select Candidate B with `candidate_path` and comparison baseline A with `comparison.baseline_path`. |
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
 | `result-artifact-read` | Reads a normalized Agent-visible Result Artifact by digest; request JSON omits `operation`. |
+| `kernel-pareto-frontier` | With `{}`, returns each visible Shape ID's lowest latency and winning Kernel Artifact digest from correct full contract Evaluations in the current Agent's visible history, plus the winner Kernel list. Independent of Direction and Experiment modules. |
 | `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Closures explicitly select supporting Experiments and declare hypothesis_status; returns the stable Direction ID. `suggest` is rejected in every session, including Bootstrap. |
 | `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, lifecycle status, hypothesis_status, and any declared ancestry to that file and returns only status, file, and count. |
 | `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction, including hypothesis_status, all associated_experiment_ids and the latest explicitly selected supporting_experiment_ids. |
+| `find-kernel-directions` | With exactly one `kernel_artifact_digest`, returns distinct `direction_ids` linked through visible Experiments; it does not return Experiment IDs. |
 | `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, and action. Runtime freezes the Trials' Kernel and Result Artifact identities. Every Experiment needs at least one Kernel-bound Gateway Result. `abandon_direction` may be one-sided; Bootstrap `baseline` requires only `after`. Returns the stable Experiment ID. |
 | `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, hypothesis, change, evidence, analysis, and action from frozen history plus the current live Journal, then returns only status, file, and count. |
 | `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
+| `find-kernel-experiments` | With exactly one `kernel_artifact_digest`, returns visible `experiment_ids` citing that Kernel Artifact as before or after; it does not return Direction IDs. |
 | `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
 
 The Direction and Experiment command families are independently enabled by
@@ -394,7 +397,8 @@ events without altering them; that compatibility context is not available to Age
 One Attempt may start and advance at
 most three distinct Directions, including inherited and newly proposed Directions. Proposals do not
 consume this limit, and the report does not limit how many Directions remain `proposed` or
-`deferred`. Only one Direction may be `in_progress` at a time. Starting another is rejected
+`deferred`. Only one Direction per Attempt may be `in_progress` at a time. Broadcast sibling Attempts may each
+advance their own Direction. Starting another in the same Attempt is rejected
 atomically with `direction_concurrency_conflict`, the conflicting Direction IDs, and recovery steps;
 the requested Direction remains unchanged. Their normalized status is the sole next-direction source. Runtime does
 not trust an Agent's success text: it independently reads Gateway records and applies finalization.

@@ -1370,6 +1370,7 @@ class EpochController:
                             attempt.kernel_agent_revision_id
                         ).dsl,
                         model=self._registry.get_lineage(epoch.lineage_id).optimizer_model,
+                        tool_modules=self._registry.get_lineage(epoch.lineage_id).tool_modules,
                     )
                 )
             except InfrastructureError as error:

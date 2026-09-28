@@ -26,8 +26,8 @@ seed trees. No optimized implementation, winning Kernel, Session history or memo
 Reference, inputs, adapter, shape domains/cases, Metadata, Roofline, Gate policy and Agent
 commits match the cleaned package. Campaign creation keys are distinct from the cleaned package.
 
-Defaults remain **L20D / CuteDSL / Claude**, 100 Epochs, three Attempts per trajectory,
-100M tokens per Optimizer/Bootstrap Session, and the same four-arm ablation plan.
+Defaults remain **L20D / CuteDSL / Claude**, 5 Epochs, three Attempts per trajectory,
+100M tokens per Optimizer/Bootstrap Session, and the same three-Retained-arm ablation plan.
 New deployments use `container` (bwrap, current user, no systemd/per-Session cgroup).
 Outer-container resource limits are required separately; no Docker container is created by the scripts.
 “Full” means original input content, not access to hidden cases. Runtime/Core/KDA prompt
@@ -53,8 +53,8 @@ python scripts/gdn/prepare.py --inputs data/GDN-full --backend claude
 # Later, service process
 python scripts/gdn/run.py serve --workspace workspaces/GDN-full
 # In a separate terminal: Bootstrap plus the single Campaign
-python scripts/gdn/run.py campaign --workspace workspaces/GDN-full --target-epoch 100
-# Alternative experiment: four-arm ablation
+python scripts/gdn/run.py campaign --workspace workspaces/GDN-full --target-epoch 5
+# Alternative experiment: twelve Retained arms (four tool settings × three replicas)
 python scripts/gdn/run.py ablation --workspace workspaces/GDN-full
 ```
 

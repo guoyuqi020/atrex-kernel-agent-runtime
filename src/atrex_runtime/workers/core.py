@@ -350,7 +350,11 @@ class CoreOptimizerSessionDriver:
                 usage_unit=environment["ATREX_USAGE_UNIT"],
                 usage_budget=float(environment["ATREX_USAGE_BUDGET"]),
                 max_attempt_report_bytes=self._config.max_attempt_report_bytes,
-                tool_modules=self._config.tool_modules,
+                tool_modules=(
+                    self._config.tool_modules
+                    if config.tool_modules is None
+                    else config.tool_modules
+                ),
                 wiki_available=(
                     config.wiki_endpoint is not None and config.wiki_capability is not None
                 ),

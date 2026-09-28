@@ -374,7 +374,7 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
     trace_digest = digest("session-trace")
     traces = FakeSessionTraceRecorder([])
     events = FakeRuntimeEventRecorder([])
-    request = _request()
+    request = replace(_request(), tool_modules=("experiments",))
     finalizer = FakeFinalizer(candidate, [])
     kernel_trials = FakeKernelTrialRecorder([])
     runner = SessionOptimizerRunner(
@@ -416,6 +416,7 @@ async def test_core_process_result_uses_only_gateway_authoritative_outcome(
     assert configs[0].wiki_capability == "attempt-capability"
     assert configs[0].wiki_endpoint == "http://gateway-proxy"
     assert configs[0].model == "optimizer-model"
+    assert configs[0].tool_modules == ("experiments",)
     assert traces.records[0][0] == request.attempt_id
     assert finalizer.calls == [(request.attempt_id, digest("candidate"), None, False)]
     assert kernel_trials.records[0][2] == (

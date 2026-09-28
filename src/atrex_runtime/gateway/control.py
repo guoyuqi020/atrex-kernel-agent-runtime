@@ -12,11 +12,13 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, contextmanager
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 from ..direction_genealogy import suggestion_availability
 from ..domain.errors import (
     DirectionConcurrencyError,
+    DirectionTrajectoryConflictError,
     GatewayCapabilityPolicyChangedError,
     GatewayOperationsInProgressError,
     InfrastructureError,
@@ -157,6 +159,7 @@ _UNMETERED_OPERATIONS = frozenset(
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.RESULT_ARTIFACT_READ,
+        GatewayOperation.KERNEL_PARETO_FRONTIER,
         GatewayOperation.DIRECTION_HISTORY,
         GatewayOperation.EXPERIMENT_HISTORY,
         GatewayOperation.DIRECTION_UPDATE,
@@ -165,6 +168,8 @@ _UNMETERED_OPERATIONS = frozenset(
         GatewayOperation.EXPERIMENT_RECORD,
         GatewayOperation.EXPERIMENTS_LIST,
         GatewayOperation.EXPERIMENT_LOAD,
+        GatewayOperation.KERNEL_EXPERIMENTS_FIND,
+        GatewayOperation.KERNEL_DIRECTIONS_FIND,
         GatewayOperation.JOURNAL_SNAPSHOT,
         GatewayOperation.WIKI_QUERY,
     }
@@ -177,6 +182,7 @@ _IMPLICIT_RUNTIME_OPERATIONS = frozenset(
         GatewayOperation.KERNEL_TRIAL_SHOW,
         GatewayOperation.KERNEL_ARTIFACT_READ,
         GatewayOperation.RESULT_ARTIFACT_READ,
+        GatewayOperation.KERNEL_PARETO_FRONTIER,
         GatewayOperation.DIRECTION_HISTORY,
         GatewayOperation.EXPERIMENT_HISTORY,
         GatewayOperation.DIRECTION_UPDATE,
@@ -185,6 +191,8 @@ _IMPLICIT_RUNTIME_OPERATIONS = frozenset(
         GatewayOperation.EXPERIMENT_RECORD,
         GatewayOperation.EXPERIMENTS_LIST,
         GatewayOperation.EXPERIMENT_LOAD,
+        GatewayOperation.KERNEL_EXPERIMENTS_FIND,
+        GatewayOperation.KERNEL_DIRECTIONS_FIND,
         GatewayOperation.JOURNAL_SNAPSHOT,
     }
 )
@@ -372,6 +380,20 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         """Issue or recover the deterministic capability for one durable Attempt."""
         attempt = self._registry.get_attempt(attempt_id)
         return self._issue(attempt_id, attempt.recovery_generation, policy)
+
+    def tool_modules_for_attempt(
+        self,
+        attempt_id: AttemptId,
+        default: tuple[Literal["directions", "experiments"], ...],
+    ) -> tuple[Literal["directions", "experiments"], ...]:
+        """Resolve a frozen Lineage override while Bootstrap keeps the service default."""
+        try:
+            attempt = self._registry.get_attempt(attempt_id)
+        except KeyError:
+            return default
+        epoch = self._registry.get_epoch(attempt.epoch_id)
+        modules = self._registry.get_lineage(epoch.lineage_id).tool_modules
+        return default if modules is None else modules
 
     def issue_bootstrap(
         self,
@@ -1072,6 +1094,40 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 if not isinstance(value, dict):
                     raise TypeError("persisted Direction event must be a JSON object")
                 return value
+            if event.get("action") not in {"propose", "suggest"}:
+                try:
+                    current_attempt = self._registry.get_attempt(attempt_id)
+                except KeyError:
+                    current_attempt = None  # Bootstrap has no registered Attempt.
+                if current_attempt is not None:
+                    requested_direction_id = str(event["direction_id"])
+                    current_trajectory = (
+                        current_attempt.branch,
+                        current_attempt.challenger_ordinal,
+                        current_attempt.trajectory_ordinal,
+                    )
+                    for other in self._registry.list_attempts(current_attempt.epoch_id):
+                        if (
+                            other.id == attempt_id
+                            or (
+                                other.branch,
+                                other.challenger_ordinal,
+                                other.trajectory_ordinal,
+                            )
+                            == current_trajectory
+                        ):
+                            continue
+                        rows = connection.execute(
+                            """SELECT event_json FROM runtime_direction_events
+                               WHERE attempt_id = ? AND direction_id = ?""",
+                            (other.id, requested_direction_id),
+                        ).fetchall()
+                        if any(
+                            json.loads(str(row["event_json"])).get("action")
+                            not in {"propose", "suggest"}
+                            for row in rows
+                        ):
+                            raise DirectionTrajectoryConflictError(requested_direction_id)
             if event.get("action") == "start":
                 latest_actions: dict[str, str] = {}
                 for row in connection.execute(
@@ -1812,7 +1868,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         self,
         current_attempt_id: AttemptId,
     ) -> tuple[LineageId, tuple[AttemptId, ...]]:
-        """Return exactly the promoted and same-trajectory history visible to an Optimizer."""
+        """Return promoted history and the current Lineage's trajectory visibility scope."""
         try:
             current = self._registry.get_attempt(current_attempt_id)
         except KeyError as error:
@@ -1879,22 +1935,31 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     and attempt.challenger_ordinal == selected_challenger
                 )
             else:
-                visible.extend(
-                    attempt.id
-                    for attempt in attempts
-                    if attempt.status is AttemptStatus.COMPLETED
-                    and attempt.branch is current.branch
-                    and attempt.challenger_ordinal == current.challenger_ordinal
-                    and attempt.trajectory_ordinal == current.trajectory_ordinal
-                    and attempt.ordinal < current.ordinal
-                )
+                if lineage.trajectory_visibility == "broadcast":
+                    visible.extend(
+                        attempt.id
+                        for attempt in attempts
+                        if attempt.id != current.id
+                        and attempt.branch is current.branch
+                        and attempt.challenger_ordinal == current.challenger_ordinal
+                    )
+                else:
+                    visible.extend(
+                        attempt.id
+                        for attempt in attempts
+                        if attempt.status is AttemptStatus.COMPLETED
+                        and attempt.branch is current.branch
+                        and attempt.challenger_ordinal == current.challenger_ordinal
+                        and attempt.trajectory_ordinal == current.trajectory_ordinal
+                        and attempt.ordinal < current.ordinal
+                    )
         return lineage.id, tuple(visible)
 
     def visible_kernel_trial_attempt_ids(
         self,
         current_attempt_id: AttemptId,
     ) -> tuple[LineageId, tuple[AttemptId, ...]]:
-        """Return completed branch history plus same-trajectory and live Kernel Trials."""
+        """Return completed branch history plus visible live Kernel Trials."""
         lineage_id, visible = self.visible_measurement_attempt_ids(current_attempt_id)
         try:
             current = self._registry.get_attempt(current_attempt_id)

@@ -39,6 +39,10 @@ _COMMAND_BINDINGS: dict[str, dict[str, object]] = {
         "kind": "runtime-query",
         "operation": "result_artifact_read",
     },
+    "kernel-pareto-frontier": {
+        "kind": "runtime-query",
+        "operation": "kernel_pareto_frontier",
+    },
     "update-direction": {
         "kind": "runtime-journal",
         "operation": "direction_update",
@@ -63,6 +67,14 @@ _COMMAND_BINDINGS: dict[str, dict[str, object]] = {
         "kind": "runtime-journal",
         "operation": "experiment_load",
     },
+    "find-kernel-experiments": {
+        "kind": "runtime-journal",
+        "operation": "kernel_experiments_find",
+    },
+    "find-kernel-directions": {
+        "kind": "runtime-journal",
+        "operation": "kernel_directions_find",
+    },
     "attempt-report": {
         "kind": "runtime-terminal",
         "operation": "attempt_report",
@@ -72,8 +84,12 @@ _COMMAND_BINDINGS: dict[str, dict[str, object]] = {
     },
 }
 _MODULE_COMMANDS = {
-    "directions": frozenset({"update-direction", "list-directions", "load-direction"}),
-    "experiments": frozenset({"record-experiment", "list-experiments", "load-experiment"}),
+    "directions": frozenset(
+        {"update-direction", "list-directions", "load-direction", "find-kernel-directions"}
+    ),
+    "experiments": frozenset(
+        {"record-experiment", "list-experiments", "load-experiment", "find-kernel-experiments"}
+    ),
 }
 
 

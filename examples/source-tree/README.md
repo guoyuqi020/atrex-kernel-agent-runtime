@@ -27,12 +27,12 @@ python3 examples/source-tree/prepare.py \
   --hardware-target "$AGATE_GPU" \
   --output workspaces/gdn-source-tree
 
-# Uses the existing services; Bootstrap once, then all seven ablation Campaigns:
+# Uses the existing services; Bootstrap once, then twelve Retained Campaigns:
 python scripts/source-tree/run.py \
   --config "$ATREX_RUNTIME_CONFIG" \
   --campaign workspaces/gdn-source-tree/campaign.json \
   --plan workspaces/gdn-source-tree/ablation.json \
-  --workspace workspaces/gdn-source-tree/run --target-epoch 100
+  --workspace workspaces/gdn-source-tree/run --target-epoch 5
 ```
 
 Select hardware capable of the original SM103 task; this example does not reinterpret it as an
@@ -41,27 +41,26 @@ to the deployment's configured base repository. Output must be a new directory. 
 generated Campaign unchanged, rather than rerunning preparation over an existing workspace.
 
 Default: CuteDSL only, with the same enabled matrix as single-file production: three independent
-Retained replicas and one Pool-Retained instance with three Trajectories. Isolated, Pool-3,
-Evolve-3, Isolated-Evolve, Isolated-Pool-Evolve, and Retained-Evolve Workflows remain available but are disabled.
+Retained replicas for each of four Direction/Experiment tool configurations (both off, either one,
+both on). Pool-Retained, Broadcast, Retained-Evolve, and the other control Workflows
+remain available but are disabled in new plans.
 The generated
 `ablation.json` and checked-in `ablation.example.json`
 use the shared production plan builder, not a second set of scheduling rules.
 All Lineages start from one frozen source-tree v0; controls never repeat Bootstrap/evaluation.
-Each runs 100 Epochs with three serial Attempts per trajectory. Retained
-replicas have one trajectory (300 Attempts each); the Pool-Retained instance has three (900 total).
-All enabled arms retain adaptive State. Pool trajectories share the winning Kernel at Epoch
-boundaries while retaining their own terminal State.
-Total: 1,800
-Optimizer Attempts; no external original-AKA run. Arms have independent later history/state.
+Each runs 5 Epochs with one trajectory and three serial Attempts per Epoch (15 Attempts each).
+All enabled arms retain adaptive State; the next Epoch starts from that Lineage's selected best
+Kernel. Total: 180 Optimizer Attempts; no external original-AKA run. Arms have independent later
+history and State.
 
 The runner saves per-arm seed IDs, logs/results and `campaign-results.json` under `run/`.
 Actual Session/Artifact storage remains in the supplied Runtime. Failures do not cancel
 other arms; rerunning resumes the same identities. Do not change frozen inputs to resume.
-New control plans spend 300 Attempts per trajectory. `--target-epoch` is retained only for
+New control plans spend 15 Attempts per trajectory. `--target-epoch` is retained only for
 compatibility with plans that enable the main arm.
-Existing workspaces retain their frozen plan; explicitly use `--target-epoch 5` to resume an
-old five-Epoch experiment without extending its main arm.
-This can run six Optimizers concurrently; provision sufficient host memory. Nothing starts
+Existing workspaces retain their frozen plan; pass the original absolute target when resuming
+an older main-arm run.
+This can run three Optimizers concurrently; provision sufficient host memory. Nothing starts
 during preparation. To run only the main arm, use the raw `bootstrap` and `run-campaign`
 CLI commands instead of this runner.
 

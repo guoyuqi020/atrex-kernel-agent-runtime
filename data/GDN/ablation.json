@@ -2,47 +2,160 @@
   "schema_version": 10,
   "enabled": true,
   "main_evolve_enabled": false,
-  "optimizer_attempt_budget_per_trajectory": 300,
+  "optimizer_attempt_budget_per_trajectory": 15,
   "arms": [
     {
       "kind": "retained",
       "label": "ablation-retained-01",
-      "target_epoch_number": 100,
+      "target_epoch_number": 5,
       "workflow_command": "workflow/retained.py",
       "max_challengers": 0,
       "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 0
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "directions",
+        "experiments"
+      ]
     },
     {
       "kind": "retained",
       "label": "ablation-retained-02",
-      "target_epoch_number": 100,
+      "target_epoch_number": 5,
       "workflow_command": "workflow/retained.py",
       "max_challengers": 0,
       "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 0
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "directions",
+        "experiments"
+      ]
     },
     {
       "kind": "retained",
       "label": "ablation-retained-03",
-      "target_epoch_number": 100,
+      "target_epoch_number": 5,
       "workflow_command": "workflow/retained.py",
       "max_challengers": 0,
       "optimizer_attempt_budget": 3,
-      "optimizer_attempt_budget_total": 300,
-      "evolution_count": 0
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "directions",
+        "experiments"
+      ]
     },
     {
-      "kind": "pool-retained",
-      "label": "ablation-pool-retained-3",
-      "target_epoch_number": 100,
-      "workflow_command": "workflow/pool_retained_3.py",
+      "kind": "retained",
+      "label": "ablation-retained-no-modules-01",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
       "max_challengers": 0,
-      "optimizer_attempt_budget": 9,
-      "optimizer_attempt_budget_total": 900,
-      "evolution_count": 0
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": []
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-no-modules-02",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": []
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-no-modules-03",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": []
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-experiments-01",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "experiments"
+      ]
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-experiments-02",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "experiments"
+      ]
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-experiments-03",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "experiments"
+      ]
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-directions-01",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "directions"
+      ]
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-directions-02",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "directions"
+      ]
+    },
+    {
+      "kind": "retained",
+      "label": "ablation-retained-directions-03",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/retained.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 15,
+      "evolution_count": 0,
+      "tool_modules": [
+        "directions"
+      ]
     }
   ]
 }

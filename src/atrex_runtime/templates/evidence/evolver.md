@@ -15,8 +15,11 @@ Evidence files and use only the Session-context `evolution_report.tool` for subm
 | --- | --- |
 | `gateway-execute` | Executes one supported GPU operation; Runtime owns Job tracking, infrastructure retries, request deduplication, result projection, and measurement persistence. |
 | `kernel-artifact-read` / `result-artifact-read` | Copies a selected Kernel Artifact source file into `scratch/`, or reads a normalized Agent-visible Result Artifact by digest. |
+| `kernel-pareto-frontier` | Shows the visible per-Shape minimum latency and winning Kernel Artifact digest from correct full contract Evaluations. |
 | `list-directions` / `load-direction` | Writes the visible Direction index to a requested `scratch/` file, or loads one complete Direction and its evidence links. |
 | `list-experiments` / `load-experiment` | Writes the visible Experiment index to a requested `scratch/` file, or loads one complete recorded Experiment. |
+| `find-kernel-experiments` | Finds visible Experiment IDs citing an exact Kernel Artifact digest. |
+| `find-kernel-directions` | Finds distinct Direction IDs linked through visible Experiments citing an exact Kernel Artifact digest. |
 | `update-direction` / `record-experiment` | Immediately persists Direction lifecycle changes or evidence-linked Experiments; enforces visibility, state, and provenance rules. |
 | `attempt-report` | Validates and publishes the terminal handoff. Invalid drafts can be repaired and resubmitted; Runtime alone decides Kernel retention and Agent promotion. |
 

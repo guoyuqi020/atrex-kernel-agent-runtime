@@ -41,6 +41,7 @@ class GatewayOperation(StrEnum):
     KERNEL_TRIAL_SHOW = "kernel_trial_show"
     KERNEL_ARTIFACT_READ = "kernel_artifact_read"
     RESULT_ARTIFACT_READ = "result_artifact_read"
+    KERNEL_PARETO_FRONTIER = "kernel_pareto_frontier"
     DIRECTION_HISTORY = "direction_history"
     EXPERIMENT_HISTORY = "experiment_history"
     DIRECTION_UPDATE = "direction_update"
@@ -49,6 +50,8 @@ class GatewayOperation(StrEnum):
     EXPERIMENT_RECORD = "experiment_record"
     EXPERIMENTS_LIST = "experiments_list"
     EXPERIMENT_LOAD = "experiment_load"
+    KERNEL_EXPERIMENTS_FIND = "kernel_experiments_find"
+    KERNEL_DIRECTIONS_FIND = "kernel_directions_find"
     JOURNAL_SNAPSHOT = "journal_snapshot"
     WIKI_QUERY = "wiki_query"
 

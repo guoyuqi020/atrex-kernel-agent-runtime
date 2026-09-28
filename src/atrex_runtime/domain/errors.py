@@ -115,6 +115,19 @@ class DirectionConcurrencyError(ValueError):
         )
 
 
+class DirectionTrajectoryConflictError(ValueError):
+    """Another Trajectory in this Epoch already advanced this Direction ID."""
+
+    def __init__(self, direction_id: str) -> None:
+        self.direction_id = direction_id
+        super().__init__(
+            f"Direction {direction_id} was already updated by another Trajectory in this Epoch. "
+            "This update was not recorded. Propose a new Direction with relationship "
+            "reimplementation and derived_from_direction_ids containing the original ID "
+            "to explore a competing implementation without replacing its conclusion"
+        )
+
+
 class DirectionSuggestionForbiddenError(ValueError):
     """A live Agent tried to create a retired suggested Direction."""
 

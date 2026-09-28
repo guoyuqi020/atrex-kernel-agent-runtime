@@ -49,6 +49,8 @@ class AblationArmSpecV1(BaseModel):
     workflow_command: str | None = None
     optimizer_model: str | None = Field(default=None, min_length=1, max_length=200)
     evolver_observer_lineage_id: LineageId | None = None
+    trajectory_visibility: Literal["isolated", "broadcast"] = "isolated"
+    tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
 
     @field_validator("creation_key")
     @classmethod
@@ -57,6 +59,15 @@ class AblationArmSpecV1(BaseModel):
         if not normalized or "\x00" in normalized:
             raise ValueError("ablation arm creation_key is invalid")
         return normalized
+
+    @field_validator("tool_modules")
+    @classmethod
+    def _validate_tool_modules(
+        cls, value: tuple[Literal["directions", "experiments"], ...] | None
+    ) -> tuple[Literal["directions", "experiments"], ...] | None:
+        if value is not None and len(value) != len(set(value)):
+            raise ValueError("ablation arm tool modules cannot repeat")
+        return value
 
     @field_validator("source_lineage_id", mode="before")
     @classmethod
@@ -178,6 +189,8 @@ class AblationArmSeeder:
                 optimizer_attempt_budget=spec.optimizer_attempt_budget,
                 workflow_command=spec.workflow_command,
                 evolver_observer_lineage_id=spec.evolver_observer_lineage_id,
+                trajectory_visibility=spec.trajectory_visibility,
+                tool_modules=spec.tool_modules,
             ),
         )
         return AblationArmResult(

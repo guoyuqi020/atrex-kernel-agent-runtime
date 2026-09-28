@@ -33,6 +33,8 @@ from .protocol import (
     ExperimentLoadRequestV2,
     ExperimentRecordRequestV2,
     GatewayProxyRequestV2,
+    KernelDirectionsFindRequestV2,
+    KernelExperimentsFindRequestV2,
 )
 
 _DIRECTION_PROPOSAL_FIELDS = {
@@ -115,11 +117,7 @@ class RuntimeJournalService:
             raise ValueError("Attempt report tool modules disagree with Runtime Journal")
         if any(event.action == "suggest" for event in report.direction_events):
             raise DirectionSuggestionForbiddenError("report.direction_events.action")
-        in_progress = sorted(
-            direction_id
-            for direction_id, direction in self._direction_views(report.attempt_id).items()
-            if direction["status"] == "in_progress"
-        )
+        in_progress = self._current_in_progress_direction_ids(report.attempt_id)
         if in_progress:
             raise ValueError(
                 "Attempt report cannot leave a Runtime-owned Direction in progress: "
@@ -231,6 +229,35 @@ class RuntimeJournalService:
                     visible.pop("sequence", None)
                     return cast(dict[str, JsonValue], visible)
             raise ValueError("Experiment ID is outside the current Attempt's visible history")
+        if isinstance(request, (KernelExperimentsFindRequestV2, KernelDirectionsFindRequestV2)):
+            associated = [
+                experiment
+                for experiment in self._visible_experiments(request.attempt_id)
+                if any(
+                    isinstance(subject := experiment.get(role), Mapping)
+                    and subject.get("kernel_artifact_digest") == request.kernel_artifact_digest
+                    for role in ("before", "after")
+                )
+            ]
+            if isinstance(request, KernelExperimentsFindRequestV2):
+                ids = [str(experiment["experiment_id"]) for experiment in associated]
+                return {
+                    "kernel_artifact_digest": request.kernel_artifact_digest,
+                    "experiment_ids": ids,
+                    "count": len(ids),
+                }
+            direction_ids = list(
+                dict.fromkeys(
+                    str(direction_id)
+                    for experiment in associated
+                    if (direction_id := experiment.get("direction_id")) is not None
+                )
+            )
+            return {
+                "kernel_artifact_digest": request.kernel_artifact_digest,
+                "direction_ids": direction_ids,
+                "count": len(direction_ids),
+            }
         if request.operation == "journal_snapshot":
             return cast(
                 dict[str, JsonValue],
@@ -312,6 +339,17 @@ class RuntimeJournalService:
                 event, context={"trusted_direction_history": True, "experiments_enabled": False}
             ).model_dump(mode="json")
             for event in self.control.list_direction_events(attempt_id)
+        )
+
+    def _current_in_progress_direction_ids(self, attempt_id: AttemptId) -> list[str]:
+        """Only this Attempt owns its open Directions; broadcast siblings own theirs."""
+        latest_actions = {
+            str(event["direction_id"]): str(event["action"])
+            for event in self._current_direction_events(attempt_id)
+            if event["action"] not in {"propose", "suggest"}
+        }
+        return sorted(
+            direction_id for direction_id, action in latest_actions.items() if action == "start"
         )
 
     def _current_experiments(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
@@ -693,14 +731,11 @@ class RuntimeJournalService:
                         "for a future Attempt"
                     )
                 in_progress = tuple(
-                    sorted(
-                        visible_direction_id
-                        for visible_direction_id, visible_direction in self._direction_views(
-                            request.attempt_id
-                        ).items()
-                        if visible_direction["status"] == "in_progress"
-                        and visible_direction_id != direction_id
+                    visible_direction_id
+                    for visible_direction_id in self._current_in_progress_direction_ids(
+                        request.attempt_id
                     )
+                    if visible_direction_id != direction_id
                 )
                 if in_progress:
                     raise DirectionConcurrencyError(direction_id, in_progress)

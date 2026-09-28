@@ -24,8 +24,9 @@ Kernel 源码与清理版完全相同，两个 seed 树仅 `UPSTREAM_PROVENANCE.
 adapter、输入范围及测试用例、Metadata、Roofline、Gate 策略和 Agent commit 均与清理版相同。
 Campaign 使用独立 creation key，不复用清理版的实验身份。
 
-默认仍为 **L20D / CuteDSL / Claude**、100 个 Epoch、每条轨迹每轮 3 次 Attempt、
-Optimizer/Bootstrap 每 Session 100M tokens，使用四臂消融方案。
+默认仍为 **L20D / CuteDSL / Claude**、5 个 Epoch、每条轨迹每轮 3 次 Attempt、
+Optimizer/Bootstrap 每 Session 100M tokens，使用十二个 Retained 臂的消融方案：
+Direction/Experiment 全关、各开一个、全开，每种三个重复臂。
 新配置默认 `container`：bwrap 隔离、当前用户运行，不需要 systemd/每 Session cgroup。
 资源限额由外层容器负责，脚本不会自动创建 Docker 容器。
 “不屏蔽”指输入恢复原始内容，并不开放隐藏测试集，也不改变 Runtime/Core/KDA 的 Prompt
@@ -50,8 +51,8 @@ python scripts/gdn/prepare.py --inputs data/GDN-full --backend claude
 # 后续：服务进程
 python scripts/gdn/run.py serve --workspace workspaces/GDN-full
 # 另一个终端：Bootstrap 加单 Campaign
-python scripts/gdn/run.py campaign --workspace workspaces/GDN-full --target-epoch 100
-# 或选择四臂消融
+python scripts/gdn/run.py campaign --workspace workspaces/GDN-full --target-epoch 5
+# 或选择十二个 Retained 臂
 python scripts/gdn/run.py ablation --workspace workspaces/GDN-full
 ```
 

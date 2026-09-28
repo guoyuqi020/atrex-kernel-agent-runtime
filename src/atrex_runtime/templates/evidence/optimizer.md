@@ -106,6 +106,9 @@ results remain visible.
 ## Direction ancestry
 
 Resume the same unfinished hypothesis with `update-direction` and its existing Direction ID.
+Parallel Pool Trajectories use separate Direction IDs for competing implementations. If Runtime
+reports `direction_trajectory_conflict`, propose a new Direction with
+`relationship="reimplementation"` and the inherited Direction ID as its parent.
 When you revisit, reinterpret, port, or combine earlier work as a new hypothesis, use `action="propose"`
 with optional `relationship`: `retry`, `refinement`, `reimplementation`, `correction`, `port`,
 `combination`, or `adoption`. Cite visible `derived_from_direction_ids` and/or `derived_from_experiment_ids` and
@@ -116,8 +119,10 @@ one of those parents; this records a revised interpretation without changing the
 Ancestry is fixed when the proposal is recorded. To correct it, propose a new derived Direction;
 do not rewrite history. These links describe your interpretation, not proof of a performance gain.
 
-Use `list-directions` to find prior work and `load-direction` to inspect its evidence. Historical
-suggested Directions remain readable; they are untested recommendations, not facts or required
+Use `list-directions` to find prior work and `load-direction` to inspect its evidence.
+Use `kernel-pareto-frontier` to inspect the visible per-Shape latency winners before choosing
+which Kernel Artifact to study or reuse. These winners come from correct full contract Evaluations.
+Historical suggested Directions remain readable; they are untested recommendations, not facts or required
 next steps. No session can create new suggestions. Choose your own hypothesis from
 the public contract, profiling, and Journal evidence, then record it with `action="propose"`.
 

@@ -75,7 +75,7 @@ from ..domain.models import (
 from ..sqlite_support import configure_durable_sqlite
 from .stop_migration import migrate_stops
 
-SCHEMA_VERSION = 43
+SCHEMA_VERSION = 45
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -797,6 +797,28 @@ class SqliteRegistry:
                        )"""
                 )
                 self._connection.execute("PRAGMA user_version = 43")
+            self._migrate()
+            return
+        if version == 43:
+            with self._transaction(migration=True):
+                lineage_columns = self._table_columns("lineages")
+                if lineage_columns and "trajectory_visibility" not in lineage_columns:
+                    self._connection.execute(
+                        "ALTER TABLE lineages ADD COLUMN trajectory_visibility TEXT "
+                        "NOT NULL DEFAULT 'isolated' "
+                        "CHECK (trajectory_visibility IN ('isolated', 'broadcast'))"
+                    )
+                self._connection.execute("PRAGMA user_version = 44")
+            self._migrate()
+            return
+        if version == 44:
+            with self._transaction(migration=True):
+                lineage_columns = self._table_columns("lineages")
+                if lineage_columns and "tool_modules_json" not in lineage_columns:
+                    self._connection.execute(
+                        "ALTER TABLE lineages ADD COLUMN tool_modules_json TEXT"
+                    )
+                self._connection.execute("PRAGMA user_version = 45")
             self._migrate()
             return
         if version == 23:
@@ -3429,8 +3451,9 @@ class SqliteRegistry:
                        evidence_checkpoint, optimizer_attempt_budget,
                        next_epoch_number, status, max_challengers,
                        optimizer_model, evolver_model, bootstrap_source_lineage_id,
-                       evolver_observer_lineage_id
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       evolver_observer_lineage_id, trajectory_visibility,
+                       tool_modules_json
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     lineage.id,
                     lineage.campaign_id,
@@ -3447,6 +3470,8 @@ class SqliteRegistry:
                     lineage.evolver_model,
                     lineage.bootstrap_source_lineage_id,
                     lineage.evolver_observer_lineage_id,
+                    lineage.trajectory_visibility,
+                    None if lineage.tool_modules is None else json.dumps(lineage.tool_modules),
                 ),
             )
             baseline = self.get_kernel_revision(lineage.best_kernel_revision_id)
@@ -3517,6 +3542,15 @@ class SqliteRegistry:
                 None
                 if (observer := _optional_text(row, "evolver_observer_lineage_id")) is None
                 else parse_lineage_id(observer)
+            ),
+            trajectory_visibility=cast(
+                Literal["isolated", "broadcast"],
+                _required_text(row, "trajectory_visibility"),
+            ),
+            tool_modules=(
+                None
+                if (modules_json := _optional_text(row, "tool_modules_json")) is None
+                else tuple(json.loads(modules_json))
             ),
         )
 

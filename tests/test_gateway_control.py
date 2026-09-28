@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,10 +16,12 @@ from conftest import NOW, digest, freeze_branch_workflow, seed_lineage
 from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.domain.errors import (
     DirectionConcurrencyError,
+    DirectionTrajectoryConflictError,
     InfrastructureError,
     InvalidTransitionError,
 )
 from atrex_runtime.domain.ids import (
+    AttemptId,
     LineageId,
     new_attempt_id,
     new_epoch_id,
@@ -180,6 +183,205 @@ def test_direction_start_is_atomically_single_active(tmp_path: Path) -> None:
     assert conflicts[0].requested_direction_id != recorded[0]["direction_id"]
     assert conflicts[0].in_progress_direction_ids == (recorded[0]["direction_id"],)
     assert len(control.list_direction_events(attempt.id)) == 1
+    control.close()
+    registry.close()
+
+
+def test_parallel_trajectories_cannot_advance_one_direction_id(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    first = _insert_attempt(registry, trajectories=2)
+    second = replace(first, id=new_attempt_id(), trajectory_ordinal=2)
+    registry.insert_attempt(second)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite",
+        registry,
+        signing_key=b"p" * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    policy = GatewayCapabilityPolicy(
+        frozenset({GatewayOperation.DIRECTION_UPDATE}),
+        8,
+        NOW_DATETIME + timedelta(hours=1),
+    )
+    control.issue(first.id, policy)
+    control.issue(second.id, policy)
+    direction_id = "direction_" + "a" * 32
+
+    def start(attempt_id: AttemptId, ordinal: int) -> object:
+        event = {
+            "direction_event_id": f"directionevent_{ordinal:032x}",
+            "direction_id": direction_id,
+            "recorded_at": NOW_DATETIME.isoformat(),
+            "action": "start",
+        }
+        try:
+            return control.append_direction_event(
+                attempt_id,
+                f"direction-start-{ordinal}",
+                event,
+                recovery_generation=0,
+            )
+        except DirectionTrajectoryConflictError as error:
+            return error
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = tuple(executor.map(lambda pair: start(*pair), ((first.id, 1), (second.id, 2))))
+    assert sum(isinstance(result, dict) for result in results) == 1
+    assert sum(isinstance(result, DirectionTrajectoryConflictError) for result in results) == 1
+    losing_attempt = second if isinstance(results[0], dict) else first
+    with pytest.raises(DirectionTrajectoryConflictError):
+        control.append_direction_event(
+            losing_attempt.id,
+            "direction-close-competing",
+            {
+                "direction_event_id": "directionevent_" + "f" * 32,
+                "direction_id": direction_id,
+                "recorded_at": NOW_DATETIME.isoformat(),
+                "action": "complete",
+            },
+            recovery_generation=0,
+        )
+    assert sum(len(control.list_direction_events(item.id)) for item in (first, second)) == 1
+    control.close()
+    registry.close()
+
+
+def test_broadcast_trajectories_share_live_journals_but_isolated_do_not(tmp_path: Path) -> None:
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    first = _insert_attempt(registry, trajectories=3)
+    second = replace(first, id=new_attempt_id(), trajectory_ordinal=2)
+    third = replace(first, id=new_attempt_id(), trajectory_ordinal=3)
+    registry.insert_attempt(second)
+    registry.insert_attempt(third)
+    epoch = registry.get_epoch(first.epoch_id)
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite", registry, signing_key=b"b" * 32
+    )
+    policy = GatewayCapabilityPolicy(
+        frozenset({GatewayOperation.DIRECTION_UPDATE}),
+        8,
+        NOW_DATETIME + timedelta(hours=1),
+    )
+    for attempt in (first, second, third):
+        control.issue(attempt.id, policy)
+
+    direction_id = "direction_" + "b" * 32
+    control.append_direction_event(
+        first.id,
+        "first-proposal",
+        {
+            "direction_event_id": "directionevent_" + "b" * 32,
+            "direction_id": direction_id,
+            "recorded_at": NOW_DATETIME.isoformat(),
+            "action": "propose",
+            "name": "shared idea",
+            "hypothesis": "shared work improves latency",
+            "rationale": "shared evidence",
+            "plan": ["try the idea"],
+            "success_criteria": "latency improves",
+            "stop_conditions": "latency regresses",
+            "analysis": None,
+            "supporting_experiment_ids": [],
+        },
+        recovery_generation=0,
+    )
+    experiment_id = "experiment_" + "c" * 32
+    control.append_experiment(
+        first.id,
+        "first-experiment",
+        {
+            "experiment_id": experiment_id,
+            "direction_id": direction_id,
+            "sequence": 1,
+            "recorded_at": NOW_DATETIME.isoformat(),
+            "name": "shared observation",
+            "hypothesis": "the shared idea may help",
+            "change": "no measured change",
+            "before": None,
+            "after": None,
+            "evidence": "investigation recorded",
+            "analysis": "continue investigating",
+            "action": "abandon_direction",
+        },
+        recovery_generation=0,
+    )
+    journals = RuntimeJournalService(control, LocalArtifactStore(tmp_path / "artifacts"))
+
+    assert first.id not in control.visible_measurement_attempt_ids(second.id)[1]
+    assert first.id not in control.visible_journal_attempt_ids(second.id)[1]
+    assert direction_id not in journals._direction_views(second.id)
+    registry._connection.execute(
+        "UPDATE lineages SET trajectory_visibility = 'broadcast' WHERE id = ?",
+        (epoch.lineage_id,),
+    )
+    for reader in (second, third):
+        assert first.id in control.visible_measurement_attempt_ids(reader.id)[1]
+        assert first.id in control.visible_kernel_trial_attempt_ids(reader.id)[1]
+        assert first.id in control.visible_journal_attempt_ids(reader.id)[1]
+        assert direction_id in journals._direction_views(reader.id)
+        assert control.live_visible_experiments(reader.id)[0]["experiment_id"] == experiment_id
+    assert second.id in control.visible_journal_attempt_ids(first.id)[1]
+    control.append_direction_event(
+        second.id,
+        "second-start-shared",
+        {
+            "direction_event_id": "directionevent_" + "d" * 32,
+            "direction_id": direction_id,
+            "recorded_at": NOW_DATETIME.isoformat(),
+            "action": "start",
+            "name": None,
+            "hypothesis": None,
+            "rationale": None,
+            "plan": [],
+            "success_criteria": None,
+            "stop_conditions": None,
+            "analysis": "taking the proposed direction",
+            "supporting_experiment_ids": [],
+        },
+        recovery_generation=0,
+    )
+    own_direction_id = "direction_" + "e" * 32
+    control.append_direction_event(
+        first.id,
+        "first-own-proposal",
+        {
+            "direction_event_id": "directionevent_" + "e" * 32,
+            "direction_id": own_direction_id,
+            "recorded_at": NOW_DATETIME.isoformat(),
+            "action": "propose",
+            "name": "independent idea",
+            "hypothesis": "independent work improves latency",
+            "rationale": "different mechanism",
+            "plan": ["try the other idea"],
+            "success_criteria": "latency improves",
+            "stop_conditions": "latency regresses",
+            "analysis": None,
+            "supporting_experiment_ids": [],
+        },
+        recovery_generation=0,
+    )
+    control.append_direction_event(
+        first.id,
+        "first-start-own",
+        {
+            "direction_event_id": "directionevent_" + "f" * 32,
+            "direction_id": own_direction_id,
+            "recorded_at": NOW_DATETIME.isoformat(),
+            "action": "start",
+            "name": None,
+            "hypothesis": None,
+            "rationale": None,
+            "plan": [],
+            "success_criteria": None,
+            "stop_conditions": None,
+            "analysis": "working independently",
+            "supporting_experiment_ids": [],
+        },
+        recovery_generation=0,
+    )
+    assert journals._current_in_progress_direction_ids(first.id) == [own_direction_id]
+    assert journals._current_in_progress_direction_ids(second.id) == [direction_id]
+    assert set(journals._direction_views(third.id)) == {direction_id, own_direction_id}
     control.close()
     registry.close()
 
@@ -888,12 +1090,14 @@ def _insert_attempt(
     registry: SqliteRegistry,
     dsl: Dsl = Dsl.TRITON,
     bootstrap_source_lineage_id: LineageId | None = None,
+    trajectories: int = 1,
 ) -> Attempt:
     seeded = seed_lineage(
         registry,
         dsl=dsl,
         evidence_checkpoint=digest("evidence"),
         challenger_count=0,
+        trajectories_per_branch=trajectories,
         attempts_per_trajectory=1,
         bootstrap_source_lineage_id=bootstrap_source_lineage_id,
     )
@@ -906,7 +1110,7 @@ def _insert_attempt(
         starting_kernel_revision_id=seeded.baseline.id,
         evidence_checkpoint=digest("evidence"),
         max_challengers=0,
-        optimizer_attempt_budget=1,
+        optimizer_attempt_budget=trajectories,
         status=EpochStatus.RUNNING,
         winner_kernel_agent_revision_id=None,
         best_kernel_revision_id=None,
@@ -914,7 +1118,7 @@ def _insert_attempt(
         completed_at=None,
     )
     registry.insert_epoch(epoch)
-    freeze_branch_workflow(registry, epoch)
+    freeze_branch_workflow(registry, epoch, trajectories=trajectories, attempts_per_trajectory=1)
     attempt = Attempt(
         id=new_attempt_id(),
         epoch_id=epoch.id,
@@ -1640,11 +1844,16 @@ def test_profile_evidence_can_cite_visible_bootstrap_without_an_experiment(tmp_p
     registry.close()
 
 
-def test_visible_history_never_crosses_lineages(tmp_path: Path) -> None:
+@pytest.mark.parametrize("visibility", ("isolated", "broadcast"))
+def test_visible_history_never_crosses_lineages(tmp_path: Path, visibility: str) -> None:
     """Ablation isolation rests entirely on this: no query reaches another Lineage."""
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     subject = _insert_attempt(registry)
     foreign = _insert_attempt(registry, Dsl.CUDA)
+    registry._connection.execute(
+        "UPDATE lineages SET trajectory_visibility = ? WHERE id = ?",
+        (visibility, registry.get_epoch(subject.epoch_id).lineage_id),
+    )
     registry.complete_attempt(
         foreign.id,
         None,

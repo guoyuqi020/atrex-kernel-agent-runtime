@@ -299,6 +299,8 @@ json.dump(
         "optimizer_attempt_budget": int(arm["optimizer_attempt_budget"]),
         "max_challengers": int(arm["max_challengers"]),
         "workflow_command": arm["workflow_command"],
+        "trajectory_visibility": arm.get("trajectory_visibility", "isolated"),
+        "tool_modules": arm.get("tool_modules"),
         "evolver_observer_lineage_id": observer_id,
     },
     open(sys.argv[3], "w", encoding="utf-8"),

@@ -43,7 +43,7 @@ python scripts/gdn/run.py ablation
 
 This starts tasks only, as the same container user as `campaign`, without sudo/systemd.
 `ablation-campaign.json` uses a new `gdn-source-tree-l20d-claude-ablation` creation key;
-it neither changes nor takes over the existing trial. After one full Bootstrap, four Lineages
+it neither changes nor takes over the existing trial. After one full Bootstrap, twelve Lineages
 reuse the new experiment's exact v0, Agent, edit boundaries, contract and initial evidence.
 No repeated baseline measurement or old trial experience is imported.
 
@@ -51,27 +51,29 @@ No repeated baseline measurement or old trial experience is imported.
 
 | Campaign instance | Agent Workflow behavior | Optimizer Attempts | Retain State | Evolutions |
 |---|---|---:|---|---:|
-| `ablation-retained-01/02/03` | One trajectory × 3 per replica | 300 each | yes | 0 |
-| `ablation-pool-retained-3` | Three trajectories × 3 | 900 | yes | 0 |
+| `ablation-retained-01/02/03` | One trajectory × 3 per replica | 15 each | yes | 0 |
+| `ablation-retained-no-modules-01/02/03` | Direction and Experiment tools off | 15 each | yes | 0 |
+| `ablation-retained-experiments-01/02/03` | Experiment tools only | 15 each | yes | 0 |
+| `ablation-retained-directions-01/02/03` | Direction tools only | 15 each | yes | 0 |
 
-Four Campaigns, 100 Epochs each, 1,800 Optimizer Attempts excluding Bootstrap. Isolated,
-Pool-3, Evolve-3, Isolated-Evolve, Isolated-Pool-Evolve, and Retained-Evolve remain implemented but are disabled.
-No external original-AKA control is launched. Resetting State preserves Kernel progress and
-Runtime journals. Pools restart from the best Kernel at Epoch boundaries; Pool-Retained also
-inherits that trajectory's terminal State, without merging. Arms share no subsequent history
-or writable files.
+Twelve Campaigns, 5 Epochs each, 180 Optimizer Attempts excluding Bootstrap. The original
+Retained labels have both tool modules enabled. Pool-Retained,
+Broadcast, Retained-Evolve, and the other control Workflows remain implemented but are disabled
+in new plans. No external original-AKA control is launched. Each Retained replica keeps its own
+State and Lineage history; the next Epoch starts from that Lineage's selected best Kernel.
+Existing Workspaces retain their frozen plans.
 
 Outputs live under `workspaces/GDN/ablation/`: frozen inputs, Bootstrap, `campaign-results.json`,
 and per-arm `campaign-result.json` / `campaign.log` (plus control seed definitions/results).
 The summary exposes Campaign/Lineage IDs for inspect. Sessions/Artifacts remain in the shared
 `workspaces/GDN/state/`. Attempt progress streams to each log; arm completion prints a timestamp.
 Failures do not cancel siblings. Rerunning resumes the same identities and reports completed
-results. `--target-epoch` affects only the main arm; controls retain 300 Attempts per trajectory in new plans.
-Existing workspaces keep their frozen control budgets; to resume an old five-Epoch run without
-extending the main arm, pass `--target-epoch 5` explicitly.
+results. `--target-epoch` affects only the main arm; new control plans spend 15 Attempts per trajectory.
+Existing workspaces keep their frozen control budgets; pass the original absolute target when
+resuming an older main-arm run.
 Changed frozen inputs require a new workspace and creation key.
 
-Up to six Optimizer workers run concurrently. On memory-limited Lima, finish the old trial
+Up to nine Optimizer workers run concurrently. On memory-limited Lima, finish the old trial
 before explicitly launching this suite. Adding these configs does not start/stop/restart tasks.
 
 ## Contents and provenance
@@ -150,7 +152,7 @@ processes need matching `ATREX_CAPABILITY_SIGNING_KEY` and `ATREX_ADMIN_BEARER_T
 The selected model CLI must already be installed and authenticated.
 
 Alternatively, run `python scripts/gdn/run.py serve` and
-`python scripts/gdn/run.py campaign --target-epoch 100` in separate Linux processes with Agate
+`python scripts/gdn/run.py campaign --target-epoch 5` in separate Linux processes with Agate
 environment variables loaded, as the same container user without sudo. They
 automatically share persistent `runtime-secrets.json` (mode 0600, Git-ignored), run Bootstrap
 before the requested Epoch, and save `bootstrap-result.json` / `epoch-result.json`. A failed
@@ -177,19 +179,19 @@ atrex-kernel-agent-runtime serve --config workspaces/GDN/runtime.json
 atrex-kernel-agent-runtime bootstrap \
   --config workspaces/GDN/runtime.json --campaign workspaces/GDN/campaign.json
 
-# Substitute the returned campaign_id. Run through Epoch 100.
+# Substitute the returned campaign_id. Run through Epoch 5.
 atrex-kernel-agent-runtime run-campaign \
   --config workspaces/GDN/runtime.json \
-  --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 100
+  --campaign CAMPAIGN_ID_FROM_BOOTSTRAP --target-epoch 5
 ```
 
-Defaults: 100 Epochs total, three serial Attempts per branch per Epoch, one Trajectory;
+Defaults: 5 Epochs total, three serial Attempts per branch per Epoch, one Trajectory;
 Active only in Epoch 1, with one Challenger starting in Epoch 2 (three Active Attempts and
 three Challenger Attempts per Epoch). The per-Trajectory Attempt count matches single-file
 production; its Epoch target is unchanged. The Active-only first Epoch is unchanged, giving
-597 Optimizer Attempts for a single Campaign.
-The target is absolute: rerunning after Epoch 100 reports the completed result rather than adding
-100 more Epochs. Each completed Epoch launches one post-Epoch Evolution, including the final Epoch;
+27 Optimizer Attempts for a single Campaign.
+The target is absolute: rerunning after Epoch 5 reports the completed result rather than adding
+5 more Epochs. Each completed Epoch launches one post-Epoch Evolution, including the final Epoch;
 the last successor is retained for a later continuation.
 The Attempt count is frozen when a Lineage is registered. Existing one-Attempt Lineages are not
 changed by editing this config: use a new Campaign creation key for the new schedule, retaining

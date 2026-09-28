@@ -87,9 +87,9 @@ python scripts/gdn/run.py ablation --workspace "$gdn_workspace"
 仅恢复已冻结的 sandbox 工作区时才沿用旧 systemd 服务：
 先核对该服务配置和实际进程，再通过已有单元恢复，不把新 container 任务塞进旧 root 服务。
 
-先说明将产生模型/GPU 消耗。新实验默认目标为 100 个 Epoch；
+先说明将产生模型/GPU 消耗。新实验默认目标为 5 个 Epoch；
 非默认目标或恢复旧实验时追加 `--target-epoch N`，
-例如恢复旧 5 轮实验使用 `--target-epoch 5`，不要自动延长主臂。
+恢复旧主臂时使用它原来的绝对目标轮次，不要意外改变预算。
 对照臂预算仍由冻结计划决定，不隐式改拓扑。保留 Workspace lock 和 Registry lease 检查。
 
 ## 服务缺失时
@@ -114,7 +114,7 @@ tail -n 40 "$gdn_workspace/ablation/bootstrap.log"
 ```
 
 日志里可能包含不应复述的环境/服务信息；给用户摘要，不原样倾倒。
-七臂 fan-out 后查看各臂 `campaign.log` 和 `campaign-results.json`。
+按冻结计划 fan-out 后查看各臂 `campaign.log` 和 `campaign-results.json`。
 服务活跃但短时间无新日志不等于卡死：继续看实际 Worker、最新 Session 与 Gateway 请求，
 不据此自动重启。
 

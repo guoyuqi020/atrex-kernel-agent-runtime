@@ -383,6 +383,8 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
             "pooled": ("workflow/pool_3.py", 6),
             "retained": ("workflow/retained.py", 3),
             "pool-retained": ("workflow/pool_retained_3.py", 9),
+            "broadcast": ("workflow/broadcast_3.py", 9),
+            "retained-no-modules": ("workflow/retained.py", 3),
         }
         seeded = {
             kind: await arms.seed_arm(
@@ -392,6 +394,10 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
                         "source_lineage_id": str(evolution_lineage_id),
                         "optimizer_attempt_budget": shape[1],
                         "workflow_command": shape[0],
+                        "trajectory_visibility": (
+                            "broadcast" if kind == "broadcast" else "isolated"
+                        ),
+                        "tool_modules": () if kind == "retained-no-modules" else None,
                     }
                 )
             )
@@ -401,16 +407,20 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
         for kind, shape in shapes.items():
             lineage = registry.get_lineage(seeded[kind].lineage.lineage_id)
             assert lineage.optimizer_attempt_budget == shape[1]
+            assert lineage.trajectory_visibility == (
+                "broadcast" if kind == "broadcast" else "isolated"
+            )
+            assert lineage.tool_modules == (() if kind == "retained-no-modules" else None)
             assert seeded[kind].workflow_command == shape[0]
             # No arm ever evolves; its Workflow alone owns organization.
             assert lineage.max_challengers == 0
             assert lineage.bootstrap_source_lineage_id == evolution_lineage_id
 
-        assert len({arm.campaign_id for arm in seeded.values()}) == 4
+        assert len({arm.campaign_id for arm in seeded.values()}) == 6
         # Every arm starts from the identical frozen baseline, measured exactly once.
         assert len({arm.lineage.kernel_artifact_digest for arm in seeded.values()}) == 1
         assert len({arm.lineage.latency_us for arm in seeded.values()}) == 1
-        assert len({arm.lineage.kernel_revision_id for arm in seeded.values()}) == 4
+        assert len({arm.lineage.kernel_revision_id for arm in seeded.values()}) == 6
         assert len(evaluator.calls) == 1
 
 

@@ -251,12 +251,15 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `gateway-execute` | GPU/Agate Operation 与参数；Candidate 操作默认上传当前 Working Kernel。Evaluate 可通过 `candidate_path` 选择 B，通过 `comparison.baseline_path` 选择比较基线 A。 |
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
 | `result-artifact-read` | 按 Result Artifact Digest 读取规范化的 Agent 可见结果；请求 JSON 不写 `operation`。 |
+| `kernel-pareto-frontier` | 请求为 `{}`；从当前 Agent 可见历史的正确标准 full Evaluate 中，返回每个可见 Shape ID 的最低延迟、对应 Kernel Artifact digest，以及获胜 Kernel 列表。不依赖 Direction 或 Experiment 模块。 |
 | `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；关闭时显式选择支持 Experiment 并声明 hypothesis_status，返回稳定 Direction ID。所有阶段（包括 Bootstrap）均拒绝 `suggest`。 |
 | `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称、生命周期状态、hypothesis_status 和已声明的谱系关系原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction，包括 hypothesis_status、全部 associated_experiment_ids 以及最近一次关闭时显式选中的 supporting_experiment_ids。 |
+| `find-kernel-directions` | 请求只包含 `kernel_artifact_digest`，返回可见 Experiment 关联的、去重后的 `direction_ids`；不返回 Experiment ID。 |
 | `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis` 与 Action；Runtime 冻结所选 Result 与对应 Kernel 的身份。每条 Experiment 至少绑定一个 Kernel 对应的 Gateway Result；abandon_direction 可单边，Bootstrap baseline 只需 after。返回稳定 Experiment ID。 |
 | `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis 和 Action 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
+| `find-kernel-experiments` | 请求只包含 `kernel_artifact_digest`，返回把该 Kernel Artifact 记录为 before 或 after 的可见 `experiment_ids`；不返回 Direction ID。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
 
 Direction 与 Experiment 两组命令由 `campaign.optimizer.tool_modules` 独立启用。关闭的命令
@@ -318,7 +321,8 @@ Runtime 进程崩溃时保守保留当前代的标记，由正常 Attempt recove
 
 `candidate_ready` 要求匹配的非空 Runtime 自管 Direction/Experiment Journal 及有实验支持的 Findings。
 若没有需要关闭的 Direction，`blocked` 和 `pivot` 允许 Journal 与 Findings 为空；报告需如实说明原因，
-不应虚构证据。已有 in_progress Direction 仍须先关联 Experiment 再关闭。
+不应虚构证据。本 Attempt 已有 in_progress Direction 仍须先关联 Experiment 再关闭；Broadcast 臂的其他
+Trajectory 可以同时推进自己的 Direction。
 第一次成功调用 `attempt-report` 会发布不可覆盖的终态
 Report；校验或工具错误不会发布 Report，因此 Agent 可以依据 `issues`、`request_schema` 和 `recovery`
 修正后重试，但成功后不得再次调用。每个 Experiment 必须绑定可见的 `in_progress` Direction，
@@ -346,6 +350,9 @@ Agent 请求不能启用此历史读取兼容上下文。
 不占推进名额，Report 也不限制保持 proposed/deferred 的 Direction 数量。同一时间只能有一个 Direction
 处于 `in_progress`；启动第二个 Direction 会被 Runtime 原子拒绝，并返回
 `direction_concurrency_conflict`、冲突 Direction ID 与修复步骤，请求的 Direction 状态保持不变。
+同一 Epoch 的并行 Trajectory 不能推进同一个 Direction ID；第二条轨迹收到
+`direction_trajectory_conflict`，该更新不会写入 Journal。竞争实现应新建 Direction ID，
+用 `reimplementation` 等谱系关系引用原 Direction；Kernel 仍按权威测量选优。
 Direction 的规范化状态是下一方向的唯一来源。Runtime 不信任 Agent 的成功文本，
 会独立读取 Gateway 记录并执行 Finalization。
 `update-direction` 与 `record-experiment` 是同步 Runtime Mutation：Runtime 校验并持久追加事件后才

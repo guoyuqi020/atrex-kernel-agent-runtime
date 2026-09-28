@@ -87,7 +87,7 @@ def main() -> None:
     CampaignSpecV3.model_validate(definition)
     plan = build_ablation_plan(
         {"schedule": {**definition, "event_only": True}},
-        optimizer_attempt_budget_per_trajectory=300,
+        optimizer_attempt_budget_per_trajectory=15,
     )
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
