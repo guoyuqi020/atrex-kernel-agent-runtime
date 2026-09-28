@@ -29,6 +29,7 @@ EOF
 kernel=""
 backend=""
 target_epoch="5"
+dsl_schedule="${ATREX_PROD_DSL_SCHEDULE:-parallel}"
 workspace=""
 service_workspace=""
 hardware_target="${AGATE_GPU:-}"
@@ -65,6 +66,10 @@ if [[ -z "${kernel}" || -z "${backend}" ]]; then
 fi
 if [[ ! "${target_epoch}" =~ ^[1-9][0-9]*$ ]]; then
   echo "--target-epoch must be a positive integer" >&2
+  exit 64
+fi
+if [[ "${dsl_schedule}" != parallel && "${dsl_schedule}" != sequential ]]; then
+  echo "ATREX_PROD_DSL_SCHEDULE must be parallel or sequential" >&2
   exit 64
 fi
 case "${backend}" in claude|codex|qodercli|pi) ;; *) usage; exit 64 ;; esac
@@ -258,6 +263,12 @@ if value.get("schema_version") != ABLATION_PLAN_SCHEMA_VERSION:
     raise SystemExit(f"unsupported ablation plan schema: {sys.argv[1]}")
 if not value.get("enabled"):
     raise SystemExit(0)
+generation = value.get("run_generation")
+if generation is not None and (
+    not isinstance(generation, str)
+    or re.fullmatch(r"[a-z0-9-]{1,50}", generation) is None
+):
+    raise SystemExit("invalid run generation")
 for arm in value.get("arms", []):
     label = arm["label"]
     if re.fullmatch(r"ablation-[a-z0-9-]+", label) is None:
@@ -283,6 +294,11 @@ lineages = bootstrap.get("lineages", [])
 if len(lineages) != 1:
     raise SystemExit("Bootstrap result does not own exactly one Lineage")
 arm = next(item for item in plan["arms"] if item["label"] == label)
+generation = plan.get("run_generation")
+agent_digests = plan.get("agent_artifact_digests", {})
+if not isinstance(agent_digests, dict):
+    raise SystemExit("invalid Agent Artifact map")
+agent_digest = agent_digests.get(sys.argv[5])
 observer_id = None
 observer_label = arm.get("observer_label")
 if observer_label is not None:
@@ -294,8 +310,9 @@ if observer_label is not None:
 json.dump(
     {
         "schema_version": 1,
-        "creation_key": f"{label}-{sys.argv[5]}",
+        "creation_key": f"{label}-{sys.argv[5]}" + (f"-{generation}" if generation else ""),
         "source_lineage_id": lineages[0]["lineage_id"],
+        "agent_artifact_digest": agent_digest,
         "optimizer_attempt_budget": int(arm["optimizer_attempt_budget"]),
         "max_challengers": int(arm["max_challengers"]),
         "workflow_command": arm["workflow_command"],
@@ -488,18 +505,28 @@ if plan.get("enabled"):
 fi
 echo "Each versioned Workflow owns Branch, Trajectory, replication, evolution, and routing policy; Runtime enforces only its resource envelope."
 
+pipeline_failed=0
 for dsl in "${dsls[@]}"; do
   run_dsl_pipeline "${dsl}" &
   job_pids+=("$!")
   job_dsls+=("${dsl}")
-done
-pipeline_failed=0
-for index in "${!job_pids[@]}"; do
-  if ! wait "${job_pids[index]}"; then
-    echo "[${job_dsls[index]}] DSL pipeline failed." >&2
-    pipeline_failed=1
+  if [[ "${dsl_schedule}" == sequential ]]; then
+    if ! wait "${job_pids[0]}"; then
+      echo "[${dsl}] DSL pipeline failed." >&2
+      pipeline_failed=1
+    fi
+    job_pids=()
+    job_dsls=()
   fi
 done
+if [[ "${dsl_schedule}" == parallel ]]; then
+  for index in "${!job_pids[@]}"; do
+    if ! wait "${job_pids[index]}"; then
+      echo "[${job_dsls[index]}] DSL pipeline failed." >&2
+      pipeline_failed=1
+    fi
+  done
+fi
 job_pids=()
 job_dsls=()
 trap - INT TERM EXIT

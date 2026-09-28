@@ -905,6 +905,75 @@ def test_production_runner_rejects_invalid_ablation_plan_before_bootstrap(
     assert not marker.exists()
 
 
+def test_production_runner_seeds_new_agent_without_changing_bootstrap_identity(
+    tmp_path: Path,
+) -> None:
+    runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
+    start = runner.index('if ! "${atrex_prod_python}" -c \'\n', runner.index("seed_arm() ("))
+    start += len('if ! "${atrex_prod_python}" -c \'\n')
+    end = runner.index('\n\' "${atrex_prod_bootstrap_result}"', start)
+    bootstrap = tmp_path / "bootstrap.json"
+    bootstrap.write_text(
+        json.dumps({"lineages": [{"lineage_id": "lineage_" + "a" * 32}]}),
+        encoding="utf-8",
+    )
+    plan = _ablation_plan(json.loads((PRODUCTION / "policy.json").read_text()))
+    plan["run_generation"] = "fresh-agent"
+    digest = "sha256:" + "b" * 64
+    plan["agent_artifact_digests"] = {"cuda": digest}
+    plan_path = tmp_path / "ablation.json"
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    spec = tmp_path / "arm.json"
+    subprocess.run(
+        (
+            sys.executable,
+            "-c",
+            runner[start:end],
+            str(bootstrap),
+            str(plan_path),
+            str(spec),
+            "ablation-retained-01",
+            "cuda",
+            str(tmp_path),
+        ),
+        check=True,
+    )
+    value = json.loads(spec.read_text(encoding="utf-8"))
+    assert value["source_lineage_id"] == "lineage_" + "a" * 32
+    assert value["creation_key"] == "ablation-retained-01-cuda-fresh-agent"
+    assert value["agent_artifact_digest"] == digest
+    assert value["tool_modules"] == ["directions", "experiments"]
+
+
+def test_production_runner_can_finish_one_dsl_before_starting_next(tmp_path: Path) -> None:
+    runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
+    start = runner.index('pipeline_failed=0\nfor dsl in "${dsls[@]}"; do')
+    end = runner.index("\njob_pids=()\njob_dsls=()\ntrap -", start)
+    events = tmp_path / "events"
+    shell = (
+        "set -euo pipefail\n"
+        "dsls=(cuda triton cutedsl)\n"
+        "job_pids=()\njob_dsls=()\n"
+        "dsl_schedule=sequential\n"
+        'run_dsl_pipeline() { echo "start:$1" >>"$EVENTS"; sleep 0.05; '
+        'echo "end:$1" >>"$EVENTS"; }\n'
+        + runner[start:end]
+    )
+    subprocess.run(
+        ("bash", "-euc", shell),
+        env={**os.environ, "EVENTS": str(events)},
+        check=True,
+    )
+    assert events.read_text(encoding="utf-8").splitlines() == [
+        "start:cuda",
+        "end:cuda",
+        "start:triton",
+        "end:triton",
+        "start:cutedsl",
+        "end:cutedsl",
+    ]
+
+
 def test_production_runner_reuses_completed_bootstrap(tmp_path: Path) -> None:
     runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
     bootstrap_start = runner.index("bootstrap_one() (")

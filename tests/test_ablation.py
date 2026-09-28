@@ -164,6 +164,59 @@ async def test_ablation_arm_owns_a_separate_campaign_sharing_the_exact_contract(
 
 
 @pytest.mark.anyio
+async def test_ablation_arm_replaces_only_agent_while_reusing_bootstrap_measurement(
+    tmp_path: Path,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    evaluator = FakeEvaluator(artifacts, [])
+    with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
+        seeder, _campaign_id, source_id = await _evolution_arm(
+            registry, artifacts, tmp_path, evaluator
+        )
+        replacement_root = tmp_path / "replacement"
+        _agent_artifact(artifacts, replacement_root)
+        (replacement_root / "agent/src/main.py").write_text(
+            "def optimize(): return 'new agent'\n", encoding="utf-8"
+        )
+        replacement = artifacts.put_directory(
+            replacement_root / "agent", ArtifactKind.KERNEL_AGENT
+        )
+        arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
+        spec = AblationArmSpecV1(
+            creation_key="new-agent-old-bootstrap",
+            source_lineage_id=source_id,
+            agent_artifact_digest=replacement,
+            optimizer_attempt_budget=3,
+            workflow_command="workflow/main.py",
+        )
+
+        result = await arms.seed_arm(spec)
+        assert await arms.seed_arm(spec) == result
+        source_kernel = registry.list_lineage_kernels(source_id)[0].revision
+        source_agent = registry.list_lineage_agent_revisions(source_id)[0].revision
+        assert result.lineage.kernel_artifact_digest == source_kernel.artifact_digest
+        assert (
+            result.lineage.gateway_result_digest
+            == source_kernel.evaluation.gateway_result_digest
+        )
+        assert result.lineage.latency_us == source_kernel.evaluation.latency_us
+        assert result.lineage.agent_artifact_digest != source_agent.optimizer_digest
+        assert result.lineage.source_agent_revision_id is None
+        assert result.lineage.source_kernel_revision_id == source_kernel.id
+        assert (
+            registry.get_lineage(result.lineage.lineage_id).bootstrap_source_lineage_id
+            == source_id
+        )
+        assert len(evaluator.calls) == 1
+        with pytest.raises(ValueError, match="different content"):
+            await arms.seed_arm(
+                spec.model_copy(
+                    update={"agent_artifact_digest": source_agent.optimizer_digest}
+                )
+            )
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("budget,epochs,total", [(2, 15, 30), (10, 3, 30)])
 async def test_evolving_arm_preserves_baseline_and_models_with_independent_schedule(
     tmp_path: Path,

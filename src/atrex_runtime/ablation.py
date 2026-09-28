@@ -13,8 +13,10 @@ from typing import Literal, Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .domain.ids import (
+    ArtifactDigest,
     CampaignId,
     LineageId,
+    parse_artifact_digest,
     parse_campaign_id,
     parse_lineage_id,
 )
@@ -44,6 +46,7 @@ class AblationArmSpecV1(BaseModel):
     schema_version: Literal[1] = ABLATION_ARM_SPEC_VERSION
     creation_key: str = Field(min_length=1, max_length=200)
     source_lineage_id: LineageId
+    agent_artifact_digest: ArtifactDigest | None = None
     optimizer_attempt_budget: int = Field(gt=0)
     max_challengers: int = Field(default=0, ge=0)
     workflow_command: str | None = None
@@ -75,6 +78,15 @@ class AblationArmSpecV1(BaseModel):
         if not isinstance(value, str):
             raise ValueError("source Lineage ID must be a string")
         return parse_lineage_id(value)
+
+    @field_validator("agent_artifact_digest", mode="before")
+    @classmethod
+    def _validate_agent_artifact_digest(cls, value: object) -> ArtifactDigest | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("replacement Agent Artifact digest must be a string")
+        return parse_artifact_digest(value)
 
     @field_validator("evolver_observer_lineage_id", mode="before")
     @classmethod
@@ -181,6 +193,7 @@ class AblationArmSeeder:
                 creation_key=spec.creation_key,
                 dsl=source_lineage.dsl,
                 seed=LineageBaselineSeedV1(lineage_id=source_lineage.id),
+                agent_artifact_digest=spec.agent_artifact_digest,
                 models=LineageSeedModelsV1(
                     optimizer=spec.optimizer_model or source_lineage.optimizer_model,
                     evolver=source_lineage.evolver_model,

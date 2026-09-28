@@ -134,6 +134,7 @@ class LineageSeedSpecV1(BaseModel):
     creation_key: str = Field(min_length=1, max_length=200)
     dsl: Dsl
     seed: LineageSeedSourceV1
+    agent_artifact_digest: ArtifactDigest | None = None
     initial_evidence: Path | None = None
     models: LineageSeedModelsV1 = LineageSeedModelsV1()
     max_challengers: int = Field(default=1, ge=0)
@@ -158,6 +159,15 @@ class LineageSeedSpecV1(BaseModel):
             return None
         return KernelAgentBundleWorkflowV1(command=value).command
 
+    @field_validator("agent_artifact_digest", mode="before")
+    @classmethod
+    def _validate_agent_artifact_digest(cls, value: object) -> ArtifactDigest | None:
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise ValueError("replacement Agent Artifact digest must be a string")
+        return parse_artifact_digest(value)
+
     @field_validator("evolver_observer_lineage_id", mode="before")
     @classmethod
     def _validate_observer_lineage_id(cls, value: object) -> LineageId | None:
@@ -173,6 +183,10 @@ class LineageSeedSpecV1(BaseModel):
             raise ValueError("Lineage seed tool modules cannot repeat")
         if isinstance(self.seed, LineageBaselineSeedV1) and self.initial_evidence is not None:
             raise ValueError("a cloned Lineage baseline already carries its Bootstrap Evidence")
+        if self.agent_artifact_digest is not None and not isinstance(
+            self.seed, LineageBaselineSeedV1
+        ):
+            raise ValueError("replacement Agent Artifact requires a Lineage baseline seed")
         return self
 
     @classmethod
@@ -285,6 +299,14 @@ class LineageSeeder:
         except KeyError:
             existing = None
         roots = self._resolve_roots(spec.seed, spec.dsl)
+        if spec.agent_artifact_digest is not None:
+            # Refresh only the Agent: the frozen Kernel evaluation and Bootstrap
+            # Evidence still come from the source Lineage baseline.
+            roots = replace(
+                roots,
+                agent_artifact_digest=spec.agent_artifact_digest,
+                source_agent_revision_id=None,
+            )
         if spec.workflow_command is not None:
             candidate = self._agent_builder.select_workflow(
                 roots.agent_artifact_digest,
