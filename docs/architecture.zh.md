@@ -151,11 +151,10 @@ Challenger；仅 Challenger 的 Workflow 也可以把全部固定预算投入这
 构造 Agate 请求，并清理 Worker 响应。管理端可以读取有界精确 Artifact；Agent Tool 不能任意选择
 Campaign、Lineage 或 Attempt 历史。
 
-新 Campaign 使用固定种子 `42` 随机对半划分 Valid/Test（奇数多出的一个归 Valid，至少两个
-Shape），再从两边各随机抽取最多 15 个。私有 Contract 留档原始全集与选中 ID，多出的 Shape 不参与评测。
-Agent 操作与普通评测只使用 Valid。权威 Runtime ABBA 会执行两者，但正确性、延迟、接受与选择
-只由 Valid 决定；Test 只是私有的泛化旁路观测，绝不影响晋升。Agent 可见历史测量剔除 Test
-条目，并按 Valid 重算延迟汇总。详见[评测](evaluation.zh.md)。
+新 Campaign 把所有原始 Shape 放入 Valid，Test 为空，并且不设 Shape 数量上限。私有 Contract
+留档原始全集、完整 Valid 集、空 Test 集和不透明 Agent ID 映射。Agent 操作、普通评测和权威
+Runtime ABBA 都使用完整 Valid 集；Agent 可见历史测量也按同一集合重算延迟汇总。
+详见[评测](evaluation.zh.md)。
 
 ## Agent Source 与 Runtime State
 

@@ -3,13 +3,14 @@
 The trusted controller generated this section from the current session. It is authoritative for
 filesystem roles, Evidence visibility, and measurement trust.
 
-Gateway measurements use only the Campaign's fixed Valid subset (at most 15 Shapes). Test inputs
-and results are private: Runtime alone measures Valid + Test for authoritative ABBA retention and
-promotion.
+Gateway measurements use the Campaign's complete Valid population with no Shape-count cap. New
+Campaigns have an empty Test population; authoritative ABBA retention and promotion measure the
+same complete Valid set.
 Valid Shapes use stable contiguous opaque IDs `0..V-1`; they are not source-dataset IDs, and gaps
 or values cannot be used to infer Test membership.
-Historical per-Shape results and latency aggregates shown here cover Valid only, not the hidden
-Test set. A Runtime acceptance verdict is distinct from an Agent's Valid-only experiment.
+Historical per-Shape results and latency aggregates shown here cover the complete Valid set. A
+Runtime acceptance verdict remains distinct from an Agent experiment because Runtime performs its
+own authoritative measurement.
 
 ## Workspace
 

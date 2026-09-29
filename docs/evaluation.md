@@ -13,29 +13,25 @@ policy, and Production Gate flag. Runtime replaces Gate-owned fields with deploy
 sealing the Contract.
 
 Before sealing, Runtime lexicographically sorts the IDs from complete `shape_valid.json` (or
-Contract `shapes`), then shuffles them with a local `random.Random(42)` and divides the shuffled
-population into halves (odd extra: Valid). Using that same RNG, it independently samples up to
-15 Shapes from each half. Valid gets `min(15, ceil(N/2))` Shapes and Test gets
-`min(15, floor(N/2))`; fewer than two Shapes is an error. Extra Shapes do not participate in
-evaluation. This RNG does not modify global random state or evaluator correctness seeds. The private Contract
-retains only the selected Valid + Test Shapes (at most 30) and seals `validation_shape_ids`;
-Test is its complement. Per-Shape metadata and Roofline are reduced to the selected population.
-The same partition is used across DSLs, Attempts, retries, and ablation arms.
+Contract `shapes`) and places every source Shape in Valid. Test is empty. Runtime does not sample
+or cap the Shape population, and a single-Shape task is valid. The private Contract retains the
+complete population and seals it in `validation_shape_ids`. Per-Shape metadata and Roofline retain
+that same population. Every DSL, Attempt, retry, and ablation arm uses the identical set.
 
-The private Contract's `shape_split` archives the algorithm, seed, cap, original population count
-and IDs, final Valid/Test IDs, and the stable opaque Agent-ID mapping. For an original population
+The private Contract's `shape_split` archives the algorithm, original population count and IDs,
+final Valid/Test IDs, and the stable opaque Agent-ID mapping. For an original population
 `"0"` through `"9"`, the record is:
 
 ```json
 {
-  "algorithm": "python_random_shuffle_sample",
-  "seed": 42,
-  "max_shapes_per_set": 15,
+  "algorithm": "all_valid",
+  "seed": null,
+  "max_shapes_per_set": null,
   "source_shape_count": 10,
   "source_shape_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-  "valid_shape_ids": ["2", "3", "5", "7", "8"],
-  "test_shape_ids": ["0", "1", "4", "6", "9"],
-  "agent_shape_id_map": {"0": "2", "1": "3", "2": "5", "3": "7", "4": "8"}
+  "valid_shape_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+  "test_shape_ids": [],
+  "agent_shape_id_map": {"0": "0", "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7": "7", "8": "8", "9": "9"}
 }
 ```
 
@@ -47,29 +43,23 @@ and must not be copied into Agent workspaces or Evidence.
 
 Agent-facing Valid Shapes are re-keyed to contiguous opaque IDs `"0"` through `"V-1"`. Runtime
 uses the private map when building Agent Evaluate/Profile requests and when projecting authoritative
-results back into historical Evidence. Original Valid IDs therefore cannot reveal Test membership
-through gaps in a dense source-ID sequence. The aliases remain stable for the Campaign.
+results back into historical Evidence. The aliases keep evaluator-owned source IDs out of the
+Agent protocol and remain stable for the Campaign.
 
-Agent operations, including ordinary Evaluate, Agent ABBA, Profile, and Check, use Valid only.
-Bootstrap final Evaluate, Lineage seed Evaluate, and ordinary Evaluate comparisons also use
-Valid. Authoritative Runtime ABBA executes Valid + Test but derives correctness, latency, and
-promotion exclusively from Valid. Test is a private, observation-only generalization measurement;
-its failure or slowdown cannot reject a Kernel or Agent revision. Bootstrap similarly gates v0 on
-Valid and records one non-blocking private Test observation. Custom Agent probes still use
-Agent-supplied inputs; they cannot select or reveal hidden Test cases.
+Agent operations, Bootstrap final Evaluate, Lineage seed Evaluate, ordinary comparisons, and
+authoritative Runtime ABBA all evaluate the complete Valid population. Because new Campaigns have
+an empty Test population, they produce no Test observation. Custom Agent probes still use
+Agent-supplied inputs and cannot select evaluator-owned source IDs.
 
-Agent-facing historical reports, Evolver summaries, and Attempt fact indexes expose only Valid
-per-Shape timings and recompute their latency aggregates from Valid. They never expose full-set
-aggregate latencies, Test profiler data, or Test error metrics. Acceptance/selection verdicts are
-Valid-only. Private Gateway Results retain Test observations for administration and research;
-Result Artifacts remain Agent-visible Valid projections.
-Public `shape_train` describes the legal domain, not the holdout membership. Auto-generated
-problem context and missing Roofline construction use Valid inputs only.
+Agent-facing historical reports, Evolver summaries, and Attempt fact indexes expose per-Shape
+timings and aggregates for the complete Valid population. Acceptance and selection verdicts use
+that same population. Result Artifacts remain Agent-visible projections with opaque Shape IDs.
+Public `shape_train` describes the legal domain, not the exact evaluation population. Auto-generated
+problem context and missing Roofline construction use the complete Valid population.
 
-New Campaigns seal this partition. A pre-change Campaign's immutable Contract is not rewritten:
-create a new Campaign/workspace if its Contract has no fixed-seed split archive or no opaque
-Agent-ID map; do not mix its old full-set or source-ID results with new Valid-only measurements.
-The shared VecAdd example has two Shapes for this reason.
+New Campaigns seal this all-Valid population. A pre-change Campaign's immutable Contract is not
+rewritten: legacy fixed-seed 15/15 Contracts remain loadable and keep their original semantics.
+Create a new Campaign/workspace to use all source Shapes as Valid.
 
 Agents never receive exact validation Shapes, `reference.py`, `input.py`, metadata, or Roofline.
 They receive a public `shape_train` contract describing the legal parameter domain and non-Shape
@@ -86,9 +76,9 @@ returned to the Agent.
 An exploratory `evaluate` records measurement evidence, but it does not create a `vN` Kernel
 revision. The Agent may evaluate several Candidates in one Attempt and record them in the
 Experiment Journal. A `candidate_ready` nomination still requires a successful full evaluation of
-the exact Candidate against the trusted Contract's Valid subset. This precheck is not the
-authoritative same-allocation ABBA retention decision; that decision also uses Valid while Test is
-recorded only as a private observation.
+the exact Candidate against the trusted Contract's complete Valid population. This precheck is not
+the authoritative same-allocation ABBA retention decision; that decision independently measures
+the same complete Valid population.
 That precheck may come from this Attempt or from an explicit `adopt` Experiment referencing a
 compatible successful full Evaluate in visible history. Runtime verifies the original Trial and
 exact Kernel/Result binding; adoption neither creates a new measurement nor changes its ownership.
@@ -248,16 +238,17 @@ A and B and keeps underlying responses as private evidence.
 ## Ordinary Evaluate Shape batches
 
 Each ordinary Evaluate round submits one Agate Eval Job per validation Shape, with at most sixteen
-batches in flight. This default matches ABBA's one-Shape/sixteen-batch setting and applies to Optimizer
-requests, Bootstrap stages, Lineage seeding, and the ordinary Evaluate comparator. The Agent submits
-one logical request; Runtime partitions the sealed contract, including matching metadata and Roofline,
-and preserves every batch's Job and result in the aggregate Artifact.
+batches in flight. This default matches ABBA's one-Shape/sixteen-batch setting and applies to Agent
+full and `correctness_only` requests, Bootstrap stages, Lineage seeding, and the ordinary Evaluate
+comparator. The Agent submits one logical request; Runtime partitions the sealed contract, including
+matching metadata and Roofline, and preserves every batch's Job and result in the aggregate Artifact.
 
 All Shapes must pass. For an Agent full Evaluate, Runtime performs one complete logical Agate call
 and combines its per-Shape latencies using the geometric mean. There is no extra cross-job repeat or
 median layer. The sixteen-batch cap applies to this call. Bootstrap, Lineage seeding, and trusted
 comparators retain their own configured sampling policies. ABBA's comparison settings do not change
-the ordinary-Evaluate aggregation.
+the ordinary-Evaluate aggregation. For `correctness_only`, Runtime combines the per-Shape verdicts
+without creating latency fields or triggering automatic profiling.
 
 ## Single submission and single measurement
 

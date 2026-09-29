@@ -42,10 +42,10 @@ and local validation. These paths describe the standard implementation, not a re
 it. Runtime request errors return the operation's `issues`, `request_schema`, and `recovery`;
 use the supplied contracts, not invented endpoints or guessed IDs.
 
-Agent Gateway operations use only the Campaign's fixed Valid subset; authoritative Runtime ABBA
-uses Valid + Test, each containing at most 15 Shapes. Test inputs and per-Shape results are never
-exposed. Valid Shapes use stable contiguous opaque IDs `0..V-1`, not source-dataset IDs. Latencies
-in this Evidence view cover Valid only; Kernel acceptance and Branch selection
+Agent Gateway operations and authoritative Runtime ABBA use the Campaign's complete Valid
+population with no Shape-count cap. New Campaigns have an empty Test population. Valid Shapes use
+stable contiguous opaque IDs `0..V-1`, not source-dataset IDs. Latencies in this Evidence view
+cover that complete Valid set; Kernel acceptance and Branch selection
 are Runtime verdicts, not Valid-only performance decisions. Do not attempt to reconstruct hidden
 Test data.
 

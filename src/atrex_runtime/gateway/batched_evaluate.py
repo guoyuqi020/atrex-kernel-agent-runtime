@@ -36,9 +36,18 @@ class ShapeBatchOutcome:
     """Trusted result of one physical Agate Eval job."""
 
     job: JsonValue
-    evaluation: EvaluationV2
+    evaluation: EvaluationV2 | None
     job_id: str | None = None
     worker_result: JsonValue | None = None
+    correctness: bool | None = None
+
+    @property
+    def correct(self) -> bool:
+        if self.evaluation is not None:
+            return self.evaluation.correct
+        if self.correctness is not None:
+            return self.correctness
+        raise AssertionError("Shape batch outcome has no correctness verdict")
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +55,7 @@ class BatchedEvaluateOutcome:
     """One logical Evaluate reconstructed from all physical Shape batches."""
 
     job: JsonValue
-    evaluation: EvaluationV2
+    evaluation: EvaluationV2 | None
     job_id: str | None
     worker_result: JsonValue
     batches: tuple[ShapeBatchOutcome, ...]
@@ -72,7 +81,7 @@ class ShapeBatchedEvaluateExecutor:
         idempotency_key: str,
         evaluate: Callable[[ShapeBatch], Awaitable[ShapeBatchOutcome]],
     ) -> BatchedEvaluateOutcome:
-        """Run every Shape exactly once and aggregate correctness and latency."""
+        """Run every Shape exactly once and aggregate the mode's trusted result."""
         batches = self._batches(contract, idempotency_key)
         results: list[ShapeBatchOutcome | None] = [None] * len(batches)
         limiter = anyio.Semaphore(self._max_parallel_batches)
@@ -135,11 +144,10 @@ class ShapeBatchedEvaluateExecutor:
     ) -> BatchedEvaluateOutcome:
         if len(outcomes) == 1:
             outcome = outcomes[0]
-            worker = outcome.worker_result or _worker_result(
-                outcome.evaluation,
-                batches,
-                outcomes,
-            )
+            worker = outcome.worker_result
+            if worker is None:
+                evaluation = _require_full_evaluation(outcome)
+                worker = _worker_result(evaluation, batches, outcomes)
             return BatchedEvaluateOutcome(
                 outcome.job,
                 outcome.evaluation,
@@ -147,6 +155,27 @@ class ShapeBatchedEvaluateExecutor:
                 worker,
                 outcomes,
             )
+
+        correctness_only = all(
+            batch.contract.mode == "correctness_only" for batch in batches
+        )
+        if correctness_only:
+            correct = all(outcome.correct for outcome in outcomes)
+            return BatchedEvaluateOutcome(
+                _correctness_only_job(
+                    correct,
+                    batches,
+                    outcomes,
+                    shape_batch_size=self._shape_batch_size,
+                    max_parallel_batches=self._max_parallel_batches,
+                ),
+                None,
+                None,
+                _correctness_only_worker_result(correct, batches, outcomes),
+                outcomes,
+            )
+        if any(batch.contract.mode != "full" for batch in batches):
+            raise AssertionError("Shape batches mixed evaluation modes")
 
         evaluation = _aggregate_batch_evaluations(batches, outcomes)
         job = cast(
@@ -164,8 +193,8 @@ class ShapeBatchedEvaluateExecutor:
                         "batch_index": batch.index,
                         "shape_ids": list(batch.shape_ids),
                         "agate_job_id": outcome.job_id,
-                        "correct": outcome.evaluation.correct,
-                        "latency_us": outcome.evaluation.latency_us,
+                        "correct": _require_full_evaluation(outcome).correct,
+                        "latency_us": _require_full_evaluation(outcome).latency_us,
                         "job": outcome.job,
                     }
                     for batch, outcome in zip(batches, outcomes, strict=True)
@@ -293,13 +322,13 @@ def _aggregate_batch_evaluations(
     batches: tuple[ShapeBatch, ...],
     outcomes: tuple[ShapeBatchOutcome, ...],
 ) -> EvaluationV2:
-    if any(not outcome.evaluation.correct for outcome in outcomes):
+    if any(not _require_full_evaluation(outcome).correct for outcome in outcomes):
         return EvaluationV2(correct=False, latency_us=None)
     weighted_log_sum = 0.0
     shape_count = 0
     latencies: list[float] = []
     for batch, outcome in zip(batches, outcomes, strict=True):
-        latency = outcome.evaluation.latency_us
+        latency = _require_full_evaluation(outcome).latency_us
         if latency is None or latency <= 0 or not math.isfinite(latency):
             return EvaluationV2(correct=False, latency_us=None)
         count = len(batch.shape_ids)
@@ -356,6 +385,89 @@ def _worker_result(
     )
 
 
+def _correctness_only_job(
+    correct: bool,
+    batches: tuple[ShapeBatch, ...],
+    outcomes: tuple[ShapeBatchOutcome, ...],
+    *,
+    shape_batch_size: int | None,
+    max_parallel_batches: int,
+) -> JsonValue:
+    return cast(
+        JsonValue,
+        {
+            "schema_version": 1,
+            "operation": "shape_batched_evaluate",
+            "mode": "correctness_only",
+            "shape_batch_size": shape_batch_size,
+            "max_parallel_shape_batches": max_parallel_batches,
+            "shape_ids": [shape_id for batch in batches for shape_id in batch.shape_ids],
+            "correct": correct,
+            "batches": [
+                {
+                    "batch_index": batch.index,
+                    "shape_ids": list(batch.shape_ids),
+                    "agate_job_id": outcome.job_id,
+                    "correct": outcome.correct,
+                    "job": outcome.job,
+                }
+                for batch, outcome in zip(batches, outcomes, strict=True)
+            ],
+        },
+    )
+
+
+def _correctness_only_worker_result(
+    correct: bool,
+    batches: tuple[ShapeBatch, ...],
+    outcomes: tuple[ShapeBatchOutcome, ...],
+) -> JsonValue:
+    correctness_values: list[object] = []
+    shared_fields: dict[str, JsonValue] = {}
+    for outcome in outcomes:
+        worker = outcome.worker_result
+        if not isinstance(worker, dict):
+            continue
+        correctness = worker.get("correctness")
+        if isinstance(correctness, dict):
+            correctness_values.append(correctness)
+        for key in ("mode", "input_scope"):
+            value = worker.get(key)
+            if value is not None:
+                previous = shared_fields.setdefault(key, value)
+                if previous != value:
+                    raise AssertionError(f"Shape batches disagreed on {key}")
+    return cast(
+        JsonValue,
+        {
+            "correct": correct,
+            "all_pass": correct,
+            "correctness": merge_correctness_summaries(
+                correctness_values,
+                passed=correct,
+            ),
+            "failures": (
+                []
+                if correct
+                else [
+                    "one or more hidden evaluator cases failed; "
+                    "reproduce within the public shape_domain"
+                ]
+            ),
+            "shape_batch_count": len(batches),
+            "shape_ids_are_opaque": True,
+            "hidden_case_details": "shape inputs and failure details withheld",
+            **shared_fields,
+        },
+    )
+
+
+def _require_full_evaluation(outcome: ShapeBatchOutcome) -> EvaluationV2:
+    if outcome.evaluation is None:
+        raise AssertionError("full Shape batch has no performance evaluation")
+    return outcome.evaluation
+
+
 def _candidate_rejection_detail(outcome: ShapeBatchOutcome) -> JsonValue | None:
     job = outcome.job
     if not isinstance(job, dict) or job.get("status") != "rejected":
@@ -391,10 +503,18 @@ def _candidate_rejected_outcome(
             "shape_batch_count": batch_count,
         },
     )
-    worker_result = project_candidate_rejection(detail)
+    worker_result = (
+        outcome.worker_result
+        if batch.contract.mode == "correctness_only" and outcome.worker_result is not None
+        else project_candidate_rejection(detail)
+    )
     return BatchedEvaluateOutcome(
         job,
-        EvaluationV2(correct=False, latency_us=None),
+        (
+            None
+            if batch.contract.mode == "correctness_only"
+            else EvaluationV2(correct=False, latency_us=None)
+        ),
         None,
         worker_result,
         (outcome,),

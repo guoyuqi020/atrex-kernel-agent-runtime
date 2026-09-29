@@ -111,18 +111,16 @@ canonical Agent-visible `operation`/`status`/`result` projection as a Result Art
 receives its `result_artifact_digest`; initial execution and later reads expose the same canonical
 content and never expose the private Gateway Result identity.
 
-The sealed private Contract retains at most 30 selected Shapes; `validation_shape_ids` fixes
-its Valid subset, and the complement is Test. Each subset contains at most 15 Shapes. This
-controller-owned field is not an Agent request parameter.
-The private `shape_split` record stores seed `42`, algorithm, cap, original population IDs/count,
-and selected Valid/Test IDs. It is sealed with the Contract and stripped from Agent and per-batch
-contexts; use it only for administrative reproduction.
-Default Agent operations use Valid only. Authoritative Runtime ABBA executes all selected Shapes,
-but only its Valid aggregation controls correctness, latency, and promotion. Test is stored as a
-private `test_observation` with `affects_promotion: false`; Test failure or slowdown cannot reject a
-revision. Bootstrap follows the same rule: Valid gates v0 and Test is a private side observation.
-Historical Agent-visible projections include `measurement_domain: "valid"`, omit Test rows/error
-metrics, and recompute GeoMean and arithmetic mean over Valid only. See
+The sealed private Contract retains every source Shape; `validation_shape_ids` contains that full
+Valid population and Test is empty. There is no Shape-count cap. This controller-owned field is
+not an Agent request parameter. The private `shape_split` record stores the `all_valid` algorithm,
+original population IDs/count, complete Valid IDs, empty Test IDs, and the opaque Agent-ID map. It
+is sealed with the Contract and stripped from Agent and per-batch contexts; use it only for
+administrative reproduction.
+Default Agent operations, authoritative Runtime ABBA, and Bootstrap all execute the complete Valid
+population. New Campaigns therefore have no `test_observation`. Historical Agent-visible
+projections include `measurement_domain: "valid"` and recompute GeoMean and arithmetic mean over
+the complete Valid set. See
 [evaluation privacy](evaluation.md#evaluation-inputs-and-privacy).
 
 The `evaluate` wire request optionally accepts `mode: "full" | "correctness_only"` (default
@@ -130,7 +128,8 @@ The `evaluate` wire request optionally accepts `mode: "full" | "correctness_only
 object of Agate Shape records keyed by integer strings). Each Shape record is an object. Overrides
 are independent: omitted input source or Shapes are reused from the private Contract. The reference
 and trusted evaluation policy remain unchanged. `correctness_only` omits performance measurement
-and automatic profiling. Custom or correctness-only calls keep their Kernel Trial and Result
+and automatic profiling. It uses the same one-Shape batches and sixteen-batch concurrency limit as
+full Evaluate, then merges the batch verdicts without latency fields. Custom or correctness-only calls keep their Kernel Trial and Result
 Artifact identities, and their nested `result` records `mode` and `input_scope` (`custom` or
 `contract`). They do not satisfy the full trusted-contract evaluation required before
 `candidate_ready`. Full Evaluate also requires `latency_prediction`: `improved` for a geometric-

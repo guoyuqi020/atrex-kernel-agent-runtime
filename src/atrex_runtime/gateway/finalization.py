@@ -234,10 +234,11 @@ class AgateAuthoritativeCandidateEvaluator:
                 context.contract,
                 context.contract.shape_split.valid_shape_ids,
             )
-            test_contract = subset_evaluation_contract(
-                context.contract,
-                context.contract.shape_split.test_shape_ids,
-            )
+            if context.contract.shape_split.test_shape_ids:
+                test_contract = subset_evaluation_contract(
+                    context.contract,
+                    context.contract.shape_split.test_shape_ids,
+                )
         for stage_index, stage in enumerate(self._bootstrap_stages):
             stage_contract = valid_contract.model_copy(
                 update={
@@ -498,6 +499,8 @@ class AgateAuthoritativeCandidateEvaluator:
             return ShapeBatchOutcome(job, evaluation, job_id)
 
         result = await self._shape_batches.run(contract, idempotency_key, evaluate_batch)
+        if result.evaluation is None:
+            raise AssertionError("finalization batch aggregation lost its evaluation")
         return result.job, result.job_id, result.evaluation
 
     async def _evaluate_once(

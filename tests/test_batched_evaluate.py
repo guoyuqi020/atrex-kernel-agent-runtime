@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 
 import anyio
@@ -130,6 +131,40 @@ async def test_shape_batch_executor_fails_closed_when_any_batch_is_incorrect() -
     assert isinstance(result.job, dict)
     assert result.job["correct"] is False
     assert result.worker_result["all_pass"] is False  # type: ignore[index]
+
+
+@pytest.mark.anyio
+async def test_correctness_only_batches_merge_without_performance_fields() -> None:
+    executor = ShapeBatchedEvaluateExecutor(shape_batch_size=1, max_parallel_batches=2)
+    contract = _contract(3).model_copy(update={"mode": "correctness_only"})
+
+    async def evaluate(batch: ShapeBatch) -> ShapeBatchOutcome:
+        correct = batch.index != 1
+        return ShapeBatchOutcome(
+            {"status": "succeeded", "batch": batch.index},
+            None,
+            f"job-{batch.index}",
+            {
+                "correct": correct,
+                "all_pass": correct,
+                "correctness": {"status": "PASS" if correct else "FAIL"},
+                "mode": "correctness_only",
+                "input_scope": "contract",
+            },
+            correctness=correct,
+        )
+
+    result = await executor.run(contract, "correctness-only", evaluate)
+
+    assert result.evaluation is None
+    assert result.job_id is None
+    assert isinstance(result.job, dict)
+    assert result.job["correct"] is False
+    assert result.worker_result["correct"] is False  # type: ignore[index]
+    assert result.worker_result["shape_batch_count"] == 3  # type: ignore[index]
+    assert result.worker_result["mode"] == "correctness_only"  # type: ignore[index]
+    assert "latency" not in json.dumps(result.job)
+    assert "latency" not in json.dumps(result.worker_result)
 
 
 @pytest.mark.anyio

@@ -11,28 +11,24 @@ Runtime 持有评测策略与晋升权。Core 可以请求探索性操作，Agat
 Validation Shapes、Metadata、可选 Roofline、容差、采样策略、锁频策略与 Production Gate 开关。
 Runtime 会在封存前用部署策略覆盖所有 Gate 持有字段。
 
-封存前，Runtime 先按字典序排列完整 `shape_valid.json`（或 Contract 的 `shapes`）的 ID，
-再用独立的 `random.Random(42)` 打乱，并对半划分为 Valid/Test（奇数多出的一个归 Valid）。
-继续使用同一个 RNG，分别从两边随机抽取最多 15 个：Valid 取 `min(15, ceil(N/2))` 个，
-Test 取 `min(15, floor(N/2))` 个；少于两个 Shape 拒绝启动，多出的 Shape 不参与评测。
-此 RNG 不改变全局随机状态，也不改变 Correctness Gate 的输入随机种子。
-私有 Contract 只保留选中的 Valid + Test（合计最多 30 个），并封存 `validation_shape_ids`，
-其补集即 Test；逐 Shape Metadata 和 Roofline 也同步裁剪。所有 DSL、Attempt、重试和消融臂
-使用同一划分，不会在每次调用时重新抽样。
+封存前，Runtime 按字典序排列完整 `shape_valid.json`（或 Contract 的 `shapes`）的 ID，并把
+所有原始 Shape 放入 Valid；Test 为空。Runtime 不再随机采样，也不限制 Shape 数量；单 Shape
+题目同样有效。私有 Contract 保留完整 Shape 集，并把它封存在 `validation_shape_ids` 中；逐 Shape
+Metadata 和 Roofline 也保留同一完整集合。所有 DSL、Attempt、重试和消融臂使用完全相同的集合。
 
-私有 Contract 的 `shape_split` 会留档算法、种子、上限、原始全集数量与 ID、最终选中的
+私有 Contract 的 `shape_split` 会留档算法、原始全集数量与 ID、最终选中的
 Valid/Test ID，以及稳定的不透明 Agent ID 映射。例如原始 ID 为 `"0"` 到 `"9"` 时：
 
 ```json
 {
-  "algorithm": "python_random_shuffle_sample",
-  "seed": 42,
-  "max_shapes_per_set": 15,
+  "algorithm": "all_valid",
+  "seed": null,
+  "max_shapes_per_set": null,
   "source_shape_count": 10,
   "source_shape_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
-  "valid_shape_ids": ["2", "3", "5", "7", "8"],
-  "test_shape_ids": ["0", "1", "4", "6", "9"],
-  "agent_shape_id_map": {"0": "2", "1": "3", "2": "5", "3": "7", "4": "8"}
+  "valid_shape_ids": ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"],
+  "test_shape_ids": [],
+  "agent_shape_id_map": {"0": "0", "1": "1", "2": "2", "3": "3", "4": "4", "5": "5", "6": "6", "7": "7", "8": "8", "9": "9"}
 }
 ```
 
@@ -42,25 +38,20 @@ Valid/Test ID，以及稳定的不透明 Agent ID 映射。例如原始 ID 为 `
 这是管理端数据：Agent Context 与逐批请求都会移除该档案，不应复制到 Agent Workspace 或 Evidence。
 
 Agent 可见的 Valid Shape 会重新编号为连续的不透明 ID `"0"` 到 `"V-1"`。Runtime 在构造
-Agent Evaluate/Profile 请求及把权威结果投影回历史 Evidence 时使用私有映射，因此原始 ID 的
-缺号不能再泄漏 Test 成员；同一 Campaign 内别名保持稳定。
+Agent Evaluate/Profile 请求及把权威结果投影回历史 Evidence 时使用私有映射，从而不在 Agent
+协议中暴露评测器持有的源 ID；同一 Campaign 内别名保持稳定。
 
-Agent 的普通 Evaluate、Agent ABBA、Profile、Check 等操作只使用 Valid。Bootstrap 终评、
-Lineage Seed 评测和普通 Evaluate Comparator 也只使用 Valid。Runtime 权威 ABBA 会执行
-Valid + Test，但正确性、延迟和晋升结论只由 Valid 决定；Test 只是私有的泛化旁路观测，
-其错误或性能下降不能拒绝 Kernel 或 Agent Revision。Bootstrap 同样只用 Valid 决定 v0，
-并额外记录一次非阻塞的私有 Test 观测。Agent 自定义探测仍使用自己提供的输入，不能通过编号
-选择或获取隐藏 Test。
+Agent 的普通 Evaluate、Agent ABBA、Profile、Check、Bootstrap 终评、Lineage Seed 评测、
+普通 Comparator 和 Runtime 权威 ABBA 都评测完整 Valid 集。新 Campaign 的 Test 为空，因此
+不会生成 Test observation。Agent 自定义探测仍使用自己提供的输入，不能通过编号选择评测器源 ID。
 
-Agent 可见的历史报告、Evolver 效果汇总及逐 Attempt 事实索引只展示 Valid 逐 Shape 延迟，
-并据此重新计算聚合延迟。不展示包含 Test 的全量平均延迟、Test Profile 或 Test 误差指标；
-Kernel 接受/拒绝及分支胜负也只由 Valid 决定。私有 Gateway Result 保留 Test 观测，供管理端
-审计和研究；Result Artifact 始终是 Agent 可见的 Valid 投影。公开 `shape_train` 描述合法参数域，
-不描述集合成员。自动生成问题上下文和补建 Roofline 也只使用 Valid 输入。
+Agent 可见的历史报告、Evolver 效果汇总及逐 Attempt 事实索引展示完整 Valid 集的逐 Shape 延迟
+及聚合值；Kernel 接受/拒绝及分支胜负使用同一集合。Result Artifact 仍以不透明 Shape ID
+提供 Agent 可见投影。公开 `shape_train` 描述合法参数域；自动生成问题上下文和补建 Roofline
+同样使用完整 Valid 集。
 
-此划分在新 Campaign 中封存，不改写旧 Campaign 的不可变 Contract。应用到旧实验时应新建
-Campaign/Workspace（旧 Contract 没有固定种子划分档案或不透明 Agent ID 映射时），避免混用
-旧全量/原始 ID 结果和新 Valid-only 测量；公共 VecAdd 示例因此保留两个 Shape。
+全量 Valid 集会封存在新 Campaign 中，不改写旧 Campaign 的不可变 Contract。旧的固定种子
+15/15 Contract 仍可加载并保持原语义；要让旧实验使用全部原始 Shape，需新建 Campaign/Workspace。
 
 Agent 不会看到精确 Validation Shapes、`reference.py`、`input.py`、Metadata 或 Roofline，只会得到
 描述合法参数域和非 Shape ABI 约束的公开 `shape_train` Contract。Gateway 响应只暴露聚合正确性、
@@ -74,8 +65,8 @@ Optimizer Runtime Tools 通过 `gateway-execute` 暴露 `check`、`dev`、`evalu
 
 探索性 `evaluate` 会记录测量证据，但不会直接创建 `vN` Kernel Revision。Agent 可以在一个
 Attempt 中评测多个 Candidate，并写入 Experiment Journal。通过 `candidate_ready` 提名时，
-该精确 Candidate 仍须成功完成可信 Contract 的 Valid 子集评测；这只是预检，不是权威
-Same-allocation ABBA Retention 裁决。Retention 同样只由 Valid 决定，Test 仅作为私有旁路观测。
+该精确 Candidate 仍须成功完成可信 Contract 的完整 Valid 集评测；这只是预检，不是权威
+Same-allocation ABBA Retention 裁决。Retention 会独立测量同一个完整 Valid 集。
 这份预检证据可以来自本 Attempt，也可以通过 `adopt` Experiment 显式采纳可见历史中的兼容成功
 完整 Evaluate。Runtime 核验原始 Trial 和精确 Kernel/Result 绑定；采纳只记录当前决策，不新建
 测量，也不改变原测量归属。配置的独立 Retention 比较保持不变。不兼容的历史证据需要重新做完整
@@ -220,14 +211,15 @@ Kernel Artifact 身份属于 B。保留的 Result Artifact 包含 A 的
 ## 普通 Evaluate 的 Shape 分批
 
 每轮普通 Evaluate 为每个验证 Shape 提交一个 Agate Eval Job，最多 16 批并发。默认与 ABBA 的
-单 Shape、16 批并发一致，覆盖 Optimizer 请求、Bootstrap 各阶段、Lineage Seed 和普通 Evaluate
-Comparator。Agent 仍只发起一个逻辑请求；Runtime 按批裁剪私有 Contract、对应 metadata 和
-Roofline，并在聚合 Artifact 中保留每批的 Job 与结果。
+单 Shape、16 批并发一致，覆盖 Agent 的完整及 `correctness_only` 请求、Bootstrap 各阶段、
+Lineage Seed 和普通 Evaluate Comparator。Agent 仍只发起一个逻辑请求；Runtime 按批裁剪私有
+Contract、对应 metadata 和 Roofline，并在聚合 Artifact 中保留每批的 Job 与结果。
 
 全部 Shapes 必须通过正确性检查。Agent 发起完整 Evaluate 时，Runtime 执行一次完整的逻辑
 Agate 调用，对逐 Shape 延迟取几何平均，不再额外重复三次或跨 Job 取中位数。16 批限制作用于
 这次调用。Bootstrap、Lineage Seed 和可信 Comparator 仍使用
 各自配置的采样策略。ABBA 的比较配置不会改变普通 Evaluate 的上述聚合方式。
+`correctness_only` 只合并逐 Shape 的正确性结论，不生成延迟字段，也不触发自动 Profile。
 
 ## 单次提交与单次测量
 

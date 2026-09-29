@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import json
-import random
 from dataclasses import dataclass
-from typing import Final, Literal, Protocol, Self
+from typing import Literal, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -18,8 +17,6 @@ from .control import SqliteGatewayControl
 from .environment import AcceleratorBackend
 
 EVALUATION_CONTRACT_VERSION: Literal[1] = 1
-MAX_HOLDOUT_SHAPES: Final = 15
-SHAPE_SPLIT_SEED: Final = 42
 _GATE_OWNED_RUNNER_KEYS = frozenset(
     {
         "atol",
@@ -84,14 +81,17 @@ class AgentCorrectnessPolicyV1(BaseModel):
 
 
 class ShapeSplitRecordV1(BaseModel):
-    """Private replay record for the exact fixed-seed split and capped sampling."""
+    """Private replay record for the Campaign's exact evaluation population."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    algorithm: Literal["python_random_shuffle_sample"] = "python_random_shuffle_sample"
-    seed: int = Field(ge=0, strict=True)
-    max_shapes_per_set: Literal[15] = 15
-    source_shape_count: int = Field(ge=2, strict=True)
+    # The legacy algorithm remains accepted so frozen Campaign Contracts can resume.
+    algorithm: Literal["python_random_shuffle_sample", "all_valid"] = (
+        "python_random_shuffle_sample"
+    )
+    seed: int | None = Field(default=42, ge=0, strict=True)
+    max_shapes_per_set: Literal[15] | None = 15
+    source_shape_count: int = Field(ge=1, strict=True)
     source_shape_ids: tuple[str, ...]
     valid_shape_ids: tuple[str, ...]
     test_shape_ids: tuple[str, ...]
@@ -110,14 +110,34 @@ class ShapeSplitRecordV1(BaseModel):
             or len(self.source_shape_ids) != self.source_shape_count
             or len(self.valid_shape_ids) != len(valid)
             or len(self.test_shape_ids) != len(test)
-            or len(valid) != min(self.max_shapes_per_set, (self.source_shape_count + 1) // 2)
-            or len(test) != min(self.max_shapes_per_set, self.source_shape_count // 2)
             or valid & test
             or not (valid | test) <= source
         ):
             raise ValueError(
-                "shape_split must record unique, disjoint, capped Valid/Test selections"
+                "shape_split must record unique, disjoint Valid/Test selections"
             )
+        if self.algorithm == "all_valid":
+            if (
+                self.seed is not None
+                or self.max_shapes_per_set is not None
+                or valid != source
+                or test
+            ):
+                raise ValueError(
+                    "all_valid shape_split must place every source Shape in Valid, "
+                    "leave Test empty, and have no seed or Shape cap"
+                )
+        else:
+            if (
+                self.seed is None
+                or self.max_shapes_per_set != 15
+                or self.source_shape_count < 2
+                or len(valid) != min(15, (self.source_shape_count + 1) // 2)
+                or len(test) != min(15, self.source_shape_count // 2)
+            ):
+                raise ValueError(
+                    "legacy shape_split must record the fixed-seed capped Valid/Test selection"
+                )
         if aliases is not None and (
             set(aliases) != {str(index) for index in range(len(valid))}
             or len(set(aliases.values())) != len(aliases)
@@ -192,15 +212,24 @@ class AgateEvaluationContractV1(BaseModel):
     def _validate_holdout(self) -> Self:
         if self.validation_shape_ids is not None:
             ids = self.validation_shape_ids
-            if (
-                not 2 <= len(self.shapes) <= 2 * MAX_HOLDOUT_SHAPES
+            if len(set(ids)) != len(ids) or not set(ids) <= self.shapes.keys():
+                raise ValueError("validation_shape_ids must contain unique retained Shape IDs")
+            if self.shape_split is not None and self.shape_split.algorithm == "all_valid":
+                if set(ids) != self.shapes.keys():
+                    raise ValueError(
+                        "all_valid evaluation Contracts must place every Shape in Valid"
+                    )
+            elif self.shape_split is None and set(ids) == self.shapes.keys():
+                # Contracts sealed before the population archive was introduced may
+                # already use the full Shape set. Bootstrap detects the missing
+                # archive separately and requires a new Campaign identity.
+                pass
+            elif (
+                not 2 <= len(self.shapes) <= 30
                 or len(ids) != (len(self.shapes) + 1) // 2
-                or len(set(ids)) != len(ids)
-                or not set(ids) <= self.shapes.keys()
             ):
                 raise ValueError(
-                    "validation_shape_ids must select half of retained shapes (odd extra: Valid); "
-                    f"Valid and Test must each contain at most {MAX_HOLDOUT_SHAPES} Shapes"
+                    "legacy validation_shape_ids must select half of at most 30 retained Shapes"
                 )
         if self.shape_split is not None and (
             self.validation_shape_ids is None
@@ -212,37 +241,23 @@ class AgateEvaluationContractV1(BaseModel):
         return self
 
     def with_shape_holdout(self) -> AgateEvaluationContractV1:
-        """Randomly split and sample with a fixed local RNG, then seal the replay record."""
-        if len(self.shapes) < 2:
-            raise ValueError(
-                "Valid/Test splitting requires at least 2 Shapes; "
-                "single-Shape tasks are not supported"
-            )
+        """Seal every source Shape as Valid and retain an empty Test population."""
         if self.validation_shape_ids is not None:
             return self
         source_ids = tuple(sorted(self.shapes))
-        ordered = list(source_ids)
-        rng = random.Random(SHAPE_SPLIT_SEED)
-        rng.shuffle(ordered)
-        midpoint = (len(ordered) + 1) // 2
-        valid_ids = tuple(sorted(rng.sample(ordered[:midpoint], min(midpoint, MAX_HOLDOUT_SHAPES))))
-        test_ids = tuple(
-            sorted(rng.sample(ordered[midpoint:], min(len(ordered) - midpoint, MAX_HOLDOUT_SHAPES)))
-        )
+        valid_ids = source_ids
+        test_ids: tuple[str, ...] = ()
         agent_shape_id_map = {
             str(index): shape_id
             for index, shape_id in enumerate(sorted(valid_ids, key=_shape_id_sort_key))
         }
-        retained = self
-        if len(ordered) > 2 * MAX_HOLDOUT_SHAPES:
-            from .batched_evaluate import subset_evaluation_contract
-
-            retained = subset_evaluation_contract(self, tuple(sorted((*valid_ids, *test_ids))))
-        return retained.model_copy(
+        return self.model_copy(
             update={
                 "validation_shape_ids": valid_ids,
                 "shape_split": ShapeSplitRecordV1(
-                    seed=SHAPE_SPLIT_SEED,
+                    algorithm="all_valid",
+                    seed=None,
+                    max_shapes_per_set=None,
                     source_shape_count=len(source_ids),
                     source_shape_ids=source_ids,
                     valid_shape_ids=valid_ids,

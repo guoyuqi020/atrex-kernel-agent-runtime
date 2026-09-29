@@ -286,13 +286,11 @@ def _subject(attempt_id: object) -> BootstrapGatewaySubject:
 @pytest.mark.anyio
 @pytest.mark.parametrize("failure_reason", [None, "logs_unavailable", "exec_failed"])
 @pytest.mark.parametrize("holdout", [False, True])
-@pytest.mark.parametrize("test_observation_fails", [False, True])
 async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     failure_reason: str | None,
     holdout: bool,
-    test_observation_fails: bool,
 ) -> None:
     delays: list[float] = []
     fetched: list[str] = []
@@ -322,10 +320,6 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
                         "details": {"backend_state": "succeeded"},
                     },
                 }
-            request = self.submitted[int(job_id.rsplit("_", 1)[1])]
-            observation = "bootstrap_test_observation" in str(request.get("name"))
-            if observation and test_observation_fails:
-                return {**job, "result": {"all_pass": False}}
             return {**job, "result": {"all_pass": True, "latency_us_geomean": 7.5}}
 
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
@@ -425,10 +419,7 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert batches["max_parallel_shape_batches"] == 16
     if holdout:
         assert set(raw["validation_shape_ids"]) == set(private_contract.validation_shape_ids or ())
-        assert raw["test_observation"]["domain"] == "test"
-        assert raw["test_observation"]["affects_promotion"] is False
-        assert raw["test_observation"]["status"] == "completed"
-        assert raw["test_observation"]["correct"] is (not test_observation_fails)
+        assert "test_observation" not in raw
         assert raw["evaluation_contract_digest"] == str(
             contexts.resolve(attempt_id).evaluation_contract_digest
         )

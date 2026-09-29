@@ -6,6 +6,13 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Agent `correctness_only` Evaluate now uses the same one-Shape batches and sixteen-batch
+  concurrency limit as full Evaluate. Runtime merges every batch into one correctness verdict while
+  continuing to omit latency measurements and automatic profiling.
+- New Campaigns place 100% of source Shapes in Valid, leave Test empty, and apply no Shape-count
+  cap. Agent and authoritative Runtime evaluation use the same complete population. The sealed
+  `shape_split` records `algorithm: all_valid`, a null seed/cap, all source IDs as Valid, and an
+  empty Test list. Legacy fixed-seed 15/15 Contracts remain loadable with their original semantics.
 - FA4 and FA4-SM120 now pin Evolver `794219bc`, whose Evidence contract accepts and validates the
   Runtime-projected `input/evidence/review/` directory. This prevents every Evolver-backed arm from
   failing at startup when it reaches Challenger construction. Both task definitions use new
@@ -26,10 +33,9 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 - Bootstrap now materializes the configured initial-evidence Artifact at read-only
   `input/evidence/` and injects its bounded UTF-8 `README.md` into the framework-baseline prompt.
   Task hints are therefore visible to the model rather than serving only as a Registry identity.
-- Runtime-owned final evaluation now uses the complete sealed Valid+Test Shape contract. Agent
-  Evaluate/Profile remains Valid-only, and Agent-facing result projections continue to expose only
-  opaque Valid Shape IDs and Valid-only latency metrics. Bootstrap v0 therefore cannot be
-  registered without passing the private Test Shapes.
+- Runtime-owned final evaluation uses the complete sealed Valid Shape population. Agent
+  Evaluate/Profile and Agent-facing result projections use the same population through opaque
+  Shape IDs and Valid latency metrics.
 
 - Single-file Agent and authoritative ABBA now use Agate's native Eval ABBA API. Runtime maps two
   side measurements to one complete A/B/B/A block, rebuilds its existing authoritative aggregate

@@ -546,17 +546,11 @@ class AgateGatewayAdapter:
         }
         kind = kind_by_operation[request.operation]
         if request.operation is GatewayOperation.EVALUATE:
-            if context.contract.mode == "correctness_only":
-                mapped = await self._submit_once(
-                    request,
-                    context,
-                    payload,
-                    kind,
-                    binding_key=request.idempotency_key,
-                )
-                if mapped.status == "queued":
-                    raise InfrastructureError("Agate correctness evaluation did not complete")
-            elif request.measurement_repetition is None and self._optimizer_evaluate_repeats > 1:
+            if (
+                context.contract.mode == "full"
+                and request.measurement_repetition is None
+                and self._optimizer_evaluate_repeats > 1
+            ):
                 mapped = await self._submit_repeated_evaluate(request, context)
             else:
                 mapped = await self._submit_batched_evaluate(
@@ -720,7 +714,7 @@ class AgateGatewayAdapter:
         *,
         idempotency_key: str,
     ) -> GatewayAdapterResult:
-        """Execute one logical Optimizer Eval through shared Shape batches."""
+        """Execute one logical Agent Eval through shared Shape batches."""
 
         async def evaluate_batch(batch: ShapeBatch) -> ShapeBatchOutcome:
             payload = self._build_request(
@@ -737,13 +731,32 @@ class AgateGatewayAdapter:
                 binding_key=batch.idempotency_key,
                 expected_shape_ids=batch.shape_ids,
             )
-            if mapped.status != "completed" or mapped.evaluation is None:
-                raise InfrastructureError("Agate Eval batch did not complete")
+            if mapped.status != "completed":
+                message = (
+                    "Agate correctness evaluation did not complete"
+                    if context.contract.mode == "correctness_only"
+                    else "Agate Eval batch did not complete"
+                )
+                raise InfrastructureError(message)
+            evaluation = mapped.evaluation
+            correctness: bool | None = None
+            if context.contract.mode == "correctness_only":
+                worker = mapped.worker_result
+                verdict = worker.get("correct") if isinstance(worker, dict) else None
+                if not isinstance(verdict, bool):
+                    raise InfrastructureError(
+                        "Agate correctness Eval batch has no correctness verdict"
+                    )
+                evaluation = None
+                correctness = verdict
+            elif evaluation is None:
+                raise InfrastructureError("Agate Eval batch did not produce a measurement")
             return ShapeBatchOutcome(
                 mapped.result,
-                mapped.evaluation,
+                evaluation,
                 mapped.job_id,
                 mapped.worker_result,
+                correctness=correctness,
             )
 
         try:

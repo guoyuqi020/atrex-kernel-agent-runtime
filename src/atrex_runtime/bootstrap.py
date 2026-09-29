@@ -615,7 +615,7 @@ class CampaignBootstrapper:
                 )
             if contract.shape_split is not None and stored_contract.shape_split is None:
                 raise ValueError(
-                    "Existing Campaign has no fixed-seed Shape split archive; create a new "
+                    "Existing Campaign has no Shape population archive; create a new "
                     "Campaign creation_key and workspace. Its frozen evaluation Contract "
                     "cannot be changed."
                 )

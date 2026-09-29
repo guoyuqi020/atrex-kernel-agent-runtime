@@ -159,6 +159,8 @@ class AgateLineageSeedEvaluator:
 
         batched = await self._shape_batches.run(contract, idempotency_key, evaluate_batch)
         evaluation = batched.evaluation
+        if evaluation is None:
+            raise AssertionError("lineage seed batch aggregation lost its evaluation")
         job = batched.job
         job_id = batched.job_id
         profile: JsonValue | None = None

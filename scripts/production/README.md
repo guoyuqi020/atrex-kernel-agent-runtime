@@ -166,16 +166,13 @@ For current Atrex-Bench layouts, preparation exposes `shape_train.json` to the A
 remain fallback-only. `metadata.json` is forwarded privately, including `mutates_inputs` and
 `scratch_inputs`, so the remote correctness gate enforces declared input side effects.
 
-Bootstrap uses fixed seed `42` to randomly split those exact Shapes 50/50 (odd extra: Valid;
-at least two Shapes required), then randomly samples at most 15 from each half. The private
-Contract's `shape_split` archives the population and selected IDs; extra Shapes are excluded from evaluation.
-Valid Shapes are exposed to the Agent only through stable contiguous IDs `0..V-1`; the private
-Contract retains the mapping to evaluator IDs, so gaps cannot reveal Test membership.
-Agent operations and Bootstrap/seed ordinary Eval use Valid only. Authoritative Runtime ABBA
-executes Valid + Test, but promotion uses only Valid; Test is a private observation. Bootstrap also
-records a private Test observation after its Valid gate. Test rows and full-set aggregates never
-enter Agent Evidence or tool responses. Existing Campaign Contracts are immutable: use a new task
-workspace to apply the split or opaque-ID map to a pre-change experiment. See
+Bootstrap places every exact Shape in Valid, leaves Test empty, and applies no Shape-count cap. The
+private Contract's `shape_split` archives the complete population, empty Test set, and opaque
+Agent-ID mapping. Valid Shapes are exposed to the Agent only through stable contiguous IDs
+`0..V-1`. Agent operations, Bootstrap/seed ordinary Eval, and authoritative Runtime ABBA all use
+that complete Valid population. Existing Campaign Contracts are immutable: use a new task
+workspace to apply the all-Valid population to a pre-change experiment. Legacy fixed-seed 15/15
+Contracts remain resumable with their original semantics. See
 [evaluation privacy](../../docs/evaluation.md).
 
 ## Per-DSL inspection

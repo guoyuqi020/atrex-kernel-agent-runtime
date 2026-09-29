@@ -1,4 +1,4 @@
-"""Fixed Valid/Test inputs and non-disclosing authoritative result projections."""
+"""All-Valid inputs, legacy split compatibility, and safe result projections."""
 
 from __future__ import annotations
 
@@ -69,8 +69,8 @@ def _contract(count: int = 10) -> AgateEvaluationContractV1:
     )
 
 
-@pytest.mark.parametrize("count", [2, 3, 10, 11, 29, 30, 31, 32, 45, 100])
-def test_holdout_is_balanced_stable_and_preserved_in_sealed_contract(count: int) -> None:
+@pytest.mark.parametrize("count", [1, 2, 3, 10, 11, 29, 30, 31, 32, 45, 100])
+def test_all_shapes_are_stable_valid_and_preserved_in_sealed_contract(count: int) -> None:
     original = _contract(count)
     split = original.with_shape_holdout()
     reordered = original.model_copy(update={"shapes": dict(reversed(original.shapes.items()))})
@@ -80,37 +80,30 @@ def test_holdout_is_balanced_stable_and_preserved_in_sealed_contract(count: int)
     assert restored == split
     assert split.shape_split is not None
     record = split.shape_split
-    assert record.seed == 42
+    assert record.algorithm == "all_valid"
+    assert record.seed is None
+    assert record.max_shapes_per_set is None
     assert record.source_shape_count == count
     assert record.source_shape_ids == tuple(sorted(original.shapes))
     assert set(record.valid_shape_ids) == set(split.validation_shape_ids)
     assert set(record.valid_shape_ids) | set(record.test_shape_ids) == set(split.shapes)
-    # Replay only from the recorded population and seed, not source dict ordering.
-    rng = random.Random(record.seed)
-    replay = list(record.source_shape_ids)
-    rng.shuffle(replay)
-    midpoint = (count + 1) // 2
-    assert record.valid_shape_ids == tuple(sorted(rng.sample(replay[:midpoint], min(15, midpoint))))
-    assert record.test_shape_ids == tuple(
-        sorted(rng.sample(replay[midpoint:], min(15, count // 2)))
-    )
-    valid_count, test_count = min(15, (count + 1) // 2), min(15, count // 2)
-    assert len(split.shapes) == valid_count + test_count
-    assert len(split.validation_shape_ids or ()) == valid_count
-    assert len(set(split.shapes) - set(split.validation_shape_ids or ())) == test_count
-    assert set(split.shapes) <= set(original.shapes)
+    assert record.valid_shape_ids == tuple(sorted(original.shapes))
+    assert record.test_shape_ids == ()
+    assert len(split.shapes) == count
+    assert len(split.validation_shape_ids or ()) == count
+    assert set(split.shapes) == set(original.shapes)
     assert split.metadata is not None and split.roofline is not None
-    assert split.metadata["num_shapes"] == valid_count + test_count
+    assert split.metadata["num_shapes"] == count
     assert set(split.metadata["shapes"]) == set(split.shapes)
     assert set(split.roofline["shapes"]) == set(split.shapes)
     assert record.agent_shape_id_map is not None
-    assert set(record.agent_shape_id_map) == {str(index) for index in range(valid_count)}
+    assert set(record.agent_shape_id_map) == {str(index) for index in range(count)}
     assert set(record.agent_shape_id_map.values()) == set(record.valid_shape_ids)
     valid = split.for_agent()
-    assert len(valid.shapes) == valid_count
+    assert len(valid.shapes) == count
     assert set(valid.shapes) == set(record.agent_shape_id_map)
     assert valid.metadata is not None and valid.roofline is not None
-    assert valid.metadata["num_shapes"] == valid_count
+    assert valid.metadata["num_shapes"] == count
     assert set(valid.metadata["shapes"]) == set(valid.shapes)
     assert set(valid.roofline["shapes"]) == set(valid.shapes)
     assert "private-shape-trace" not in json.dumps(valid.metadata)
@@ -124,10 +117,28 @@ def test_holdout_is_balanced_stable_and_preserved_in_sealed_contract(count: int)
     assert original.metadata["num_shapes"] == count
 
 
-def test_fixed_seed_sampling_does_not_modify_global_random_state() -> None:
+def test_all_valid_selection_does_not_modify_global_random_state() -> None:
     before = random.getstate()
     _contract(100).with_shape_holdout()
     assert random.getstate() == before
+
+
+def test_legacy_fixed_seed_split_contract_remains_loadable() -> None:
+    value = _contract(10).model_dump(mode="json")
+    value["validation_shape_ids"] = [str(index) for index in range(5)]
+    value["shape_split"] = {
+        "algorithm": "python_random_shuffle_sample",
+        "seed": 42,
+        "max_shapes_per_set": 15,
+        "source_shape_count": 10,
+        "source_shape_ids": [str(index) for index in range(10)],
+        "valid_shape_ids": [str(index) for index in range(5)],
+        "test_shape_ids": [str(index) for index in range(5, 10)],
+        "agent_shape_id_map": {str(index): str(index) for index in range(5)},
+    }
+    restored = AgateEvaluationContractV1.model_validate(value)
+    assert restored.shape_split is not None
+    assert restored.shape_split.algorithm == "python_random_shuffle_sample"
 
 
 def test_split_archive_is_not_in_agent_result_projection() -> None:
@@ -149,9 +160,9 @@ def test_archived_selection_must_match_the_sealed_contract() -> None:
     split = _contract(40).with_shape_holdout()
     assert split.shape_split is not None
     value = split.model_dump(mode="json")
-    excluded = next(iter(set(split.shape_split.source_shape_ids) - set(split.shapes)))
-    value["shape_split"]["test_shape_ids"][0] = excluded
-    with pytest.raises(ValidationError, match="selections must match"):
+    moved = value["shape_split"]["valid_shape_ids"].pop()
+    value["shape_split"]["test_shape_ids"] = [moved]
+    with pytest.raises(ValidationError, match="every source Shape in Valid"):
         AgateEvaluationContractV1.model_validate(value)
 
 
@@ -159,29 +170,31 @@ def test_archived_agent_shape_id_map_must_be_contiguous_and_exact() -> None:
     split = _contract(40).with_shape_holdout()
     value = split.model_dump(mode="json")
     value["shape_split"]["agent_shape_id_map"]["0"] = value["shape_split"][
-        "test_shape_ids"
-    ][0]
+        "agent_shape_id_map"
+    ]["1"]
     with pytest.raises(ValidationError, match="contiguous opaque Agent IDs"):
         AgateEvaluationContractV1.model_validate(value)
 
 
-def test_sealed_partition_cannot_exceed_shape_cap() -> None:
-    value = _contract(40).model_dump()
-    value["validation_shape_ids"] = [str(i) for i in range(20)]
-    with pytest.raises(ValidationError, match="at most 15 Shapes"):
-        AgateEvaluationContractV1.model_validate(value)
+def test_sealed_all_valid_population_has_no_shape_cap() -> None:
+    split = _contract(100).with_shape_holdout()
+    restored = AgateEvaluationContractV1.model_validate_json(split.model_dump_json())
+    assert len(restored.shapes) == 100
+    assert restored.validation_shape_ids is not None
+    assert len(restored.validation_shape_ids) == 100
 
 
-def test_single_shape_is_rejected() -> None:
-    with pytest.raises(ValueError, match="at least 2 Shapes"):
-        _contract(1).with_shape_holdout()
+def test_single_shape_is_valid() -> None:
+    split = _contract(1).with_shape_holdout()
+    assert split.validation_shape_ids == ("0",)
+    assert split.shape_split is not None and split.shape_split.test_shape_ids == ()
 
 
 @pytest.mark.parametrize("ids", [[], ["0", "0"], ["0", "1", "2"], ["unknown", "0"]])
 def test_invalid_sealed_partition_is_rejected(ids: list[str]) -> None:
     value = _contract(4).model_dump()
     value["validation_shape_ids"] = ids
-    with pytest.raises(ValidationError, match="select half"):
+    with pytest.raises(ValidationError, match="validation_shape_ids"):
         AgateEvaluationContractV1.model_validate(value)
 
 
@@ -212,28 +225,48 @@ async def test_agent_eval_sends_and_returns_only_valid_shapes(tmp_path: Path) ->
         sent = [payload["reference"]["shapes"] for _, payload in client.submitted]
         aliases = contract.agent_shape_id_map()
         assert aliases is not None
-        assert len(sent) == 1 and set(sent[0]) == set(aliases)
+        assert len(sent) == len(aliases)
+        assert {shape_id for batch in sent for shape_id in batch} == set(aliases)
         assert "private-shape-trace" not in json.dumps(client.submitted)
-        assert set(result.worker_result["latency_us_by_shape"]) == set(sent[0])
-        test_id = "not-an-agent-shape"
+        assert set(result.worker_result["latency_us_by_shape"]) == set(aliases)
+        invalid_id = "not-an-agent-shape"
         with pytest.raises(ValueError, match="not an evaluator-owned"):
             await adapter.execute(
                 replace(
                     request,
                     operation=GatewayOperation.PROFILE,
-                    parameters={"shape_id": test_id},
+                    parameters={"shape_id": invalid_id},
                     profile_level="sol",
                     idempotency_key="cannot-probe-test",
                 )
             )
-        assert len(client.submitted) == 1
+        assert len(client.submitted) == len(aliases)
     finally:
         jobs.close()
 
 
 @pytest.mark.anyio
 async def test_agent_profile_uses_opaque_valid_shape_id_end_to_end(tmp_path: Path) -> None:
-    contract = _contract(40).with_shape_holdout()
+    original = _contract(40)
+    source_ids = {str(index): str(index + 100) for index in range(40)}
+    metadata = dict(original.metadata or {})
+    metadata["shapes"] = {
+        source_ids[shape_id]: value
+        for shape_id, value in (original.metadata or {})["shapes"].items()
+    }
+    roofline = {
+        "shapes": {
+            source_ids[shape_id]: value
+            for shape_id, value in (original.roofline or {})["shapes"].items()
+        }
+    }
+    contract = original.model_copy(
+        update={
+            "shapes": {source_ids[shape_id]: value for shape_id, value in original.shapes.items()},
+            "metadata": metadata,
+            "roofline": roofline,
+        }
+    ).with_shape_holdout()
     aliases = contract.agent_shape_id_map()
     assert aliases is not None
     alias, source_id = next(
@@ -299,11 +332,14 @@ async def test_agent_abba_uses_only_valid_inputs(case: Case) -> None:
     case.contexts.context = replace(case.contexts.context, contract=contract)
     result = await case.adapter.execute(case.request)
     assert result.status == "completed"
-    assert len(case.client.requests) == 1
-    files = case.client.requests[0]["files"]
+    assert len(case.client.requests) == len(contract.for_agent().shapes)
     aliases = contract.agent_shape_id_map()
     assert aliases is not None
-    assert set(json.loads(files["reference/shapes.json"])) == set(aliases)
+    assert {
+        shape_id
+        for request in case.client.requests
+        for shape_id in json.loads(request["files"]["reference/shapes.json"])
+    } == set(aliases)
     assert set(result.worker_result["candidate"]["latency_us_by_shape"]) == set(
         aliases
     )
@@ -311,11 +347,9 @@ async def test_agent_abba_uses_only_valid_inputs(case: Case) -> None:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("shape_count", [10, 40])
-@pytest.mark.parametrize("test_failure", [False, True])
-async def test_authoritative_abba_gates_on_valid_and_observes_test_privately(
+async def test_authoritative_abba_uses_the_full_valid_population(
     tmp_path: Path,
     shape_count: int,
-    test_failure: bool,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     revisions = []
@@ -335,29 +369,7 @@ async def test_authoritative_abba_gates_on_valid_and_observes_test_privately(
         )
     contract = _contract(shape_count).with_shape_holdout()
     assert contract.shape_split is not None
-    failed_test_shape = contract.shape_split.test_shape_ids[0]
-
-    class ObservationClient(AbbaClient):
-        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
-            accepted = super().submit_job(kind, request)
-            files = request["files"]
-            assert isinstance(files, dict)
-            request_shapes = set(json.loads(files["reference/shapes.json"]))
-            if test_failure and failed_test_shape in request_shapes:
-                job = self.jobs[str(accepted["job_id"])]
-                result_payload = job["result"]
-                assert isinstance(result_payload, dict)
-                stdout = result_payload["stdout"]
-                assert isinstance(stdout, str)
-                payload = json.loads(stdout.split("=", 1)[1])
-                for run in payload["runs"]:
-                    run["result"]["all_pass"] = False
-                    run["result"]["latency_us_by_shape"] = {}
-                result_payload["stdout"] = "__ATREX_RUNTIME_ABBA_RESULT__=" + json.dumps(
-                    payload,
-                    separators=(",", ":"),
-                )
-            return accepted
+    assert contract.shape_split.test_shape_ids == ()
 
     contract_digest = artifacts.put_json(
         contract.model_dump(mode="json"), ArtifactKind.EVALUATION_CONTRACT
@@ -369,7 +381,7 @@ async def test_authoritative_abba_gates_on_valid_and_observes_test_privately(
         contract,
         evaluation_contract_digest=contract_digest,
     )
-    client = ObservationClient()
+    client = AbbaClient()
     journal = FakeJournal()
     runner = AgateSameAllocationAbbaRunner(
         client,
@@ -388,31 +400,23 @@ async def test_authoritative_abba_gates_on_valid_and_observes_test_privately(
         shape_batch_size=1,
         max_parallel_shape_batches=16,
     )
-    assert len(client.requests) == min(shape_count, 30)
+    assert len(client.requests) == shape_count
     assert {
         sid
         for payload in client.requests
         for sid in json.loads(payload["files"]["reference/shapes.json"])
     } == set(contract.shapes)
-    assert len(contract.for_agent().shapes) <= 15
-    assert len(set(contract.shapes) - set(contract.validation_shape_ids)) <= 15
+    assert len(contract.for_agent().shapes) == shape_count
+    assert set(contract.validation_shape_ids or ()) == set(contract.shapes)
     raw_path = artifacts.verify(result.gateway_result_digest).payload_path / "value.json"
     raw = json.loads(raw_path.read_text())
     valid_ids = set(contract.validation_shape_ids)
-    test_ids = set(contract.shape_split.test_shape_ids)
     assert raw["promotion_domain"] == "valid"
     assert raw["candidate"]["correct"] is True
     assert all(run.correct for run in result.candidate_runs)
     assert set(raw["candidate"]["latency_us_by_shape"]) == valid_ids
-    assert raw["test_observation"]["affects_promotion"] is False
-    assert raw["test_observation"]["status"] == "completed"
-    assert raw["test_observation"]["candidate"]["correct"] is (not test_failure)
-    assert set(raw["test_observation"]["candidate"]["latency_us_by_shape"]) == (
-        set() if test_failure else test_ids
-    )
-    # Synthetic distinctive Test measurements catch aggregate and scalar leakage.
+    assert "test_observation" not in raw
     raw["candidate"]["latency_us_by_shape"] = {sid: 90 for sid in valid_ids}
-    raw["test_observation"]["candidate"]["latency_us_by_shape"] = {sid: 9000 for sid in test_ids}
     raw["candidate"]["correctness"]["max_abs_err"] = 123456789
     private_result = artifacts.put_json(raw, ArtifactKind.GATEWAY_RESULT)
     public = gateway_result_projection(artifacts, private_result, correct=True, latency_us=900)
@@ -424,8 +428,7 @@ async def test_authoritative_abba_gates_on_valid_and_observes_test_privately(
     assert public["correctness"]["max_abs_err"] is None
     assert public["measurement_domain"] == "valid"
     assert public["shape_ids_are_opaque"] is True
-    assert not set(public["latency_us_by_shape"]).intersection(valid_ids - set(aliases))
-    assert "9000" not in json.dumps(public) and "123456789" not in json.dumps(public)
+    assert "123456789" not in json.dumps(public)
 
     lineage = tmp_path / "lineage"
     (lineage / "epochs").mkdir(parents=True)
@@ -454,7 +457,9 @@ async def test_authoritative_abba_gates_on_valid_and_observes_test_privately(
 
 
 @pytest.mark.parametrize("shape_count", [10, 40])
-def test_problem_generalizer_cannot_read_test_inputs(tmp_path: Path, shape_count: int) -> None:
+def test_problem_generalizer_receives_every_shape_under_opaque_ids(
+    tmp_path: Path, shape_count: int
+) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     contract = _contract(shape_count).with_shape_holdout()
     private_digest = artifacts.put_json(
@@ -477,6 +482,7 @@ def test_problem_generalizer_cannot_read_test_inputs(tmp_path: Path, shape_count
     root = prepared.root / manifest.paths.private_inputs
     aliases = contract.agent_shape_id_map()
     assert aliases is not None
+    assert len(aliases) == shape_count
     assert set(json.loads((root / "shapes.json").read_text())) == set(aliases)
     assert set(json.loads((root / "metadata.json").read_text())["shapes"]) == set(
         aliases

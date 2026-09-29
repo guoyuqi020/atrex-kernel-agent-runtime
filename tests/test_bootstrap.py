@@ -273,16 +273,16 @@ def test_campaign_bootstrap_resolves_agent_arch_from_agate_environment(
     assert lineage.hardware_target == "sm_120"
     assert baseline.hardware_targets == ["sm_120"]
     assert contract["agate_gpu"] == "L20N"
-    assert len(contract["shapes"]) == min(30, shape_count)
-    assert len(contract["validation_shape_ids"]) == min(15, (shape_count + 1) // 2)
-    assert set(contract["validation_shape_ids"]) < set(contract["shapes"])
-    assert contract["shape_split"]["seed"] == 42
+    assert len(contract["shapes"]) == shape_count
+    assert len(contract["validation_shape_ids"]) == shape_count
+    assert set(contract["validation_shape_ids"]) == set(contract["shapes"])
+    assert contract["shape_split"]["algorithm"] == "all_valid"
+    assert contract["shape_split"]["seed"] is None
+    assert contract["shape_split"]["max_shapes_per_set"] is None
     assert contract["shape_split"]["source_shape_count"] == shape_count
     assert set(contract["shape_split"]["source_shape_ids"]) == set(contract_input["shapes"])
     assert set(contract["shape_split"]["valid_shape_ids"]) == set(contract["validation_shape_ids"])
-    assert set(contract["shape_split"]["test_shape_ids"]) == (
-        set(contract["shapes"]) - set(contract["validation_shape_ids"])
-    )
+    assert contract["shape_split"]["test_shape_ids"] == []
     assert set(contract["shape_split"]["agent_shape_id_map"]) == {
         str(index) for index in range(len(contract["validation_shape_ids"]))
     }
@@ -437,7 +437,7 @@ def test_campaign_bootstrap_requires_new_identity_for_unarchived_campaign(
             )
             original = bootstrapper.bootstrap_campaign(spec)
         error = (
-            "Existing Campaign has no fixed-seed Shape split archive" if archive_only
+            "Existing Campaign has no Shape population archive" if archive_only
             else "Existing Campaign predates the Valid/Test split"
         )
         with pytest.raises(ValueError, match=error):
@@ -448,7 +448,7 @@ def test_campaign_bootstrap_requires_new_identity_for_unarchived_campaign(
         assert baseline.calls == [Dsl.TRITON]
 
 
-def test_campaign_bootstrap_rejects_single_shape_before_running_agent(tmp_path: Path) -> None:
+def test_campaign_bootstrap_accepts_single_shape(tmp_path: Path) -> None:
     spec = CampaignSpecV3.from_file(_campaign_spec(tmp_path, lineage_dsls=(Dsl.TRITON,)))
     contract = _contract()
     contract["shapes"] = {"0": {}}
@@ -457,9 +457,12 @@ def test_campaign_bootstrap_rejects_single_shape_before_running_agent(tmp_path: 
     baseline = FakeBaselineGenerator(artifacts)
     with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
         bootstrapper = _bootstrapper(registry, artifacts, FakeGitLoader(artifacts), baseline)
-        with pytest.raises(ValueError, match="at least 2 Shapes"):
-            bootstrapper.bootstrap_campaign(spec)
-        assert baseline.calls == []
+        result = bootstrapper.bootstrap_campaign(spec)
+        contract_path = artifacts.verify(result.lineages[0].evaluation_contract_digest).payload_path
+        sealed = json.loads((contract_path / "value.json").read_text(encoding="utf-8"))
+        assert sealed["validation_shape_ids"] == ["0"]
+        assert sealed["shape_split"]["test_shape_ids"] == []
+        assert baseline.calls == [Dsl.TRITON]
 
 
 class ConcurrentBaselineGenerator(FakeBaselineGenerator):

@@ -173,13 +173,11 @@ constructs Agate requests from the sealed Contract and sanitizes Worker response
 may retrieve bounded exact Artifacts; Agent tools cannot select arbitrary Campaign, Lineage, or
 Attempt history.
 
-New Campaigns seal a fixed-seed (`42`) randomized 50/50 Valid/Test partition (odd extra: Valid;
-at least two Shapes), then randomly sample at most 15 Shapes per subset. The private Contract
-archives the source population and selected IDs; extra Shapes do not participate in evaluation.
-Agent operations and ordinary evaluation use Valid only. Authoritative Runtime ABBA executes both,
-but only Valid controls correctness, latency, acceptance, and selection. Test is a private
-observation-only generalization signal and never affects promotion. Agent-facing historical
-measurements omit Test rows and recompute latency aggregates over Valid. See
+New Campaigns place every source Shape in Valid, leave Test empty, and apply no Shape-count cap.
+The private Contract archives the source population, full Valid population, empty Test population,
+and opaque Agent-ID map. Agent operations, ordinary evaluation, and authoritative Runtime ABBA all
+use the complete Valid set. Agent-facing historical measurements recompute latency aggregates over
+that same set. See
 [evaluation](evaluation.md).
 
 ## Agent source and Runtime State

@@ -573,7 +573,7 @@ async def test_proxy_owned_measurement_repetition_bypasses_adapter_repeats(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("custom", [False, True])
-async def test_correctness_only_runs_once_without_latency_or_auto_profile(
+async def test_correctness_only_batches_shapes_without_latency_or_auto_profile(
     tmp_path: Path, custom: bool,
 ) -> None:
     shape_ids = ("7", "8") if custom else ("0", "1")
@@ -602,13 +602,58 @@ async def test_correctness_only_runs_once_without_latency_or_auto_profile(
         }
         assert worker["mode"] == "correctness_only"
         assert worker["input_scope"] == ("custom" if custom else "contract")
+        assert worker["shape_batch_count"] == len(shape_ids)
         assert "latency" not in json.dumps(worker)
         assert "input_kwargs" not in json.dumps(worker)
-        assert len(client.submitted) == 1
-        kind, payload = client.submitted[0]
-        assert kind == "eval" and payload["mode"] == "correctness_only"
-        assert set(payload["reference"]["shapes"]) == set(shape_ids)
-        assert payload["options"]["num_correctness_cases"] == 4
+        assert "latency" not in json.dumps(result.result)
+        assert len(client.submitted) == len(shape_ids)
+        sent_shape_ids: set[str] = set()
+        sent_keys: set[str] = set()
+        for kind, payload in client.submitted:
+            assert kind == "eval" and payload["mode"] == "correctness_only"
+            reference = payload["reference"]
+            assert isinstance(reference, dict)
+            sent_shapes = reference["shapes"]
+            assert isinstance(sent_shapes, dict) and len(sent_shapes) == 1
+            sent_shape_ids.update(sent_shapes)
+            assert payload["options"]["num_correctness_cases"] == 4
+            sent_keys.add(str(payload["idempotency_key"]))
+        assert sent_shape_ids == set(shape_ids)
+        assert len(sent_keys) == len(shape_ids)
+        assert all(key.startswith("shape-batch:") for key in sent_keys)
+    finally:
+        jobs.close()
+
+
+@pytest.mark.anyio
+async def test_correctness_only_batch_failure_fails_the_logical_check(tmp_path: Path) -> None:
+    class FailingShapeClient(FakeAgateClient):
+        def get_job(self, job_id: str, **kwargs: object) -> dict[str, object]:
+            job = super().get_job(job_id, **kwargs)
+            request = self.requests_by_job[job_id]
+            reference = request["reference"]
+            assert isinstance(reference, dict)
+            if set(reference["shapes"]) == {"1"}:
+                result = job["result"]
+                assert isinstance(result, dict)
+                passed = result["passed"]
+                assert isinstance(passed, dict)
+                correctness = passed["correctness"]
+                assert isinstance(correctness, dict)
+                correctness["1"] = {"status": "failed"}
+            return job
+
+    client = FailingShapeClient(_job_for_shapes("0", "1", correctness_only=True))
+    adapter, _builder, jobs = _adapter(tmp_path, client)
+    request = _exploratory_request(tmp_path, {"mode": "correctness_only"})
+    try:
+        result = await adapter.execute(request)
+        assert result.evaluation is None
+        assert result.worker_result["correct"] is False
+        assert result.worker_result["all_pass"] is False
+        assert len(client.submitted) == 2
+        assert "latency" not in json.dumps(result.result)
+        assert "latency" not in json.dumps(result.worker_result)
     finally:
         jobs.close()
 
@@ -832,15 +877,34 @@ async def test_correctness_only_log_recovery_preserves_custom_request_and_bindin
     try:
         result = await adapter.execute(request)
         assert result.evaluation is None and result.worker_result["correct"] is True
-        assert len(client.submitted) == 2
-        original = client.submitted[0][1]
-        recovered = client.submitted[1][1]
+        assert len(client.submitted) == 3
+        recovered = next(
+            payload
+            for _, payload in client.submitted
+            if str(payload["idempotency_key"]).startswith("logs-retry:")
+        )
+        original = next(
+            payload
+            for _, payload in client.submitted
+            if payload["reference"] == recovered["reference"]
+            and not str(payload["idempotency_key"]).startswith("logs-retry:")
+        )
         assert recovered["reference"] == original["reference"]
         assert recovered["mode"] == original["mode"] == "correctness_only"
         assert recovered["idempotency_key"].startswith("logs-retry:")
         bindings = jobs.list_owned(request.attempt_id)
-        assert len(bindings) == 2
-        assert all(binding.expected_shape_ids == ("7", "8") for binding in bindings)
+        assert len(bindings) == 3
+        assert all(
+            binding.expected_shape_ids in {("7",), ("8",)} for binding in bindings
+        )
+        bound_shape_ids = {
+            shape_id
+            for binding in bindings
+            for shape_id in binding.expected_shape_ids or ()
+        }
+        assert bound_shape_ids == {
+            "7", "8",
+        }
         assert all(binding.evaluation_mode == "correctness_only" for binding in bindings)
         assert all(binding.input_scope == "custom" for binding in bindings)
     finally:

@@ -97,22 +97,21 @@ Candidate 操作上传完整 Base64 File Bundle，Runtime 在执行前封存。�
 Agent 可见 `operation`、`status`、`result` 独立封存为 Result Artifact。Agent 始终收到
 `result_artifact_digest`，初次执行和后续读取暴露同一份规范化内容，不暴露私有 Gateway Result 身份。
 
-私有 Contract 的 `shapes` 只保留最多 30 个选中 Shape，`validation_shape_ids` 固定选择其中的
-Valid 子集，其补集为 Test；两个集合各最多 15 个。这是控制器字段，不是 Agent 请求参数。
-私有 `shape_split` 记录种子 `42`、算法、上限、原始全集 ID/数量及选中的 Valid/Test ID，随
-Contract 一起封存，Agent 和逐批 Context 会移除它；仅供管理端复现。
-Agent 默认操作只使用 Valid。Runtime 权威 ABBA 会执行全部选中 Shape，但正确性、延迟和晋升
-只由 Valid 聚合决定；Test 以 `affects_promotion: false` 的私有 `test_observation` 保存，Test
-错误或性能下降不能拒绝 Revision。Bootstrap 同样由 Valid 决定 v0，Test 只作私有旁路观测。
-历史权威 ABBA 的 Agent 可见投影增加 `measurement_domain: "valid"`，隐藏 Test 行及误差指标，
-并仅按 Valid 重算几何/算术平均延迟。
+私有 Contract 的 `shapes` 保留全部原始 Shape，`validation_shape_ids` 包含这个完整 Valid 集，
+Test 为空且不设 Shape 数量上限。这是控制器字段，不是 Agent 请求参数。私有 `shape_split`
+记录 `all_valid` 算法、原始全集 ID/数量、完整 Valid ID、空 Test ID 和不透明 Agent ID 映射，
+随 Contract 一起封存，Agent 和逐批 Context 会移除它；仅供管理端复现。
+Agent 默认操作、Runtime 权威 ABBA 和 Bootstrap 都执行完整 Valid 集；新 Campaign 不生成
+`test_observation`。Agent 可见投影包含 `measurement_domain: "valid"`，并按完整 Valid 集重算
+几何/算术平均延迟。
 详见[评测隐私](evaluation.zh.md#评测输入与隐私)。
 
 `evaluate` 的 Wire Request 可指定 `mode: "full" | "correctness_only"`（默认 `full`）、
 `input_py`（UTF-8 Python 输入生成器源码，上限 128 KiB）和 `shapes`（以整数字符串为键的非空
 Agate Shape Record Object，每条记录也是 Object）。两个输入组件可独立覆盖；未指定的源码或
 Shapes 继续复用私有 Contract，Reference 和可信评测策略保持不变。`correctness_only` 不测性能、
-不自动 Profile。自定义输入或仅正确性调用仍保留 Kernel Trial 和 Result Artifact 身份，其嵌套
+不自动 Profile；它与完整 Evaluate 一样按单 Shape 分批且最多 16 批并发，随后只合并各批正确性
+结论，不生成延迟字段。自定义输入或仅正确性调用仍保留 Kernel Trial 和 Result Artifact 身份，其嵌套
 `result` 记录 `mode` 与 `input_scope`（`custom` 或 `contract`）。这些调用不能满足
 `candidate_ready` 前所需的可信 Contract 完整评测。完整 Evaluate 还须填写
 `latency_prediction`：`improved` 表示几何平均延迟降低超过 1%，`retained` 表示变化在

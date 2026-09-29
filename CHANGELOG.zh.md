@@ -6,6 +6,11 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Agent 的 `correctness_only` Evaluate 现在与完整 Evaluate 一样按单 Shape 分批，最多 16 批
+  并发。Runtime 将所有批次合并为一个正确性结论，仍不生成延迟测量，也不自动执行 Profile。
+- 新 Campaign 将 100% 原始 Shape 放入 Valid，Test 为空且不设 Shape 数量上限。Agent 与 Runtime
+  权威评测使用同一完整集合；封存的 `shape_split` 记录 `algorithm: all_valid`、空 Seed/上限、
+  全部 Valid ID 和空 Test 列表。旧的固定种子 15/15 Contract 仍可按原语义加载。
 - FA4 与 FA4-SM120 现在固定使用 Evolver `794219bc`；该版本的 Evidence Contract 会接受并校验
   Runtime 投影的 `input/evidence/review/` 目录，避免所有带 Evolver 的消融臂在构建 Challenger
   时启动即失败。两个任务定义同时更新 Creation Key，重新生成的 Workspace 不会再解析到不兼容的
@@ -23,9 +28,8 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 - Bootstrap 现在会把配置的 Initial Evidence Artifact 只读物化到 `input/evidence/`，并把其中
   有界的 UTF-8 `README.md` 注入 Framework Baseline Prompt。任务 Hint 因而会真正进入模型
   上下文，而不再只充当 Registry 身份信息。
-- Runtime 持有的最终评测现在使用完整密封的 Valid+Test Shape Contract。Agent 的
-  Evaluate/Profile 仍然只使用 Valid；面向 Agent 的结果投影也继续只展示不透明的 Valid Shape ID
-  和 Valid-only 延迟指标。因此 Bootstrap v0 必须通过私有 Test Shapes 才能注册。
+- Runtime 持有的最终评测使用完整密封的 Valid Shape 集。Agent 的 Evaluate/Profile 与面向 Agent
+  的结果投影使用同一集合，并通过不透明 Shape ID 展示 Valid 延迟指标。
 
 - 单文件 Agent ABBA 与权威 ABBA 改用 Agate 原生 Eval ABBA API。Runtime 将每侧两次测量精确
   映射为一个完整 A/B/B/A Block，并根据返回的原始 SDK Runs 重建既有权威聚合；Shape 分批、

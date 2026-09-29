@@ -169,6 +169,8 @@ class AgateKernelMeasurementRunner(KernelMeasurementRunner):
             evaluate_batch,
         )
         evaluation = batched.evaluation
+        if evaluation is None:
+            raise AssertionError("measurement batch aggregation lost its evaluation")
         job_id = batched.job_id
         result_digest = self._artifacts.put_json(batched.job, ArtifactKind.GATEWAY_RESULT)
         event_base = {
