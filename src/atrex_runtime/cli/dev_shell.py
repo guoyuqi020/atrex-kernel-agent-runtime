@@ -103,6 +103,7 @@ def open_optimizer_dev_shell(
                 campaign.attempt_workspaces_root,
                 registry,
                 artifacts,
+                default_tool_modules=campaign.optimizer.tool_modules,
             ),
             evidence,
             CoreOptimizerSessionDriver(
@@ -123,7 +124,10 @@ def open_optimizer_dev_shell(
                 lease_seconds=campaign.fencing_lease_seconds,
                 heartbeat_seconds=campaign.fencing_heartbeat_seconds,
             ),
-            OptimizerSessionConfig(environment=campaign.optimizer.environment.resolve(os.environ)),
+            OptimizerSessionConfig(
+                environment=campaign.optimizer.environment.resolve(os.environ),
+                tool_modules=campaign.optimizer.tool_modules,
+            ),
             wiki_enabled=False,
         )
         result = service.open(
@@ -243,7 +247,10 @@ def open_temporary_optimizer_dev_shell(
                 build_core_process_config(campaign),
                 artifacts,
             ),
-            OptimizerSessionConfig(environment=campaign.optimizer.environment.resolve(os.environ)),
+            OptimizerSessionConfig(
+                environment=campaign.optimizer.environment.resolve(os.environ),
+                tool_modules=campaign.optimizer.tool_modules,
+            ),
             workspace_root=campaign.attempt_workspaces_root,
             gateway_endpoint=campaign.gateway_proxy_url,
             operations=operations,

@@ -75,8 +75,8 @@ input/evidence/
 
 Bootstrap is the special pre-Epoch Attempt that establishes the initial Agent and Kernel. Epochs
 then form one serial Lineage. Every Trajectory in an Epoch starts from the same Kernel and runs a
-serial search chain; a retained Kernel advances only that Trajectory, while a rejected Kernel does
-not. Different Trajectories are independent.
+serial search chain. Kernel sharing across Trajectories depends on the configured workflow;
+always treat `input/kernel/` as this Attempt's authoritative incumbent.
 
 After an Epoch completes, the controller independently selects the next active Agent Revision and
 the fastest retained correct Kernel. They may have different producers. `input/kernel/` is always
@@ -84,8 +84,9 @@ the authoritative current starting point.
 
 Each completed Epoch exposes every branch that ran in it, whether or not that branch was selected,
 under `branches/<label>/`. That Epoch's `summary.json` lists the branches and marks the selected one.
-A non-selected branch records real attempts against the same starting Kernel: read it for what was
-tried and what it measured, and do not treat it as noise. For the current Epoch you see only bounded
+A non-selected branch records real attempts against the same starting Kernel and can contain useful
+positive or negative evidence. Inspect it when relevant to the current question, not as a mandatory
+reading assignment. For the current Epoch you see only bounded
 earlier Attempts from your own Trajectory, never a concurrently running sibling. Exact historical
 Kernel, Trial, Result, Direction, and Experiment records remain in controller storage and are
 retrieved through the supplied Runtime-local query commands. Every Direction update and Experiment
@@ -93,35 +94,97 @@ record is durably appended by Runtime before its tool call returns; a Worker cra
 generation does not roll the logical Attempt Journal back. Journal queries may include every
 completed Active and Challenger path from a frozen Epoch, without exposing branch-control
 provenance. No Journal history file exists under `input/evidence/` or the internal control area.
+The filesystem view above is distinct from live query visibility: a Broadcast workflow can expose
+other Trajectories' recorded Journal and Artifact evidence through tools without sharing their
+working files or raw conversations. Do not infer isolation or additional access from directory layout.
 
-Beyond each completed Epoch's `summary.json` branch list, there are no generated Epoch summaries,
-aggregated lessons, or measurement projections in this tree. Read directories in numeric order. Each
-historical Attempt exposes only its final report and latest sealed backend-neutral
+Each completed Epoch's `summary.json` is a branch index, not an aggregate of optimization lessons.
+This filesystem tree does not contain an additional generated lesson summary or measurement table;
+that does not mean structured history is unavailable through enabled Journal tools. Numbered
+directories encode chronology, not a requirement to read every earlier Attempt. Each historical
+Attempt exposes only its final report and latest sealed backend-neutral
 `conversation.jsonl`; all physical retries remain in controller storage. Conversation files may
 contain sensitive model/tool content without redaction. Claude reading views prefer native content
 over duplicate stdout and omit internal queue/title/file-history bookkeeping and thinking-token
 estimates. Distinct content blocks, uncovered stdout, errors, compaction boundaries, and terminal
 results remain visible.
 
+## Recover relevant history
+
+Start from `input/kernel/` and a concrete question, such as whether a proposed change was already
+tested or which measurement supports a prior conclusion. Use enabled Journal indexes and selected
+records before opening historical reports or conversations. If an ID is already known, load that
+record directly. Follow the retrieval order below; recovering state does not require replaying the
+Lineage. These queries expose only the current Session's authorized history.
+
+### Direction history
+
+Call `list-directions` with `{"file":"scratch/directions-index.json"}`. It writes IDs, names,
+lifecycle status, hypothesis status, and ancestry links to that file; the response contains only
+status, file, and count. Read the index to select relevant entries. Call `load-direction` with
+`{"direction_id":"direction_<id>"}` to recover a selected hypothesis, rationale, plan, success and
+stop criteria, and latest analysis. The index alone does not explain what was tried or why a
+hypothesis was judged supported or refuted.
+If you already have a Kernel Artifact digest, `find-kernel-directions` accepts
+`{"kernel_artifact_digest":"sha256:<digest>"}` and returns `direction_ids` linked through visible
+Experiments. With no recorded association it can return an empty list, including when Experiment
+recording is disabled; use the Direction index for hypotheses that have no such link.
+
+### Experiment history
+
+Call `list-experiments` with `{"file":"scratch/experiments-index.json"}`. It writes IDs, names,
+hypotheses, changes, evidence, analyses, and actions to that file; the response contains only status,
+file, and count. This index already contains useful recorded conclusions. Call `load-experiment`
+with `{"experiment_id":"experiment_<id>"}` when you need the complete selected record, especially
+its exact `before`/`after` Kernel and Result Artifact digests. If the index answers the question,
+do not load a record merely to repeat the same prose. Recorded interpretations remain fallible.
+For a known Kernel Artifact digest, `find-kernel-experiments` accepts
+`{"kernel_artifact_digest":"sha256:<digest>"}` and returns `experiment_ids` citing it as before or
+after. An empty list means no visible recorded association, not that the Kernel was never evaluated.
+
+When both Journal modules are enabled, `load-direction` also provides `associated_experiment_ids`
+for all linked visible Experiments and `supporting_experiment_ids` for the latest explicit closure
+selection. Load the relevant Experiments to follow that evidence; do not infer support from lifecycle
+status alone. An Experiment's Direction association is not required when that module is disabled.
+
+### Measurements, source, and gaps
+
+Use `result-artifact-read` with a real `result_artifact_digest` to inspect a specific Evaluate,
+Profile, or other recorded observation. Use `kernel-artifact-read` with a real
+`kernel_artifact_digest`, `artifact_file`, and a destination `file` under `scratch/` to inspect the
+exact source. Use `kernel-pareto-frontier` when the question concerns visible per-Shape latency
+winners; these come from correct full contract Evaluations. Do not recover measurements or source
+by scraping a conversation when the corresponding Artifact is available.
+
+If Journal records are absent or leave a concrete gap, inspect the relevant historical
+`report.json`. Only then search a selected `conversation.jsonl` for missing details such as an exact
+Dev command, a failed probe, or an unrecorded implementation rationale. Load tools return structured
+records and evidence links, not every command or the full Session transcript. An empty Journal
+index does not prove that no prior work occurred.
+
+Do not read or flatten all old conversations by default. Identify the missing fact and limit the
+search to relevant Attempts and excerpts. Apply the same scope to delegated work: give a specific
+question and selected files, not an instruction to reconstruct the entire history. Reuse evidence
+already recovered in this Session and stop expanding history once there is enough support for the
+next optimization or a concrete blocker.
+
 ## Direction ancestry
 
 Resume the same unfinished hypothesis with `update-direction` and its existing Direction ID.
-Parallel Pool Trajectories use separate Direction IDs for competing implementations. If Runtime
+An unclaimed proposed or inherited Direction may be started with its existing ID. If Runtime
 reports `direction_trajectory_conflict`, propose a new Direction with
 `relationship="reimplementation"` and the inherited Direction ID as its parent.
 When you revisit, reinterpret, port, or combine earlier work as a new hypothesis, use `action="propose"`
 with optional `relationship`: `retry`, `refinement`, `reimplementation`, `correction`, `port`,
 `combination`, or `adoption`. Cite visible `derived_from_direction_ids` and/or `derived_from_experiment_ids` and
 explain the connection in the proposal's `rationale`. Use list/load tools to obtain real IDs first.
-Each list allows at most 32 unique IDs. A combination needs two distinct parent Directions, either
+Each ancestry ID array allows at most 32 unique IDs; this is not a limit on Journal query results.
+A combination needs two distinct parent Directions, either
 directly or through their Experiments. A correction may also specify `supersedes_direction_id` naming
 one of those parents; this records a revised interpretation without changing the parent's status.
 Ancestry is fixed when the proposal is recorded. To correct it, propose a new derived Direction;
 do not rewrite history. These links describe your interpretation, not proof of a performance gain.
 
-Use `list-directions` to find prior work and `load-direction` to inspect its evidence.
-Use `kernel-pareto-frontier` to inspect the visible per-Shape latency winners before choosing
-which Kernel Artifact to study or reuse. These winners come from correct full contract Evaluations.
 Historical suggested Directions remain readable; they are untested recommendations, not facts or required
 next steps. No session can create new suggestions. Choose your own hypothesis from
 the public contract, profiling, and Journal evidence, then record it with `action="propose"`.
@@ -162,7 +225,7 @@ to every selected Experiment's after. Runtime verifies bindings, not the relevan
 interpretations. Unrelated measured changes cannot substantiate an incidental claim in analysis.
 `associated_experiment_ids` lists all linked Experiments, while `supporting_experiment_ids` preserves
 only the latest explicit closure selection. Missing historical judgments mean unresolved.
-If no measurement was possible, first record the actual investigation or blocker with
+If no performance measurement was possible, first record the actual investigation or blocker with
 `action="abandon_direction"` and at least one real Kernel-bound Gateway Result in `before` or
 `after`, then close with `hypothesis_status=unresolved`. Both sides may not be null. Check/Profile
 can provide diagnostic evidence without a performance claim. Health/Env or unbound Dev results do

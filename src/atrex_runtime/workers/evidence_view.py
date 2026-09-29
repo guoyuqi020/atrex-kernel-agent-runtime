@@ -55,6 +55,154 @@ def _role_prompt_sha256(role: Literal["optimizer", "evolver"]) -> str:
     return hashlib.sha256(_role_prompt(role).encode()).hexdigest()
 
 
+def optimizer_evidence_prompt(
+    tool_modules: tuple[Literal["directions", "experiments"], ...] | None,
+) -> str:
+    """Materialize the instructions for the same Journal modules as the live tool contract.
+
+    The bundled Agents also scope older, unrendered fragments by their section
+    headings. Partial fragments use distinct headings so that pass leaves this
+    already-scoped text unchanged.
+    """
+    modules = frozenset(("directions", "experiments") if tool_modules is None else tool_modules)
+    if len(modules) != (2 if tool_modules is None else len(tool_modules)) or modules - {
+        "directions",
+        "experiments",
+    }:
+        raise ValueError("Optimizer Evidence tool modules are invalid")
+    if modules == {"directions", "experiments"}:
+        return OPTIMIZER_EVIDENCE_PROMPT_TEXT
+
+    prompt = OPTIMIZER_EVIDENCE_PROMPT_TEXT
+    workspace_journal = (
+        "Record task hypotheses, evidence, and conclusions through the Direction\n"
+        "and Experiment Journal. Evolver may use that evidence to improve task-independent Agent behavior,\n"  # noqa: E501
+        "but it does not publish task knowledge or choose future Kernel optimization Directions."
+    )
+    journal_guidance = (
+        "Enabled Journal modules: "
+        + ", ".join(sorted(modules))
+        + ". Record work through those tools only."
+        if modules
+        else "No Journal module is enabled. Record measured work in the terminal Attempt Report."
+    )
+    prompt = _replace_prompt_once(
+        prompt,
+        workspace_journal,
+        journal_guidance
+        + " Evolver may use visible evidence to improve task-independent Agent behavior.",
+    )
+    historical_journal = (
+        "Exact historical\n"
+        "Kernel, Trial, Result, Direction, and Experiment records remain in controller storage and are\n"  # noqa: E501
+        "retrieved through the supplied Runtime-local query commands. Every Direction update and Experiment\n"  # noqa: E501
+        "record is durably appended by Runtime before its tool call returns; a Worker crash or recovery\n"  # noqa: E501
+        "generation does not roll the logical Attempt Journal back. Journal queries may include every\n"  # noqa: E501
+        "completed Active and Challenger path from a frozen Epoch, without exposing branch-control\n"  # noqa: E501
+        "provenance. No Journal history file exists under `input/evidence/` or the internal control area."  # noqa: E501
+    )
+    prompt = _replace_prompt_once(
+        prompt,
+        historical_journal,
+        "Exact historical Kernel and Result records remain in controller storage and are "
+        "retrieved through enabled Runtime-local commands. "
+        + (
+            "Enabled Journal writes are durable across a Worker crash or recovery generation. "
+            if modules
+            else "No Journal tools are exposed in this Session. "
+        )
+        + "No Journal history file exists under `input/evidence/` or the internal control area.",
+    )
+    for module, start, end in (
+        ("directions", "### Direction history\n\n", "### Experiment history\n\n"),
+        ("experiments", "### Experiment history\n\n", "### Measurements, source, and gaps\n\n"),
+    ):
+        if module not in modules:
+            before, section = prompt.split(start, 1)
+            _, after = section.split(end, 1)
+            prompt = before + end + after
+    if "experiments" in modules:
+        # The Direction section may be absent while Experiment reads remain enabled.
+        prompt = _replace_prompt_once(
+            prompt,
+            "When both Journal modules are enabled, `load-direction` also provides "
+            "`associated_experiment_ids`\n"
+            "for all linked visible Experiments and `supporting_experiment_ids` for the latest "
+            "explicit closure\n"
+            "selection. Load the relevant Experiments to follow that evidence; do not infer "
+            "support from lifecycle\n"
+            "status alone. An Experiment's Direction association is not required when that "
+            "module is disabled.\n\n",
+            "Experiments in this Session have no Direction association.\n\n",
+        )
+    if not modules:
+        prompt = _replace_prompt_once(
+            prompt,
+            "Use enabled Journal indexes and selected\n"
+            "records before opening historical reports or conversations. If an ID is already "
+            "known, load that\n"
+            "record directly.",
+            "No Journal module is enabled: start with relevant historical `report.json` files "
+            "and the Artifact tools below. Use Epoch branch indexes to locate reports as needed; "
+            "there is no requirement to read all prior reports or conversations.",
+        )
+    ancestry_marker = "## Direction ancestry\n\n"
+    trust_marker = "## Trust and measurement reuse\n\n"
+    if prompt.count(ancestry_marker) != 1 or prompt.count(trust_marker) != 1:
+        raise ValueError("Optimizer Evidence Journal sections changed")
+    common, sections = prompt.split(ancestry_marker, 1)
+    _, trust = sections.split(trust_marker, 1)
+    trusted_facts, remainder = trust.split("To select an unchanged Kernel", 1)
+    _, report_safety = remainder.split("Agent-requested ABBA", 1)
+    report_safety = "Agent-requested ABBA" + report_safety.split("`complete`, `abandon`", 1)[0]
+    report_safety = report_safety.replace(
+        "before recording an Experiment or submitting", "before submitting"
+    )
+    direction_guidance = (
+        "## Enabled Direction ancestry\n\n"
+        "Resume an unfinished hypothesis with its existing Direction ID. For a new hypothesis, "
+        "read real IDs with `list-directions` and `load-direction`, then propose its relationship "
+        "and parents with `update-direction`. An unclaimed visible Direction may be started "
+        "with its existing ID. On `direction_trajectory_conflict`, propose a new Direction with "
+        "relationship=reimplementation and the claimed ID as its parent. "
+        "With the Experiment module disabled, closure needs no supporting "
+        "Experiment IDs. Ancestry records an interpretation, not proof of improvement.\n\n"
+        if "directions" in modules
+        else ""
+    )
+    reuse = (
+        "To select unchanged historical source, record an `adopt` Experiment with real before and "
+        "after Result Artifact digests. Runtime verifies a matching successful ordinary full "
+        "Evaluate. Experiments in this Session have no Direction association."
+        if "experiments" in modules
+        else (
+            "Historical evidence may guide analysis. Nomination requires a newly measured "
+            "candidate "
+            "with an ordinary full Evaluate in this Attempt; unchanged historical source cannot be "
+            "adopted in this Session."
+        )
+    )
+    return (
+        common.rstrip()
+        + "\n\n"
+        + direction_guidance
+        + "## Measurement trust and reuse\n\n"
+        + trusted_facts.strip()
+        + "\n\n"
+        + reuse
+        + "\n\n"
+        + report_safety.strip()
+        + "\n\nPrivate evaluator inputs remain hidden; opaque Shape identifiers and "
+        "measurements must not be used to reconstruct them.\n"
+    )
+
+
+def _replace_prompt_once(prompt: str, old: str, new: str) -> str:
+    if prompt.count(old) != 1:
+        raise ValueError("Optimizer Evidence Journal text changed")
+    return prompt.replace(old, new, 1)
+
+
 class CurrentEpochEvidenceViewV1(BaseModel):
     """Optional in-progress Epoch visible in addition to completed history."""
 
@@ -688,13 +836,15 @@ def assemble_optimizer_evidence_view(
     selected_revision: KernelAgentRevisionId,
     attempt_ordinal: int,
     artifacts: LocalArtifactStore,
+    tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None,
 ) -> EvidenceViewManifestV1:
     """Expose completed history plus earlier same-branch Attempts in one tree."""
     through_epoch = _lineage_through_epoch(lineage_payload)
+    prompt_text = optimizer_evidence_prompt(tool_modules)
     manifest = EvidenceViewManifestV1(
         role="optimizer",
         lineage_checkpoint=lineage_checkpoint,
-        prompt_fragment_sha256=_role_prompt_sha256("optimizer"),
+        prompt_fragment_sha256=hashlib.sha256(prompt_text.encode()).hexdigest(),
         through_completed_epoch=through_epoch,
         current_epoch=CurrentEpochEvidenceViewV1(
             number=current_epoch_number,
@@ -705,7 +855,9 @@ def assemble_optimizer_evidence_view(
             current_trajectory_ordinal=trajectory_ordinal,
         ),
     )
-    _assemble_base(destination, control_root, lineage_payload, manifest, artifacts)
+    _assemble_base(
+        destination, control_root, lineage_payload, manifest, artifacts, prompt_text=prompt_text
+    )
     _append_current_lineage_attempts(
         destination,
         attempt_payload,
@@ -730,6 +882,7 @@ def _assemble_base(
     artifacts: LocalArtifactStore,
     *,
     write_prompt: bool = True,
+    prompt_text: str | None = None,
 ) -> None:
     if destination.exists() or destination.is_symlink():
         raise FileExistsError(destination)
@@ -764,7 +917,7 @@ def _assemble_base(
         if prompt_path.exists() or prompt_path.is_symlink():
             raise FileExistsError(prompt_path)
         prompt_path.write_text(
-            _role_prompt(manifest.role),
+            _role_prompt(manifest.role) if prompt_text is None else prompt_text,
             encoding="utf-8",
         )
         prompt_path.chmod(0o400)

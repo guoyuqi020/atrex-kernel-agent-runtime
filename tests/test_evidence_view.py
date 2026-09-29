@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ast
+import hashlib
 import json
 import os
 import re
 from pathlib import Path
+from typing import Literal
 
 import pytest
 from conftest import digest
@@ -27,6 +29,7 @@ from atrex_runtime.workers.evidence_view import (
     assemble_evolver_evidence_view,
     assemble_optimizer_evidence_view,
     evolver_agent_optimization_summary,
+    optimizer_evidence_prompt,
 )
 from atrex_runtime.workers.evolver_review import materialize_evolver_review
 
@@ -38,6 +41,41 @@ def test_optimizer_prompt_enforces_evolver_owned_agent_content() -> None:
     assert "Evolver may use that evidence to improve task-independent Agent behavior" in (
         " ".join(EVIDENCE_PROMPT_TEXT.split())
     )
+
+
+@pytest.mark.parametrize(
+    "modules",
+    [(), ("directions",), ("experiments",), ("directions", "experiments")],
+)
+def test_optimizer_evidence_prompt_matches_enabled_journal_modules(
+    modules: tuple[Literal["directions", "experiments"], ...],
+) -> None:
+    prompt = optimizer_evidence_prompt(modules)
+    if len(modules) < 2:
+        # Bundled Agents scope old, unrendered prompts by these headings. The
+        # Runtime-rendered fragment must survive their second pass unchanged.
+        assert "## Direction ancestry" not in prompt
+        assert "## Trust and measurement reuse" not in prompt
+    assert ("`update-direction`" in prompt) == ("directions" in modules)
+    assert ("`list-directions`" in prompt) == ("directions" in modules)
+    assert ("`load-direction`" in prompt) == ("directions" in modules)
+    assert ("`list-experiments`" in prompt) == ("experiments" in modules)
+    assert ("`load-experiment`" in prompt) == ("experiments" in modules)
+    assert ("`adopt` Experiment" in prompt or 'action="adopt"' in prompt) == (
+        "experiments" in modules
+    )
+    assert ("Direction and Experiment Journal" in " ".join(prompt.split())) == (
+        len(modules) == 2
+    )
+    assert "Private evaluator inputs remain hidden" in prompt
+    assert "Read directories in numeric order" not in prompt
+    assert "Do not read or flatten all old conversations by default" in prompt
+    assert "Apply the same scope to delegated work" in prompt
+    assert "`result-artifact-read`" in prompt
+    assert "`kernel-artifact-read`" in prompt
+    assert "`kernel-pareto-frontier`" in prompt
+    if not modules:
+        assert "start with relevant historical `report.json` files" in prompt
 
 
 def _evolver_service_catalog() -> str:
@@ -816,6 +854,36 @@ def test_evolver_view_rejects_a_pool_version_outside_the_visible_versions(tmp_pa
         )
 
 
+@pytest.mark.parametrize("modules", [(), ("directions",), ("experiments",)])
+def test_optimizer_view_writes_scoped_prompt_and_matching_digest(
+    tmp_path: Path,
+    modules: tuple[Literal["directions", "experiments"], ...],
+) -> None:
+    checkpoint = digest("lineage")
+    control_root = tmp_path / ".runtime"
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    traces = _trace_digests(store, tmp_path / "trace-sources")
+    manifest = assemble_optimizer_evidence_view(
+        tmp_path / "view",
+        control_root=control_root,
+        lineage_payload=_lineage(tmp_path / "lineage", traces, store),
+        lineage_checkpoint=checkpoint,
+        attempt_payload=_current_branch(tmp_path / "attempt", str(checkpoint), traces),
+        attempt_snapshot=digest("attempt"),
+        current_epoch_number=2,
+        branch=BranchRole.ACTIVE,
+        challenger_ordinal=0,
+        trajectory_ordinal=1,
+        selected_revision="agent_active",
+        attempt_ordinal=3,
+        artifacts=store,
+        tool_modules=modules,
+    )
+    prompt_bytes = (control_root / "evidence-instructions.md").read_bytes()
+    assert prompt_bytes.decode() == optimizer_evidence_prompt(modules)
+    assert manifest.prompt_fragment_sha256 == hashlib.sha256(prompt_bytes).hexdigest()
+
+
 def test_optimizer_view_projects_every_completed_branch_by_epoch(tmp_path: Path) -> None:
     checkpoint = digest("lineage")
     destination = tmp_path / "view"
@@ -852,8 +920,8 @@ def test_optimizer_view_projects_every_completed_branch_by_epoch(tmp_path: Path)
     assert "supplied Runtime-local query commands" in EVIDENCE_PROMPT_TEXT
     assert "durably appended by Runtime before its tool call returns" in EVIDENCE_PROMPT_TEXT
     assert "`kernel-trial-show`" not in EVIDENCE_PROMPT_TEXT
-    assert "`kernel-artifact-read`" not in EVIDENCE_PROMPT_TEXT
-    assert "`result-artifact-read`" not in EVIDENCE_PROMPT_TEXT
+    assert "`kernel-artifact-read`" in EVIDENCE_PROMPT_TEXT
+    assert "`result-artifact-read`" in EVIDENCE_PROMPT_TEXT
     assert "`list-directions`" in EVIDENCE_PROMPT_TEXT
     assert "`load-direction`" in EVIDENCE_PROMPT_TEXT
     assert "`measurements-query`" not in EVIDENCE_PROMPT_TEXT

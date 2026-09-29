@@ -220,6 +220,7 @@ def build_campaign_runtime(
                 campaign.attempt_workspaces_root,
                 registry,
                 artifacts,
+                default_tool_modules=campaign.optimizer.tool_modules,
             ),
             optimizer_sessions,
             control,

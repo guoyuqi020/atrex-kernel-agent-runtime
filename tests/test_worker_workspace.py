@@ -6,6 +6,7 @@ import json
 import os
 from dataclasses import replace
 from pathlib import Path
+from typing import Literal
 from unittest.mock import Mock
 
 import pytest
@@ -298,7 +299,11 @@ def test_next_active_rejects_revision_without_completed_successor(tmp_path: Path
         assembler._active_branch_seed(next_epoch)
 
 
-def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) -> None:
+@pytest.mark.parametrize("default_tool_modules", [(), ("directions", "experiments")])
+def test_workspace_materializes_complete_optimizer_repository(
+    tmp_path: Path,
+    default_tool_modules: tuple[Literal["directions", "experiments"], ...],
+) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     store = LocalArtifactStore(tmp_path / "artifacts")
     optimizer = _put_text_artifact(store, tmp_path, "optimizer", ArtifactKind.KERNEL_AGENT)
@@ -458,7 +463,12 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
         attempt_evidence,
         Dsl.TRITON,
     )
-    assembler = LocalAttemptWorkspaceAssembler(tmp_path / "workspaces", registry, store)
+    assembler = LocalAttemptWorkspaceAssembler(
+        tmp_path / "workspaces",
+        registry,
+        store,
+        default_tool_modules=default_tool_modules,
+    )
     bootstrap_state = (
         tmp_path / "workspaces/.reusable" / str(lineage_id) / str(agent_id) / "bootstrap"
     )
@@ -468,6 +478,8 @@ def test_workspace_materializes_complete_optimizer_repository(tmp_path: Path) ->
     (bootstrap_state / "tools/README.md").write_text("# Bootstrap tools\n")
 
     first = assembler.prepare(request)
+    evidence_prompt = (first.root / ".runtime/evidence-instructions.md").read_text()
+    assert ("`update-direction`" in evidence_prompt) == bool(default_tool_modules)
     recorded_input_state = registry.get_attempt(attempt_id).input_runtime_state_digest
     assert recorded_input_state is not None
     assert store.verify(recorded_input_state).kind is ArtifactKind.KERNEL_AGENT_RUNTIME_STATE

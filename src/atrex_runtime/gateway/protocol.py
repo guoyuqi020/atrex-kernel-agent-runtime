@@ -614,6 +614,16 @@ def _agent_operation_schema(
         schema["required"] = [
             field_name for field_name in required if field_name not in hidden_fields
         ]
+    if model is DevRequestV2:
+        properties["file_paths"] = {
+            "type": "array",
+            "items": {"type": "string", "minLength": 1},
+            "description": (
+                "Workspace-relative files expanded by the CLI into wire files. Each is uploaded "
+                "under its basename beside the candidate; basenames must be distinct and must "
+                "not shadow candidate files. Prefer this over embedding a script in command."
+            ),
+        }
     if model is EvaluateRequestV2:
         for source, path in (("input_py", "input_path"), ("shapes", "shapes_path")):
             properties[path] = {

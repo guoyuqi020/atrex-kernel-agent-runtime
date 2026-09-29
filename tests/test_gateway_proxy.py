@@ -262,6 +262,11 @@ def test_agent_request_schema_is_projected_from_live_gateway_model() -> None:
     assert journal_document["request_contract"] == "runtime-journal"
     assert "operation" not in journal_schema["properties"]
     assert "request" in journal_schema["required"]
+    dev_document = gateway_agent_request_schema("dev")
+    dev_schema = cast(dict[str, Any], dev_document["operations"])["dev"]
+    assert dev_schema["properties"]["file_paths"]["items"]["type"] == "string"
+    assert "file_paths" not in dev_schema["required"]
+    assert "candidate" not in dev_schema["properties"]
     all_operations = cast(dict[str, Any], gateway_agent_request_schema()["operations"])
     assert "submit" not in all_operations
     assert "sol" not in all_operations

@@ -284,7 +284,7 @@ def test_optimizer_prompt_layers_are_concise_non_redundant_and_consistent() -> N
     assert prompt.index("# Runtime workspace and Evidence contract") < prompt.index(
         "## Session tools"
     )
-    assert "This workspace carries no upstream project checkout" in prompt
+    assert "Use a knowledge service only if a binding is provided" in prompt
     assert "reference/" not in prompt
     assert "reference research" not in prompt
     assert "no local knowledge or reference checkout is available" not in prompt
@@ -321,7 +321,7 @@ def test_optimizer_prompt_limits_advancement_not_open_direction_count() -> None:
 
     assert "advance at most three inherited or new Directions" in normalized
     assert "proposals are unlimited and do not consume this limit" in normalized
-    assert "Only one Direction may be `in_progress` at a time" in normalized
+    assert "Only one Direction per Attempt may be `in_progress` at a time" in normalized
     assert "do not interleave their research, tools, edits, or measurements" in normalized
     assert "Before starting another, close the current one" in normalized
     assert "None may remain `in_progress` at handoff" in normalized

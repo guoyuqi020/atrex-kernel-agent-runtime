@@ -357,6 +357,7 @@ class TemporaryOptimizerDevShell:
             selected_revision=request.kernel_agent_revision_id,
             attempt_ordinal=1,
             artifacts=self._artifacts,
+            tool_modules=self._config.tool_modules,
         )
         self._artifacts.materialize_file(
             request.agent_problem_digest,

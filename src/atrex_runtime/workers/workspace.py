@@ -12,7 +12,7 @@ from collections.abc import Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Literal, Protocol
 from uuid import uuid4
 
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
@@ -381,10 +381,16 @@ class LocalAttemptWorkspaceAssembler:
         root: str | Path,
         registry: Registry,
         artifacts: LocalArtifactStore,
+        *,
+        default_tool_modules: tuple[Literal["directions", "experiments"], ...] = (
+            "directions",
+            "experiments",
+        ),
     ) -> None:
         self._root = Path(root).resolve()
         self._registry = registry
         self._artifacts = artifacts
+        self._default_tool_modules = default_tool_modules
         self._root.mkdir(parents=True, exist_ok=True, mode=0o700)
 
     def prepare(self, request: RunAttemptRequest) -> PreparedAttempt:
@@ -492,6 +498,9 @@ class LocalAttemptWorkspaceAssembler:
             selected_revision=request.kernel_agent_revision_id,
             attempt_ordinal=attempt.ordinal,
             artifacts=self._artifacts,
+            tool_modules=(
+                self._default_tool_modules if request.tool_modules is None else request.tool_modules
+            ),
         )
         visible_digest = campaign.agent_problem_digest
         contract = self._artifacts.verify(visible_digest)
