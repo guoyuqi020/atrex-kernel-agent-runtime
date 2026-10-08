@@ -315,6 +315,35 @@ whitespace. These are independent limits; the HTTP request-body limit and the cu
 source/Shape-file limits are unchanged. Existing workspace configs retain their saved value
 unless explicitly updated.
 
+### Recovery after an output-limit failure
+
+`campaign.optimizer.output_limit_recovery_retries` defaults to `2` (integer `0..10`),
+independently of `report_completion_retries`. Runtime passes it to Core/KDA through
+`ATREX_OUTPUT_LIMIT_RECOVERY_RETRIES`, overriding the same field in `atrex-agent.json`.
+`0` disables optimization recovery after an output-limit failure.
+
+A Claude invocation that terminates with a classified output-limit failure can start a fresh
+provider conversation in the same Attempt and workspace. A single truncated response that the
+provider subsequently recovers from is not a failed invocation. Recovery uses saved source,
+plans and Runtime evidence to continue a concrete implementation or verification step; it does
+not replay the entire failed conversation or reset the Attempt's wall-time or token/credit budget.
+After the optimization-recovery allowance is exhausted, only report-only continuations may run,
+within the separate `report_completion_retries` allowance. If report-only retries are also
+exhausted without a Runtime-accepted Report, the Session preserves `output_limit` and exit status `1`, even
+if the last provider invocation itself exited normally. It does not return `127` or reopen
+optimization through outer infrastructure recovery, so the output-limit retry bound cannot be reset.
+An already accepted Report is restored and requires no recovery invocation. Other nonzero exits,
+exhausted budgets, timeouts, or unusable capture/accounting do not become recoverable merely because
+an earlier response was truncated. Previously frozen Agent bundles must be refreshed to acquire
+this behavior.
+
+Before a replacement invocation, the launcher stops owned local tool processes and checks that
+output capture has closed. Recovery requires verified local process cleanup; the current verifier
+uses Linux `/proc` identities. On platforms without that verifier, including macOS, an output-limit
+failure remains a failure rather than risking concurrent writers. Local cleanup does not cancel
+already submitted remote Gateway jobs: their existing receipts and Runtime deduplication rules
+still apply, and a missing receipt does not mean a job never ran.
+
 ### Report completion after normal model exit
 
 `campaign.optimizer.report_completion_retries` defaults to `2` (integer `0..10`).
@@ -328,9 +357,9 @@ When missing, the harness starts at most that many report-only provider invocati
 Attempt and workspace, pointing to the existing Journal, draft and Trace. This is a fresh provider
 conversation, not native resume, a new optimization Attempt, or permission to invent measurements.
 An unaccepted local terminal file is moved to a unique scratch backup so it cannot block resubmission.
-All invocations share the original wall-time deadline and token/credit allowance. Nonzero model exits,
-timeouts, exhausted quotas, incomplete provider capture, or unavailable usage do not trigger
-completion. A known Claude usage-reconciliation gap with captured, nonzero provider counters
+All invocations share the original wall-time deadline and token/credit allowance. Except for the
+classified output-limit recovery path above, nonzero model exits, timeouts, exhausted quotas,
+incomplete provider capture, or unavailable usage do not trigger completion. A known Claude usage-reconciliation gap with captured, nonzero provider counters
 is an accounting warning, not a failed optimization: report completion and normal candidate
 validation still run. Other process/policy failures (including other causes of exit 126) remain
 blocking.
@@ -339,8 +368,9 @@ blocking.
 The Trace retains the initial capture at its root and later captures under `continuations/001/`,
 `002/`, etc. Root `session.json` indexes `segments` and `report_completion`;
 `conversation.jsonl` combines them with segment identities, and provider usage is cumulative.
-After exhausted retries, the Worker Session ends as `report-completion-exhausted`, with no
-successful candidate. Runtime classifies that physical Session as an incomplete handoff and starts
+For ordinary missing Reports without an exhausted output-limit recovery, normal provider exits
+followed by exhausted report-only retries end as `report-completion-exhausted` (exit status `127`),
+with no successful candidate. Runtime classifies that physical Session as an incomplete handoff and starts
 a fresh recovery Session for the same logical Attempt or Bootstrap run, subject to the normal
 `max_infrastructure_retries` budget. The failed capture and Runtime State checkpoint remain
 auditable; the configured Attempt count is unchanged. Only exhaustion of that outer recovery budget
@@ -361,10 +391,10 @@ Calls remain active through result persistence; success, failure, and cancellati
 Local Journal/history reads and report-status queries do not block handoff. A process crash leaves
 a fail-closed reservation scoped to its recovery generation; normal Attempt recovery fences it off.
 
-`candidate_ready` requires non-empty matching Runtime-owned Direction and Experiment journals and
-evidence-backed Findings. `blocked` and `pivot` may have empty journals and Findings when no
-Direction needs closing; give the genuine reason in the report rather than fabricate evidence.
-Any in-progress Direction must still be closed with an associated Experiment first.
+`candidate_ready` requires nomination journals for enabled modules and at least one Finding.
+`blocked` and `pivot` may have empty journals and Findings; give the genuine reason instead of
+fabricating evidence. Close this Attempt's in-progress Directions before handoff; an unmeasured
+Direction can close unresolved with no Experiment or Gateway call.
 The first successful `attempt-report`
 call publishes a write-once terminal Report. Validation or tool errors publish nothing, so the Agent
 may correct the request using `issues`, `request_schema`, and `recovery` and retry; a successful call
@@ -375,24 +405,26 @@ they append to the current Attempt's Journal without reopening the Direction, ch
 or rewriting prior events. Its associated Experiment IDs update; selected closure support does not. A merely
 `proposed` Direction still must be started first. Trial visibility, ownership, and evidence validation
 remain unchanged; this is not permission to resume research without `start`.
-Before terminal handoff, no Direction may
-remain in progress. `complete`, `abandon`, `block`, and `defer` each require at least one Experiment
-explicitly selected in `supporting_experiment_ids` (1–32 unique IDs), all visible and belonging to
-that Direction. `propose` and `start` do not select support. Every closure also requires
-`hypothesis_status=unresolved|supported|refuted`, independently of lifecycle. For supported/refuted,
-each selected Experiment must bind a completed Gateway Result in its `after`; Runtime validates
-bindings, not causal relevance or scientific truth. Untested interpretations remain unresolved.
+Before terminal handoff, no Direction owned by this Attempt may remain in progress. `complete`,
+`abandon`, `block`, and `defer` declare `hypothesis_status=unresolved|supported|refuted`, independently
+of lifecycle. With Experiments enabled, `supporting_experiment_ids` explicitly selects 0–32 unique
+visible IDs belonging to that Direction. Empty support is valid for unresolved closures, including
+before any measurement. `propose` and `start` do not select outcome support. Judged conclusions
+use the proposal hypothesis as their claim, an explicit `scope`, optional `claim_kind` (default
+`causal_hypothesis`), and completed evidence via selected Experiments or direct `supporting_results`.
+The latter uses exact Kernel/Result subjects and works even with Experiments disabled. The evidence
+eligibility and uncertainty rules are the same as Findings below; insufficient support produces an
+unresolved judgment with `assessment_notes`, while invalid/invisible bindings are rejected.
+Stopping work does not refute its hypothesis; Runtime does not certify scientific truth.
 
 Every new Experiment must bind at least one real Kernel-bound Gateway Result. `abandon_direction`
 permits before-only or after-only evidence, never both-null. `keep_after`, `restore_before`, and
 `adopt` require both sides; Bootstrap `baseline` requires null before and non-null after.
 Check/Profile and failed diagnostic Results may document a blocker without a performance claim.
 Health/Env and unbound Dev results do not qualify. A transport error without a Result Artifact is
-not citable: if no real evidence exists, closure remains blocked and normal session recovery handles
-the failure; never fabricate an Experiment to finish. Blocked Bootstrap reports may omit baseline
+not citable: use an unresolved closure with empty support; never fabricate an Experiment to finish. Blocked Bootstrap reports may omit baseline
 when all Experiments are diagnostic `abandon_direction` records; candidate_ready still needs baseline.
-Read-only replay of Runtime-owned historical records still accepts old unmeasured `block`/`defer`
-events without altering them; that compatibility context is not available to Agent requests.
+Historical records without a hypothesis judgment remain unresolved.
 One Attempt may start and advance at
 most three distinct Directions, including inherited and newly proposed Directions. Proposals do not
 consume this limit, and the report does not limit how many Directions remain `proposed` or
@@ -410,7 +442,8 @@ files are written under `scratch/`. A Bootstrap Session starts without prior jou
 terminal journals, Kernel Trials, and Result Artifacts become the root history of ordinary Attempts
 in that Lineage.
 
-Use `record-experiment` with `action="adopt"` to select an unchanged Kernel from visible history.
+With Experiments enabled, use `record-experiment` with `action="adopt"` to select an unchanged
+Kernel from visible history.
 Both `before` and `after` contain exactly `{"result_artifact_digest":"sha256:<result>"}`. Unlike other actions, `adopt` allows a
 historical `after`: Runtime requires a successful ordinary full Evaluate of that exact Kernel,
 a committed matching Result Artifact, and the same operator, hardware, DSL and sealed evaluation
@@ -422,6 +455,16 @@ This persisted adoption can satisfy `candidate_ready` without reevaluating the u
 A different candidate needs its own qualifying evidence; a current failed full Evaluate cannot be
 overridden by adopting an earlier success. Request idempotency is scoped to Attempt and recovery
 generation, not a global prohibition on evaluating an Artifact in another Attempt.
+
+With Experiments disabled, restore the exact visible historical Kernel into `work/kernel` and
+submit `candidate_ready`. Runtime automatically resolves qualifying historical evidence using
+the same compatibility and visibility checks above; no adoption Experiment or duplicate Evaluate
+is required. Enabled Direction bookkeeping still applies. It preserves the original Trial, Result
+and measurement provenance rather than creating
+a current-Attempt measurement. Modified source needs its own qualifying evidence, and a failed
+current full Evaluate cannot be replaced by an earlier success. The independent authoritative
+retention comparison is unchanged in either mode.
+
 `list-experiments` and `load-experiment` combine the current live Runtime Journal with prior durable
 Journals; terminal Report Artifacts remain a compatibility fallback for older records. Completed Epoch history includes journals from the
 selected branch and every losing Active/Challenger branch, while branch, Epoch, Attempt, selection,
@@ -459,8 +502,8 @@ A one-sided diagnostic Experiment (replace placeholders with real IDs):
 
 Tool validation errors include `issues` (field, code, message), `request_schema`, and `recovery`.
 Both-null subjects point to `before` with a message naming both sides. Unknown/cross-Direction
-support, duplicate IDs, missing closure fields, and incomplete Gateway evidence are rejected before
-journal append. Repair the request using real recorded IDs and retry; an HTTP 400 or validation
+support, duplicate IDs, and missing required closure fields are rejected before journal append.
+Insufficient completed evidence downgrades a scientific judgment to unresolved instead of blocking closure. Repair the request using real recorded IDs and retry; an HTTP 400 or validation
 failure is not an Experiment and must not be cited as one.
 
 `profile_evidence` is either `null` or an exact object containing `tool_used`, `profiler`,
@@ -473,10 +516,29 @@ historical Profiles and Profiles obtained after an Experiment snapshot remain ci
 supplementing the Journal or reopening a Direction. Existing history visibility boundaries still
 apply. Pending operations without a Result Artifact and non-Profile operations are not citable.
 `null` is required when no recorded Profile evidence is available.
-Every Finding requires a non-empty unique `supporting_experiment_ids` array. Each ID must name an
-Experiment in the same attached Journal, so a Finding resolves through that Experiment's available
-before/after subjects to exact Kernel Artifacts, Trials, and Result Artifacts without repeating those
-identities in the Finding itself.
+Each Finding retains `category`, `observation`, `resolution`, and `lesson`, and may carry one
+explicit reusable `claim`, `claim_kind` (`observation`, `implementation_outcome`, or
+`causal_hypothesis`, the default), `assessment` (`unresolved`, the default; `supported`; or `refuted`),
+and tested `scope`. `root_cause` may be omitted or null when unknown; a causal explanation is never
+required. Legacy Findings with no assessment remain unresolved, regardless of confident prose.
+
+`supporting_results` binds the claim directly to at most 32 exact subjects:
+`[{"kernel_artifact_digest":"sha256:<kernel>","result_artifact_digests":["sha256:<result>"]}]`.
+Each subject has 1–4096 unique Result digests. This route works with either, both, or neither Journal
+module enabled. Optional `supporting_experiment_ids` (0–32 unique IDs from this Attempt's attached
+Journal) organize additional evidence when Experiments are enabled; omit them when disabled.
+Matching visible historical Results can be reused without a new GPU job or Experiment.
+
+Runtime checks exact visibility and identity bindings. Supported/refuted observations require a
+completed Check, Dev, Profile, or Evaluate; implementation outcomes require completed Dev or full
+Evaluate; causal hypotheses require completed Dev, Profile, or full Evaluate. Check-only and
+correctness-only results cannot establish a performance or causal judgment. Missing claim, scope,
+or suitable completed evidence downgrades the assessment to unresolved and returns
+`assessment_notes`; malformed, mismatched, or invisible references remain hard errors. This checks
+provenance and operation eligibility, not whether the experiment semantically proves the claim.
+All general analysis, diagnosis, root-cause text, and lessons remain Agent interpretation; binding
+a genuine result does not validate every sentence. A negative implementation result does not refute
+all possible implementations of its mechanism. Untested directions may be deferred unresolved.
 `contributing_result_artifact_digests` is a required array naming the historical Result Artifacts whose Kernel code
 or approach the Attempt drew content from, and is empty when it drew from none. Core/KDA and Runtime
 accept any order and repeated IDs, then sort and deduplicate them before submitting or sealing the

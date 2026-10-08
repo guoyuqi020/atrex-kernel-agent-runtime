@@ -71,6 +71,12 @@ Commit SHA，并直接封存对应本地 Commit，不执行 Fetch 或其他网�
 
 DSL 拓扑、Model 身份和 `K/Y/X` Epoch 结构属于 Campaign 定义，不属于 Runtime 服务配置。
 
+`campaign.optimizer.output_limit_recovery_retries` 控制已分类输出上限失败后的 Core/KDA 新对话恢复。
+默认 `2`，允许整数 `0..10`，与仅补交报告的 `report_completion_retries` 配额独立。
+恢复保留 Attempt 工作区以及剩余时间/用量预算。
+详见[输出上限恢复](interfaces.zh.md#输出上限失败后的恢复)。
+
+
 ## Gate 与比较策略
 
 `campaign.gate_policy` 是以下内容的可信来源：
@@ -121,8 +127,11 @@ Directions 时，关闭 Direction 不要求 Experiment 支持 ID；仅启用 Exp
 `record-experiment` 不填写 `direction_id`。
 Session 提示词也随此配置调整：保留通用的工作区和评测说明，只展示已启用 Journal 工具的
 操作要求。默认配置仍使用原始提示词；已启动的 Session 沿用启动时的契约与提示词。
-关闭 Experiments 后不能使用历史 `adopt`；提名需要在当前 Attempt 测得候选版本。
-完全相同的历史 Evaluate 可能被判定为重复任务。
+关闭 Experiments 后，仍可通过 `candidate_ready` 提名可见历史中的原样 Kernel：Runtime 自动
+核验并复用其匹配的成功普通完整 Evaluate 证据。算子、硬件、DSL、封存 Contract 和精确 Kernel
+内容必须一致；自定义输入、仅正确性检查、Profile 和探索性 ABBA 不符合条件。无需记录 Experiment
+或重复 Evaluate，原始测量身份保持不变。本 Attempt 新的完整 Evaluate 已失败时，不能用历史成功
+覆盖。启用 Experiments 时，历史复用仍需显式调用 `record-experiment` 并设置 `action="adopt"`。
 
 ### Evolver
 

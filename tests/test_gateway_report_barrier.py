@@ -115,8 +115,14 @@ async def test_report_waits_for_single_measurement(
 
         monkeypatch.setattr(adapter, "execute", delayed)
         payload = _report(attempt, status)
+        evaluation = None
+
+        async def evaluate() -> None:
+            nonlocal evaluation
+            evaluation = await service.execute(capability.token, _request(attempt))
+
         async with anyio.create_task_group() as tasks:
-            tasks.start_soon(service.execute, capability.token, _request(attempt))
+            tasks.start_soon(evaluate)
             with anyio.fail_after(5):
                 await started.wait()
             code, error = await _post_report(service, capability.token, payload)
@@ -145,6 +151,20 @@ async def test_report_waits_for_single_measurement(
             observed = await service.execute(capability.token, status_request)
             assert observed.result == {"status": "missing"}
             release.set()
+        if status == "candidate_ready":
+            assert evaluation is not None
+            # Once the call finishes, reference the actual measured Kernel/Result;
+            # the handoff must not invent evidence merely to test barrier release.
+            accepted_payload = json.loads(payload)
+            accepted_payload["idempotency_key"] = "terminal-report-after-measurement"
+            accepted_report = accepted_payload["report"]
+            accepted_report["profile_evidence"] = None
+            subject = {
+                "kernel_artifact_digest": evaluation.kernel_artifact_digest,
+                "result_artifact_digests": [evaluation.result_artifact_digest],
+            }
+            accepted_report["experiments"][0].update(before=subject, after=subject)
+            payload = json.dumps(accepted_payload).encode()
         code, accepted = await _post_report(service, capability.token, payload)
         assert code == 200
         assert accepted["result"]["status"] == "registered"

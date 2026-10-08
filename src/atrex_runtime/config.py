@@ -270,6 +270,7 @@ class CoreOptimizerWorkerSettings(BaseModel):
     token_usage_report_relative_path: str
     max_attempt_report_bytes: int = Field(gt=0)
     report_completion_retries: int = Field(default=2, strict=True, ge=0, le=10)
+    output_limit_recovery_retries: int = Field(default=2, strict=True, ge=0, le=10)
     tool_modules: tuple[Literal["directions", "experiments"], ...] = ("directions", "experiments")
     timeout_seconds: float = Field(gt=0)
     bootstrap_timeout_seconds: float = Field(default=14_400.0, gt=0)

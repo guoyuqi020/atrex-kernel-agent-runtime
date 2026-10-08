@@ -37,6 +37,7 @@ from ..domain.models import Dsl
 from ..ports import RuntimeEventRecorder
 from ..serialization import canonical_json_bytes, canonical_json_digest
 from ..workers.attempt_report import AttemptReportV12
+from .claim_evidence import normalize_report_findings
 from .contract import AgateEvaluationContextResolver, candidate_path_for_attempt
 from .control import SqliteGatewayControl
 from .control_models import (
@@ -1286,19 +1287,28 @@ class GatewayProxyService:
                 f"actual_bytes={report_bytes}, max_bytes={self._max_attempt_report_bytes}. "
                 "Shorten the final report before submitting again."
             )
-        self._journals_for_attempt(request.attempt_id).validate_report_journal(request.report)
         if request.report.status == "candidate_ready":
             evaluation = self._control.find_candidate_evaluation(
-                request.attempt_id, candidate_digest
+                request.attempt_id,
+                candidate_digest,
+                default_tool_modules=self._tool_modules,
             )
             if evaluation is None:
+                reuse_guidance = (
+                    "record an adopt Experiment referencing a compatible successful historical "
+                    "full-Evaluate Trial, or run Evaluate with latency_prediction, then submit "
+                    "again. "
+                    if "experiments" in modules
+                    else "Runtime found no reusable successful full Evaluate in this Attempt's "
+                    "visible history matching the exact kernel and evaluation contract. "
+                    "Unchanged compatible historical kernels can be nominated directly; "
+                    "otherwise run Evaluate with latency_prediction, then submit again. "
+                )
                 raise ValueError(
                     "candidate_ready requires a completed Agent evaluate for the exact current "
                     f"work/kernel tree, sealed as {candidate_digest}. No Agent evaluate covers it; "
                     "custom inputs or correctness_only checks do not qualify; "
-                    "record an adopt Experiment referencing a compatible successful historical "
-                    "full-Evaluate Trial, or run Evaluate with latency_prediction, then submit "
-                    "again. "
+                    f"{reuse_guidance}"
                     "Agent ABBA does not replace full Evaluate; Runtime authoritative ABBA "
                     "runs only after the terminal report is handed off"
                 )
@@ -1308,6 +1318,16 @@ class GatewayProxyService:
                     f"work/kernel tree, sealed as {candidate_digest}. Its evaluate reported "
                     "incorrect results; repair the candidate, re-evaluate, and submit again"
                 )
+        report, direction_notes = self._journals_for_attempt(
+            request.attempt_id
+        ).validate_report_journal(request.report)
+        report, finding_notes = normalize_report_findings(
+            report, control=self._control, artifacts=self._artifacts
+        )
+        assessment_notes = (*direction_notes, *finding_notes)
+        report_value = report.model_dump(mode="json")
+        if len(canonical_json_bytes(report_value)) > self._max_attempt_report_bytes:
+            raise ValueError("Attempt report exceeds byte limit after assessment normalization")
         report_digest = self._artifacts.put_json(
             cast(JsonValue, report_value), ArtifactKind.ATTEMPT_REPORT
         )
@@ -1320,6 +1340,8 @@ class GatewayProxyService:
                     "candidate_digest": str(candidate_digest),
                     "report_status": request.report.status,
                     "report_artifact_digest": str(report_digest),
+                    "report": report_value,
+                    **({"assessment_notes": list(assessment_notes)} if assessment_notes else {}),
                 },
             ),
         )
@@ -1377,6 +1399,11 @@ class GatewayProxyService:
                         "status": "accepted",
                         "report": report.model_dump(mode="json"),
                         "report_artifact_digest": str(report_digest),
+                        **(
+                            {"assessment_notes": receipt["assessment_notes"]}
+                            if "assessment_notes" in receipt
+                            else {}
+                        ),
                     },
                 ),
             )
@@ -2105,14 +2132,16 @@ def _invalid_request_response(
                 },
                 {
                     "instruction": (
-                        "Continue exploration only under the existing in-progress Direction, or "
+                        "Continue exploration only under this Attempt's in_progress(self) "
+                        "Direction, or "
                         "close it with update-direction action complete, abandon, defer, or block"
                     )
                 },
                 {
                     "instruction": (
-                        "The requested Direction was not started. Retry start only after no other "
-                        "Direction is in progress"
+                        "The requested Direction was not started. Retry start only after this "
+                        "Attempt has no in_progress(self) Direction; "
+                        "do not close other Attempts' work"
                     )
                 },
             ],

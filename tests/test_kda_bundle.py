@@ -80,6 +80,7 @@ def test_complete_kda_bundle_can_be_sealed(exported_bundle: Path, tmp_path: Path
         "pool_3.py",
         "pool_retained_3.py",
         "broadcast_3.py",
+        "epoch_shared_3.py",
     ):
         assert not (sealed / "workflow" / name).exists()
     assert not list(sealed.rglob(".git"))
@@ -314,6 +315,7 @@ def test_default_workflow_executes_complete_pool_epoch(bundle_name: str) -> None
         ("pool_3.py", 6, (2, 3, False)),
         ("pool_retained_3.py", 9, (3, 3, True)),
         ("broadcast_3.py", 9, (3, 3, True)),
+        ("epoch_shared_3.py", 9, (3, 3, True)),
     ),
 )
 def test_control_workflow_program_owns_exact_topology(
@@ -377,6 +379,11 @@ def test_control_workflow_program_owns_exact_topology(
             launch["input_kernel_revision_id"] == first_best
             for launch in batches[2]["arguments"]["launches"]
         )
+    if program == "epoch_shared_3.py":
+        for round_index, batch in enumerate(batches[1:], start=1):
+            assert [
+                launch["input_kernel_revision_id"] for launch in batch["arguments"]["launches"]
+            ] == [f"kernelrev_{round_index:016d}{ordinal:016d}" for ordinal in range(1, 4)]
     _finish_workflow(process, context["context"]["epoch_id"])
     process.stdin.close()
     assert process.wait(timeout=5) == 0

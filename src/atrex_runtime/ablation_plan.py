@@ -5,9 +5,9 @@ from __future__ import annotations
 from typing import Any, cast
 
 ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY = 15
-ABLATION_PLAN_SCHEMA_VERSION = 10
+ABLATION_PLAN_SCHEMA_VERSION = 11
 ABLATION_REPLICA_COUNT = 3
-ENABLED_ABLATION_ARM_KINDS = frozenset({"retained"})
+ENABLED_ABLATION_ARM_KINDS = frozenset({"epoch-shared", "broadcast"})
 
 
 def build_ablation_plan(
@@ -51,41 +51,35 @@ def build_ablation_plan(
             "optimizer_attempt_budget_total": attempt_budget * trajectory_multiplier,
             "evolution_count": target_epoch if evolves_after_each_epoch else 0,
         }
-        if trajectory_visibility != "isolated":
-            value["trajectory_visibility"] = trajectory_visibility
+        value["trajectory_visibility"] = trajectory_visibility
         if tool_modules is not None:
             value["tool_modules"] = list(tool_modules)
         return value
 
     if enabled:
-        # Keep the original Retained labels for the full-tool control group.
-        arms.extend(
-            arm(
-                kind="retained",
-                label=f"ablation-retained-{ordinal:02d}",
-                attempts_per_epoch=3,
-                trajectory_multiplier=1,
-                workflow_command="workflow/retained.py",
-                tool_modules=("directions", "experiments"),
-            )
-            for ordinal in range(1, ABLATION_REPLICA_COUNT + 1)
-        )
-        for suffix, modules in (
-            ("no-modules", ()),
-            ("experiments", ("experiments",)),
-            ("directions", ("directions",)),
+        # Each module setting owns one Lineage with three communicating Trajectories.
+        # Keep different settings in separate Campaigns so the ablation remains isolated.
+        for kind, visibility, workflow in (
+            ("epoch-shared", "isolated", "workflow/epoch_shared_3.py"),
+            ("broadcast", "broadcast", "workflow/broadcast_3.py"),
         ):
-            arms.extend(
-                arm(
-                    kind="retained",
-                    label=f"ablation-retained-{suffix}-{ordinal:02d}",
-                    attempts_per_epoch=3,
-                    trajectory_multiplier=1,
-                    workflow_command="workflow/retained.py",
-                    tool_modules=modules,
+            for suffix, modules in (
+                ("", ("directions", "experiments")),
+                ("no-modules", ()),
+                ("experiments", ("experiments",)),
+                ("directions", ("directions",)),
+            ):
+                arms.append(
+                    arm(
+                        kind=kind,
+                        label=f"ablation-{kind}-{suffix + '-' if suffix else ''}3",
+                        attempts_per_epoch=9,
+                        trajectory_multiplier=3,
+                        workflow_command=workflow,
+                        trajectory_visibility=visibility,
+                        tool_modules=modules,
+                    )
                 )
-                for ordinal in range(1, ABLATION_REPLICA_COUNT + 1)
-            )
         # One retained Pool runs three parallel Trajectories, each with three serial Attempts.
         # `3` in the label denotes the number of pooled Trajectories.
         arms.append(
@@ -95,16 +89,6 @@ def build_ablation_plan(
                 attempts_per_epoch=9,
                 trajectory_multiplier=3,
                 workflow_command="workflow/pool_retained_3.py",
-            )
-        )
-        arms.append(
-            arm(
-                kind="broadcast",
-                label="ablation-broadcast-3",
-                attempts_per_epoch=9,
-                trajectory_multiplier=3,
-                workflow_command="workflow/broadcast_3.py",
-                trajectory_visibility="broadcast",
             )
         )
         arms.extend(

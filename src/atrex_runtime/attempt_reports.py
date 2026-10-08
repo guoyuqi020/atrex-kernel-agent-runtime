@@ -52,6 +52,23 @@ class RuntimeAttemptReportProjector:
             for key, value in agent.items()
             if key not in {"schema_version", "attempt_id", "status", "experiments"}
         }
+        # Old sealed reports contain confident prose without a claim assessment.
+        # Project uncertainty explicitly without rewriting their immutable Artifacts.
+        findings = agent_fields.get("findings")
+        if isinstance(findings, list):
+            agent_fields["findings"] = [
+                {
+                    "claim_kind": "causal_hypothesis",
+                    "assessment": "unresolved",
+                    "claim": None,
+                    "scope": None,
+                    "supporting_results": [],
+                    **finding,
+                }
+                if isinstance(finding, dict)
+                else finding
+                for finding in findings
+            ]
         experiments = agent.get("experiments")
         if not isinstance(experiments, list):
             raise ValueError("Agent Attempt Report has invalid experiments")
@@ -68,6 +85,11 @@ class RuntimeAttemptReportProjector:
                 "production_gate": self._production_gate(attempt),
                 **agent_fields,
                 "experiments": experiments,
+                "interpretation_notice": (
+                    "Analysis, diagnosis, Findings and Experiment explanations are Agent "
+                    "interpretations. Missing assessment means unresolved. Result bindings "
+                    "and eligible operations do not certify causal explanations."
+                ),
             },
         )
 

@@ -167,6 +167,7 @@
       "token_usage_report_relative_path": "scratch/token-usage.json",
       "max_attempt_report_bytes": 1048576,
       "report_completion_retries": 2,
+      "output_limit_recovery_retries": 2,
       "timeout_seconds": 28800,
       "bootstrap_timeout_seconds": 10800,
       "terminate_grace_seconds": 10,

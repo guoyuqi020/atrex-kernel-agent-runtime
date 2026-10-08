@@ -97,7 +97,8 @@ completed Active and Challenger path from a frozen Epoch, without exposing branc
 provenance. No Journal history file exists under `input/evidence/` or the internal control area.
 The filesystem view above is distinct from live query visibility: a Broadcast workflow can expose
 other Trajectories' recorded Journal and Artifact evidence through tools without sharing their
-working files or raw conversations. Do not infer isolation or additional access from directory layout.
+working files or live conversations. With Epoch-boundary sharing, sibling history becomes visible
+only after the Epoch completes. Do not infer isolation or additional access from directory layout.
 
 Each completed Epoch's `summary.json` is a branch index, not an aggregate of optimization lessons.
 This filesystem tree does not contain an additional generated lesson summary or measurement table;
@@ -126,6 +127,10 @@ status, file, and count. Read the index to select relevant entries. Call `load-d
 `{"direction_id":"direction_<id>"}` to recover a selected hypothesis, rationale, plan, success and
 stop criteria, and latest analysis. The index alone does not explain what was tried or why a
 hypothesis was judged supported or refuted.
+Both queries show `in_progress(self)` for a Direction started by this Attempt and
+`in_progress(other)` for one owned by another Attempt, regardless of who proposed it.
+Close only your own open Direction before switching or handing off; shared visibility does not
+transfer ownership. Other lifecycle statuses are unchanged.
 If you already have a Kernel Artifact digest, `find-kernel-directions` accepts
 `{"kernel_artifact_digest":"sha256:<digest>"}` and returns `direction_ids` linked through visible
 Experiments. With no recorded association it can return an empty list, including when Experiment
@@ -218,20 +223,42 @@ tool commands using the backend's task wait/output tool if they moved to the bac
 this is allowed and is not polling or resubmitting an Agate job. Do not end this headless
 Session expecting a background task to wake it later, and do not submit replacement measurements.
 Once the calls finish, reconcile their evidence and submit the Report again.
-`complete`, `abandon`, `block`, and `defer` all require an Experiment associated with that Direction.
-Explicitly select the relevant `supporting_experiment_ids` at closure and declare
-`hypothesis_status`: `unresolved`, `supported`, or `refuted`. Lifecycle is not a hypothesis verdict.
-Unmeasured reasoning remains unresolved; supported/refuted needs a completed Gateway Result bound
-to every selected Experiment's after. Runtime verifies bindings, not the relevance or truth of
-interpretations. Unrelated measured changes cannot substantiate an incidental claim in analysis.
-`associated_experiment_ids` lists all linked Experiments, while `supporting_experiment_ids` preserves
-only the latest explicit closure selection. Missing historical judgments mean unresolved.
-If no performance measurement was possible, first record the actual investigation or blocker with
-`action="abandon_direction"` and at least one real Kernel-bound Gateway Result in `before` or
-`after`, then close with `hypothesis_status=unresolved`. Both sides may not be null. Check/Profile
-can provide diagnostic evidence without a performance claim. Health/Env or unbound Dev results do
-not qualify. With no Result available, closure is blocked; never fabricate evidence to finish.
-`blocked` or `pivot` may contain empty experiments and findings if no Direction needs closing;
-give the genuine reason in the report. `candidate_ready` still requires journaled evidence.
+`complete`, `abandon`, `block`, and `defer` declare `hypothesis_status`: unresolved, supported,
+or refuted, separately from lifecycle. Untested or inconclusive work can close unresolved with
+empty support, even before any experiment or Gateway call. Select relevant `supporting_experiment_ids`
+only when available; direct `supporting_results` bind exact Kernel and Result digests regardless of
+Journal modules. Judged conclusions need a tested scope and completed evidence suitable for their
+claim kind; insufficient support remains unresolved with assessment notes. Invalid references are
+errors. Abandoning work does not refute a hypothesis, and no diagnostic call is required merely to
+close it. `associated_experiment_ids` lists linked Experiments; selected support is a separate list.
+
+Record one reusable claim per Finding. Set `claim_kind` to `observation` (what was observed),
+`implementation_outcome` (the measured outcome of a particular implementation), or
+`causal_hypothesis` (an explanation of why). Supply the exact sentence in `claim`, its tested
+Kernel/hardware/Shape scope in `scope`, and `assessment=unresolved|supported|refuted`.
+Use `root_cause: null` when the cause is unknown; neither a report nor a completed Attempt requires
+a causal explanation. Missing historical assessment means unresolved.
+
+Bind evidence to that claim using `supporting_results`, available with every Journal module
+selection: `[{"kernel_artifact_digest":"sha256:<kernel>","result_artifact_digests":["sha256:<result>"]}]`.
+When Experiments are enabled, optional `supporting_experiment_ids` may reference this Attempt's
+Journal as an additional organization of evidence; direct Result bindings do not require an
+Experiment. Reuse matching visible historical Results; do not repeat GPU work just to record a claim.
+Runtime validates exact visible bindings and completed operation eligibility: observations may use
+Check, Dev, Profile, or Evaluate; implementation outcomes require Dev or full Evaluate; causal
+hypotheses require Dev, Profile, or full Evaluate. Check-only or correctness-only evidence cannot
+support a performance or causal judgment. These checks do not establish causal relevance or truth.
+Missing claim, scope, or suitable completed evidence downgrades a requested supported/refuted
+Finding to unresolved with `assessment_notes`; invalid or invisible references are still errors.
+
+Keep an untested explanation unresolved even beside a successful measured optimization. General
+`analysis`, diagnosis, root-cause text, and lessons remain Agent interpretations, not verified
+conclusions. Before rejecting a potentially useful mechanism, identify the smallest targeted probe
+that could distinguish it from alternatives; if it is not worth testing now, defer it unresolved.
+For example, observing `autovec_copy` in source does not establish that output cost is negligible.
+A failed implementation does not refute every implementation of its proposed mechanism.
+
+`blocked` or `pivot` may contain empty experiments and findings; give the genuine stopping reason.
+`candidate_ready` still requires the enabled modules' nomination evidence and at least one Finding.
 Private evaluator inputs remain hidden; opaque Shape identifiers and measurements must not be used
 to reconstruct them.

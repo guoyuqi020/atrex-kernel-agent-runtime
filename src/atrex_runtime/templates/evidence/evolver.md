@@ -16,7 +16,7 @@ Evidence files and use only the Session-context `evolution_report.tool` for subm
 | `gateway-execute` | Executes one supported GPU operation; Runtime owns Job tracking, infrastructure retries, request deduplication, result projection, and measurement persistence. |
 | `kernel-artifact-read` / `result-artifact-read` | Copies a selected Kernel Artifact source file into `scratch/`, or reads a normalized Agent-visible Result Artifact by digest. |
 | `kernel-pareto-frontier` | Shows the visible per-Shape minimum latency and winning Kernel Artifact digest from correct full contract Evaluations. |
-| `list-directions` / `load-direction` | Writes the visible Direction index to a requested `scratch/` file, or loads one complete Direction and its evidence links. |
+| `list-directions` / `load-direction` | Writes the visible Direction index to a requested `scratch/` file, or loads one complete Direction and its evidence links. Open status is `in_progress(self)` or `in_progress(other)`, relative to the querying Attempt. |
 | `list-experiments` / `load-experiment` | Writes the visible Experiment index to a requested `scratch/` file, or loads one complete recorded Experiment. |
 | `find-kernel-experiments` | Finds visible Experiment IDs citing an exact Kernel Artifact digest. |
 | `find-kernel-directions` | Finds distinct Direction IDs linked through visible Experiments citing an exact Kernel Artifact digest. |
@@ -132,7 +132,15 @@ Reports, Directions, and Experiments needed to classify a material signal.
 `journal/directions/index.json` and `journal/experiments/index.json` index Bootstrap and the completed Lineage's
 append-only Journal. Read selected `<id>.json` files for full Direction events and Experiments,
 including entries from Attempts without terminal Reports. Gateway measurements are facts;
-Agent-authored analyses are interpretations. Historical `suggest` records remain readable;
+Agent-authored analyses are interpretations. Findings separate one explicit claim, `claim_kind`,
+`assessment`, tested `scope`, and exact `supporting_results`; Experiment links are optional evidence
+organization. `root_cause: null` means unknown. Missing historical assessments and insufficient
+support mean unresolved, even if free prose sounds certain. Runtime validates bindings and operation
+eligibility, not causal truth. A closed or abandoned Direction may have no measurement and an
+unresolved hypothesis; this is a valid stopping decision, not a failure to explain or proof of
+refutation. Check the claim's own evidence before carrying a lesson into Agent behavior; an unrelated
+successful optimization does not validate every sentence in its report. Do not prescribe extra GPU
+work solely to fill report fields. Historical `suggest` records remain readable;
 they are untested recommendations, not facts. Evolver cannot create or change Directions.
 Compare related hypotheses and Experiments across Branches and check interpretations against
 trusted outcomes. Use that evidence only to diagnose task-independent Agent defects in process,

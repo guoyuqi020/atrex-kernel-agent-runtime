@@ -42,11 +42,12 @@ python scripts/gdn/run.py campaign --workspace workspaces/GDN-shared
 python scripts/gdn/run.py campaign --workspace workspaces/GDN-full-shared
 ```
 
-Use `ablation` instead of `campaign` for twelve Retained arms **per input variant** (24 Campaigns total):
-three replicas each with Direction/Experiment tools both off, either one enabled, or both enabled.
+Use `ablation` instead of `campaign` for eight arms **per input variant** (16 Campaigns total):
+four Direction/Experiment tool settings × Epoch-boundary or live sharing; three Trajectories per arm.
 Each variant has its own Bootstrap, v0, public inputs, history and creation keys. Sharing a
-Runtime does not seed GDN from GDN-full. Two ablation suites may run up to 24 Optimizers;
-the branch limit is not a deployment-wide semaphore. Check host memory before parallel runs.
+Runtime does not seed GDN from GDN-full. Two ablation suites declare 48 Trajectories; actual
+concurrency follows deployment limits. The branch limit is not a deployment-wide semaphore.
+Check host memory before parallel runs.
 Both runners default to absolute Epoch 5; no processes are launched by preparation.
 
 - `control-gdn/`: `runtime.json`, `service.json`, one `runtime-secrets.json`, and shared
@@ -88,9 +89,10 @@ python scripts/gdn/run.py campaign --target-epoch 5
 ```
 
 For a separate experiment, pass `--workspace workspaces/GDN-clean` to all commands.
-`run.py ablation` uses the workspace's frozen arm definitions. New plans enable only three
-Retained arms; existing Workspaces retain their frozen plans. Only Runtime is needed;
-these scripts do not start Wiki. Preparation does not run Agents or evaluations.
+`run.py ablation` uses the workspace's frozen arm definitions. New plans enable eight
+three-Trajectory arms across two communication modes; existing Workspaces retain their frozen
+plans. Only Runtime is needed; these scripts do not start Wiki. Preparation does not run Agents
+or evaluations.
 Run roles use existing workspace snapshots; they never silently re-prepare changed task inputs.
 
 中文：输入和模板只放在 [`data/GDN`](../../data/GDN/README.zh.md)，脚本放在此目录。
@@ -110,8 +112,8 @@ Run roles use existing workspace snapshots; they never silently re-prepare chang
 已有 8766 服务时选择空闲端口，例如准备服务时加 `--port 8767`，不要抢占旧任务端口。
 
 只对服务工作区运行一次 `run.py serve`，无需 Wiki。之后可在两个独立进程中分别运行两条 `run.py campaign` 命令，
-或将 role 改为 `ablation`，按每份输入自己的冻结计划启动；新计划各启用十二个 Retained 臂：
-Direction/Experiment 全关、各开一个、全开，每种三个重复臂。
+或将 role 改为 `ablation`，按每份输入自己的冻结计划启动；新计划各启用八个三轨迹臂：
+Direction/Experiment 四种工具配置分别采用 Epoch 结束后互通和实时互通模式。
 准备本身不启动模型/GPU 作业。
 请以同一个容器用户、相同环境变量运行服务与任务，不需要 sudo/systemd 调度权限。
 

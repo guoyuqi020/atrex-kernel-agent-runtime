@@ -60,7 +60,15 @@ class Case:
 
     def report(self) -> dict[str, Any]:
         value = report_value(self.attempt.id)
-        value.update(status="blocked", final_candidate=None, blocker="No correct Kernel yet")
+        value.update(
+            status="blocked",
+            final_candidate=None,
+            blocker="No correct Kernel yet",
+            profile_evidence=None,
+            experiments=[],
+            direction_events=[],
+            findings=[],
+        )
         return value
 
     def submission(self, key: str = "report", report: dict[str, Any] | None = None) -> bytes:

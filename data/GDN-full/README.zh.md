@@ -25,8 +25,9 @@ adapter、输入范围及测试用例、Metadata、Roofline、Gate 策略和 Age
 Campaign 使用独立 creation key，不复用清理版的实验身份。
 
 默认仍为 **L20D / CuteDSL / Claude**、5 个 Epoch、每条轨迹每轮 3 次 Attempt、
-Optimizer/Bootstrap 每 Session 100M tokens，使用十二个 Retained 臂的消融方案：
-Direction/Experiment 全关、各开一个、全开，每种三个重复臂。
+Optimizer/Bootstrap 每 Session 100M tokens，使用八个臂的消融方案：
+Direction/Experiment 全关、各开一个、全开，每种分别采用 Epoch 结束后互通与实时互通模式，
+每臂三条轨迹，共 360 次 Optimizer Attempt。
 新配置默认 `container`：bwrap 隔离、当前用户运行，不需要 systemd/每 Session cgroup。
 资源限额由外层容器负责，脚本不会自动创建 Docker 容器。
 “不屏蔽”指输入恢复原始内容，并不开放隐藏测试集，也不改变 Runtime/Core/KDA 的 Prompt
@@ -52,7 +53,7 @@ python scripts/gdn/prepare.py --inputs data/GDN-full --backend claude
 python scripts/gdn/run.py serve --workspace workspaces/GDN-full
 # 另一个终端：Bootstrap 加单 Campaign
 python scripts/gdn/run.py campaign --workspace workspaces/GDN-full --target-epoch 5
-# 或选择十二个 Retained 臂
+# 或选择八个臂（四种工具配置 × 两种互通模式）
 python scripts/gdn/run.py ablation --workspace workspaces/GDN-full
 ```
 

@@ -67,9 +67,13 @@ Optimizer Runtime Tools 通过 `gateway-execute` 暴露 `check`、`dev`、`evalu
 Attempt 中评测多个 Candidate，并写入 Experiment Journal。通过 `candidate_ready` 提名时，
 该精确 Candidate 仍须成功完成可信 Contract 的完整 Valid 集评测；这只是预检，不是权威
 Same-allocation ABBA Retention 裁决。Retention 会独立测量同一个完整 Valid 集。
-这份预检证据可以来自本 Attempt，也可以通过 `adopt` Experiment 显式采纳可见历史中的兼容成功
-完整 Evaluate。Runtime 核验原始 Trial 和精确 Kernel/Result 绑定；采纳只记录当前决策，不新建
-测量，也不改变原测量归属。配置的独立 Retention 比较保持不变。不兼容的历史证据需要重新做完整
+这份预检证据可以来自本 Attempt，也可以复用可见历史中兼容的成功普通完整 Evaluate。启用
+Experiments 时，历史复用需显式记录 `adopt` Experiment；关闭 Experiments 时，直接以
+`candidate_ready` 提交历史原样 Kernel，Runtime 自动查找合格证据，无需 Experiment 或重复
+Evaluate。两种方式都核验一致的算子、硬件、DSL 和封存 Contract、原始 Trial 以及精确的
+Kernel/Result 绑定。自定义输入、仅正确性检查、Profile 和探索性 ABBA 不符合条件；本 Attempt
+新的完整 Evaluate 已失败时，不能用更早成功记录覆盖。复用不新建测量，也不改变原测量归属。
+配置的独立 Retention 比较保持不变。不兼容的历史证据需要重新做完整
 Evaluate，无需通过修改注释来制造不同 Digest。
 
 `evaluate` 接受可选的 `mode`、`input_py` 和 `shapes`。`mode` 只能为 `full`（默认）或

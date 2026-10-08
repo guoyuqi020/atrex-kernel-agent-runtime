@@ -324,10 +324,11 @@ def test_optimizer_prompt_limits_advancement_not_open_direction_count() -> None:
     assert "Only one Direction per Attempt may be `in_progress` at a time" in normalized
     assert "do not interleave their research, tools, edits, or measurements" in normalized
     assert "Before starting another, close the current one" in normalized
-    assert "None may remain `in_progress` at handoff" in normalized
-    assert "All four closing actions require at least one Experiment associated" in normalized
-    assert "`propose` and `start` do not" in normalized
-    assert "actual investigation or blocker" in normalized
+    assert "None may remain `in_progress(self)` at handoff" in normalized
+    assert "peers' `in_progress(other)` Directions do not block your report" in normalized
+    assert "All closing actions permit empty support in that state" in normalized
+    assert 'close with `hypothesis_status="unresolved"`, empty support' in normalized
+    assert "Do not fabricate a diagnostic Experiment or launch a GPU job" in normalized
     assert "Without an Experiment use `defer` or `block`" not in normalized
     assert "Leave at most three visible Directions" not in prompt
 

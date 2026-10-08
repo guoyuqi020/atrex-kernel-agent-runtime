@@ -57,6 +57,8 @@ def _role_prompt_sha256(role: Literal["optimizer", "evolver"]) -> str:
 
 def optimizer_evidence_prompt(
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None,
+    *,
+    trajectory_visibility: Literal["isolated", "broadcast"] = "isolated",
 ) -> str:
     """Materialize the instructions for the same Journal modules as the live tool contract.
 
@@ -70,10 +72,30 @@ def optimizer_evidence_prompt(
         "experiments",
     }:
         raise ValueError("Optimizer Evidence tool modules are invalid")
-    if modules == {"directions", "experiments"}:
-        return OPTIMIZER_EVIDENCE_PROMPT_TEXT
-
     prompt = OPTIMIZER_EVIDENCE_PROMPT_TEXT
+    if trajectory_visibility == "broadcast":
+        prompt = _replace_prompt_once(
+            prompt,
+            "# current Epoch only, this Trajectory alone",
+            "# current Epoch: sealed earlier-round history from all Trajectories",
+        )
+        prompt = _replace_prompt_once(
+            prompt,
+            "For the current Epoch you see only bounded\n"
+            "earlier Attempts from your own Trajectory, never a concurrently running sibling.",
+            "This Lineage uses Broadcast: all three Trajectories can query each other's "
+            "recorded measurements, Artifacts, and enabled Journals as soon as Runtime saves "
+            "them. For the current Epoch, this filesystem snapshot also includes sealed "
+            "reports and conversations from completed earlier-round peer Attempts. It does "
+            "not refresh during this Session. Between rounds, the workflow routes the best "
+            "accepted Kernel so far to all three Trajectories. Other tool-module arms remain "
+            "outside your "
+            "visible history. Working files, scratch, and live conversations remain private.",
+        )
+    elif trajectory_visibility != "isolated":
+        raise ValueError("Optimizer trajectory visibility is invalid")
+    if modules == {"directions", "experiments"}:
+        return prompt
     workspace_journal = (
         "Record task hypotheses, evidence, and conclusions through the Direction\n"
         "and Experiment Journal. Evolver may use that evidence to improve task-independent Agent behavior,\n"  # noqa: E501
@@ -176,10 +198,14 @@ def optimizer_evidence_prompt(
         "Evaluate. Experiments in this Session have no Direction association."
         if "experiments" in modules
         else (
-            "Historical evidence may guide analysis. Nomination requires a newly measured "
-            "candidate "
-            "with an ordinary full Evaluate in this Attempt; unchanged historical source cannot be "
-            "adopted in this Session."
+            "To nominate an unchanged Kernel from visible history, restore its exact source "
+            "in work/kernel and submit candidate_ready. Runtime automatically reuses matching "
+            "successful ordinary full Evaluate evidence for the same operator, hardware, DSL, "
+            "and sealed Contract; no Experiment or duplicate Evaluate is required. Custom inputs, "
+            "correctness-only checks, Profile, and exploratory ABBA do not qualify. Reuse "
+            "preserves the original measurement identity and cannot override a failed current "
+            "full Evaluate. "
+            "Changed source needs its own qualifying evidence. Independent retention is unchanged."
         )
     )
     return (
@@ -837,10 +863,13 @@ def assemble_optimizer_evidence_view(
     attempt_ordinal: int,
     artifacts: LocalArtifactStore,
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None,
+    trajectory_visibility: Literal["isolated", "broadcast"] = "isolated",
 ) -> EvidenceViewManifestV1:
     """Expose completed history plus earlier same-branch Attempts in one tree."""
     through_epoch = _lineage_through_epoch(lineage_payload)
-    prompt_text = optimizer_evidence_prompt(tool_modules)
+    prompt_text = optimizer_evidence_prompt(
+        tool_modules, trajectory_visibility=trajectory_visibility
+    )
     manifest = EvidenceViewManifestV1(
         role="optimizer",
         lineage_checkpoint=lineage_checkpoint,
@@ -870,6 +899,18 @@ def assemble_optimizer_evidence_view(
         attempt_ordinal=attempt_ordinal,
         artifacts=artifacts,
     )
+    if trajectory_visibility == "broadcast":
+        _append_broadcast_peer_attempts(
+            destination,
+            attempt_payload,
+            current_epoch_number=current_epoch_number,
+            branch=branch,
+            challenger_ordinal=challenger_ordinal,
+            trajectory_ordinal=trajectory_ordinal,
+            selected_revision=selected_revision,
+            attempt_ordinal=attempt_ordinal,
+            artifacts=artifacts,
+        )
     make_tree_read_only(destination)
     return manifest
 
@@ -1441,6 +1482,62 @@ def _append_current_lineage_attempts(
         )
     if actual_ordinals != expected_ordinals:
         raise ValueError("current-lineage Evidence has an incomplete Attempt sequence")
+
+
+def _append_broadcast_peer_attempts(
+    destination: Path,
+    attempt_payload: Path,
+    *,
+    current_epoch_number: int,
+    branch: BranchRole,
+    challenger_ordinal: int,
+    trajectory_ordinal: int,
+    selected_revision: KernelAgentRevisionId,
+    attempt_ordinal: int,
+    artifacts: LocalArtifactStore,
+) -> None:
+    """Expose sealed peer reports/conversations; never read mutable peer workspaces."""
+    context = _json_object(attempt_payload / "context.json", "Attempt Evidence context")
+    expected = context.get("peer_attempt_ids", [])
+    if not isinstance(expected, list) or any(not isinstance(item, str) for item in expected):
+        raise ValueError("Attempt Evidence peer IDs are invalid")
+    actual: list[str] = []
+    for source in sorted((attempt_payload / "peer-trajectories").glob("*/attempts/*.json")):
+        raw = _json_object(source, "peer Attempt summary")
+        peer = raw.get("trajectory_ordinal")
+        ordinal = raw.get("ordinal")
+        attempt_id = raw.get("attempt_id")
+        if (
+            not isinstance(peer, int)
+            or isinstance(peer, bool)
+            or peer < 1
+            or peer == trajectory_ordinal
+            or source.parents[1].name != f"{peer:08d}"
+            or not isinstance(ordinal, int)
+            or isinstance(ordinal, bool)
+            or not 1 <= ordinal < attempt_ordinal
+            or source.stem != f"{ordinal:08d}"
+            or raw.get("branch") != branch.value
+            or raw.get("challenger_ordinal") != challenger_ordinal
+            or raw.get("kernel_agent_revision_id") != str(selected_revision)
+            or not isinstance(attempt_id, str)
+            or attempt_id in actual
+        ):
+            raise ValueError("Broadcast peer Attempt identity is invalid")
+        actual.append(attempt_id)
+        target = (
+            destination / "epochs" / f"{current_epoch_number:08d}"
+            / "trajectories" / f"{peer:08d}" / "attempts" / f"{ordinal:08d}"
+        )
+        target.mkdir(parents=True, mode=0o700)
+        peer_root = source.parents[1]
+        _project_optional_json(peer_root / "reports" / source.name, target / "report.json")
+        _materialize_latest_conversation(
+            peer_root / "traces", f"{ordinal:08d}-run-*.json",
+            target / "conversation.jsonl", artifacts=artifacts,
+        )
+    if actual != expected:
+        raise ValueError("Broadcast peer Evidence disagrees with its sealed membership")
 
 
 def _lineage_through_epoch(lineage_payload: Path) -> int:

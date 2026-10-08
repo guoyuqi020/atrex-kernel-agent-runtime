@@ -38,6 +38,7 @@ def test_shipped_configs_allow_1_mib_attempt_reports(config: Path) -> None:
     assert settings.campaign is not None
     assert settings.campaign.optimizer.max_attempt_report_bytes == 1_048_576
     assert settings.campaign.optimizer.report_completion_retries == 2
+    assert settings.campaign.optimizer.output_limit_recovery_retries == 2
 
 
 def test_production_config_selects_kda(tmp_path: Path) -> None:
@@ -62,6 +63,7 @@ def test_production_config_selects_kda(tmp_path: Path) -> None:
     assert config["campaign"]["optimizer"]["agent_backend"] == "codex"
     assert config["campaign"]["optimizer"]["max_attempt_report_bytes"] == 1_048_576
     assert config["campaign"]["optimizer"]["report_completion_retries"] == 2
+    assert config["campaign"]["optimizer"]["output_limit_recovery_retries"] == 2
 
 
 def test_connectivity_probe_defaults_to_kda() -> None:

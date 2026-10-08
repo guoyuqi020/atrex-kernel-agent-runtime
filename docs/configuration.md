@@ -76,6 +76,12 @@ Deployment policy shared by every scheduled Campaign:
 
 DSL topology, model identity, and `K/Y/X` Epoch shape belong to the Campaign definition, not Runtime service configuration.
 
+`campaign.optimizer.output_limit_recovery_retries` controls fresh Core/KDA conversations after a
+classified output-limit failure. It defaults to `2`, accepts integers `0..10`, and is independent
+of the report-only `report_completion_retries` allowance. Recovery preserves the Attempt workspace
+and remaining time/usage budgets. See [output-limit recovery](interfaces.md#recovery-after-an-output-limit-failure).
+
+
 ## Gate and comparison policy
 
 `campaign.gate_policy` is the trusted source for:
@@ -131,8 +137,13 @@ need no Experiment support IDs; with Experiments alone, `record-experiment` omit
 Session Prompts follow this setting: they retain the common workspace and evaluation guidance,
 but include instructions only for enabled Journal tools. The default setting keeps the original
 Prompts unchanged. Existing Sessions keep the contract and Prompt they started with.
-Without Experiments, historical `adopt` is unavailable; nomination requires a newly measured
-candidate in the current Attempt. An identical historical Evaluate may be rejected as a duplicate.
+Without Experiments, an unchanged visible historical Kernel can still be nominated with
+`candidate_ready`: Runtime automatically validates and reuses its matching successful ordinary
+full Evaluate evidence. The operator, hardware, DSL, sealed Contract, and exact Kernel content must
+match; custom inputs, correctness-only checks, Profile, and exploratory ABBA do not qualify.
+No Experiment or duplicate Evaluate is required, and the original measurement identity is preserved.
+A failed current full Evaluate cannot be overridden by historical success. With Experiments enabled,
+historical reuse continues to require an explicit `record-experiment` with `action="adopt"`.
 
 ### Evolver
 

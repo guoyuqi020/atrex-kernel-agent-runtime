@@ -111,12 +111,14 @@ def test_empty_report_cannot_fabricate_finding_support(status: str) -> None:
 
 
 @pytest.mark.parametrize("status", ["blocked", "pivot"])
-def test_nonempty_report_still_requires_experiment_direction(status: str) -> None:
+def test_report_defers_external_direction_visibility_to_runtime(status: str) -> None:
     value = _report(status)
     value["experiments"] = _value(value["attempt_id"])["experiments"]
 
-    with pytest.raises(ValidationError, match="Direction absent from this Attempt"):
-        AttemptReportV12.model_validate(value)
+    report = AttemptReportV12.model_validate(value)
+
+    assert report.experiments[0].direction_id is not None
+    assert report.direction_events == ()
 
 
 @pytest.mark.parametrize("missing", ["before", "after", "both"])

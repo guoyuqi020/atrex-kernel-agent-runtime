@@ -30,21 +30,26 @@ def test_source_tree_arms_keep_topology_with_five_epochs(relative: str) -> None:
     assert single_file["optimizer_attempt_budget_per_trajectory"] == 15
     assert all(arm["target_epoch_number"] == 5 for arm in single_file["arms"])
     assert plan["main_evolve_enabled"] is False
-    assert len(plan["arms"]) == 12
+    assert len(plan["arms"]) == 8
     assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 180
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 360
     assert all("observer_label" not in arm for arm in plan["arms"])
     assert [arm["label"] for arm in plan["arms"]] == [
-        f"ablation-retained-{suffix}{ordinal:02d}"
+        f"ablation-{kind}-{suffix}3"
+        for kind in ("epoch-shared", "broadcast")
         for suffix in ("", "no-modules-", "experiments-", "directions-")
-        for ordinal in range(1, 4)
     ]
     assert [arm["tool_modules"] for arm in plan["arms"]] == [
         modules
+        for _ in range(2)
         for modules in (["directions", "experiments"], [], ["experiments"], ["directions"])
-        for _ in range(3)
     ]
-    assert all(arm["workflow_command"] == "workflow/retained.py" for arm in plan["arms"])
+    assert [arm["workflow_command"] for arm in plan["arms"]] == (
+        ["workflow/epoch_shared_3.py"] * 4 + ["workflow/broadcast_3.py"] * 4
+    )
+    assert [arm["trajectory_visibility"] for arm in plan["arms"]] == (
+        ["isolated"] * 4 + ["broadcast"] * 4
+    )
     campaign = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/ablation-campaign.json")
     for key in ("max_challengers", "optimizer_attempt_budget"):
         assert getattr(campaign, key) == policy["schedule"][key]
@@ -107,7 +112,10 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
             label = Path(command[-1]).parent.name
             planned_arms = json.loads(plan_path.read_text())["arms"]
             planned = next(arm for arm in planned_arms if arm["label"] == label)
-            for key in ("max_challengers", "optimizer_attempt_budget", "workflow_command"):
+            for key in (
+                "max_challengers", "optimizer_attempt_budget", "workflow_command",
+                "trajectory_visibility", "tool_modules",
+            ):
                 assert seed[key] == planned[key]
             if planned.get("observer_label") is None:
                 assert seed["evolver_observer_lineage_id"] is None
@@ -186,18 +194,18 @@ def test_bootstrap_once_shared_seed_parallel_launch_and_resume(tmp_path, monkeyp
     test = launch_fixture(tmp_path, monkeypatch)
     test.module.main()
     summary = json.loads((test.workspace / "campaign-results.json").read_text())
-    assert len(summary["arms"]) == 12
+    assert len(summary["arms"]) == 8
     assert all(arm["status"] == "completed" for arm in summary["arms"])
-    assert len(test.calls) == 13  # one Bootstrap, twelve measurement-free seed operations
-    assert len(test.processes) == 12
-    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 12
+    assert len(test.calls) == 9  # one Bootstrap, eight measurement-free seed operations
+    assert len(test.processes) == 8
+    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 8
     for arm in summary["arms"]:
         assert Path(arm["result_path"]).is_file()
         assert "attempt finished" in Path(arm["log"]).read_text()
     test.module.main()
     resumed = json.loads((test.workspace / "campaign-results.json").read_text())
     assert resumed == summary
-    assert len(test.processes) == 24
+    assert len(test.processes) == 16
 
 
 def test_source_tree_runner_defaults_all_arms_to_five_epochs(tmp_path, monkeypatch):
@@ -205,7 +213,7 @@ def test_source_tree_runner_defaults_all_arms_to_five_epochs(tmp_path, monkeypat
     test.module.main()
     arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
     assert all(arm["target_epoch_number"] == 5 for arm in arms)
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 180
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 360
 
 
 def test_existing_one_hundred_epoch_plan_is_not_rewritten(tmp_path, monkeypatch):

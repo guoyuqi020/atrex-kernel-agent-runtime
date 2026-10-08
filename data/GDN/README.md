@@ -43,24 +43,33 @@ python scripts/gdn/run.py ablation
 
 This starts tasks only, as the same container user as `campaign`, without sudo/systemd.
 `ablation-campaign.json` uses a new `gdn-source-tree-l20d-claude-ablation` creation key;
-it neither changes nor takes over the existing trial. After one full Bootstrap, twelve Lineages
+it neither changes nor takes over the existing trial. After one full Bootstrap, eight three-Trajectory Lineages
 reuse the new experiment's exact v0, Agent, edit boundaries, contract and initial evidence.
 No repeated baseline measurement or old trial experience is imported.
 
-`ablation.json` uses the same plan builder as single-file production. Defaults:
+The current plan enables two communication modes for each of four Direction/Experiment tool
+settings: both enabled, both disabled, Experiment only, and Direction only. Each setting/mode owns
+one Campaign/Lineage with three retained Trajectories. All eight arms share one frozen Bootstrap v0.
+Default: 5 Epochs, three serial Attempts per Trajectory per Epoch; 15 Attempts per Trajectory,
+45 per arm, and 360 in total, excluding Bootstrap. No Evolver runs.
 
-| Campaign instance | Agent Workflow behavior | Optimizer Attempts | Retain State | Evolutions |
-|---|---|---:|---|---:|
-| `ablation-retained-01/02/03` | One trajectory × 3 per replica | 15 each | yes | 0 |
-| `ablation-retained-no-modules-01/02/03` | Direction and Experiment tools off | 15 each | yes | 0 |
-| `ablation-retained-experiments-01/02/03` | Experiment tools only | 15 each | yes | 0 |
-| `ablation-retained-directions-01/02/03` | Direction tools only | 15 each | yes | 0 |
+| Mode | Workflow | Within the Epoch | After the Epoch |
+|---|---|---|---|
+| `epoch-shared` | `epoch_shared_3.py` | Each Trajectory reads only its own current history and carries its own Kernel | All three share completed history and the selected best Kernel |
+| `broadcast` | `broadcast_3.py` | Recorded measurements, Artifacts and enabled Journals are immediately queryable across Trajectories; each round routes the best accepted Kernel so far | All three share completed history and the selected best Kernel |
 
-Twelve Campaigns, 5 Epochs each, 180 Optimizer Attempts excluding Bootstrap. The original
-Retained labels have both tool modules enabled. Pool-Retained,
-Broadcast, Retained-Evolve, and the other control Workflows remain implemented but are disabled
-in new plans. No external original-AKA control is launched. Each Retained replica keeps its own
-State and Lineage history; the next Epoch starts from that Lineage's selected best Kernel.
+Each mode has arm labels `ablation-MODE-3`, `ablation-MODE-no-modules-3`,
+`ablation-MODE-experiments-3`, and `ablation-MODE-directions-3`. Broadcast also exposes sealed
+reports and conversations from completed earlier-round peers in the next Attempt's filesystem
+snapshot. Working source, scratch and live conversations remain private; retained Tool State is
+routed independently per Trajectory. History is accessible when relevant, not a requirement to
+read every prior conversation. Different arms do not share post-Bootstrap history.
+
+Pool-Retained, single-Trajectory Retained, Retained-Evolve and other Workflow templates remain
+available but are disabled in new plans. Each enabled arm owns a Lineage-local `agent-v0` that
+freezes its chosen Workflow; Runtime does not infer topology from labels. Actual concurrency is
+bounded by deployment settings.
+
 Existing Workspaces retain their frozen plans.
 
 Outputs live under `workspaces/GDN/ablation/`: frozen inputs, Bootstrap, `campaign-results.json`,
@@ -73,7 +82,7 @@ Existing workspaces keep their frozen control budgets; pass the original absolut
 resuming an older main-arm run.
 Changed frozen inputs require a new workspace and creation key.
 
-Up to nine Optimizer workers run concurrently. On memory-limited Lima, finish the old trial
+The plan declares 24 Trajectories; actual concurrency follows deployment limits. On memory-limited Lima, finish the old trial
 before explicitly launching this suite. Adding these configs does not start/stop/restart tasks.
 
 ## Contents and provenance

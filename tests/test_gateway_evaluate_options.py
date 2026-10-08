@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pytest
 from pydantic import ValidationError
@@ -193,6 +193,15 @@ async def test_exploration_is_recorded_but_cannot_authorize_candidate_submission
         assert len(control.list_evaluations(attempt.id)) == 1
         assert isinstance(full.result, dict)
         assert "input_scope" not in full.result
+        # The successful handoff cites real completed observations rather than the
+        # placeholder Artifact IDs in the generic report fixture.
+        report_value = cast(dict[str, Any], report["report"])
+        report_value["profile_evidence"] = None
+        experiment = report_value["experiments"][0]
+        experiment["before"] = experiment["after"] = {
+            "kernel_artifact_digest": full.kernel_artifact_digest,
+            "result_artifact_digests": [full.result_artifact_digest],
+        }
         report["idempotency_key"] = "report-after-full-evaluate"
         accepted = await service.execute(
             capability.token, json.dumps(report).encode(), operation_scope="runtime"

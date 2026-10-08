@@ -549,6 +549,7 @@ def build_core_process_config(
         token_usage_report_relative_path=worker.token_usage_report_relative_path,
         max_attempt_report_bytes=worker.max_attempt_report_bytes,
         report_completion_retries=worker.report_completion_retries,
+        output_limit_recovery_retries=worker.output_limit_recovery_retries,
         tool_modules=worker.tool_modules,
         timeout_seconds=worker.timeout_seconds if timeout_seconds is None else timeout_seconds,
         terminate_grace_seconds=worker.terminate_grace_seconds,

@@ -501,6 +501,7 @@ class LocalAttemptWorkspaceAssembler:
             tool_modules=(
                 self._default_tool_modules if request.tool_modules is None else request.tool_modules
             ),
+            trajectory_visibility=lineage.trajectory_visibility,
         )
         visible_digest = campaign.agent_problem_digest
         contract = self._artifacts.verify(visible_digest)

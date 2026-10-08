@@ -1353,6 +1353,7 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
             "analysis": "the measured experiment completed",
             "hypothesis_status": "supported",
             "supporting_experiment_ids": [experiment_id],
+            "scope": "This exact kernel on the evaluated hardware and contract shapes",
         },
     )
 
@@ -1396,6 +1397,14 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
             "name": "vectorize loads",
             "status": "completed",
             "hypothesis_status": "supported",
+            "claim_kind": "causal_hypothesis",
+            "scope": "This exact kernel on the evaluated hardware and contract shapes",
+            "supporting_results": [],
+            "supporting_experiment_ids": [experiment_id],
+            "interpretation_notice": (
+                "Agent interpretation, not a Runtime-certified causal conclusion. "
+                "Read the cited evidence and scope before reusing it."
+            ),
         }
     ]
     assert cast(dict[str, Any], loaded_direction.result)["supporting_experiment_ids"] == [
@@ -1583,7 +1592,10 @@ def test_direction_concurrency_error_is_machine_readable_and_actionable() -> Non
     recovery = cast(list[dict[str, Any]], response["recovery"])
     assert recovery[0]["tool"] == "list-directions"
     assert "close it with update-direction" in recovery[1]["instruction"]
-    assert "Retry start only after no other Direction is in progress" in recovery[2]["instruction"]
+    assert "Retry start only after this Attempt has no in_progress(self)" in (
+        recovery[2]["instruction"]
+    )
+    assert "do not close other Attempts' work" in recovery[2]["instruction"]
     assert "request_schema" in response
 
 
@@ -2041,7 +2053,13 @@ async def test_candidate_ready_needs_an_evaluate_for_the_exact_sealed_candidate(
             operation_scope="runtime",
         )
 
-    await service.execute(capability_value.token, _request(attempt))
+    evaluated = await service.execute(capability_value.token, _request(attempt))
+    report["profile_evidence"] = None
+    experiment = cast(list[dict[str, Any]], report["experiments"])[0]
+    experiment["before"] = experiment["after"] = {
+        "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+        "result_artifact_digests": [evaluated.result_artifact_digest],
+    }
     accepted = await service.execute(
         capability_value.token,
         payload("report-after-evaluate"),
@@ -2067,9 +2085,15 @@ async def test_candidate_ready_needs_an_evaluate_for_the_exact_sealed_candidate(
 async def test_attempt_report_api_seals_canonical_contributing_trials(tmp_path: Path) -> None:
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
     try:
-        await service.execute(capability.token, _request(attempt))
+        evaluated = await service.execute(capability.token, _request(attempt))
         first, second = "sha256:" + "a" * 64, "sha256:" + "b" * 64
         report = _report_value(attempt.id)
+        report["profile_evidence"] = None
+        experiment = cast(list[dict[str, Any]], report["experiments"])[0]
+        experiment["before"] = experiment["after"] = {
+            "kernel_artifact_digest": evaluated.kernel_artifact_digest,
+            "result_artifact_digests": [evaluated.result_artifact_digest],
+        }
         report["contributing_result_artifact_digests"] = [second, first, second]
         payload = {
             **json.loads(_request(attempt)),

@@ -59,11 +59,22 @@ def test_optimizer_evidence_prompt_matches_enabled_journal_modules(
     assert ("`update-direction`" in prompt) == ("directions" in modules)
     assert ("`list-directions`" in prompt) == ("directions" in modules)
     assert ("`load-direction`" in prompt) == ("directions" in modules)
+    assert ("in_progress(self)" in prompt) == ("directions" in modules)
+    assert ("in_progress(other)" in prompt) == ("directions" in modules)
     assert ("`list-experiments`" in prompt) == ("experiments" in modules)
     assert ("`load-experiment`" in prompt) == ("experiments" in modules)
     assert ("`adopt` Experiment" in prompt or 'action="adopt"' in prompt) == (
         "experiments" in modules
     )
+    assert ("Runtime automatically reuses matching" in prompt) == (
+        "experiments" not in modules
+    )
+    if "experiments" not in modules:
+        assert "restore its exact source in work/kernel and submit candidate_ready" in prompt
+        assert "no Experiment or duplicate Evaluate is required" in prompt
+        assert "cannot override a failed current full Evaluate" in prompt
+        assert "Custom inputs, correctness-only checks, Profile, and exploratory ABBA" in prompt
+        assert "unchanged historical source cannot be adopted" not in prompt
     assert ("Direction and Experiment Journal" in " ".join(prompt.split())) == (
         len(modules) == 2
     )
@@ -882,6 +893,52 @@ def test_optimizer_view_writes_scoped_prompt_and_matching_digest(
     prompt_bytes = (control_root / "evidence-instructions.md").read_bytes()
     assert prompt_bytes.decode() == optimizer_evidence_prompt(modules)
     assert manifest.prompt_fragment_sha256 == hashlib.sha256(prompt_bytes).hexdigest()
+
+
+@pytest.mark.parametrize("modules", [(), ("directions",), ("experiments",),
+                                     ("directions", "experiments")])
+def test_broadcast_view_includes_sealed_peer_history_with_module_scoped_guidance(
+    tmp_path: Path, modules: tuple[Literal["directions", "experiments"], ...],
+) -> None:
+    store = LocalArtifactStore(tmp_path / "artifacts")
+    checkpoint = digest("lineage")
+    traces = _trace_digests(store, tmp_path / "trace-sources")
+    attempt = _current_branch(tmp_path / "attempt", str(checkpoint), traces)
+    context = json.loads((attempt / "context.json").read_text())
+    context["peer_attempt_ids"] = ["attempt_peer"]
+    _write(attempt / "context.json", context)
+    peer_root = attempt / "peer-trajectories/00000002"
+    _write(peer_root / "attempts/00000001.json", {
+        "attempt_id": "attempt_peer", "trajectory_ordinal": 2, "ordinal": 1,
+        "branch": "active", "challenger_ordinal": 0,
+        "kernel_agent_revision_id": "agent_active",
+    })
+    _write(peer_root / "reports/00000001.json", {"ordinal": 1, "branch": "active"})
+    _write(peer_root / "traces/00000001-run-0001.json", {
+        "source_session_log_digest": str(traces["current-1"]), "sessions": [],
+    })
+    view = tmp_path / "view"
+    control = tmp_path / ".runtime"
+    manifest = assemble_optimizer_evidence_view(
+        view, control_root=control,
+        lineage_payload=_lineage(tmp_path / "lineage", traces, store),
+        lineage_checkpoint=checkpoint, attempt_payload=attempt,
+        attempt_snapshot=digest("attempt"), current_epoch_number=2,
+        branch=BranchRole.ACTIVE, challenger_ordinal=0, trajectory_ordinal=1,
+        selected_revision="agent_active", attempt_ordinal=3, artifacts=store,
+        tool_modules=modules, trajectory_visibility="broadcast",
+    )
+    assert manifest.visibility.current_trajectory_ordinal == 1
+    peer_view = view / "epochs/00000002/trajectories/00000002/attempts/00000001"
+    assert {path.name for path in peer_view.iterdir()} == {"report.json", "conversation.jsonl"}
+    assert not (peer_view / "report.json").stat().st_mode & 0o222
+    prompt = (control / "evidence-instructions.md").read_text()
+    assert "This Lineage uses Broadcast" in prompt
+    assert "never a concurrently running sibling" not in prompt
+    assert "Working files, scratch, and live conversations remain private" in prompt
+    assert ("`load-direction`" in prompt) == ("directions" in modules)
+    assert ("`load-experiment`" in prompt) == ("experiments" in modules)
+    assert manifest.prompt_fragment_sha256 == hashlib.sha256(prompt.encode()).hexdigest()
 
 
 def test_optimizer_view_projects_every_completed_branch_by_epoch(tmp_path: Path) -> None:

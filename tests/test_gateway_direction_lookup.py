@@ -137,7 +137,9 @@ async def test_near_match_hints_never_include_an_invisible_direction(history: _H
     )
     assert history.control.list_direction_events(history.historical_attempt.id)
     assert _one_edit_apart(bad_id, hidden_id)
-    assert hidden_id not in history.service._journals._direction_views(history.current.id)
+    assert hidden_id not in history.service._journals_for_attempt(
+        history.current.id
+    )._direction_views(history.current.id)
     with pytest.raises(DirectionLookupError) as rejected:
         await history.journal("direction_load", direction_id=bad_id)
     assert rejected.value.suggested_direction_ids == (direction_id,)
@@ -157,17 +159,19 @@ def test_near_match_hints_are_bounded_deterministic_and_do_not_replace_ids(
         visible = {candidate: {"direction_id": candidate} for candidate in candidates}
         monkeypatch.setattr(RuntimeJournalService, "_direction_views", lambda self, _: visible)
         with pytest.raises(DirectionLookupError) as rejected:
-            service._journals._require_direction(attempt.id, requested, field_path="direction_id")
+            service._journals_for_attempt(attempt.id)._require_direction(
+                attempt.id, requested, field_path="direction_id"
+            )
         assert rejected.value.suggested_direction_ids == tuple(sorted(candidates)[:3])
         for candidate in candidates:
             assert (
-                service._journals._require_direction(
+                service._journals_for_attempt(attempt.id)._require_direction(
                     attempt.id, candidate, field_path="direction_id"
                 )
                 is visible[candidate]
             )
         with pytest.raises(DirectionLookupError) as distant:
-            service._journals._require_direction(
+            service._journals_for_attempt(attempt.id)._require_direction(
                 attempt.id, "direction_" + "f" * 32, field_path="direction_id"
             )
         assert distant.value.suggested_direction_ids == ()

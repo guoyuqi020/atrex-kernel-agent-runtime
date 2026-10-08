@@ -32,6 +32,7 @@ from atrex_runtime.workers.core import (
     CoreOptimizerSessionDriver,
 )
 from atrex_runtime.workers.core_phase import CorePhaseRunner
+from atrex_runtime.workers.evidence_view import EvidenceViewManifestV1, optimizer_evidence_prompt
 from atrex_runtime.workers.launcher import CleanEnvironmentLauncher
 from atrex_runtime.workers.manifest import AttemptInputManifestV9, AttemptTaskContextV5
 from atrex_runtime.workers.optimizer import OptimizerSessionConfig
@@ -99,12 +100,14 @@ def test_visible_core_config_matches_runtime_binding(
             max_diagnostic_bytes=4096,
             max_session_tokens=1000,
             report_completion_retries=3,
+            output_limit_recovery_retries=4,
         ),
         artifacts,
     )
     prepared = runner.prepare(root, root / "sessions")
     env = runner.runtime_environment(prepared, phase=phase, model=model)
     assert env["ATREX_REPORT_COMPLETION_RETRIES"] == "3"
+    assert env["ATREX_OUTPUT_LIMIT_RECOVERY_RETRIES"] == "4"
     assert env["ATREX_ATTEMPT_REPORT_MAX_BYTES"] == "65536"
     effective = json.loads((repository / "atrex-agent.json").read_text())
     assert effective == {
@@ -462,11 +465,13 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v9(
     )
     evidence = root / "input/evidence"
     (evidence / "epochs/00000001/trajectories/00000001/attempts").mkdir(parents=True)
-    prompt = "# Runtime evidence\n\nUse only the current Attempt evidence.\n"
+    prompt = optimizer_evidence_prompt(
+        None, trajectory_visibility="broadcast" if backend == "claude" else "isolated"
+    )
     (root / ".runtime/evidence-instructions.md").write_text(prompt, encoding="utf-8")
     manifest = _attempt_manifest()
-    (root / ".runtime/evidence-manifest.json").write_text(
-        json.dumps(
+    (root / ".runtime/evidence-manifest.json").write_bytes(
+        EvidenceViewManifestV1.model_validate(
             {
                 "schema_version": 1,
                 "role": "optimizer",
@@ -485,8 +490,7 @@ async def test_runtime_executes_current_core_bundle_with_attempt_v9(
                     "current_trajectory_ordinal": 1,
                 },
             }
-        ),
-        encoding="utf-8",
+        ).canonical_json_bytes(),
     )
     manifest_path = root / ".runtime/attempt.json"
     manifest_path.parent.mkdir(exist_ok=True)

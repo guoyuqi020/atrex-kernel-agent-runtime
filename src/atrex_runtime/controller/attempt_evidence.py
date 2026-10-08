@@ -42,6 +42,7 @@ class AttemptEvidenceMetadataV2(BaseModel):
     ordinal: int = Field(gt=0)
     epoch_evidence_checkpoint: ArtifactDigest
     previous_attempt_ids: tuple[AttemptId, ...]
+    peer_attempt_ids: tuple[AttemptId, ...] = ()
 
     @field_validator("epoch_id", mode="before")
     @classmethod
@@ -50,7 +51,7 @@ class AttemptEvidenceMetadataV2(BaseModel):
             raise ValueError("Attempt Evidence epoch_id must be a string")
         return parse_epoch_id(value)
 
-    @field_validator("attempt_id", "previous_attempt_ids", mode="before")
+    @field_validator("attempt_id", "previous_attempt_ids", "peer_attempt_ids", mode="before")
     @classmethod
     def _validate_attempt_ids(cls, value: object) -> object:
         if isinstance(value, str):
@@ -91,6 +92,7 @@ class LocalAttemptEvidenceAssembler:
     def assemble(self, request: BuildAttemptEvidenceRequest) -> ArtifactDigest:
         """Seal authoritative facts and bounded projections before one Attempt starts."""
         previous = self._previous_attempts(request)
+        peers = self._peer_attempts(request)
 
         staging = Path(tempfile.mkdtemp(prefix="atrex-attempt-evidence-"))
         try:
@@ -98,7 +100,7 @@ class LocalAttemptEvidenceAssembler:
             (staging / "traces").mkdir(mode=0o700)
             (staging / "diffs").mkdir(mode=0o700)
             (staging / "reports").mkdir(mode=0o700)
-            metadata = self._metadata(request, previous)
+            metadata = self._metadata(request, previous, peers)
             write_canonical_json(
                 staging / "context.json",
                 cast(JsonValue, metadata.model_dump(mode="json")),
@@ -106,6 +108,11 @@ class LocalAttemptEvidenceAssembler:
             annotations: list[JsonValue] = []
             for attempt in previous:
                 self._append_attempt(staging, attempt, annotations)
+            for attempt in peers:
+                peer_root = staging / "peer-trajectories" / f"{attempt.trajectory_ordinal:08d}"
+                for name in ("attempts", "traces", "diffs", "reports"):
+                    (peer_root / name).mkdir(parents=True, mode=0o700, exist_ok=True)
+                self._append_attempt(peer_root, attempt, annotations)
             write_canonical_json(
                 staging / "lessons.json",
                 {
@@ -129,8 +136,19 @@ class LocalAttemptEvidenceAssembler:
         stored = self._artifacts.verify(digest)
         if stored.kind is not ArtifactKind.ATTEMPT_EVIDENCE:
             raise ValueError("persisted Attempt Evidence has the wrong artifact kind")
-        expected = self._metadata(request, self._previous_attempts(request))
         actual = AttemptEvidenceMetadataV2.from_file(stored.payload_path / "context.json")
+        # A retry retains the original sealed peer history even if another peer completed
+        # later. Check membership, not equality with a newly assembled visibility snapshot.
+        eligible = {attempt.id: attempt for attempt in self._peer_attempts(request)}
+        if len(set(actual.peer_attempt_ids)) != len(actual.peer_attempt_ids) or any(
+            attempt_id not in eligible for attempt_id in actual.peer_attempt_ids
+        ):
+            raise ValueError("persisted Attempt Evidence has invalid peer history")
+        expected = self._metadata(
+            request,
+            self._previous_attempts(request),
+            [eligible[attempt_id] for attempt_id in actual.peer_attempt_ids],
+        )
         if actual != expected:
             raise ValueError("persisted Attempt Evidence disagrees with its Attempt")
 
@@ -173,10 +191,30 @@ class LocalAttemptEvidenceAssembler:
             raise ValueError("Attempt Evidence cannot include an unfinished Attempt")
         return previous
 
+    def _peer_attempts(self, request: BuildAttemptEvidenceRequest) -> list[Attempt]:
+        """Broadcast sealed earlier-round history within the same Lineage Branch."""
+        epoch = self._registry.get_epoch(request.epoch_id)
+        lineage = self._registry.get_lineage(epoch.lineage_id)
+        if lineage.trajectory_visibility != "broadcast":
+            return []
+        return sorted(
+            (
+                attempt
+                for attempt in self._registry.list_attempts(epoch.id)
+                if attempt.branch is request.branch
+                and attempt.challenger_ordinal == request.challenger_ordinal
+                and attempt.trajectory_ordinal != request.trajectory_ordinal
+                and attempt.ordinal < request.ordinal
+                and attempt.status is AttemptStatus.COMPLETED
+            ),
+            key=lambda attempt: (attempt.trajectory_ordinal, attempt.ordinal),
+        )
+
     @staticmethod
     def _metadata(
         request: BuildAttemptEvidenceRequest,
         previous: list[Attempt],
+        peers: list[Attempt] | None = None,
     ) -> AttemptEvidenceMetadataV2:
         return AttemptEvidenceMetadataV2(
             epoch_id=request.epoch_id,
@@ -187,6 +225,7 @@ class LocalAttemptEvidenceAssembler:
             ordinal=request.ordinal,
             epoch_evidence_checkpoint=request.epoch_evidence_checkpoint,
             previous_attempt_ids=tuple(attempt.id for attempt in previous),
+            peer_attempt_ids=tuple(attempt.id for attempt in peers or []),
         )
 
     def _append_attempt(

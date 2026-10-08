@@ -35,7 +35,7 @@ async def test_optimizer_report_cannot_submit_suggested_direction(history: _Hist
     report = AttemptReportV12.model_validate(value)
 
     with pytest.raises(ValueError, match="no longer supported"):
-        history.service._journals.validate_report_journal(report)
+        history.service._journals_for_attempt(history.current.id).validate_report_journal(report)
 
 
 @pytest.mark.anyio
@@ -92,7 +92,9 @@ async def test_bootstrap_suggestion_creation_is_rejected_but_legacy_journal_is_r
     value = _value(str(bootstrap_id))
     value["direction_events"][0]["action"] = "suggest"
     with pytest.raises(ValueError, match="no longer supported"):
-        history.service._journals.validate_report_journal(AttemptReportV12.model_validate(value))
+        history.service._journals_for_attempt(history.current.id).validate_report_journal(
+            AttemptReportV12.model_validate(value)
+        )
 
     # Import a pre-removal Journal event through the internal persistence boundary.
     suggested_id = "direction_" + "c" * 32
@@ -189,16 +191,14 @@ async def test_diagnostic_result_and_hypothesis_judgment_are_independent(
         "analysis": "The tested claim",
         "hypothesis_status": judgment,
         "supporting_experiment_ids": [receipt["experiment_id"]],
+        "scope": "This compiler/check result only",
+        "claim_kind": "observation",
     }
-    events = history.control.list_direction_events(history.current.id)
-    if operation_status != "completed" and judgment != "unresolved":
-        with pytest.raises(ValueError, match="completed Gateway observation"):
-            await history.journal("direction_update", request=closing)
-        assert history.control.list_direction_events(history.current.id) == events
-        return
-    await history.journal("direction_update", request=closing)
+    response = await history.journal("direction_update", request=closing)
+    effective = judgment if operation_status == "completed" else "unresolved"
+    assert response.result["hypothesis_status"] == effective
     loaded = (await history.journal("direction_load", direction_id=direction)).result
-    assert loaded["hypothesis_status"] == judgment
+    assert loaded["hypothesis_status"] == effective
     assert loaded["supporting_experiment_ids"] == [receipt["experiment_id"]]
     await history.journal(
         "direction_update",
@@ -214,7 +214,7 @@ async def test_diagnostic_result_and_hypothesis_judgment_are_independent(
     assert loaded["associated_experiment_ids"] == [receipt["experiment_id"]]
     assert (
         history.control.list_direction_events(history.current.id)[-2]["hypothesis_status"]
-        == judgment
+        == effective
     )
 
 
@@ -258,7 +258,7 @@ async def test_rejected_support_selection_does_not_append(history: _History, inv
 
 
 @pytest.mark.anyio
-async def test_legacy_unmeasured_notes_are_readable_but_cannot_support_new_closure(
+async def test_legacy_unmeasured_notes_can_only_leave_a_closure_unresolved(
     history: _History,
 ) -> None:
     direction = await history.start()
@@ -276,17 +276,18 @@ async def test_legacy_unmeasured_notes_are_readable_but_cannot_support_new_closu
     history.control.append_experiment(history.current.id, "legacy", legacy, recovery_generation=0)
     loaded = (await history.journal("direction_load", direction_id=direction)).result
     assert loaded["associated_experiment_ids"] == [legacy["experiment_id"]]
-    with pytest.raises(ValueError, match="historical unmeasured notes"):
-        await history.journal(
-            "direction_update",
-            request={
-                "action": "abandon",
-                "direction_id": direction,
-                "analysis": "Cannot certify this note",
-                "hypothesis_status": "unresolved",
-                "supporting_experiment_ids": [legacy["experiment_id"]],
-            },
-        )
+    response = await history.journal(
+        "direction_update",
+        request={
+            "action": "abandon",
+            "direction_id": direction,
+            "analysis": "Cannot certify this note",
+            "hypothesis_status": "refuted",
+            "supporting_experiment_ids": [legacy["experiment_id"]],
+        },
+    )
+    assert response.result["hypothesis_status"] == "unresolved"
+    assert response.result["assessment_notes"]
 
 
 @pytest.mark.anyio

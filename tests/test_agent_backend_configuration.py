@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -61,6 +62,7 @@ def test_core_process_contract_contains_runtime_binding() -> None:
     assert process.reasoning_effort == "max"
     assert process.session_settings == ""
     assert process.report_completion_retries == 2
+    assert process.output_limit_recovery_retries == 2
     assert process.timeout_seconds == 28_800
 
     bootstrap = build_core_process_config(
@@ -86,3 +88,42 @@ def test_runtime_rejects_invalid_report_completion_configuration(retries: object
     value["campaign"]["optimizer"]["report_completion_retries"] = retries
     with pytest.raises(ValidationError):
         RuntimeSettings.model_validate(value, context={"base": CONFIG.parent})
+
+
+@pytest.mark.parametrize("retries", (0, 2, 10))
+def test_output_limit_recovery_configuration_reaches_process_policy(retries: int) -> None:
+    value = json.loads(CONFIG.read_text(encoding="utf-8"))
+    value["campaign"]["optimizer"]["output_limit_recovery_retries"] = retries
+    value["campaign"]["optimizer"]["report_completion_retries"] = 1
+    settings = RuntimeSettings.model_validate(value, context={"base": CONFIG.parent})
+    assert settings.campaign is not None
+    process = build_core_process_config(with_local_interpreter(settings.campaign))
+    assert process.output_limit_recovery_retries == retries
+    assert process.report_completion_retries == 1
+
+
+@pytest.mark.parametrize("retries", (-1, 11, True, "2", 2.0, None))
+def test_runtime_rejects_invalid_output_limit_recovery_configuration(retries: object) -> None:
+    value = json.loads(CONFIG.read_text(encoding="utf-8"))
+    value["campaign"]["optimizer"]["output_limit_recovery_retries"] = retries
+    with pytest.raises(ValidationError):
+        RuntimeSettings.model_validate(value, context={"base": CONFIG.parent})
+
+
+@pytest.mark.parametrize("retries", (-1, 11, True, "2", 2.0, None))
+def test_process_policy_rejects_invalid_output_limit_recovery_configuration(
+    retries: object,
+) -> None:
+    settings = RuntimeSettings.from_file(CONFIG)
+    assert settings.campaign is not None
+    process = build_core_process_config(with_local_interpreter(settings.campaign))
+    with pytest.raises(ValueError, match="output limit recovery retries"):
+        replace(process, output_limit_recovery_retries=retries)
+
+
+def test_missing_output_limit_recovery_configuration_defaults_to_two() -> None:
+    value = json.loads(CONFIG.read_text(encoding="utf-8"))
+    value["campaign"]["optimizer"].pop("output_limit_recovery_retries", None)
+    settings = RuntimeSettings.model_validate(value, context={"base": CONFIG.parent})
+    assert settings.campaign is not None
+    assert settings.campaign.optimizer.output_limit_recovery_retries == 2

@@ -278,22 +278,51 @@ class AttemptKnowledgeUseV1(BaseModel):
 
 
 class AttemptFindingV1(BaseModel):
-    """One reusable finding distilled from a positive or negative result."""
+    """One scoped Agent claim; evidence eligibility is not causal certification."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     category: str = Field(min_length=1)
     observation: str = Field(min_length=1)
-    root_cause: str = Field(min_length=1)
+    root_cause: str | None = Field(default=None, min_length=1)
     resolution: str = Field(min_length=1)
     lesson: str = Field(min_length=1)
     supporting_experiment_ids: tuple[str, ...] = Field(default=(), max_length=32)
+    # Defaults keep sealed historical reports readable without promoting their prose.
+    claim: str | None = Field(default=None, min_length=1)
+    claim_kind: Literal["observation", "implementation_outcome", "causal_hypothesis"] = (
+        "causal_hypothesis"
+    )
+    assessment: Literal["unresolved", "supported", "refuted"] = "unresolved"
+    scope: str | None = Field(default=None, min_length=1)
+    supporting_results: tuple[AttemptExperimentSubjectV1, ...] = Field(default=(), max_length=32)
 
-    @field_validator("category", "observation", "root_cause", "resolution", "lesson")
+    @field_validator("category", "observation", "resolution", "lesson")
     @classmethod
     def _validate_text(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("Attempt finding fields cannot be blank")
+        return value
+
+    @field_validator("root_cause", "claim", "scope")
+    @classmethod
+    def _validate_optional_text(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Finding optional text must be null or non-blank")
+        return value
+
+    @field_validator("supporting_results")
+    @classmethod
+    def _validate_result_subjects(
+        cls, value: tuple[AttemptExperimentSubjectV1, ...]
+    ) -> tuple[AttemptExperimentSubjectV1, ...]:
+        refs = [
+            (subject.kernel_artifact_digest, digest)
+            for subject in value
+            for digest in subject.result_artifact_digests
+        ]
+        if len(set(refs)) != len(refs):
+            raise ValueError("Finding supporting Results must be unique")
         return value
 
     @field_validator("supporting_experiment_ids")
@@ -330,6 +359,11 @@ class AttemptDirectionEventV1(BaseModel):
     supporting_experiment_ids: tuple[str, ...] = Field(max_length=32)
     # None identifies legacy events whose support IDs were automatically aggregated.
     hypothesis_status: Literal["unresolved", "supported", "refuted"] | None = None
+    claim_kind: Literal["observation", "implementation_outcome", "causal_hypothesis"] = (
+        "causal_hypothesis"
+    )
+    scope: str | None = Field(default=None, min_length=1)
+    supporting_results: tuple[AttemptExperimentSubjectV1, ...] = Field(default=(), max_length=32)
     relationship: (
         Literal[
             "retry",
@@ -361,6 +395,12 @@ class AttemptDirectionEventV1(BaseModel):
 
     @model_validator(mode="after")
     def _validate_event(self, info: ValidationInfo) -> AttemptDirectionEventV1:
+        if self.scope is not None and not self.scope.strip():
+            raise ValueError("Direction scope must be null or non-blank")
+        if self.action in {"propose", "suggest", "start"} and (
+            self.scope is not None or self.supporting_results
+        ):
+            raise ValueError("Only a Direction closure may declare assessment evidence or scope")
         has_relationship = bool(
             self.relationship
             or self.derived_from_direction_ids
@@ -403,6 +443,8 @@ class AttemptDirectionEventV1(BaseModel):
             if (
                 self.action in {"complete", "abandon", "block", "defer"}
                 and not self.supporting_experiment_ids
+                and not self.supporting_results
+                and self.hypothesis_status is None
             ):
                 trusted_legacy = (
                     self.action in {"block", "defer"}
@@ -565,9 +607,9 @@ class AttemptReportV12(BaseModel):
                 f"started={len(advanced_direction_ids)}; "
                 f"direction_ids={sorted(str(value) for value in advanced_direction_ids)}"
             )
-        experiment_direction_ids = {experiment.direction_id for experiment in self.experiments}
-        if directions_enabled and not experiment_direction_ids.issubset(direction_events):
-            raise ValueError("Experiment references a Direction absent from this Attempt")
+        # Direction references can belong to visible peer or historical Attempts.
+        # RuntimeJournalService validates visibility against the authoritative Journal;
+        # a standalone report cannot establish that scope from its own events.
         if not directions_enabled and any(
             experiment.direction_id is not None for experiment in self.experiments
         ):
@@ -583,8 +625,6 @@ class AttemptReportV12(BaseModel):
                 f"{in_progress_direction_ids}"
             )
         for finding in self.findings:
-            if experiments_enabled and not finding.supporting_experiment_ids:
-                raise ValueError("Finding requires supporting Experiments")
             if not experiments_enabled and finding.supporting_experiment_ids:
                 raise ValueError("Finding cannot reference disabled Experiments")
             if not set(finding.supporting_experiment_ids).issubset(experiment_ids):
@@ -594,6 +634,8 @@ class AttemptReportV12(BaseModel):
                 if (
                     event.action in {"complete", "abandon", "block", "defer"}
                     and not event.supporting_experiment_ids
+                    and not event.supporting_results
+                    and event.hypothesis_status is None
                 ):
                     trusted_legacy = (
                         event.action in {"block", "defer"}

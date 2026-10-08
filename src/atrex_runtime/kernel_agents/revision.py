@@ -34,6 +34,7 @@ KERNEL_AGENT_WORKFLOW_TEMPLATE_NAMES = frozenset(
         "pool_3.py",
         "pool_retained_3.py",
         "broadcast_3.py",
+        "epoch_shared_3.py",
         "retained.py",
     }
 )

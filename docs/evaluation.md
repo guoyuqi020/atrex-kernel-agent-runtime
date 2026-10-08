@@ -79,9 +79,14 @@ Experiment Journal. A `candidate_ready` nomination still requires a successful f
 the exact Candidate against the trusted Contract's complete Valid population. This precheck is not
 the authoritative same-allocation ABBA retention decision; that decision independently measures
 the same complete Valid population.
-That precheck may come from this Attempt or from an explicit `adopt` Experiment referencing a
-compatible successful full Evaluate in visible history. Runtime verifies the original Trial and
-exact Kernel/Result binding; adoption neither creates a new measurement nor changes its ownership.
+That precheck may come from this Attempt or from a compatible successful ordinary full Evaluate
+in visible history. With Experiments enabled, historical reuse requires an explicit `adopt`
+Experiment. With Experiments disabled, submit the unchanged historical Kernel as `candidate_ready`;
+Runtime automatically resolves its eligible evidence without an Experiment or duplicate Evaluate.
+In both cases, Runtime verifies the same operator, hardware, DSL and sealed Contract, the original
+Trial, and the exact Kernel/Result binding. Custom inputs, correctness-only checks, Profile and
+exploratory ABBA do not qualify; a failed current full Evaluate cannot be overridden by an earlier
+success. Reuse neither creates a new measurement nor changes its ownership.
 The configured independent retention comparison is unchanged. Incompatible historical evidence
 requires a new full Evaluate; modifying comments to obtain another digest is unnecessary.
 

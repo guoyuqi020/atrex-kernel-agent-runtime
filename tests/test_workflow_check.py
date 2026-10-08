@@ -64,6 +64,7 @@ def test_check_agent_workflow_exercises_first_later_and_no_change_paths(
         ("pool_3.py", 0, 6),
         ("pool_retained_3.py", 0, 9),
         ("broadcast_3.py", 0, 9),
+        ("epoch_shared_3.py", 0, 9),
         ("evolve_3.py", 1, 6),
         ("evolve_isolated_3.py", 1, 3),
         ("evolve_retained_3.py", 1, 3),

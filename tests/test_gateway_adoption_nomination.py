@@ -279,28 +279,16 @@ async def test_empty_report_cannot_omit_an_actual_in_progress_direction(
     with pytest.raises(ValueError, match="Runtime-owned Direction in progress"):
         await _submit(history, report, key="omitted-direction")
     close_action = "block" if status == "blocked" else "defer"
-    with pytest.raises(ValueError, match="requires at least one associated Experiment"):
-        await history.journal(
-            "direction_update",
-            request={"action": close_action, "direction_id": direction, "analysis": "Blocked"},
-        )
-    await history.journal(
-        "experiment_record",
-        request={
-            **history.experiment(direction, action="abandon_direction"),
-            "before": {"result_artifact_digest": history.before.result_artifact_digest},
-            "after": None,
-            "evidence": "The planned check could not be run; no measurement was obtained.",
-        },
-    )
-    await history.journal(
+    closed = await history.journal(
         "direction_update",
         request={
-            "action": "block" if status == "blocked" else "defer",
+            "action": close_action,
             "direction_id": direction,
             "analysis": "No safe experiment was possible; preserve the actual direction state.",
         },
     )
+    assert closed.result["hypothesis_status"] == "unresolved"
+    assert history.control.list_experiments(history.current.id) == ()
     report["direction_events"] = list(history.control.list_direction_events(history.current.id))
     report["experiments"] = list(history.control.list_experiments(history.current.id))
     assert (await _submit(history, report)).result["status"] == "registered"
@@ -338,7 +326,7 @@ async def test_adoption_survives_attempt_recovery_without_copying_measurement(
 
 
 @pytest.mark.anyio
-async def test_empty_report_cannot_hide_inherited_in_progress_direction(history: _History) -> None:
+async def test_empty_report_does_not_own_inherited_in_progress_direction(history: _History) -> None:
     prior: dict[str, Any] = _value(history.historical_attempt.id)
     for index, event in enumerate(prior["direction_events"][:2]):
         history.control.append_direction_event(
@@ -358,27 +346,13 @@ async def test_empty_report_cannot_hide_inherited_in_progress_direction(history:
         profile_evidence=None,
     )
     assert history.control.list_direction_events(history.current.id) == ()
-    with pytest.raises(ValueError, match="Runtime-owned Direction in progress"):
-        await _submit(history, report, key="hide-inherited-direction")
-    await history.journal(
-        "experiment_record",
-        request={
-            **history.experiment(
-                prior["direction_events"][0]["direction_id"], action="abandon_direction"
-            ),
-            "before": {"result_artifact_digest": history.before.result_artifact_digest},
-            "after": None,
-            "evidence": "The inherited investigation remains blocked; no measurement was made.",
-        },
+    original_events = history.control.list_direction_events(history.historical_attempt.id)
+    response = await _submit(history, report, key="leave-inherited-direction-unchanged")
+    assert response.result["status"] == "registered"
+    assert history.control.list_direction_events(history.historical_attempt.id) == original_events
+    assert history.control.list_direction_events(history.current.id) == ()
+    assert history.control.list_experiments(history.current.id) == ()
+    inherited = await history.journal(
+        "direction_load", direction_id=prior["direction_events"][0]["direction_id"]
     )
-    await history.journal(
-        "direction_update",
-        request={
-            "action": "block",
-            "direction_id": prior["direction_events"][0]["direction_id"],
-            "analysis": "Acknowledge the inherited direction without inventing an experiment.",
-        },
-    )
-    report["direction_events"] = list(history.control.list_direction_events(history.current.id))
-    report["experiments"] = list(history.control.list_experiments(history.current.id))
-    assert (await _submit(history, report)).result["status"] == "registered"
+    assert inherited.result["status"] == "in_progress(other)"

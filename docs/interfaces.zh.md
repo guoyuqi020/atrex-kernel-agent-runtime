@@ -280,6 +280,28 @@ Core/KDA 的每份 `--request` JSON 文件也限制为 1 MiB，按实际文件�
 这两层限制相互独立；HTTP 请求体限制及自定义输入源码、Shape 文件限制保持不变。
 已有 Workspace 配置会保留原值，需要显式更新才会生效。
 
+### 输出上限失败后的恢复
+
+`campaign.optimizer.output_limit_recovery_retries` 默认 `2`，允许整数 `0..10`，
+与 `report_completion_retries` 独立。Runtime 通过 `ATREX_OUTPUT_LIMIT_RECOVERY_RETRIES`
+传给 Core/KDA，覆盖 `atrex-agent.json` 中的同名字段。`0` 关闭输出上限失败后的优化恢复。
+
+Claude 调用以已分类的输出上限错误结束时，可以在同一个 Attempt 和工作区中启动新的 Provider
+对话。某条回复被截断、但 Provider 随后已正常继续，不算调用失败。恢复读取已有源码、计划及
+Runtime 证据，继续一项具体实现或验证；不会重放整个失败对话，也不会重置 Attempt 的总时间或
+Token/Credit 配额。优化恢复次数耗尽后，只允许在独立的 `report_completion_retries` 配额内
+补交报告。若补交次数也耗尽仍没有 Runtime 接受的 Report，Session 保留 `output_limit` 和退出码 `1`，
+即使最后一次 Provider 调用本身正常退出，也不返回 `127`，不通过外层基础设施恢复重新开启优化，
+避免重置输出上限恢复次数。若 Report 已被接受，则恢复本地报告，不启动新的恢复调用。
+其他非零退出、预算耗尽、超时，或捕获/记账不可用，不会仅因更早的回复被截断而获得恢复资格。
+已冻结的 Agent Bundle 需要刷新后才具备此行为。
+
+启动替代调用前，Launcher 会停止所属的本地工具进程并检查输出采集已结束。
+自动恢复要求确认本地进程清理完成；当前验证依赖 Linux `/proc` 的进程身份。
+没有该验证能力的平台（包括 macOS）会保留输出上限失败，避免两个会话同时写入工作区。
+本地清理不会取消已提交的远端 Gateway Job；仍须使用已有回执并遵守 Runtime 去重规则，
+缺少回执不代表远端任务没有执行。
+
 ### 模型正常退出后的报告补交
 
 `campaign.optimizer.report_completion_retries` 默认 `2`，允许整数 `0..10`。
@@ -292,16 +314,17 @@ Core/KDA 的每份 `--request` JSON 文件也限制为 1 MiB，按实际文件�
 若尚未接受，Harness 最多追加指定次数的报告补交调用，沿用同一个 Attempt 和工作区，
 提示读取已有 Journal、草稿和 Trace。这是新的 Provider 对话，不是原生 resume，也不是新一轮
 优化，不能编造缺失测量。尚未接受的本地终态文件会移到唯一的 scratch 备份，避免阻塞重新提交。
-所有调用共同消耗原有总时间和 Token/Credit 配额；模型非零退出、超时、配额耗尽、
-Provider 捕获不完整或用量完全不可用时，不触发补交。已捕获非零 Provider 计数且仅发生已知
+所有调用共同消耗原有总时间和 Token/Credit 配额；除上述已分类的输出上限恢复路径外，
+模型非零退出、超时、配额耗尽、Provider 捕获不完整或用量完全不可用时，不触发补交。已捕获非零 Provider 计数且仅发生已知
 Claude usage 对账异常时，记为 accounting warning，仍执行报告补交和正常候选验收；其他
 进程/策略失败（包括其他原因导致的 `126`）仍然阻断。`0` 关闭追加调用，但仍检查报告是否接受。
 
 初次调用的 Trace 保留在根目录，后续调用分别放在 `continuations/001/`、`002/` 等目录。
 根 `session.json` 的 `segments` 与 `report_completion` 记录分段及补交状态；
 `conversation.jsonl` 按分段身份合并对话，Provider 用量累计计算。
-补交耗尽时 Worker Session 记录 `report-completion-exhausted`，不会产生成功 Candidate。
-Runtime 将该物理 Session 归类为未完整交接，并在正常 `max_infrastructure_retries` 预算内，
+普通缺报告且不存在已耗尽的输出上限恢复时，Provider 正常退出但补交次数耗尽，Worker Session
+记录 `report-completion-exhausted`（退出码 `127`），不会产生成功 Candidate。Runtime 将该物理
+Session 归类为未完整交接，并在正常 `max_infrastructure_retries` 预算内，
 为同一个逻辑 Attempt 或 Bootstrap Run 启动新的恢复 Session。失败 Trace 和 Runtime State
 Checkpoint 保持可审计，配置的 Attempt 数不变；只有外层恢复预算也耗尽时才向上抛出失败，
 未完整交接不会被消耗为普通负优化结果。有界 Report-only continuation 适用于 Core/KDA 的优化与
@@ -318,10 +341,10 @@ Framework Baseline，不用于 Problem Generalization 或 Evolver；Runtime 的�
 落账才解除阻塞，成功、失败和取消均会清理运行标记；Journal/历史读取及报告状态查询不阻塞交接。
 Runtime 进程崩溃时保守保留当前代的标记，由正常 Attempt recovery 切换代次后隔离。
 
-`candidate_ready` 要求匹配的非空 Runtime 自管 Direction/Experiment Journal 及有实验支持的 Findings。
-若没有需要关闭的 Direction，`blocked` 和 `pivot` 允许 Journal 与 Findings 为空；报告需如实说明原因，
-不应虚构证据。本 Attempt 已有 in_progress Direction 仍须先关联 Experiment 再关闭；Broadcast 臂的其他
-Trajectory 可以同时推进自己的 Direction。
+`candidate_ready` 要求启用模块对应的候选提名 Journal，以及至少一个 Finding。
+`blocked` 和 `pivot` 允许 Journal 与 Findings 为空；应如实说明原因，不应虚构证据。
+本 Attempt 的 in_progress Direction 必须先关闭；未测量时可用 unresolved 和空证据关闭，
+无需先创建 Experiment 或调用 Gateway。Broadcast 的其他 Trajectory 可以同时推进自己的 Direction。
 第一次成功调用 `attempt-report` 会发布不可覆盖的终态
 Report；校验或工具错误不会发布 Report，因此 Agent 可以依据 `issues`、`request_schema` 和 `recovery`
 修正后重试，但成功后不得再次调用。每个 Experiment 必须绑定可见的 `in_progress` Direction，
@@ -329,22 +352,23 @@ Report；校验或工具错误不会发布 Report，因此 Agent 可以依据 `i
 Experiment 追加到当前 Attempt 的 Journal，不重新打开 Direction、不改变其状态、不改写历史事件；
 加载 Direction 时，associated Experiment ID 会包含补录条目，但不会改写关闭时选定的 supporting ID。仅处于 `proposed` 的 Direction 仍须先
 start。Trial 可见性、归属和证据校验不变；补录不代表可以不经 start 就恢复研究。
-终态交接前，任何 Direction 都不能保持 in_progress。`complete`、`abandon`、`block`、`defer` 均要求
-通过 `supporting_experiment_ids` 显式选择 1–32 条无重复、当前可见且属于该 Direction 的 Experiment；
-`propose`、`start` 不选择关闭证据。关闭还必须声明独立于生命周期的
-`hypothesis_status=unresolved|supported|refuted`。supported/refuted 要求每条选中 Experiment 的 after
-绑定已完成的 Gateway Result；Runtime 校验归属和结果绑定，不认证因果相关性或科学结论。
-未测量的推断保持 unresolved，放弃投入不等于证伪。
+终态交接前，本 Attempt 拥有的 Direction 不能保持 in_progress。`complete`、`abandon`、`block`、
+`defer` 均声明独立于生命周期的 `hypothesis_status=unresolved|supported|refuted`。启用 Experiments 时，
+`supporting_experiment_ids` 选择 0–32 条无重复、可见且属于该 Direction 的 Experiment。未测量或证据
+不足时，可 unresolved 并提供空证据；`propose/start` 不选择结果证据。supported/refuted 以 proposal 的
+hypothesis 为具体结论，需要 `scope`、可选的 `claim_kind`（默认 causal_hypothesis），及相关 Experiment
+或直接 `supporting_results` 的已完成证据。后者填写精确 Kernel/Result 绑定，在关闭 Experiments 时也可用。
+证据规则与下述 Finding 相同：证据不足降级为 unresolved，并返回 `assessment_notes`；无效或不可见的
+引用仍拒绝。停止投入不等于证伪，Runtime 不认证科学结论。
 
 每条新 Experiment 至少绑定一个真实、与 Kernel 绑定的 Gateway Result。
 `abandon_direction` 允许 before 或 after 单边非空，禁止两边均 null；
 `keep_after`、`restore_before`、`adopt` 要求两边都有；Bootstrap baseline 要求 before=null、after 非空。
 Check/Profile 或失败的诊断 Result 可以证明调查或阻塞，但不代表性能结论；Health/Env、没有 Kernel
-绑定的 Dev 不算证据。只有传输报错、没有 Result Artifact 时不能引用：没有真实证据就不能关闭
-Direction，交由正常 Session 失败/恢复流程处理，禁止为结束而伪造 Experiment。
+绑定的 Dev 不算证据。只有传输报错、没有 Result Artifact 时不能引用：此时以 unresolved 和空证据
+关闭 Direction，禁止为结束而伪造 Experiment。
 仅含 abandon_direction 诊断的 blocked Bootstrap Report 可不含 baseline；candidate_ready 仍须 baseline。
-Runtime 自管历史记录的只读回放仍可读取旧的无 Experiment `block/defer` 事件，不修改原记录；
-Agent 请求不能启用此历史读取兼容上下文。
+历史记录未声明假设判断时保持 unresolved。
 每个 Attempt 最多可以启动并推进三个不同 Direction，包括继承和本 Attempt 新增的 Direction。仅 propose
 不占推进名额，Report 也不限制保持 proposed/deferred 的 Direction 数量。同一时间只能有一个 Direction
 处于 `in_progress`；启动第二个 Direction 会被 Runtime 原子拒绝，并返回
@@ -361,7 +385,8 @@ Runtime Journal 与授权冻结历史的合并视图，只有显式请求的紧�
 Bootstrap Session 开始时没有更早 Journal；成功后，
 其终态 Journal、Kernel Trial 与 Result Artifact 会成为该 Lineage 后续普通 Attempt 的根历史。
 
-采纳可见历史中的原样 Kernel 时，使用 `record-experiment` 的 `action="adopt"`，before/after 都填写
+启用 Experiments 时，采纳可见历史中的原样 Kernel，使用 `record-experiment` 的
+`action="adopt"`，before/after 都填写
 真实 Result Artifact Digest。区别于其他动作，`adopt` 允许历史 after：Runtime 要求该精确 Kernel 有成功的
 普通完整 Evaluate、已提交且匹配的 Result Artifact，以及一致的算子、硬件、DSL 和封存评测 Contract。
 现有历史可见边界保持不变，包括显式继承的 Bootstrap 历史。自定义输入、仅正确性检查、Profile 和探索性
@@ -369,6 +394,14 @@ ABBA 不符合采纳资格。Experiment 记录当前采纳决策，保留原始 
 Trial 的 disposition。这条持久化采纳记录可以满足 `candidate_ready` 预检，无需重测原样候选；如果更改
 候选，则需为新的精确内容提供证据。本 Attempt 新的完整 Evaluate 已失败时，不能用更早成功记录覆盖。
 请求幂等按 Attempt 与 Recovery Generation 隔离，不是全历史同 Artifact 禁止评测。
+
+关闭 Experiments 时，把可见历史 Kernel 的精确源码恢复到 `work/kernel`，直接提交
+`candidate_ready`。Runtime 按上述相同的兼容性和可见性规则自动查找合格历史证据，无需登记
+adopt Experiment 或重复 Evaluate；已启用的 Direction 记录要求仍然适用。原始 Trial、Result
+和测量来源保持不变，不会伪造当前 Attempt 的新测量。
+修改后的源码需要自己的合格证据；本 Attempt 新的完整 Evaluate 已失败时，不能用更早成功替代。
+两种模式均不改变独立的权威 Retention 比较。
+
 `list-experiments` 和 `load-experiment` 把当前实时 Runtime Journal 与历史持久 Journal 合并；终态
 Attempt Report Artifact 只作为旧数据的兼容回退。已完成 Epoch 包含获胜分支以及所有未获胜 Active/Challenger 分支的
 Journal，但不向 Agent 暴露分支、Epoch、Attempt、选中状态或当前/历史来源；普通 Agent/Kernel Evidence
@@ -398,7 +431,8 @@ Branch、Epoch、Attempt、选中状态或当前/历史来源。
 
 工具校验错误返回 `issues`（字段、错误码、原因）、`request_schema` 与 `recovery`。
 双 null 错误定位 before，消息同时说明两边约束。未知或跨 Direction 的支持 ID、重复 ID、遗漏关闭
-字段、缺少已完成 Gateway 证据均在 Journal 追加前拒绝。用真实记录修正后可重试；HTTP 400 或
+必填字段均在 Journal 追加前拒绝。缺少适用的已完成证据时，将判断降级为 unresolved，
+不阻止正常关闭。用真实记录修正后可重试；HTTP 400 或
 参数校验失败本身不是 Experiment，也不能作为 Result 引用。
 
 `profile_evidence` 必须为 `null`，或包含 `tool_used`、`profiler`、`profile_level`、
@@ -410,9 +444,25 @@ Object。每项 Supporting Result 绑定 `operation`（仅允许 `profile`）、
 Experiment 快照之后取得的 Profile，都无需补录 Journal 或重新打开 Direction 即可引用。
 原有历史可见性边界保持不变。尚无 Result Artifact 的进行中操作，以及非 Profile 操作，不能引用。
 没有已记录的 Profile 证据时必须为 `null`。
-每个 Finding 必须包含非空且唯一的 `supporting_experiment_ids`；每个 ID 都必须属于同一份随 Report
-附加的 Experiment Journal。这样 Finding 可通过 Experiment 中实际存在的 before/after Subject 追溯到准确
-Kernel Artifact 和 Result Artifact，而无需在 Finding 中重复这些身份。
+每个 Finding 保留 `category`、`observation`、`resolution`、`lesson`，并可记录一个明确的可复用
+`claim`、`claim_kind`（observation/implementation_outcome/causal_hypothesis，默认最后一种）、
+`assessment`（unresolved/supported/refuted，默认 unresolved）和实际检验的 `scope`。
+原因未知时 `root_cause` 可以省略或为 null；流程不要求 Agent 必须给出因果解释。
+历史 Finding 未声明 assessment 时也保持 unresolved，不能从肯定语气推断其已被证实。
+
+`supporting_results` 直接绑定具体结论，最多 32 个精确 Subject：
+`[{"kernel_artifact_digest":"sha256:<kernel>","result_artifact_digests":["sha256:<result>"]}]`。
+每个 Subject 含 1–4096 个无重复 Result Digest；四种 Journal 模块组合均可使用这条证据路径。
+启用 Experiments 时，可选的 `supporting_experiment_ids` 用 0–32 个同一附加 Journal 内的无重复 ID
+组织额外证据；关闭时不填写。可复用匹配且可见的历史 Result，无需为记录结论重复执行 GPU 工作或创建 Experiment。
+
+Runtime 检查精确身份和可见性。supported/refuted 的 observation 需要已完成的 Check/Dev/Profile/Evaluate；
+implementation_outcome 需要已完成的 Dev 或 full Evaluate；causal_hypothesis 需要已完成的
+Dev/Profile/full Evaluate。仅 Check 或 correctness_only 不能支持性能或因果判断。缺少 claim、scope 或适用的
+已完成证据时，assessment 降级为 unresolved，并返回 `assessment_notes`；格式错误、绑定不匹配或不可见的
+引用仍报错。此检查只验证来源与操作类型，不证明实验在语义上支持该结论。
+通用 analysis、diagnosis、root_cause 文本和 lesson 都是 Agent 解读；引用真实 Result 不会使整段分析获得认证。
+某次实现失败也不能证伪该机制的所有实现。未测试的方向可以 unresolved 暂缓。
 `contributing_result_artifact_digests` 是必填数组，列出本次 Attempt 取用过其代码或思路的历史
 Result Artifact；没有取用时为空。Core/KDA 和 Runtime 接受任意顺序及重复 ID，在提交或封存 Report 前
 自动排序、去重；仍逐项校验 ID 格式，并在去重前限制输入最多 64 项。两侧都不去解析它是否在可见历史内 ——

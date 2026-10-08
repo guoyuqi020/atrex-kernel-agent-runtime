@@ -68,6 +68,9 @@ def compose_authoritative_candidate_evaluator(
         bootstrap_bench_iters=(100 if gate_policy is None else gate_policy.bootstrap.bench_iters),
         profile_without_roofline=True,
         production_policy=production_policy or ProductionKernelPolicy(),
+        tool_modules=(
+            ("directions", "experiments") if campaign is None else campaign.optimizer.tool_modules
+        ),
     )
 
 

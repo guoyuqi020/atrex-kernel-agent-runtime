@@ -2165,21 +2165,37 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 "Adoption requires a successful ordinary full evaluate for the selected Trial; "
                 "Profile, ABBA, custom-input and correctness_only results do not qualify"
             )
-        if not any(
-            observation.operation is GatewayOperation.EVALUATE
-            and observation.idempotency_key == evaluation.idempotency_key
-            and observation.gateway_result_digest == evaluation.gateway_result_digest
-            and observation.result_artifact_digest is not None
-            and (
-                result_artifact_digests is None
-                or str(observation.result_artifact_digest) in result_artifact_digests
-            )
-            for observation in trial.observations
-        ):
+        if not self._has_completed_evaluation_result(evaluation, result_artifact_digests):
             raise ValueError(
                 "Adoption requires a completed Evaluate with a recorded Result Artifact"
             )
         return evaluation
+
+    def _has_completed_evaluation_result(
+        self,
+        evaluation: GatewayEvaluationRecord,
+        result_artifact_digests: Sequence[str] | None = None,
+    ) -> bool:
+        """Bind reusable evidence to its committed ordinary Evaluate operation."""
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT result_artifact_digest FROM gateway_operations
+                   WHERE attempt_id = ? AND recovery_generation = ? AND operation = ?
+                     AND kernel_artifact_digest = ? AND idempotency_key = ?
+                     AND gateway_result_digest = ? AND result_artifact_digest IS NOT NULL""",
+                (
+                    evaluation.attempt_id,
+                    evaluation.recovery_generation,
+                    GatewayOperation.EVALUATE.value,
+                    evaluation.kernel_artifact_digest,
+                    evaluation.idempotency_key,
+                    evaluation.gateway_result_digest,
+                ),
+            ).fetchone()
+        return row is not None and (
+            result_artifact_digests is None
+            or str(row["result_artifact_digest"]) in result_artifact_digests
+        )
 
     def find_candidate_evaluation(
         self,
@@ -2188,8 +2204,12 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         *,
         gateway_result_digest: ArtifactDigest | None = None,
         recovery_generation: int | None = None,
+        default_tool_modules: tuple[Literal["directions", "experiments"], ...] = (
+            "directions",
+            "experiments",
+        ),
     ) -> GatewayEvaluationRecord | None:
-        """Resolve a fresh precheck or an explicit Runtime-journaled adoption.
+        """Resolve fresh evidence, explicit adoption, or module-independent reuse.
 
         Never turn a historical measurement into a current-Attempt Evaluation row. In
         particular, a current failed full Evaluate must not be hidden by an older success.
@@ -2214,6 +2234,13 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             )
             if evaluation is not None:
                 return evaluation
+        if "experiments" not in self.tool_modules_for_attempt(attempt_id, default_tool_modules):
+            return self._find_visible_candidate_evaluation(
+                attempt_id,
+                kernel_artifact_digest,
+                gateway_result_digest=gateway_result_digest,
+                recovery_generation=recovery_generation,
+            )
         for experiment in reversed(self.list_experiments(attempt_id)):
             after = experiment.get("after")
             if experiment.get("action") != "adopt" or not isinstance(after, Mapping):
@@ -2238,6 +2265,46 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 return adopted
         return None
 
+    def _find_visible_candidate_evaluation(
+        self,
+        attempt_id: AttemptId,
+        kernel_artifact_digest: ArtifactDigest,
+        *,
+        gateway_result_digest: ArtifactDigest | None,
+        recovery_generation: int | None,
+    ) -> GatewayEvaluationRecord | None:
+        """Reuse visible exact-source evidence when no Experiment Journal is available."""
+        own_latest = self.find_agent_evaluation(
+            attempt_id,
+            kernel_artifact_digest,
+            recovery_generation=recovery_generation,
+            include_prior_generations=True,
+        )
+        if own_latest is not None and not own_latest.correct:
+            return own_latest
+        _, visible_attempts = self.visible_kernel_trial_attempt_ids(attempt_id)
+        identity = self.evaluation_identity(attempt_id)
+        for owner in reversed(visible_attempts):
+            if self.evaluation_identity(owner) != identity:
+                continue
+            evaluation = (
+                own_latest
+                if owner == attempt_id
+                else self.find_agent_evaluation(
+                    owner, kernel_artifact_digest, include_prior_generations=True
+                )
+            )
+            if evaluation is None or not evaluation.correct:
+                continue
+            if (
+                gateway_result_digest is not None
+                and evaluation.gateway_result_digest != gateway_result_digest
+            ):
+                continue
+            if self._has_completed_evaluation_result(evaluation):
+                return evaluation
+        return None
+
     def find_agent_evaluation(
         self,
         attempt_id: AttemptId,
@@ -2245,15 +2312,17 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         *,
         gateway_result_digest: ArtifactDigest | None = None,
         recovery_generation: int | None = None,
+        include_prior_generations: bool = False,
     ) -> GatewayEvaluationRecord | None:
         """Find the newest Agent evaluation for an exact nominated Kernel/result."""
         current_generation = self._subject_generation(attempt_id)
         generation = current_generation if recovery_generation is None else recovery_generation
         if generation < 0 or generation > current_generation:
             raise InvalidTransitionError("Agent evaluation lookup uses an invalid generation")
-        query = """SELECT * FROM gateway_evaluations
-                   WHERE attempt_id = ? AND recovery_generation = ? AND source = ?
-                     AND kernel_artifact_digest = ?"""
+        generation_operator = "<=" if include_prior_generations else "="
+        query = f"""SELECT * FROM gateway_evaluations
+                   WHERE attempt_id = ? AND recovery_generation {generation_operator} ?
+                     AND source = ? AND kernel_artifact_digest = ?"""
         parameters: list[object] = [
             attempt_id,
             generation,
@@ -2263,7 +2332,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         if gateway_result_digest is not None:
             query += " AND gateway_result_digest = ?"
             parameters.append(str(parse_artifact_digest(str(gateway_result_digest))))
-        query += " ORDER BY ordinal DESC LIMIT 1"
+        query += " ORDER BY recovery_generation DESC, ordinal DESC LIMIT 1"
         with self._lock:
             row = self._connection.execute(query, tuple(parameters)).fetchone()
         return None if row is None else self._evaluation_from_row(row)

@@ -25,6 +25,7 @@ from ..workers.attempt_report import (
     AttemptReportV12,
 )
 from .artifact_subjects import resolve_artifact_subject
+from .claim_evidence import ClaimAssessment, assess_claim
 from .control import SqliteGatewayControl
 from .control_models import GatewayAuthorization, GatewayKernelTrialRecord, GatewayOperation
 from .protocol import (
@@ -51,6 +52,11 @@ _DIRECTION_CLOSURE_FIELDS = _DIRECTION_UPDATE_FIELDS | {
     "hypothesis_status",
     "supporting_experiment_ids",
 }
+_DIRECTION_CLOSURE_OPTIONAL_FIELDS = {"supporting_results", "scope", "claim_kind"}
+_INTERPRETATION_NOTICE = (
+    "Agent interpretation, not a Runtime-certified causal conclusion. "
+    "Read the cited evidence and scope before reusing it."
+)
 _DIRECTION_CLOSURES = {"complete", "abandon", "block", "defer"}
 _EXPERIMENT_FIELDS = {
     "direction_id",
@@ -111,7 +117,9 @@ class RuntimeJournalService:
     artifacts: LocalArtifactStore
     tool_modules: tuple[str, ...] = ("directions", "experiments")
 
-    def validate_report_journal(self, report: AttemptReportV12) -> None:
+    def validate_report_journal(
+        self, report: AttemptReportV12
+    ) -> tuple[AttemptReportV12, tuple[str, ...]]:
         """An empty or edited report must not erase a live authoritative Journal."""
         if set(report.tool_modules) != set(self.tool_modules):
             raise ValueError("Attempt report tool modules disagree with Runtime Journal")
@@ -121,24 +129,26 @@ class RuntimeJournalService:
         if in_progress:
             raise ValueError(
                 "Attempt report cannot leave a Runtime-owned Direction in progress: "
-                f"{in_progress}; record its Experiment, then block or defer it before submitting"
+                f"{in_progress}; block or defer it before submitting. An untested Direction "
+                "may close with hypothesis_status=unresolved and no supporting evidence"
             )
         events = self._current_direction_events(report.attempt_id)
         experiments = self._current_experiments(report.attempt_id)
-        # Direct report-only clients must not bypass conclusion/evidence validation.
-        declared = [
-            event for event in report.direction_events if event.hypothesis_status is not None
-        ]
-        if declared and "experiments" in self.tool_modules:
-            available = {
-                str(item["experiment_id"]): item
-                for item in self._visible_experiments(report.attempt_id)
+        if "directions" in self.tool_modules and report.experiments:
+            # Experiments may reuse a peer's Direction without taking ownership of it.
+            # Report-only clients may also declare their own legacy Direction events.
+            available_direction_ids = set(self._direction_views(report.attempt_id)) | {
+                event.direction_id for event in report.direction_events
             }
-            for experiment in report.experiments:
-                available.setdefault(experiment.experiment_id, experiment.model_dump(mode="json"))
-            for event in declared:
-                self._closure_support(
-                    report.attempt_id, event.direction_id, event.model_dump(mode="json"), available
+            missing_direction_ids = {
+                str(experiment.direction_id)
+                for experiment in report.experiments
+                if experiment.direction_id not in available_direction_ids
+            }
+            if missing_direction_ids:
+                raise ValueError(
+                    "Experiment references a Direction outside this Attempt's visible history: "
+                    f"{sorted(missing_direction_ids)}"
                 )
         if not events and not experiments:
             if any(event.relationship for event in report.direction_events):
@@ -153,22 +163,64 @@ class RuntimeJournalService:
                     "First record an adopt Experiment in the Runtime Journal, "
                     "then submit the report"
                 )
-            return
-        expected_events = tuple(
-            AttemptDirectionEventV1.model_validate(
-                item, context={"trusted_direction_history": True, "experiments_enabled": False}
+        else:
+            # Compare the submitted journal before any normalization: weak claims
+            # must not provide a way to disguise edits to authoritative events.
+            expected_events = tuple(
+                AttemptDirectionEventV1.model_validate(
+                    item, context={"trusted_direction_history": True, "experiments_enabled": False}
+                )
+                for item in events
             )
-            for item in events
-        )
-        expected_experiments = tuple(
-            AttemptExperimentV8.model_validate(item) for item in experiments
-        )
-        if report.direction_events != expected_events or report.experiments != expected_experiments:
-            raise ValueError(
-                "Attempt report must match the Runtime-owned Direction and Experiment journals; "
-                "refresh the journal snapshot using the attempt-report tool. Record an associated "
-                "Experiment before closing any in-progress Direction and submitting"
+            expected_experiments = tuple(
+                AttemptExperimentV8.model_validate(item) for item in experiments
             )
+            if (
+                report.direction_events != expected_events
+                or report.experiments != expected_experiments
+            ):
+                raise ValueError(
+                    "Attempt report must match the Runtime-owned Direction and Experiment "
+                    "journals; "
+                    "refresh the journal snapshot using the attempt-report tool, then close any "
+                    "in-progress Direction before submitting"
+                )
+        # Direct report-only clients obey the same evidence gate even with the
+        # Experiment module disabled. Missing evidence reduces certainty, not liveness.
+        available = {
+            str(item["experiment_id"]): item
+            for item in self._visible_experiments(report.attempt_id)
+        }
+        for experiment in report.experiments:
+            available.setdefault(experiment.experiment_id, experiment.model_dump(mode="json"))
+        hypotheses = {
+            direction_id: direction.get("hypothesis")
+            for direction_id, direction in self._direction_views(report.attempt_id).items()
+        }
+        hypotheses.update(
+            (event.direction_id, event.hypothesis)
+            for event in report.direction_events
+            if event.action == "propose"
+        )
+        normalized = []
+        notes: list[str] = []
+        for event in report.direction_events:
+            if event.action not in _DIRECTION_CLOSURES:
+                normalized.append(event)
+                continue
+            _, assessment = self._closure_support(
+                report.attempt_id,
+                event.direction_id,
+                {
+                    **event.model_dump(mode="json"),
+                    "hypothesis_status": event.hypothesis_status or "unresolved",
+                },
+                available,
+                claim=cast(str | None, hypotheses.get(event.direction_id)),
+            )
+            notes.extend(f"Direction {event.direction_id}: {note}" for note in assessment.notes)
+            normalized.append(event.model_copy(update={"hypothesis_status": assessment.assessment}))
+        return report.model_copy(update={"direction_events": tuple(normalized)}), tuple(notes)
 
     def execute(
         self,
@@ -180,6 +232,7 @@ class RuntimeJournalService:
             return self._update_direction(request, authorization)
         if request.operation == "directions_list":
             directions = self._direction_views(request.attempt_id)
+            own_in_progress = set(self._current_in_progress_direction_ids(request.attempt_id))
             return cast(
                 dict[str, JsonValue],
                 {
@@ -187,8 +240,15 @@ class RuntimeJournalService:
                         {
                             "direction_id": direction["direction_id"],
                             "name": direction["name"],
-                            "status": direction["status"],
+                            "status": self._direction_query_view(direction, own_in_progress)[
+                                "status"
+                            ],
                             "hypothesis_status": direction["hypothesis_status"],
+                            "claim_kind": direction["claim_kind"],
+                            "scope": direction["scope"],
+                            "supporting_experiment_ids": direction["supporting_experiment_ids"],
+                            "supporting_results": direction["supporting_results"],
+                            "interpretation_notice": _INTERPRETATION_NOTICE,
                             **relationship_fields(direction),
                         }
                         for direction in directions.values()
@@ -198,8 +258,11 @@ class RuntimeJournalService:
         if isinstance(request, DirectionLoadRequestV2):
             return cast(
                 dict[str, JsonValue],
-                self._require_direction(
-                    request.attempt_id, request.direction_id, field_path="direction_id"
+                self._direction_query_view(
+                    self._require_direction(
+                        request.attempt_id, request.direction_id, field_path="direction_id"
+                    ),
+                    set(self._current_in_progress_direction_ids(request.attempt_id)),
                 ),
             )
         if isinstance(request, ExperimentRecordRequestV2):
@@ -243,7 +306,7 @@ class RuntimeJournalService:
                 ids = [str(experiment["experiment_id"]) for experiment in associated]
                 return {
                     "kernel_artifact_digest": request.kernel_artifact_digest,
-                    "experiment_ids": ids,
+                    "experiment_ids": cast(JsonValue, ids),
                     "count": len(ids),
                 }
             direction_ids = list(
@@ -255,7 +318,7 @@ class RuntimeJournalService:
             )
             return {
                 "kernel_artifact_digest": request.kernel_artifact_digest,
-                "direction_ids": direction_ids,
+                "direction_ids": cast(JsonValue, direction_ids),
                 "count": len(direction_ids),
             }
         if request.operation == "journal_snapshot":
@@ -351,6 +414,18 @@ class RuntimeJournalService:
         return sorted(
             direction_id for direction_id, action in latest_actions.items() if action == "start"
         )
+
+    @staticmethod
+    def _direction_query_view(
+        direction: dict[str, object], own_in_progress: set[str]
+    ) -> dict[str, object]:
+        """Annotate query status relative to the reader without changing lifecycle state."""
+        visible = dict(direction)
+        visible["interpretation_notice"] = _INTERPRETATION_NOTICE
+        if visible["status"] == "in_progress":
+            ownership = "self" if str(visible["direction_id"]) in own_in_progress else "other"
+            visible["status"] = f"in_progress({ownership})"
+        return visible
 
     def _current_experiments(self, attempt_id: AttemptId) -> tuple[dict[str, object], ...]:
         values = self.control.list_experiments(attempt_id)
@@ -499,6 +574,9 @@ class RuntimeJournalService:
                 "supporting_experiment_ids": [],
                 "associated_experiment_ids": [],
                 "hypothesis_status": "unresolved",
+                "claim_kind": "causal_hypothesis",
+                "scope": None,
+                "supporting_results": [],
                 **relationship_fields(suggested),
             }
         for event in self._visible_direction_events(attempt_id):
@@ -525,6 +603,9 @@ class RuntimeJournalService:
                     "supporting_experiment_ids": [],
                     "associated_experiment_ids": [],
                     "hypothesis_status": "unresolved",
+                    "claim_kind": "causal_hypothesis",
+                    "scope": None,
+                    "supporting_results": [],
                     **relationship_fields(event),
                 }
                 continue
@@ -535,7 +616,16 @@ class RuntimeJournalService:
             # Lifecycle changes are not proof. A new investigation resets the current
             # assessment; historical closure assertions remain in append-only events.
             assessment = event.get("hypothesis_status")
-            existing["hypothesis_status"] = assessment or "unresolved"
+            # Old assertions predate the scoped-claim contract. Keep their immutable
+            # events, but do not promote them into reusable certainty on a new read.
+            existing["hypothesis_status"] = (
+                assessment if assessment is not None and event.get("scope") else "unresolved"
+            )
+            existing["claim_kind"] = event.get("claim_kind", "causal_hypothesis")
+            existing["scope"] = event.get("scope")
+            existing["supporting_results"] = list(
+                cast(list[dict[str, object]], event.get("supporting_results", []))
+            )
             existing["supporting_experiment_ids"] = (
                 list(cast(list[str], event["supporting_experiment_ids"]))
                 if assessment is not None and action in _DIRECTION_CLOSURES
@@ -571,27 +661,40 @@ class RuntimeJournalService:
         direction_id: str,
         value: Mapping[str, object],
         experiments: Mapping[str, Mapping[str, object]],
-    ) -> list[str]:
-        """Validate selected evidence, never certify the Agent's causal interpretation."""
+        *,
+        claim: str | None,
+    ) -> tuple[list[str], ClaimAssessment]:
+        """Validate references while allowing untested work to end as unresolved."""
         status = value.get("hypothesis_status")
         if not isinstance(status, str) or status not in {"unresolved", "supported", "refuted"}:
             raise ValueError("hypothesis_status must be unresolved, supported, or refuted")
-        selected = value.get("supporting_experiment_ids")
+        selected = value.get("supporting_experiment_ids", [])
         if (
             not isinstance(selected, list)
-            or not selected
             or len(selected) > 32
             or any(not isinstance(item, str) for item in selected)
         ):
-            raise ValueError(
-                "Direction closure requires at least one associated Experiment explicitly selected "
-                "in supporting_experiment_ids (maximum 32); record-experiment first if needed. "
-                "Every Experiment must cite at least one real Kernel-bound Gateway Result. "
-                "A diagnostic Result may support an unresolved closure, but not a performance claim"
-            )
+            raise ValueError("Direction supporting_experiment_ids must be an array (maximum 32)")
         supporting = cast(list[str], selected)
         if len(set(supporting)) != len(supporting):
             raise ValueError("Direction supporting_experiment_ids must be unique")
+        if supporting and "experiments" not in self.tool_modules:
+            raise ValueError("Direction cannot reference disabled Experiments")
+        direct = value.get("supporting_results", [])
+        if not isinstance(direct, list) or len(direct) > 32:
+            raise ValueError("Direction supporting_results must be an array (maximum 32)")
+        if any(not isinstance(subject, Mapping) for subject in direct):
+            raise ValueError("Direction supporting_results must contain Kernel/Result references")
+        subjects = list(cast(list[Mapping[str, object]], direct))
+        if any(
+            set(subject) != {"kernel_artifact_digest", "result_artifact_digests"}
+            for subject in subjects
+        ):
+            raise ValueError(
+                "Direction supporting_results fields must be exactly "
+                "kernel_artifact_digest and result_artifact_digests"
+            )
+        baseline_subjects: list[Mapping[str, object]] = []
         for experiment_id in supporting:
             experiment = experiments.get(experiment_id)
             if experiment is None:
@@ -600,43 +703,52 @@ class RuntimeJournalService:
                 )
             if experiment.get("direction_id") != direction_id:
                 raise ValueError("Supporting Experiment must belong to the Direction being closed")
-            if experiment.get("before") is None and experiment.get("after") is None:
-                raise ValueError(
-                    "Supporting Experiment requires at least one Gateway Result; "
-                    "historical unmeasured notes cannot justify a new Direction closure"
-                )
-        if status != "unresolved":
-            trials = tuple(self._visible_trials(attempt_id).values())
-            for experiment_id in supporting:
-                after = experiments[experiment_id].get("after")
-                if not isinstance(after, Mapping):
-                    raise ValueError(
-                        "supported/refuted requires Gateway Result evidence for every selected "
-                        "Experiment; use hypothesis_status=unresolved for unmeasured analysis"
-                    )
-                trial = resolve_artifact_subject(trials, after, attempt_id=attempt_id)
-                results = cast(list[str], after["result_artifact_digests"])
-                if not any(
-                    item.result_artifact_digest is not None
-                    and item.result_artifact_digest in results
-                    and self._completed_result(str(item.result_artifact_digest))
-                    for item in trial.observations
-                ):
-                    raise ValueError(
-                        "supported/refuted requires a completed Gateway observation; "
-                        "infrastructure failures must remain hypothesis_status=unresolved"
-                    )
-        return list(supporting)
-
-    def _completed_result(self, digest: str) -> bool:
-        artifact = self.artifacts.verify(parse_artifact_digest(digest))
-        if artifact.kind not in {ArtifactKind.RESULT_ARTIFACT, ArtifactKind.GATEWAY_RESULT}:
-            raise InfrastructureError("Direction evidence has an invalid Result Artifact kind")
-        try:
-            value = json.loads((artifact.payload_path / "value.json").read_bytes())
-        except (OSError, json.JSONDecodeError) as error:
-            raise InfrastructureError("Direction evidence has invalid Result JSON") from error
-        return isinstance(value, dict) and value.get("status") == "completed"
+            for side_name in ("before", "after"):
+                side = experiment.get(side_name)
+                if side is not None:
+                    if not isinstance(side, Mapping):
+                        raise ValueError(
+                            "Supporting Experiment has an invalid Kernel/Result reference"
+                        )
+                    # A measured baseline cannot certify an untested intervention.
+                    # Baseline claims must select that Result explicitly instead.
+                    if side_name == "after":
+                        subjects.append(side)
+                    else:
+                        baseline_subjects.append(side)
+        kind = value.get("claim_kind", "causal_hypothesis")
+        if not isinstance(kind, str) or kind not in {
+            "observation",
+            "implementation_outcome",
+            "causal_hypothesis",
+        }:
+            raise ValueError("Direction claim_kind is invalid")
+        scope = value.get("scope")
+        if scope is not None:
+            _text(scope, "Direction scope")
+        trials = tuple(self._visible_trials(attempt_id).values())
+        if baseline_subjects:
+            assess_claim(
+                attempt_id=attempt_id,
+                assessment="unresolved",
+                claim_kind=kind,
+                claim=claim,
+                scope=cast(str | None, scope),
+                supporting_results=baseline_subjects,
+                trials=trials,
+                artifacts=self.artifacts,
+            )
+        assessment = assess_claim(
+            attempt_id=attempt_id,
+            assessment=status,
+            claim_kind=kind,
+            claim=claim,
+            scope=cast(str | None, scope),
+            supporting_results=subjects,
+            trials=trials,
+            artifacts=self.artifacts,
+        )
+        return list(supporting), assessment
 
     def _update_direction(
         self,
@@ -644,6 +756,7 @@ class RuntimeJournalService:
         authorization: GatewayAuthorization,
     ) -> dict[str, JsonValue]:
         value = dict(request.request)
+        assessment_notes: tuple[str, ...] = ()
         action = value.get("action")
         if not isinstance(action, str):
             raise ValueError("Direction action must be text")
@@ -700,10 +813,14 @@ class RuntimeJournalService:
                 if action in _DIRECTION_CLOSURES
                 else _DIRECTION_UPDATE_FIELDS
             )
-            if set(value) != expected_fields:
+            optional_fields = (
+                _DIRECTION_CLOSURE_OPTIONAL_FIELDS if action in _DIRECTION_CLOSURES else set()
+            )
+            if set(value) - optional_fields != expected_fields:
                 raise ValueError(
-                    f"Direction {action} fields must be exactly {sorted(expected_fields)}; "
-                    "closures must select supporting_experiment_ids and declare hypothesis_status"
+                    f"Direction {action} requires {sorted(expected_fields)}; "
+                    f"optional fields are {sorted(optional_fields)}. "
+                    "An untested closure may select no evidence and remain unresolved"
                 )
             if action not in {"start", "complete", "abandon", "block", "defer"}:
                 raise ValueError("Direction update action is invalid")
@@ -739,9 +856,10 @@ class RuntimeJournalService:
                 )
                 if in_progress:
                     raise DirectionConcurrencyError(direction_id, in_progress)
-            supporting = []
-            if action in _DIRECTION_CLOSURES and "experiments" in self.tool_modules:
-                supporting = self._closure_support(
+            supporting: list[str] = []
+            effective_status = value.get("hypothesis_status")
+            if action in _DIRECTION_CLOSURES:
+                supporting, assessment = self._closure_support(
                     request.attempt_id,
                     direction_id,
                     value,
@@ -749,7 +867,10 @@ class RuntimeJournalService:
                         str(item["experiment_id"]): item
                         for item in self._visible_experiments(request.attempt_id)
                     },
+                    claim=cast(str | None, direction.get("hypothesis")),
                 )
+                effective_status = assessment.assessment
+                assessment_notes = assessment.notes
             event = {
                 "direction_event_id": f"directionevent_{uuid4().hex}",
                 "direction_id": direction_id,
@@ -763,7 +884,10 @@ class RuntimeJournalService:
                 "stop_conditions": None,
                 "analysis": value["analysis"],
                 "supporting_experiment_ids": supporting,
-                "hypothesis_status": value.get("hypothesis_status"),
+                "hypothesis_status": effective_status,
+                "claim_kind": value.get("claim_kind", "causal_hypothesis"),
+                "scope": value.get("scope"),
+                "supporting_results": value.get("supporting_results", []),
             }
         validated = AttemptDirectionEventV1.model_validate(
             event,
@@ -775,7 +899,14 @@ class RuntimeJournalService:
             validated,
             recovery_generation=authorization.recovery_generation,
         )
-        return {"status": "recorded", "direction_id": str(recorded["direction_id"])}
+        response: dict[str, JsonValue] = {
+            "status": "recorded",
+            "direction_id": str(recorded["direction_id"]),
+        }
+        if action in _DIRECTION_CLOSURES:
+            response["hypothesis_status"] = cast(JsonValue, recorded["hypothesis_status"])
+            response["assessment_notes"] = list(assessment_notes)
+        return response
 
     def _record_experiment(
         self,

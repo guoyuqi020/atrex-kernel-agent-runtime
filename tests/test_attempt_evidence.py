@@ -106,6 +106,8 @@ def _seed_epoch(
     registry: SqliteRegistry,
     artifacts: LocalArtifactStore,
     tmp_path: Path,
+    *,
+    trajectories: int = 1,
 ) -> tuple[Epoch, KernelRevision, ArtifactDigest]:
     evidence = _directory_artifact(
         artifacts,
@@ -189,9 +191,7 @@ def _seed_epoch(
             "aggregation": "arithmetic_mean",
             "correct": True,
             "latency_us": 100.0,
-            "measurements": [
-                {"gateway_result_digest": str(value)} for value in baseline_samples
-            ],
+            "measurements": [{"gateway_result_digest": str(value)} for value in baseline_samples],
         },
         ArtifactKind.GATEWAY_RESULT,
     )
@@ -238,7 +238,7 @@ def _seed_epoch(
         completed_at=None,
     )
     registry.insert_epoch(epoch)
-    freeze_branch_workflow(registry, epoch, attempts_per_trajectory=3)
+    freeze_branch_workflow(registry, epoch, trajectories=trajectories, attempts_per_trajectory=3)
     freeze_branch_workflow(
         registry,
         epoch,
@@ -260,13 +260,14 @@ def _complete_attempt(
     annotation: str,
     *,
     reject_by_production_gate: bool = False,
+    trajectory_ordinal: int = 1,
 ) -> Attempt:
     attempt = Attempt(
         id=new_attempt_id(),
         epoch_id=epoch.id,
         branch=branch,
         challenger_ordinal=(0 if branch is BranchRole.ACTIVE else 1),
-        trajectory_ordinal=1,
+        trajectory_ordinal=trajectory_ordinal,
         ordinal=1,
         kernel_agent_revision_id=epoch.active_kernel_agent_revision_id,
         input_kernel_revision_id=baseline.id,
@@ -391,9 +392,7 @@ def _complete_attempt(
                     "root_cause": "Uncoalesced loads",
                     "resolution": "Kept the coalesced-load candidate",
                     "lesson": f"structured-lesson-{label}",
-                    "supporting_experiment_ids": [
-                        "experiment_0123456789abcdef0123456789abcdef"
-                    ],
+                    "supporting_experiment_ids": ["experiment_0123456789abcdef0123456789abcdef"],
                 }
             ],
             "contributing_kernel_trial_ids": ["gtrial_0123456789abcdef0123456789abcdef"],
@@ -410,9 +409,7 @@ def _complete_attempt(
                     "before": {
                         "kernel_artifact_digest": str(baseline.artifact_digest),
                         "kernel_trial_id": "gtrial_0123456789abcdef0123456789abcdef",
-                        "result_artifact_digests": [
-                            str(baseline.evaluation.gateway_result_digest)
-                        ],
+                        "result_artifact_digests": [str(baseline.evaluation.gateway_result_digest)],
                     },
                     "after": {
                         "kernel_artifact_digest": str(output.artifact_digest),
@@ -451,9 +448,7 @@ def _complete_attempt(
                     "success_criteria": None,
                     "stop_conditions": None,
                     "analysis": "the hypothesis was supported",
-                    "supporting_experiment_ids": [
-                        "experiment_0123456789abcdef0123456789abcdef"
-                    ],
+                    "supporting_experiment_ids": ["experiment_0123456789abcdef0123456789abcdef"],
                 },
             ],
         },
@@ -590,8 +585,7 @@ def test_attempt_evidence_contains_only_earlier_same_branch_history(
         assert challenger.attempt_report_digest is not None
         raw_agent_report = json.loads(
             (
-                artifacts.verify(challenger.attempt_report_digest).payload_path
-                / "value.json"
+                artifacts.verify(challenger.attempt_report_digest).payload_path / "value.json"
             ).read_text(encoding="utf-8")
         )
         assert raw_agent_report["experiments"][0]["after"]["result_artifact_digests"]
@@ -615,6 +609,81 @@ def test_attempt_evidence_contains_only_earlier_same_branch_history(
         )
         with pytest.raises(ValueError, match="disagrees with its Attempt"):
             assembler.validate(first_digest, mismatched)
+
+
+@pytest.mark.parametrize("visibility", ["isolated", "broadcast"])
+def test_peer_history_is_scoped_and_retry_preserves_the_sealed_snapshot(
+    tmp_path: Path,
+    visibility: str,
+) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        epoch, baseline, checkpoint = _seed_epoch(registry, artifacts, tmp_path, trajectories=2)
+        registry._connection.execute(
+            "UPDATE lineages SET trajectory_visibility = ? WHERE id = ?",
+            (visibility, epoch.lineage_id),
+        )
+        own = _complete_attempt(
+            registry,
+            artifacts,
+            tmp_path,
+            epoch,
+            baseline,
+            BranchRole.ACTIVE,
+            "own",
+            "own history",
+        )
+        _complete_attempt(
+            registry,
+            artifacts,
+            tmp_path,
+            epoch,
+            baseline,
+            BranchRole.CHALLENGER,
+            "other-branch",
+            "other branch history",
+        )
+        request = BuildAttemptEvidenceRequest(
+            attempt_id=new_attempt_id(),
+            epoch_id=epoch.id,
+            branch=BranchRole.ACTIVE,
+            challenger_ordinal=0,
+            trajectory_ordinal=1,
+            ordinal=2,
+            epoch_evidence_checkpoint=checkpoint,
+        )
+        assembler = LocalAttemptEvidenceAssembler(registry, artifacts, _projector(artifacts))
+        original = assembler.assemble(request)
+        peer = _complete_attempt(
+            registry,
+            artifacts,
+            tmp_path,
+            epoch,
+            baseline,
+            BranchRole.ACTIVE,
+            "peer",
+            "peer history",
+            trajectory_ordinal=2,
+        )
+        # A late peer completion must never change the recovered logical Attempt input.
+        assembler.validate(original, request)
+        updated = assembler.assemble(request)
+        assembler.validate(updated, request)
+        stored = artifacts.verify(updated)
+        metadata = AttemptEvidenceMetadataV2.from_file(stored.payload_path / "context.json")
+        assert metadata.previous_attempt_ids == (own.id,)
+        assert metadata.peer_attempt_ids == ((peer.id,) if visibility == "broadcast" else ())
+        peer_root = stored.payload_path / "peer-trajectories/00000002"
+        if visibility == "broadcast":
+            assert original != updated
+            value = json.loads((peer_root / "attempts/00000001.json").read_text())
+            assert value["attempt_id"] == peer.id
+            assert (peer_root / "reports/00000001.json").is_file()
+            assert (peer_root / "traces/00000001-run-0001.json").is_file()
+        else:
+            assert original == updated
+            assert not peer_root.exists()
+        assert "other branch history" not in (stored.payload_path / "lessons.json").read_text()
 
 
 def test_attempt_evidence_rejects_missing_same_branch_ordinal(tmp_path: Path) -> None:
@@ -676,3 +745,29 @@ def test_final_report_exposes_production_gate_rejection(tmp_path: Path) -> None:
                 "mixed/alternate framework marker is forbidden: cuda"
             ),
         }
+
+
+def test_legacy_report_projects_uncertainty_without_rewriting_artifact(tmp_path: Path) -> None:
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        epoch, baseline, _evidence = _seed_epoch(registry, artifacts, tmp_path)
+        attempt = _complete_attempt(
+            registry,
+            artifacts,
+            tmp_path,
+            epoch,
+            baseline,
+            BranchRole.ACTIVE,
+            "legacy-claim",
+            "a confident but unassessed explanation",
+        )
+        assert attempt.attempt_report_digest is not None
+        original = artifacts.verify(attempt.attempt_report_digest).payload_path / "value.json"
+        before = original.read_bytes()
+
+        report = RuntimeAttemptReportProjector(registry, artifacts).project(attempt)
+
+        assert report["findings"][0]["assessment"] == "unresolved"
+        assert report["findings"][0]["scope"] is None
+        assert "do not certify causal" in report["interpretation_notice"]
+        assert original.read_bytes() == before

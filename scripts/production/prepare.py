@@ -620,6 +620,7 @@ def _runtime_config(
             "token_usage_report_relative_path": "scratch/token-usage.json",
             "max_attempt_report_bytes": 1048576,
             "report_completion_retries": 2,
+            "output_limit_recovery_retries": 2,
             "timeout_seconds": int(workers["optimizer_timeout_seconds"]),
             "bootstrap_timeout_seconds": int(workers["bootstrap_timeout_seconds"]),
             "terminate_grace_seconds": 10,

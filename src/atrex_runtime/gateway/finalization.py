@@ -7,6 +7,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
+from typing import Literal
 
 import anyio
 
@@ -93,6 +94,10 @@ class AgateAuthoritativeCandidateEvaluator:
         bootstrap_bench_iters: int = 100,
         profile_without_roofline: bool = False,
         production_policy: ProductionKernelPolicy | None = None,
+        tool_modules: tuple[Literal["directions", "experiments"], ...] = (
+            "directions",
+            "experiments",
+        ),
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         if wait_timeout_s <= 0:
@@ -112,6 +117,7 @@ class AgateAuthoritativeCandidateEvaluator:
         self._bootstrap_bench_iters = bootstrap_bench_iters
         self._profile_without_roofline = profile_without_roofline
         self._production_policy = production_policy
+        self._tool_modules = tool_modules
         self._clock = clock
         self._shape_batches = ShapeBatchedEvaluateExecutor()
 
@@ -131,10 +137,12 @@ class AgateAuthoritativeCandidateEvaluator:
             candidate_digest,
             gateway_result_digest=nominated_gateway_result_digest,
             recovery_generation=nominated_recovery_generation,
+            default_tool_modules=self._tool_modules,
         )
         if agent_evaluation is None:
             raise ValueError(
-                "nominated candidate has no matching Agent evaluation or recorded adoption"
+                "nominated candidate has no matching Agent evaluation, recorded adoption "
+                "or eligible visible historical evaluation"
             )
         if agent_evaluation is not None and not agent_evaluation.correct:
             raise ValueError("nominated candidate's Agent evaluation is not correct")

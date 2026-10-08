@@ -21,7 +21,7 @@ from atrex_runtime.gateway.control import BootstrapGatewaySubject
 @pytest.mark.anyio
 @pytest.mark.parametrize("bootstrap", [False, True])
 @pytest.mark.parametrize("action", ["complete", "abandon", "block", "defer"])
-async def test_closure_requires_its_own_experiment_and_a_gateway_result(
+async def test_closure_allows_uncertainty_but_rejects_foreign_experiments(
     tmp_path: Path, bootstrap: bool, action: str
 ) -> None:
     registry, control, attempt, capability, service, adapter = _service(tmp_path)
@@ -137,13 +137,9 @@ async def test_closure_requires_its_own_experiment_and_a_gateway_result(
             "hypothesis_status": "unresolved",
             "supporting_experiment_ids": [],
         }
-        with pytest.raises(
-            ValueError, match="requires at least one associated Experiment"
-        ) as error:
-            await query("direction_update", "target-empty", request=close)
-        assert "record-experiment" in str(error.value)
-        assert "real Kernel-bound Gateway Result" in str(error.value)
-        assert control.list_direction_events(attempt.id) == events
+        empty = await query("direction_update", "target-empty", request=close)
+        assert empty["hypothesis_status"] == "unresolved"
+        assert len(control.list_direction_events(attempt.id)) == len(events) + 1
         assert len(control.list_experiments(attempt.id)) == 1
 
         with pytest.raises(ValueError, match="before and after cannot both be null"):
@@ -161,18 +157,16 @@ async def test_closure_requires_its_own_experiment_and_a_gateway_result(
         receipt = await record(direction_id)
         close["supporting_experiment_ids"] = [receipt["experiment_id"]]
         for status in ("supported", "refuted"):
-            with pytest.raises(ValueError, match="Gateway Result evidence for every selected"):
-                await query(
-                    "direction_update",
-                    "target-" + status,
-                    request={
-                        **close,
-                        "hypothesis_status": status,
-                    },
-                )
+            uncertain = await query(
+                "direction_update",
+                "target-" + status,
+                request={**close, "hypothesis_status": status},
+            )
+            assert uncertain["hypothesis_status"] == "unresolved"
+            assert uncertain["assessment_notes"]
         closed = await query("direction_update", "target-close", request=close)
         assert await query("direction_update", "target-close", request=close) == closed
-        assert len(control.list_direction_events(attempt.id)) == len(events) + 1
+        assert len(control.list_direction_events(attempt.id)) == len(events) + 4
         assert control.list_direction_events(attempt.id)[-1]["supporting_experiment_ids"] == [
             receipt["experiment_id"]
         ]

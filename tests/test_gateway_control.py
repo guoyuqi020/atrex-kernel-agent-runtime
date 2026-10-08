@@ -36,6 +36,7 @@ from atrex_runtime.domain.models import (
     BranchRole,
     Dsl,
     Epoch,
+    EpochSelection,
     EpochStatus,
 )
 from atrex_runtime.gateway import (
@@ -50,8 +51,14 @@ from atrex_runtime.gateway.control import (
     BootstrapRunStatus,
     GatewayEvaluationSource,
 )
+from atrex_runtime.gateway.control_models import GatewayAuthorization
 from atrex_runtime.gateway.control_schema import GATEWAY_SCHEMA_VERSION
 from atrex_runtime.gateway.journals import RuntimeJournalService
+from atrex_runtime.gateway.protocol import (
+    DirectionLoadRequestV2,
+    DirectionsListRequestV2,
+    JournalSnapshotRequestV2,
+)
 from atrex_runtime.ports import RunAttemptRequest
 from atrex_runtime.registry.base import Registry
 from atrex_runtime.registry.sqlite import SqliteRegistry
@@ -254,9 +261,7 @@ def test_broadcast_trajectories_share_live_journals_but_isolated_do_not(tmp_path
     registry.insert_attempt(second)
     registry.insert_attempt(third)
     epoch = registry.get_epoch(first.epoch_id)
-    control = SqliteGatewayControl(
-        tmp_path / "gateway.sqlite", registry, signing_key=b"b" * 32
-    )
+    control = SqliteGatewayControl(tmp_path / "gateway.sqlite", registry, signing_key=b"b" * 32)
     policy = GatewayCapabilityPolicy(
         frozenset({GatewayOperation.DIRECTION_UPDATE}),
         8,
@@ -382,6 +387,69 @@ def test_broadcast_trajectories_share_live_journals_but_isolated_do_not(tmp_path
     assert journals._current_in_progress_direction_ids(first.id) == [own_direction_id]
     assert journals._current_in_progress_direction_ids(second.id) == [direction_id]
     assert set(journals._direction_views(third.id)) == {direction_id, own_direction_id}
+    for reader, expected_self in (
+        (first, {own_direction_id}),
+        (second, {direction_id}),
+        (third, set()),
+    ):
+        authorization = GatewayAuthorization(
+            reader.id, GatewayOperation.DIRECTIONS_LIST, "read-directions", "unused", 0
+        )
+        result = journals.execute(
+            DirectionsListRequestV2(
+                attempt_id=reader.id,
+                idempotency_key="read-directions",
+                operation="directions_list",
+            ),
+            authorization,
+        )
+        index = cast(list[dict[str, object]], result["directions"])
+        assert len(index) == 2
+        for entry in index:
+            ownership = "self" if entry["direction_id"] in expected_self else "other"
+            assert entry["status"] == f"in_progress({ownership})"
+            assert set(entry) == {
+                "direction_id",
+                "name",
+                "status",
+                "hypothesis_status",
+                "scope",
+                "claim_kind",
+                "supporting_experiment_ids",
+                "supporting_results",
+                "interpretation_notice",
+            }
+            assert entry["scope"] is None
+            assert entry["supporting_results"] == []
+            assert "Agent interpretation" in str(entry["interpretation_notice"])
+            loaded = journals.execute(
+                DirectionLoadRequestV2(
+                    attempt_id=reader.id,
+                    idempotency_key="load-direction",
+                    operation="direction_load",
+                    direction_id=str(entry["direction_id"]),
+                ),
+                replace(authorization, operation=GatewayOperation.DIRECTION_LOAD),
+            )
+            raw = journals._direction_views(reader.id)[str(entry["direction_id"])]
+            assert loaded == {
+                **raw,
+                "status": entry["status"],
+                "interpretation_notice": entry["interpretation_notice"],
+            }
+            assert raw["status"] == "in_progress"
+        snapshot = journals.execute(
+            JournalSnapshotRequestV2(
+                attempt_id=reader.id,
+                idempotency_key="snapshot",
+                operation="journal_snapshot",
+            ),
+            replace(authorization, operation=GatewayOperation.JOURNAL_SNAPSHOT),
+        )
+        assert all(
+            direction["status"] == "in_progress"
+            for direction in cast(list[dict[str, object]], snapshot["directions"])
+        )
     control.close()
     registry.close()
 
@@ -1879,6 +1947,65 @@ def test_visible_history_never_crosses_lineages(tmp_path: Path, visibility: str)
     assert control.visible_attempt_report_artifacts(subject.id) == ()
     control.close()
     registry.close()
+
+
+@pytest.mark.parametrize("visibility", ("isolated", "broadcast"))
+def test_peer_history_is_shared_after_epoch_completion_in_both_modes(
+    tmp_path: Path,
+    visibility: str,
+) -> None:
+    with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
+        first = _insert_attempt(registry, trajectories=3)
+        epoch = registry.get_epoch(first.epoch_id)
+        registry._connection.execute(
+            "UPDATE lineages SET trajectory_visibility = ? WHERE id = ?",
+            (visibility, epoch.lineage_id),
+        )
+        siblings = [replace(first, id=new_attempt_id(), trajectory_ordinal=i) for i in (2, 3)]
+        for sibling in siblings:
+            registry.insert_attempt(sibling)
+            registry.complete_attempt(
+                sibling.id, None, accepted_as_branch_best=False, failure_reason=None
+            )
+        control = SqliteGatewayControl(
+            tmp_path / "gateway.sqlite",
+            registry,
+            signing_key=b"p" * 32,
+        )
+        try:
+            peer_ids = {sibling.id for sibling in siblings}
+            within = set(control.visible_measurement_attempt_ids(first.id)[1])
+            assert peer_ids.issubset(within) == (visibility == "broadcast")
+            registry.complete_attempt(
+                first.id, None, accepted_as_branch_best=False, failure_reason=None
+            )
+            registry.transition_epoch(epoch.id, EpochStatus.RUNNING, EpochStatus.SELECTING)
+            registry.complete_epoch(
+                epoch.id,
+                EpochSelection(
+                    winner_kernel_agent_revision_id=epoch.active_kernel_agent_revision_id,
+                    best_kernel_revision_id=epoch.starting_kernel_revision_id,
+                ),
+            )
+            next_checkpoint = digest("completed-peer-epoch")
+            registry.advance_lineage_evidence(
+                epoch.lineage_id, epoch.evidence_checkpoint, next_checkpoint
+            )
+            following = replace(
+                epoch, id=new_epoch_id(), number=2, evidence_checkpoint=next_checkpoint
+            )
+            registry.insert_epoch(following)
+            freeze_branch_workflow(registry, following, trajectories=3, attempts_per_trajectory=1)
+            reader = replace(first, id=new_attempt_id(), epoch_id=following.id)
+            registry.insert_attempt(reader)
+            for visible in (
+                control.visible_measurement_attempt_ids,
+                control.visible_kernel_trial_attempt_ids,
+                control.visible_journal_attempt_ids,
+            ):
+                assert peer_ids.issubset(visible(reader.id)[1])
+        finally:
+            control.close()
 
 
 def test_shared_bootstrap_is_visible_without_exposing_the_source_lineage(

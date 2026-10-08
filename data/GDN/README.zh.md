@@ -40,21 +40,30 @@ python scripts/gdn/run.py ablation
 
 只启动任务，不管理服务；以与 `campaign` 相同的容器用户运行，不需要 sudo/systemd。
 使用 `ablation-campaign.json` 的新 key `gdn-source-tree-l20d-claude-ablation`，
-不会修改或接管当前试跑。一次完整 Bootstrap 后，十二条消融 Lineage 共享新实验的冻结 v0、Agent、
+不会修改或接管当前试跑。一次完整 Bootstrap 后，八条各含三条轨迹的消融 Lineage 共享新实验的冻结 v0、Agent、
 修改边界、评测契约和初始证据；不重复 Baseline 测量，不导入旧试跑经验。
 
-`ablation.json` 与单文件生产使用相同的计划生成器，默认每臂 5 个 Epoch：
+当前计划为四种 Direction/Experiment 工具配置（全开、全关、仅 Experiment、仅 Direction）
+各启用两种互通模式。每个配置/模式对应一个 Campaign/Lineage，内含三条保留 State 的 Trajectory。
+共八个臂，复用同一份冻结的 Bootstrap v0，不重复 Baseline 测量，不运行 Evolver。
+默认每臂 5 个 Epoch，每条轨迹每轮串行执行 3 次 Attempt：每轨迹 15 次、每臂 45 次、
+全套 360 次 Optimizer Attempt，不含 Bootstrap。
 
-| Campaign 实例 | 每 Epoch 的结构 | Optimizer Attempts | 保留 State | Evolution |
-|---|---|---:|---|---:|
-| `ablation-retained-01/02/03` | 每个重复 1 条轨迹 × 3 次 | 各 15 | 是 | 0 |
-| `ablation-retained-no-modules-01/02/03` | Direction、Experiment 均关闭 | 各 15 | 是 | 0 |
-| `ablation-retained-experiments-01/02/03` | 仅 Experiment | 各 15 | 是 | 0 |
-| `ablation-retained-directions-01/02/03` | 仅 Direction | 各 15 | 是 | 0 |
+| 模式 | Workflow | Epoch 内 | Epoch 结束后 |
+|---|---|---|---|
+| `epoch-shared` | `epoch_shared_3.py` | 各轨迹只读自身本轮历史，延续自身 Kernel | 三条轨迹共享已完成历史及选出的最佳 Kernel |
+| `broadcast` | `broadcast_3.py` | 已记录的评测、Artifact 和启用的 Journal 实时互通；每个 round 广播截至当时最佳的已接受 Kernel | 三条轨迹共享已完成历史及选出的最佳 Kernel |
 
-共 **12 个 Campaign、180 次 Optimizer Attempt**，不含 Bootstrap。原有 Retained 标签对应两种工具全开。Pool-Retained、Broadcast、
-Retained-Evolve 及其他对照 Workflow 保留实现，但不进入新计划；也不启动外部原版 AKA 对照。
-十二个 Retained 臂各自保留 State 与 Lineage 历史，下一 Epoch 从本臂选出的最佳 Kernel 开始。
+每种模式对应 `ablation-MODE-3`、`ablation-MODE-no-modules-3`、
+`ablation-MODE-experiments-3`、`ablation-MODE-directions-3` 四个臂。
+Broadcast 的后续 Attempt 文件快照也包含其他轨迹已完成的前序 round 的 report 和对话。
+工作源码、scratch、实时对话保持私有；Tool State 按轨迹独立路由。
+历史按需读取，不要求扫描全部旧对话。不同消融臂不共享 Bootstrap 之后的历史。
+
+Pool-Retained、单轨迹 Retained、Retained-Evolve 等 Workflow 保留实现，但不进入新计划。
+每个启用臂持有 Lineage-local `agent-v0`，固定自身 Workflow；Runtime 不根据 Label 推断拓扑。
+实际并发数受部署配置限制。
+
 已有工作区继续使用其冻结计划。
 
 输出在 `workspaces/GDN/ablation/`：Bootstrap、冻结输入、`campaign-results.json` 汇总，以及每臂
@@ -65,7 +74,7 @@ Attempt 进度实时写入各臂日志，臂完成时打印时间戳。失败不
 已有工作区仍保留冻结的对照臂预算；恢复旧主臂时应显式传入原来的绝对目标轮次。
 修改冻结输入需新 Workspace 和 creation key。
 
-当前消融计划最多并行 12 个 Optimizer Worker；Lima 资源有限，建议结束旧试跑后再显式启动。
+当前消融计划包含 24 条轨迹，实际并发受部署配置限制；Lima 资源有限，建议结束旧试跑后再显式启动。
 添加配置不会自动启动、停止或重启任何任务。
 
 ## 内容与来源

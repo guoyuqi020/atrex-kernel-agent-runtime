@@ -37,23 +37,26 @@ Runtime 只约束资源边界与可信评测/晋升策略，不根据消融臂�
 - 每个启用臂默认运行至 Epoch 5；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
 
-当前计划启用四种 Retained 工具配置，每种三个独立重复臂。Pool-Retained、Broadcast、Retained-Evolve 及其他对照
-Workflow 保留实现，但不进入新计划。每个 DSL 启动 12 个独立 Campaign。
-所有臂共享同一份冻结的 Bootstrap v0，
-不重复 Bootstrap 或 Baseline 测量。每条 Trajectory 每个 Epoch 串行执行 3 个 Attempt：
+当前计划为四种 Direction/Experiment 工具配置（全开、全关、仅 Experiment、仅 Direction）
+各启用两种互通模式。每个配置/模式对应一个 Campaign/Lineage，内含三条保留 State 的 Trajectory。
+共八个臂，复用同一份冻结的 Bootstrap v0，不重复 Baseline 测量，不运行 Evolver。
+默认每臂 5 个 Epoch，每条轨迹每轮串行执行 3 次 Attempt：每轨迹 15 次、每臂 45 次、
+全套 360 次 Optimizer Attempt，不含 Bootstrap。
 
-| 臂 | 并行结构 | Optimizer Attempts 总数 | 保留 Runtime State | Evolution 次数 |
-|---|---|---:|---|---:|
-| `ablation-retained-01/02/03` | 每个重复一条 Trajectory | 各 15 | 是 | 0 |
-| `ablation-retained-no-modules-01/02/03` | Direction、Experiment 均关闭 | 各 15 | 是 | 0 |
-| `ablation-retained-experiments-01/02/03` | 仅 Experiment | 各 15 | 是 | 0 |
-| `ablation-retained-directions-01/02/03` | 仅 Direction | 各 15 | 是 | 0 |
+| 模式 | Workflow | Epoch 内 | Epoch 结束后 |
+|---|---|---|---|
+| `epoch-shared` | `epoch_shared_3.py` | 各轨迹只读自身本轮历史，延续自身 Kernel | 三条轨迹共享已完成历史及选出的最佳 Kernel |
+| `broadcast` | `broadcast_3.py` | 已记录的评测、Artifact 和启用的 Journal 实时互通；每个 round 广播截至当时最佳的已接受 Kernel | 三条轨迹共享已完成历史及选出的最佳 Kernel |
 
-Runtime State 包含 Memory/Knowledge/Skills/Tools。重置 State 时，每个目录恢复到固定 Core Revision 的初始内容，
-不清除 Kernel 进展或 Runtime 历史。各启用实例只共享 Bootstrap Baseline，不共享后续历史或可写 State。
-每个启用臂都持有 Lineage-local `agent-v0`，并冻结 `retained.py`；停用模板仍保留。
-Optimizer Source 与共享
-Bootstrap Kernel 仍受控；Runtime 不再根据臂 Label 推断组织拓扑。
+每种模式对应 `ablation-MODE-3`、`ablation-MODE-no-modules-3`、
+`ablation-MODE-experiments-3`、`ablation-MODE-directions-3` 四个臂。
+Broadcast 的后续 Attempt 文件快照也包含其他轨迹已完成的前序 round 的 report 和对话。
+工作源码、scratch、实时对话保持私有；Tool State 按轨迹独立路由。
+历史按需读取，不要求扫描全部旧对话。不同消融臂不共享 Bootstrap 之后的历史。
+
+Pool-Retained、单轨迹 Retained、Retained-Evolve 等 Workflow 保留实现，但不进入新计划。
+每个启用臂持有 Lineage-local `agent-v0`，固定自身 Workflow；Runtime 不根据 Label 推断拓扑。
+实际并发数受部署配置限制。
 
 仅用于 Bootstrap/派生的源 Campaign 位于 `dsls/DSL/`，启用臂位于 `dsls/DSL/ablation-*/`。
 生成的 `ablation.json` 冻结消融臂配置，每条 Trajectory 固定运行 15 次 Bootstrap 之后的 Attempt。

@@ -52,14 +52,18 @@ description: 在 Lima Ubuntu 中准备、启动或恢复 GDN 多文件源码树�
 
 - L20D；`chunk_gated_delta_rule`；只跑 CuteDSL；Optimizer/Evolver 都为 Claude backend。
   实际模型名称来自配置/环境，不把 CLI 名称当成模型名称。
-- 新计划启用 12 个 Campaign：`ablation-retained-01/02/03`（Direction、Experiment 全开），
-  `ablation-retained-no-modules-01/02/03`（全关），`ablation-retained-experiments-01/02/03`
-  （仅 Experiment）和 `ablation-retained-directions-01/02/03`（仅 Direction）。Pool-Retained、Broadcast、
-  Retained-Evolve 的 Workflow 实现保留，但不进入新计划。
-- 默认 5 个 Epoch，每臂一条轨迹、每轮 3 次 Attempt，各 15 次，共 180 次 Optimizer
-  Attempt，不含 Bootstrap。各臂的 Kernel、Journal 和可写 State 保持隔离。
+- 新计划启用 8 个 Campaign：四种 Direction/Experiment 配置（全开、全关、仅 Experiment、
+  仅 Direction）分别运行 `epoch-shared` 与 `broadcast` 两种互通模式，每臂三条轨迹。
+  Label 为 `ablation-MODE-3`、`ablation-MODE-no-modules-3`、
+  `ablation-MODE-experiments-3`、`ablation-MODE-directions-3`。
+- `epoch-shared` 使用 `epoch_shared_3.py`：Epoch 内历史、Kernel 各自延续，结束后互通。
+  `broadcast` 使用 `broadcast_3.py`：已记录的评测和启用的 Journal 实时可查，每个 round
+  广播截至当时最佳的已接受 Kernel；后续 Attempt 快照含同轮前序 round 的已完成 report/对话。
+  两种模式都隔离工作源码、scratch 和实时对话；不同臂不共享后续历史。
+- 默认 5 个 Epoch，每条轨迹每轮 3 次 Attempt，每轨迹 15 次、每臂 45 次，
+  全套共 360 次 Optimizer Attempt，不含 Bootstrap。不运行 Evolver。
   Active/Challenger、Trajectory、Direction 都不是独立消融臂。
-- 只做一次完整 Bootstrap，再由 `seed-ablation-arm` 派生十二个 Retained 臂：
+- 只做一次完整 Bootstrap，再由 `seed-ablation-arm` 派生八个臂：
   共享冻结 v0、初始 Agent/证据与评测契约，不导入之后的跨臂历史。
 - `ablation` 使用自己的 creation key 与 `workspaces/GDN/ablation/` 输出，不接管旧试跑。
   `run.py campaign` 是单 Campaign 入口，也用于恢复旧试跑；用户要求单路线时使用它，
