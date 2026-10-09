@@ -7,11 +7,13 @@ import json
 import re
 import subprocess
 import threading
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 from .models import JsonValue, KnowledgeQueryV1
+from .preloaded_worker import PreloadedWorker, PreloadedWorkerError
 
 _INDEXED_TOOLS = (
     "query_nl.py",
@@ -36,6 +38,13 @@ class GpuWikiQueryResult:
     revision: str
 
 
+@dataclass
+class _Generation:
+    revision: str
+    worker: PreloadedWorker
+    active: int = 0
+
+
 class CorpusIndex:
     """Execute the pinned GPU Wiki implementation without reimplementing retrieval."""
 
@@ -49,6 +58,7 @@ class CorpusIndex:
         max_concurrent_queries: int,
         max_results: int | None,
         max_response_bytes: int,
+        indexed_execution: str = "subprocess",
     ) -> None:
         self._root = root.resolve()
         self._python = python_executable.resolve()
@@ -57,6 +67,12 @@ class CorpusIndex:
         self._query_slots = threading.BoundedSemaphore(max_concurrent_queries)
         self._max_results = max_results
         self._max_response_bytes = max_response_bytes
+        self._max_concurrent_queries = max_concurrent_queries
+        self._preloaded = indexed_execution == "preloaded"
+        self._generation: _Generation | None = None
+        self._retired: list[_Generation] = []
+        self._worker_lock = threading.Lock()
+        self._closed = False
         self._query_tool = self._root / "tools" / "query_nl.py"
         self._kernel_index = self._root / "kernel_wiki" / "records" / "index.json"
         self._hardware_index = self._root / "hardware_wiki" / "records" / "index.json"
@@ -67,10 +83,21 @@ class CorpusIndex:
         self._digest_cache: dict[Path, tuple[_FileSignature, bytes]] = {}
         self._revision_lock = threading.Lock()
         self._validate_layout()
+        if self._preloaded:
+            if not self._indexed:
+                raise ValueError("GPU Wiki preloading requires an indexed native Store")
+            # Build all derived data before the HTTP service advertises readiness.
+            with self._lease_worker(self._query_revision()):
+                pass
 
     def check_health(self) -> None:
         """Fail when a dependency of the selected native interface disappears."""
         self._validate_layout()
+        if self._preloaded:
+            with self._worker_lock:
+                if self._closed or self._generation is None:
+                    raise ValueError("GPU Wiki preloaded index is unavailable")
+                self._generation.worker.check_health()
 
     def query(self, request: KnowledgeQueryV1) -> GpuWikiQueryResult:
         """Return the native ``query_nl.py`` envelope without rewriting its contents."""
@@ -100,12 +127,19 @@ class CorpusIndex:
         with self._query_slots:
             before = self._query_revision() if self._indexed else None
             try:
-                process = subprocess.run(
-                    command,
-                    check=False,
-                    capture_output=True,
-                    timeout=outer_timeout,
-                )
+                if self._preloaded:
+                    assert before is not None
+                    with self._lease_worker(before) as worker:
+                        process = worker.query(command[2:], outer_timeout)
+                else:
+                    process = subprocess.run(
+                        command,
+                        check=False,
+                        capture_output=True,
+                        timeout=outer_timeout,
+                    )
+            except PreloadedWorkerError as error:
+                raise GpuWikiQueryError(str(error)) from error
             except subprocess.TimeoutExpired as error:
                 raise GpuWikiQueryError("GPU Wiki natural-language query timed out") from error
             stdout = process.stdout[: self._max_response_bytes + 1]
@@ -132,6 +166,61 @@ class CorpusIndex:
             if before is not None and before != revision:
                 raise GpuWikiQueryError("GPU Wiki Store changed while the query was running; retry")
             return GpuWikiQueryResult(_json_object(value), revision)
+
+    @contextmanager
+    def _lease_worker(self, revision: str) -> Iterator[PreloadedWorker]:
+        with self._worker_lock:
+            if self._closed:
+                raise GpuWikiQueryError("GPU Wiki index is closed")
+            generation = self._generation
+            if generation is not None:
+                try:
+                    generation.worker.check_health()
+                except PreloadedWorkerError:
+                    generation = None
+            if generation is None or generation.revision != revision:
+                worker = PreloadedWorker(
+                    self._root,
+                    self._python,
+                    concurrency=self._max_concurrent_queries,
+                    max_response_bytes=self._max_response_bytes,
+                )
+                try:
+                    if self._query_revision() != revision:
+                        raise GpuWikiQueryError("GPU Wiki Store changed during preloading; retry")
+                except BaseException:
+                    worker.close()
+                    raise
+                if self._generation is not None:
+                    self._retired.append(self._generation)
+                generation = _Generation(revision, worker)
+                self._generation = generation
+                self._close_retired()
+            generation.active += 1
+        try:
+            yield generation.worker
+        finally:
+            with self._worker_lock:
+                generation.active -= 1
+                self._close_retired()
+
+    def _close_retired(self) -> None:
+        remaining = []
+        for generation in self._retired:
+            if generation.active:
+                remaining.append(generation)
+            else:
+                generation.worker.close()
+        self._retired = remaining
+
+    def close(self) -> None:
+        """Stop the native preload server and all of its active query children."""
+        with self._worker_lock:
+            self._closed = True
+            for generation in [*self._retired, *([self._generation] if self._generation else [])]:
+                generation.worker.close()
+            self._retired.clear()
+            self._generation = None
 
     def _validate_layout(self) -> None:
         required = self._interface_files()

@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""Wiki-only Claude adapter; read adjacent claude-config.json, never write settings."""
+
+from __future__ import annotations
+
+import json
+import os
+import re
+import sys
+from pathlib import Path
+from urllib.parse import urlsplit
+
+COMMON_ENVIRONMENT = (
+    "PATH",
+    "HOME",
+    "TMPDIR",
+    "LANG",
+    "LC_ALL",
+    "USER",
+    "LOGNAME",
+    "SHELL",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "ALL_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "all_proxy",
+    "no_proxy",
+    "SSL_CERT_FILE",
+    "SSL_CERT_DIR",
+    "NODE_EXTRA_CA_CERTS",
+)
+AUTH_NAMES = ("ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY")
+MODEL_NAMES = (
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_SMALL_FAST_MODEL",
+)
+ACTIVE_MARKER = "ATREX_WIKI_CLAUDE_BRIDGE_ACTIVE"
+ERROR = "Wiki Claude bridge configuration is unavailable or invalid; refusing launch."
+# This adapter accepts the native Wiki no-tools CLI contract. Unknown options fail
+# closed: guessing their arity could mistake a prompt or option value for a flag.
+FLAG_OPTIONS = {"--bare", "--print", "-p", "--no-session-persistence", "--strict-mcp-config"}
+VALUE_OPTIONS = {
+    "--output-format",
+    "--session-id",
+    "--tools",
+    "--prompt-suggestions",
+    "--setting-sources",
+    "--mcp-config",
+    "--permission-mode",
+    "--max-output-tokens",
+    "--model",
+    "--effort",
+}
+
+
+class ConfigurationError(Exception):
+    """Missing or incompatible configuration; callers receive a redacted error."""
+
+
+def read_json(path: Path) -> dict[str, object]:
+    if path.stat().st_size > 1024 * 1024:
+        raise ConfigurationError("configuration exceeds size limit")
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ConfigurationError("configuration must be an object")
+    return value
+
+
+def existing_path(value: object) -> Path:
+    if not isinstance(value, str) or not value or not Path(value).is_absolute():
+        raise ConfigurationError("configuration paths must be absolute")
+    path = Path(value).resolve(strict=True)
+    if not path.is_file():
+        raise ConfigurationError("configuration path must be a regular file")
+    return path
+
+
+def endpoint(value: object) -> str:
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise ConfigurationError("provider endpoint is missing")
+    parts = urlsplit(value)
+    if (
+        parts.scheme != "https"
+        or not parts.hostname
+        or parts.username
+        or parts.password
+        or parts.query
+        or parts.fragment
+        or any(char.isspace() for char in value)
+    ):
+        raise ConfigurationError("invalid provider endpoint")
+    return value.rstrip("/")
+
+
+def normalized_arguments(arguments: list[str], model: str, effort: str) -> list[str]:
+    """Override options before the prompt, leaving positional text byte-for-byte intact."""
+    result = ["--model", model, "--effort", effort]
+    index = 0
+    while index < len(arguments):
+        argument = arguments[index]
+        if argument == "--" or not argument.startswith("-"):
+            result.extend(arguments[index:])
+            break
+        name, separator, _value = argument.partition("=")
+        if name in FLAG_OPTIONS and not separator:
+            result.append(argument)
+            index += 1
+            continue
+        if name not in VALUE_OPTIONS:
+            raise ConfigurationError("unsupported bridge option")
+        width = 1 if separator else 2
+        if not separator and index + 1 >= len(arguments):
+            raise ConfigurationError("bridge option value is missing")
+        if name not in {"--model", "--effort"}:
+            result.extend(arguments[index : index + width])
+        index += width
+    return result
+
+
+def main() -> int:
+    try:
+        if os.environ.get(ACTIVE_MARKER):
+            raise ConfigurationError("wrapper recursion is forbidden")
+        wrapper = Path(__file__).resolve(strict=True)
+        config = read_json(wrapper.with_name("claude-config.json"))
+        if set(config) != {"real_claude", "settings_file", "base_url", "model", "effort"}:
+            raise ConfigurationError("unexpected configuration fields")
+        executable = existing_path(config["real_claude"])
+        if executable.samefile(wrapper):
+            raise ConfigurationError("wrapper recursion is forbidden")
+        if not os.access(executable, os.X_OK):
+            raise ConfigurationError("real Claude must be executable")
+        base_url = endpoint(config["base_url"])
+        model = config["model"]
+        effort = config["effort"]
+        if not isinstance(model, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]*", model):
+            raise ConfigurationError("model must be explicit")
+        if not isinstance(effort, str) or effort not in {"low", "medium", "high", "max"}:
+            raise ConfigurationError("effort must be explicit")
+        settings = read_json(existing_path(config["settings_file"]))
+        configured = settings.get("env")
+        if not isinstance(configured, dict):
+            raise ConfigurationError("settings env is missing")
+        if endpoint(configured.get("ANTHROPIC_BASE_URL")) != base_url:
+            raise ConfigurationError("credential provider endpoint does not match")
+        auth = {
+            name: configured[name]
+            for name in AUTH_NAMES
+            if isinstance(configured.get(name), str) and configured[name].strip()
+        }
+        if not auth:
+            raise ConfigurationError("provider credential is missing")
+        environment = {
+            name: os.environ[name] for name in COMMON_ENVIRONMENT if os.environ.get(name)
+        }
+        environment.update(auth)
+        environment.update({name: model for name in MODEL_NAMES})
+        environment.update(
+            ANTHROPIC_BASE_URL=base_url,
+            CLAUDE_CODE_EFFORT_LEVEL=effort,
+            NO_COLOR="1",
+            CI="1",
+            DISABLE_AUTOUPDATER="1",
+        )
+        environment[ACTIVE_MARKER] = "1"
+        arguments = normalized_arguments(sys.argv[1:], model, effort)
+        os.execve(str(executable), [str(executable), *arguments], environment)
+    except (OSError, ValueError, ConfigurationError):
+        # Never echo settings, inherited credentials, prompt text, or exception reprs.
+        print(ERROR, file=sys.stderr)
+        return 78
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

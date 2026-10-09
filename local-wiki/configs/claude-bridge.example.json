@@ -1,0 +1,7 @@
+{
+  "real_claude": "/opt/node/bin/claude",
+  "settings_file": "/root/.claude/settings.json",
+  "base_url": "https://example.invalid/anthropic",
+  "model": "qwen3.8-flash",
+  "effort": "high"
+}

@@ -90,9 +90,9 @@ class LocalWikiApplication:
     async def _query(self, body: bytes, send: AsgiSend) -> None:
         request = KnowledgeQueryV1.model_validate_json(body)
         result = await anyio.to_thread.run_sync(self._index.query, request)
-        content_digest = "sha256:" + hashlib.sha256(
-            canonical_json_bytes(result.content)
-        ).hexdigest()
+        content_digest = (
+            "sha256:" + hashlib.sha256(canonical_json_bytes(result.content)).hexdigest()
+        )
         request_json = canonical_json_bytes(request.model_dump(mode="json"))
         request_digest = hashlib.sha256(request_json).hexdigest()
         snapshot_material = f"{request_digest}\0{result.revision}\0{content_digest}".encode()
@@ -149,6 +149,7 @@ class LocalWikiApplication:
         """Close owned resources exactly once."""
         if not self._closed:
             self._closed = True
+            self._index.close()
             self._store.close()
 
 
@@ -163,7 +164,6 @@ def build_application(
         if not token:
             raise ValueError(f"missing environment variable: {settings.bearer_token_env}")
     synchronize_store(settings.reference_root, settings.store_root)
-    store = LocalWikiStore(settings.database)
     index = CorpusIndex(
         settings.store_root,
         python_executable=settings.python_executable,
@@ -172,7 +172,13 @@ def build_application(
         max_concurrent_queries=settings.max_concurrent_queries,
         max_results=settings.max_results,
         max_response_bytes=settings.max_response_bytes,
+        indexed_execution=settings.indexed_execution,
     )
+    try:
+        store = LocalWikiStore(settings.database)
+    except BaseException:
+        index.close()
+        raise
     return LocalWikiApplication(
         index,
         store,

@@ -29,6 +29,7 @@ class LocalWikiSettings(BaseModel):
     max_concurrent_queries: int = Field(default=16, ge=1, le=64)
     max_results: int | None = Field(default=None, gt=0)
     max_response_bytes: int = Field(gt=0)
+    indexed_execution: Literal["subprocess", "preloaded"] = "subprocess"
 
     @model_validator(mode="after")
     def _validate_paths(self) -> Self:

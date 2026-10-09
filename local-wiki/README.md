@@ -86,6 +86,54 @@ bridge CLI/provider separately before deployment; copying local Claude settings 
 verified custom-provider setup. Deterministic native retrieval and a fake intent CLI can test the
 index and HTTP contract without contacting a model.
 
+For a separate Claude bridge model, install [scripts/claude](scripts/claude) as `claude` in a
+Wiki-only executable directory. Place a `claude-config.json` beside it using
+[configs/claude-bridge.example.json](configs/claude-bridge.example.json), and prepend that directory
+to **only the Wiki service's** `PATH`. Set absolute `real_claude` and `settings_file` paths and the
+authorized `base_url`. The wrapper reads authentication from that settings file without changing
+it, and requires its endpoint to match `base_url` before forwarding credentials.
+
+The example selects `model: "qwen3.8-flash"` and `effort: "high"`. These override the native bridge's
+model selection and `--effort low`, including the model environment aliases. The Optimizer's
+shared settings and model stay unchanged. Keep the executable and its configuration private to
+the deployment, and verify a real Wiki query after configuring them. No credential belongs in
+the example or wrapper.
+
+### Preloaded indexed queries
+
+`indexed_execution` selects how the indexed corpus runs:
+
+| Value | Behavior |
+| --- | --- |
+| `"subprocess"` (default) | Starts the native query processes for each request. |
+| `"preloaded"` | Loads and prepares the supported internal index at service startup, then reuses that snapshot in isolated query processes. |
+
+[configs/internal.example.json](configs/internal.example.json) enables `"preloaded"`. This mode
+requires POSIX process forking and the verified internal tool pin imported above. Unsupported
+tool versions fail explicitly; the service does not silently fall back to another execution mode.
+Keep the default `"subprocess"` for other corpus implementations.
+
+Preloading prepares the parsed shards, record identities, governance bindings, vocabulary and
+operator resolver once per Store revision. A dedicated single-threaded fork server holds the
+snapshot; each request forks a child that inherits it and executes the native query implementation.
+Query-local environment and stdout remain isolated, while independent children can wait on their
+model calls concurrently. `max_concurrent_queries` still bounds active queries. Native ranking,
+governance eligibility, widening and result projection retain their original behavior. Responses
+are not cached: every request has its own `query_id`, and natural-language queries still run the
+upstream intent bridge.
+
+The adapter checks the Store revision before and after each query. A changed revision causes a
+new snapshot generation to be preloaded; a Store change during a query still rejects that result.
+Preloading adds startup time and memory for the resident parent snapshot in each service worker.
+Query children share unchanged snapshot pages through process copy-on-write, with additional
+memory for their own work. Size the service and concurrency limit with this memory cost in mind.
+
+For an indexed-query timing breakdown, set `ATREX_WIKI_METRICS_LOG` in the service environment to
+a writable JSONL file outside `corpus/`. The native front door records total, bridge and retrieval
+latency, bridge attempts and available model token counters. This separates time spent waiting
+on the model from local retrieval; preloading does not remove model latency. Set the variable
+before starting the service so its query processes inherit it.
+
 This config connects the knowledge service only. In the separate Runtime deployment config,
 `gpu_wiki.enabled` defaults to `false`; set it to `true` to expose `wiki-query`, its conditional
 instructions and Attempt-scoped authority to Bootstrap/Optimizer. It is independent of the
@@ -106,7 +154,7 @@ not to Optimizer/Evolver backends. Runtime context and the Agent's question are 
 intent extraction and operator resolution are entirely upstream-owned. The old local
 `operator_families` override has been removed.
 
-`max_concurrent_queries` bounds simultaneous `query_nl.py` subprocesses and defaults to `16`.
+`max_concurrent_queries` bounds simultaneous native queries and defaults to `16` in both execution modes.
 Additional requests wait for a slot. This prevents unbounded model/subprocess fan-out without
 serializing unrelated read-only queries behind one global lock.
 

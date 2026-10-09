@@ -87,6 +87,45 @@ HTTP 请求保留完整硬件、DSL、算子和原始问题。任意问题会走
 本地 Claude settings 就已完成自定义端点配置。原生确定性查询和模拟意图 CLI 可用于验证索引
 与 HTTP 契约，无需请求模型。
 
+需要为 Claude 意图解析单独指定模型时，将 [scripts/claude](scripts/claude) 安装为 Wiki
+专用目录中的 `claude`，按 [configs/claude-bridge.example.json](configs/claude-bridge.example.json)
+在其旁边创建 `claude-config.json`，并只为 Wiki 服务前置该目录到 `PATH`。配置填写
+`real_claude`、`settings_file` 的绝对路径和已授权的 `base_url`。启动器只读复用 settings
+中的凭据，不修改原文件；发送凭据前要求该文件的端点与 `base_url` 一致。
+
+示例选择 `model: "qwen3.8-flash"`、`effort: "high"`，覆盖原生 Bridge 的模型选择和
+`--effort low`，同时设置模型环境别名。Optimizer 的共享 settings 和模型保持原样。
+启动器和配置应放在部署专用目录，配置完成后验证一次真实 Wiki 查询。示例和脚本均不存放凭据。
+
+### 索引预加载
+
+`indexed_execution` 选择索引库的执行方式：
+
+| 值 | 行为 |
+| --- | --- |
+| `"subprocess"`（默认） | 每次请求启动原生查询进程。 |
+| `"preloaded"` | 服务启动时加载并准备支持的内部索引，后续查询在隔离的子进程中复用快照。 |
+
+[configs/internal.example.json](configs/internal.example.json) 已启用 `"preloaded"`。该模式要求
+POSIX 进程 Fork，且只支持上面导入的已验证内部工具版本。不支持的工具版本会明确报错，服务
+不会静默切换执行方式。其他语料实现继续使用默认 `"subprocess"`。
+
+预加载为每个 Store 版本提前准备已解析分片、记录摘要、治理绑定、词汇表和算子解析器。
+独立的单线程 Fork Server 持有快照；每次请求创建继承快照的子进程，执行原生查询实现。
+各请求的环境变量和 stdout 相互隔离，不同子进程可以同时等待模型返回，并发仍受
+`max_concurrent_queries` 限制。排序、治理资格判断、条件放宽和结果投影保持原生行为。
+这里不缓存完整响应：每次请求仍有独立 `query_id`，自然语言问题仍调用上游意图解析模型。
+
+适配器在查询前后校验 Store 版本。版本变化时会重新预热一代快照；查询过程中发生 Store
+变化，仍会拒绝该次结果。预加载会增加启动耗时，每个服务 Worker 也会增加一份常驻父进程
+快照的内存占用。查询子进程通过进程写时复制共享未修改的快照页，同时需要各自的工作内存；
+部署容量和并发上限应计入这些开销。
+
+如需索引查询的分段计时，在服务环境中设置 `ATREX_WIKI_METRICS_LOG`，指向 `corpus/` 之外
+可写的 JSONL 文件。原生入口会记录总耗时、意图解析耗时、检索耗时、模型调用次数及可用的
+Token 计数，可区分模型等待与本地检索开销。预加载不会消除模型等待时间。该变量应在服务
+启动前设置，让查询进程继承。
+
 本配置仅接通知识服务。另一个 Runtime 部署配置中的 `gpu_wiki.enabled` 默认 `false`；设为
 `true` 才向 Bootstrap/Optimizer 加载 `wiki-query`、条件式提示词并发放 Attempt 查询权限。
 它与 Direction/Experiment 模块独立。使用包含可选 Wiki 工具的 Core/KDA 源码，重启 Runtime
@@ -103,7 +142,7 @@ Local Wiki 不保存模型凭证。
 Wiki 的意图提取，不影响 Optimizer/Evolver 的 Backend 选择。Runtime 上下文和 Agent 问题以文本
 传入，意图提取和算子解析完全由上游负责。旧的本地 `operator_families` Override 已移除。
 
-`max_concurrent_queries` 限制同时运行的 `query_nl.py` 子进程数，默认值为 `16`；其余请求等待
+两种执行模式下，`max_concurrent_queries` 都限制同时运行的原生查询数，默认值为 `16`；其余请求等待
 并发槽。这样既避免模型和子进程无界扩张，也不会再用一个全局锁串行阻塞所有只读查询。
 
 ```bash
