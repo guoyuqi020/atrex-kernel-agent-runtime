@@ -43,6 +43,7 @@ KDA 与 Runtime 的 Evaluator/Evolver 配置固定为这些提交，不使用旧
   每臂最多并发 3 次。臂间不共享 Bootstrap 之后的历史，不运行 Evolver。
 - 生产门禁开启，PPU 禁用锁频；普通 Evaluate 和 ABBA 均使用原生 Eval。
 - GPU Wiki 默认开启，Bootstrap 与全部八臂均可查询，与 Direction/Experiment 开关独立。
+  自然语言检索需要模型解析，单次查询等待上限为 600 秒。
   服务地址由 `policy.json` 的 `runtime.wiki_url` 指定；`task.json` 中设置
   `runtime.gpu_wiki.enabled: false`（或 `runtime.gpu_wiki: null`）可关闭。
 

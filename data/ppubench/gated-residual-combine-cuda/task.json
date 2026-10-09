@@ -15,7 +15,8 @@
     "host_home": "/root",
     "launcher_mode": "container",
     "gpu_wiki": {
-      "enabled": true
+      "enabled": true,
+      "timeout_seconds": 600
     },
     "roofline_builder": null,
     "agate": {
