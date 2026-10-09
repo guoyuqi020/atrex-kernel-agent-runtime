@@ -1,0 +1,651 @@
+{
+  "schema_version": 1,
+  "repository": "https://code.alibaba-inc.com/tre-infra/atrex-bench.git",
+  "review_url": "https://code.alibaba-inc.com/tre-infra/atrex-bench/codereview/30328999",
+  "branch": "codex/qwen38flash-ppu-0-64k-bench",
+  "commit": "0e1413ea89367be7d38c059e458f23f5a7c33f81",
+  "public_harness_commit": "22d6a57b98ebb45c8db76e98815158d820c1dca3",
+  "collection": "qwen38flash_next_ppu_tp2_c16_0_64k_20260928",
+  "target_gpu": "ZW-M890P",
+  "operator_count": 18,
+  "shape_case_count": 460,
+  "source_layout_preserved": true,
+  "files": {
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/collection.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/collection.json",
+      "size_bytes": 1069,
+      "sha256": "2781f8eb6273e3435680f33d9ec983c82f2b6bfda949b42b58e9bcb389cc3f38"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/input.py",
+      "size_bytes": 750133,
+      "sha256": "c82a440b4bfd9bc636cf4ee67dc2837591bf42eda02f0db1fb3a073b248cd6cf"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/metadata.json",
+      "size_bytes": 19661,
+      "sha256": "6b4b529fa764b412608d745d0a897d4e4324f3fff1d8c848e8a344ca4076633d"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/roofline.json",
+      "size_bytes": 5007,
+      "sha256": "128e2a7641205cf4c957ae3cc794d63f7aa2cd58142ef06154d9e8ff64e61859"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/shape_cases.json",
+      "size_bytes": 68369,
+      "sha256": "6f9b761f851a592d80e6e22d7eaf667ae140a2be60774e7a8aa6e5d6394dcf54"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/shape_range.json",
+      "size_bytes": 3620,
+      "sha256": "628c0afeb2c6d3f281677072fed14f3f53debe75b71a40475c9e62d814a5c097"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_prefill_varlen_bf16/solution.py",
+      "size_bytes": 1401,
+      "sha256": "6cb3bf69b31b76fbb5a4133a26a5a3667cc62d3b35ea48bdb279c355b4dd0dbc"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/input.py",
+      "size_bytes": 1510938,
+      "sha256": "aff4ea3a1fb5719a5903ce104c3e2380612cc7c6e7c25668b233c4a19b21645d"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/metadata.json",
+      "size_bytes": 14192,
+      "sha256": "67b59d90dd162ca741f674631180406650d01d8c69dcafd71338e38a5268f91b"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/roofline.json",
+      "size_bytes": 2591,
+      "sha256": "f4e7a16a17ddae6edeb4e0f0f5d7b35b93aea0f5c424b1d03777373138e333bb"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/shape_cases.json",
+      "size_bytes": 39858,
+      "sha256": "18b98f1505c3b2ea912d3d84b3ef9b402d7b304589cd6d93d44b54dc2a2c8411"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/shape_range.json",
+      "size_bytes": 3381,
+      "sha256": "e723e5a3488dce48676d7f451a80a4c735ff4bc34d70079771d07b24ea8f6450"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/causal_conv1d_speculative_update_bf16/solution.py",
+      "size_bytes": 1316,
+      "sha256": "59e87f789a7f2603b5c68b9b09a8742f10bac78282ea165838a927ce98c1c8ba"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/input.py",
+      "size_bytes": 10762,
+      "sha256": "80a2a195750a241dee1ad3b256b906c55cc0a062f5af60e2eae6b18ed0308fc7"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/metadata.json",
+      "size_bytes": 19036,
+      "sha256": "80961137fc7b6bf1b59c721fc4d9af12386646633de9871c52056278279b8915"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/roofline.json",
+      "size_bytes": 4191,
+      "sha256": "78d1ec53eb9aaae45984a5222cce8d9fa26e4f2162c9feabd58649338c51d0eb"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/shape_cases.json",
+      "size_bytes": 6510,
+      "sha256": "d31dfeeec7fb9e2858b7f461ac05fa858bd8bc9637f98549eb6d8cbf72157b2b"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/shape_range.json",
+      "size_bytes": 621,
+      "sha256": "96af9c30da3062e72aadf0c989ae53da8010a0627d0f54d738694316293470d2"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/solution.py",
+      "size_bytes": 2752,
+      "sha256": "ec61b0fcb931059fc93bd0612541841cf71b72b351a955df04c42f945d014a89"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/input.py",
+      "size_bytes": 6827,
+      "sha256": "d838fe5b15412ad73370b08db9c28b62ba1ca3400a2b3b533f473b4d31371865"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/metadata.json",
+      "size_bytes": 19782,
+      "sha256": "aba3a01d4cdeaf6e930b9b8b1aa65ac19e08870a0ed8db8645a18f5b10a757ba"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/roofline.json",
+      "size_bytes": 4486,
+      "sha256": "9380b0f461d0b57347957d87c8aa3798d7ce23a1bb7f276280277636832bf174"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/shape_cases.json",
+      "size_bytes": 4105,
+      "sha256": "fe2e24e03df8c8d282dfddf6656ee9229eaa69e957580c50f7923349d55ada28"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/shape_range.json",
+      "size_bytes": 1076,
+      "sha256": "246942403293bfc71eee82c70fa528001091efe8cf0c8146cd0c2ca91dba304f"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/compressed_sparse_attention_token_selection_bf16/solution.py",
+      "size_bytes": 1314,
+      "sha256": "268859102be0b2c1fa26ecaf2c4f9ab41f9d29dd77a844a7bdd587644ca32883"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/input.py",
+      "size_bytes": 1531,
+      "sha256": "9a41e67e660e91d7193c989a2b267b37f4ba0dc5e5fe9b6f612ca31644c17911"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/metadata.json",
+      "size_bytes": 19174,
+      "sha256": "8e7ca0dccf609bf1647831a2216563b7553bcc2325c62a27b5786913294bef8e"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/roofline.json",
+      "size_bytes": 2627,
+      "sha256": "d018c71ca04455ae0f837e4834273ed8820ecdeba3100a42f66e3b866cd57165"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/shape_cases.json",
+      "size_bytes": 1392,
+      "sha256": "780c4c17a7777a874b2fcc76acacd4b4033d654aa44be1f7886dd837f574ebea"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/shape_range.json",
+      "size_bytes": 130,
+      "sha256": "b1ad44136e00cb03fb9c756a3b815b24a270f22f42b08158410918387aa8ed50"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_gating_bf16_fp32/solution.py",
+      "size_bytes": 609,
+      "sha256": "bf72d477dbb5eccbbeddadf805194ad80ef9660be818216ba737422e4c96d415"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/input.py",
+      "size_bytes": 593159,
+      "sha256": "09d767b54225634f9edfff0e4567e4aebef8ba8b8439fcfa38837d428c6da12a"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/metadata.json",
+      "size_bytes": 19928,
+      "sha256": "bc54209fdb6484e22551c1d7fdcabf839d7e0c3ed8dfcac93c9b3fef837761d9"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/roofline.json",
+      "size_bytes": 5069,
+      "sha256": "fdce9def4c0048b1a2b38cd5889fb8a3926dae105f3efe2f1a88028b38552b50"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/shape_cases.json",
+      "size_bytes": 4434,
+      "sha256": "efe6a84c849f3de90302eefde461a5018c3f3d8e269c1c940439717dec75b0c1"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/shape_range.json",
+      "size_bytes": 620,
+      "sha256": "1403148dd5b5b60cfee539020f7f3245efe1681086897bfb9e14163ba34f3892"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_prefill_varlen_bf16_fp32/solution.py",
+      "size_bytes": 599,
+      "sha256": "1f07a369a66494cf3be0014ff77ad6f31e61b804e3a58c085faf8ea43fd9f708"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/input.py",
+      "size_bytes": 1228106,
+      "sha256": "80ea46cd88af9859c58dbb71eb7a0ceb8ca3337bf4c62af5b405699c1fd619d9"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/metadata.json",
+      "size_bytes": 15545,
+      "sha256": "8440ce47d5635fe1aa4209c4f3c781c27eb01495a490a7d636ef98b812ac4a4d"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/roofline.json",
+      "size_bytes": 2709,
+      "sha256": "cf5f1cc19022e14bb5ef13f4e6ca1fede155c0c85e43faffcb24e30ffd48c589"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/shape_cases.json",
+      "size_bytes": 4334,
+      "sha256": "e24e2f42f3323bd17b165e91b2f609f26b99d078b945d9c7de48a838ddf6d2e5"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/shape_range.json",
+      "size_bytes": 849,
+      "sha256": "fe2a32bf35549b13cd431754534a8614cf09e1c5d9f12c08883347a17702c65a"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/solution.py",
+      "size_bytes": 728,
+      "sha256": "b9e36b95d62bb05fd940e7396dccdc914919657b7dd0ad36c2f66d88dc1b8da2"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/input.py",
+      "size_bytes": 6363,
+      "sha256": "115ea5b7c137996ee098234aa7a58bb85a4240922fa51c347beeb9e5d3358063"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/metadata.json",
+      "size_bytes": 17644,
+      "sha256": "41f3dc2210f73ed80b3ff69e0d89a8a776f7727111171dd1245ec46433c0d43d"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/roofline.json",
+      "size_bytes": 2670,
+      "sha256": "5c68dc1aa41a30649571bf655ac4d9349901b34cb6c119799b1e0bed41312968"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/shape_cases.json",
+      "size_bytes": 3899,
+      "sha256": "300820ae0a4502b15379af908b333a221442e538d210e62511d5744ed16b8c4b"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/shape_range.json",
+      "size_bytes": 499,
+      "sha256": "507fc0e049207a21c8eb2177bd658e823fa3652774918e5c403d24b7bb9798c6"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gated_residual_combine_bf16/solution.py",
+      "size_bytes": 451,
+      "sha256": "20794500e7984fbc8018bd6429b148e57d802327c18cf2224f68dfc726ed6490"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/input.py",
+      "size_bytes": 927160,
+      "sha256": "0a52bd84ba6f315ee2c631081c29759a895ef3cc5db7dff69f74f0e2e3a9fbb5"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/metadata.json",
+      "size_bytes": 19164,
+      "sha256": "947cbd5a10fddcbd67805c533fab621ec27517d5f7038a4efd935977c824a1b1"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/roofline.json",
+      "size_bytes": 4436,
+      "sha256": "4862cb1d6a0210c2bcd489e63c14d131a507daa1b33aec0f3c127dc16c6e98bd"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/shape_cases.json",
+      "size_bytes": 19451,
+      "sha256": "b096c89c543ac26b1b046f74dc5960c453a77a106474287aaf2589ee7307146f"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/shape_range.json",
+      "size_bytes": 1244,
+      "sha256": "aed68a5521169c99f6a82847a10af625994d91db76db4d31de710e524b8eadcb"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/gemma_rmsnorm_qk_bf16/solution.py",
+      "size_bytes": 1223,
+      "sha256": "c5755a6fbdada8743ade5cbb6f830d490d079f8fce6e0b9f8b4798327d3c2152"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/input.py",
+      "size_bytes": 2581237,
+      "sha256": "f7b605e2c14f4f9366c65b380ef41676a0d284e798bcd1b3561c3975d5f0ec60"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/metadata.json",
+      "size_bytes": 18576,
+      "sha256": "02af99c6d6e2cf288aef02e97319ed87b2a9cada58af0127f717ed97c1f9d2f2"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/roofline.json",
+      "size_bytes": 4495,
+      "sha256": "7137985f8036d3eeab6b4daf2ba7062a012a87fc79e8184d172411989ac35dc4"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/shape_cases.json",
+      "size_bytes": 43562,
+      "sha256": "34e28fd8ac418bce1b4f164d81228764c80f2ac52c16dcfac8247d7bef638278"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/shape_range.json",
+      "size_bytes": 1438,
+      "sha256": "b63f512503b69e9a63c3b6dcdd381ba944bcae52ae3592d810f0adeb5ccf9c35"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/hyperconnection_mix_bf16/solution.py",
+      "size_bytes": 1839,
+      "sha256": "8e4e2831ddda141727845bdda4e7fbea12a8a563f936ae36e95eaf471ad21c57"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/input.py",
+      "size_bytes": 1511560,
+      "sha256": "472c5e7c2ca2baff7bd93af38bc70080de37336c5367c4bb62952b46fec86ba0"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/metadata.json",
+      "size_bytes": 19161,
+      "sha256": "57e0fc49709cd29343c6eba59f29b1f32b92c634d0bfcb37a41df9a582df7567"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/roofline.json",
+      "size_bytes": 4594,
+      "sha256": "e746a98ce5b0fc14383b74ca1cd9c8c0dc47a46c7c207ec807d9277e05a41608"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/shape_cases.json",
+      "size_bytes": 19007,
+      "sha256": "4a77c1e789d377c68b5bdaa82afdf3e8d12e0ccb988eda19e6478bdbb374fe68"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/shape_range.json",
+      "size_bytes": 1117,
+      "sha256": "04e763049bc886e873eedc1046795d6d526059314a3ace057dee582ff816b57b"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/linear_bf16_no_bias/solution.py",
+      "size_bytes": 1167,
+      "sha256": "389091c4f28be137c9555d9d6d865c1bc86cb894e0a783b631d24d4eebd07370"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/input.py",
+      "size_bytes": 1252,
+      "sha256": "e5383ea395ea26c4122703592abc63116d9501cffb94082aa0661a3bd29d185d"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/metadata.json",
+      "size_bytes": 18664,
+      "sha256": "a0329e0b674c645ff1a74df808be015aed061f98886c8c4888a8e29cee8a929f"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/roofline.json",
+      "size_bytes": 2636,
+      "sha256": "6f96ab6d8604850db5e4d50e0e176b2118fc39cb0c9b89260b3b4da084531d6e"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/shape_cases.json",
+      "size_bytes": 1333,
+      "sha256": "a1cdcf629597180c083acf7ecae42007e078f6d032f8c291d16ab035a9acd482"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/shape_range.json",
+      "size_bytes": 130,
+      "sha256": "b1ad44136e00cb03fb9c756a3b815b24a270f22f42b08158410918387aa8ed50"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/qkv_three_output_rearrange_bf16/solution.py",
+      "size_bytes": 597,
+      "sha256": "900bf7afe7bacf281e1f52f6415349b22440847a83389e7025119034f59ffc17"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/input.py",
+      "size_bytes": 44641,
+      "sha256": "37dabd2b5d66af1f0543c73a8a3355b3af2d6f9808d53c824dc553640546f725"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/metadata.json",
+      "size_bytes": 20626,
+      "sha256": "e84f224723498ff97d30db5f553daf3e151930d2893bb3902a87fe4ae22eb31d"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/roofline.json",
+      "size_bytes": 4687,
+      "sha256": "632dd7c2b36dfcf29354582821c7876059f4f2ce951c318144e3704117150e91"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/shape_cases.json",
+      "size_bytes": 1250739,
+      "sha256": "73c21232f087c8507caed90268eb3af0b7d68f71678745a9c9422f9d957380cf"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/shape_range.json",
+      "size_bytes": 1900,
+      "sha256": "9df8d651f577e0da1d2eda894a66b97e41ede0c93fae9a0ceaaa6e0f6c9b604b"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/rotary_cached_qk_bf16_inplace_neox/solution.py",
+      "size_bytes": 839,
+      "sha256": "ffe0362b4e8e3c240d7cf2b12ef9f4308725b4718f3fd74507d088aa3ad76fc6"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/input.py",
+      "size_bytes": 510830,
+      "sha256": "648f1f596b704d9584c57ec870aa48fcd71f4931ab6b6c47289def4673fe5384"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/metadata.json",
+      "size_bytes": 21771,
+      "sha256": "56843d92ad305d84ae30f239c03d33df68188c2d9d0bf4e9edd81410279543fb"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/roofline.json",
+      "size_bytes": 2775,
+      "sha256": "3cb15364a1c8dcaa529a881c9cdb541627dafb796f96a3426f00fca6d9424ce9"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/shape_cases.json",
+      "size_bytes": 1388,
+      "sha256": "c216feb63b2d6062580781f924f2017e68419d3845f609aa759ff51befe0c78a"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/shape_range.json",
+      "size_bytes": 130,
+      "sha256": "b1ad44136e00cb03fb9c756a3b815b24a270f22f42b08158410918387aa8ed50"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/routed_moe_mxfp4_bf16_out/solution.py",
+      "size_bytes": 3557,
+      "sha256": "b6a666f4bec2e02c68a6b90b98d0f699bc5bc043c359f3b5a323f0ee3ec497d3"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/input.py",
+      "size_bytes": 1470704,
+      "sha256": "5089f6d9851c6c332fc1a794783abd4e11a2c531928986fb5433ef421604c9e6"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/metadata.json",
+      "size_bytes": 19503,
+      "sha256": "55ae3f933c0c557d29600541fc561c347a82fac277527a4e03932b24f5ea1b42"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/roofline.json",
+      "size_bytes": 4654,
+      "sha256": "9f5a9259a6ba67f3029150c74ddb778ecd8e9986e3ed72984c664ffab61205e5"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/shape_cases.json",
+      "size_bytes": 35198,
+      "sha256": "de761554a75e06b0bd24d9741450508d0ee30bff787b878d6e9c57620372c050"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/shape_range.json",
+      "size_bytes": 1125,
+      "sha256": "ca90730b9f6c319a547e6167dc160d42ffb020d47df1d04a0fba182befd030c1"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/shared_expert_sigmoid_swiglu_bf16/solution.py",
+      "size_bytes": 1603,
+      "sha256": "93eea55381fe230d0be3a3adc8967ab7747c357eded1e69398eaf3dd8b073da9"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/input.py",
+      "size_bytes": 1398,
+      "sha256": "aba9b83f55fffaa7dd9c6d28d909680e7d066b34ddcfd33a517fc4de7b7821d6"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/metadata.json",
+      "size_bytes": 14352,
+      "sha256": "cb7ae5b0972491ac6c1b84e7aae19c33e02d5cd7f17cd6262903952a6ed4a1dc"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/roofline.json",
+      "size_bytes": 3876,
+      "sha256": "9fdf388ea3f2efc02982ea087e813752ce9f88a34471b91222c1e52ba5d769ce"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/shape_cases.json",
+      "size_bytes": 3424,
+      "sha256": "81838f8469bb535fcae58809d40eb2eb6027a06afb9c9a184e60bd345cd7a398"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/shape_range.json",
+      "size_bytes": 793,
+      "sha256": "0bbf43a2fe60208b8baf07199fadd5aae68a9d7928f38d63bc2d54de707f79fc"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_gather_bf16/solution.py",
+      "size_bytes": 531,
+      "sha256": "96c5bca0fbc4efd8fdd062257b349ea878a1d231b2ce1a8d9471363bc15121d5"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/input.py",
+      "size_bytes": 1430,
+      "sha256": "75868a1cd9f77d1e5a2ace0d792b85e943b0cf3a0c27f40bc993721c7c956b93"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/metadata.json",
+      "size_bytes": 14083,
+      "sha256": "54439cf251aedfe5e121a49f2cc03f0d99cdc9a1379cae5c3ff8d9d71ab7510a"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/roofline.json",
+      "size_bytes": 4021,
+      "sha256": "7ebe73952a83e8feefb7e06ed064d621d3973fa12f80e69c377eb1499097d886"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/shape_cases.json",
+      "size_bytes": 3015,
+      "sha256": "fed49a164c95d01c46b91129ccee197c574837c4b3ce96f487038197475fea93"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/shape_range.json",
+      "size_bytes": 669,
+      "sha256": "5397ab23273b65c18bac95428ea03d566f159b9744e268b424a86f2cb6d29274"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_all_reduce_sum_bf16/solution.py",
+      "size_bytes": 344,
+      "sha256": "c26fb9fc98640d1305b9d98017cb241b4ec87be31cb32d6135c0dad8dd4ad599"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/input.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/input.py",
+      "size_bytes": 1404,
+      "sha256": "213191834648f24f2ae7d7d53fbf4d43bced30255b0b8f810b7429f0d9b80b2b"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/metadata.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/metadata.json",
+      "size_bytes": 13828,
+      "sha256": "4be1ba7a41ea516fe9cad19a4f54e26c5105c3fd06171c27ce8d527979a73d86"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/roofline.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/roofline.json",
+      "size_bytes": 4020,
+      "sha256": "6cb2250f2fec716f2e8a360cc8936d8f2036a433ff48f7713bb46aebb02d7ebf"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/shape_cases.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/shape_cases.json",
+      "size_bytes": 2909,
+      "sha256": "724f95155618279f47fff5f3b2618f65004f40dbc4dba03a9eda71123f7c6636"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/shape_range.json": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/shape_range.json",
+      "size_bytes": 662,
+      "sha256": "9a0776bb55ad1a9c4c9d0d5598a66c0ab41af69ab41a9dfa6f7d28c4c1c1e54c"
+    },
+    "curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/solution.py": {
+      "source_path": "internal_source/data/curated/collections/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/operators/tp_reduce_scatter_sum_dim0_bf16/solution.py",
+      "size_bytes": 344,
+      "sha256": "b0300e433e28f106a6b561f45cf7343e0b2a134f63d9eb9a875ee8f66b6d3d81"
+    },
+    "curated/operators/causal_conv1d_prefill_varlen_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/causal_conv1d_prefill_varlen_bf16/reference.py",
+      "size_bytes": 9159,
+      "sha256": "ac5b602ea68af19f5f9ac4dd5ca7922543b777a1f2d079761540dd01d8e4c786"
+    },
+    "curated/operators/causal_conv1d_speculative_update_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/causal_conv1d_speculative_update_bf16/reference.py",
+      "size_bytes": 7562,
+      "sha256": "9d47edb1f44f90a7fc4ee3fcf28f595dfd6bc4582ab966f959af8fa63ff6f1cb"
+    },
+    "curated/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/reference.py": {
+      "source_path": "internal_source/data/curated/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/reference.py",
+      "size_bytes": 9823,
+      "sha256": "5b7258f521a8262be3e9061eec14f106e0a4839152e7d281d7aaae8a18b867e5"
+    },
+    "curated/operators/compressed_sparse_attention_token_selection_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/compressed_sparse_attention_token_selection_bf16/reference.py",
+      "size_bytes": 10183,
+      "sha256": "4ee74a5f311723f2a17977bf6e903fa11c7b5ef90cd7a9ee99ad7511b5e66904"
+    },
+    "curated/operators/gated_delta_rule_gating_bf16_fp32/reference.py": {
+      "source_path": "internal_source/data/curated/operators/gated_delta_rule_gating_bf16_fp32/reference.py",
+      "size_bytes": 609,
+      "sha256": "bf72d477dbb5eccbbeddadf805194ad80ef9660be818216ba737422e4c96d415"
+    },
+    "curated/operators/gated_delta_rule_prefill_varlen_bf16_fp32/reference.py": {
+      "source_path": "internal_source/data/curated/operators/gated_delta_rule_prefill_varlen_bf16_fp32/reference.py",
+      "size_bytes": 4985,
+      "sha256": "8f7d042c5c951d479f74e121ab722b561cb1bcc8b4d86fc26fdd400bbb8698aa"
+    },
+    "curated/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/reference.py": {
+      "source_path": "internal_source/data/curated/operators/gated_delta_rule_speculative_decode_bf16_fp32_inplace_statepool/reference.py",
+      "size_bytes": 11190,
+      "sha256": "24296082291d24cc6c3070fe2b3111e524cd31903972b184c24ff7b2e95cf235"
+    },
+    "curated/operators/gated_residual_combine_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/gated_residual_combine_bf16/reference.py",
+      "size_bytes": 1445,
+      "sha256": "173b53da08889ab42b3b2786fc14ebb921a9a88b112b48df3c644aaf84d71d37"
+    },
+    "curated/operators/gemma_rmsnorm_qk_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/gemma_rmsnorm_qk_bf16/reference.py",
+      "size_bytes": 797,
+      "sha256": "7c2faa157647e34861de3d67ef105d175ec295450a18c9563de4f5f9695272bc"
+    },
+    "curated/operators/hyperconnection_mix_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/hyperconnection_mix_bf16/reference.py",
+      "size_bytes": 1957,
+      "sha256": "dad972c30c41e1b953fb1dcb33af25ed329ac3b07eadf20cffa1d0e192e49294"
+    },
+    "curated/operators/linear_bf16_no_bias/reference.py": {
+      "source_path": "internal_source/data/curated/operators/linear_bf16_no_bias/reference.py",
+      "size_bytes": 530,
+      "sha256": "664ed95aeba4a533c70595900411dea4840c089c17622203004a880d7feb0e46"
+    },
+    "curated/operators/qkv_three_output_rearrange_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/qkv_three_output_rearrange_bf16/reference.py",
+      "size_bytes": 597,
+      "sha256": "900bf7afe7bacf281e1f52f6415349b22440847a83389e7025119034f59ffc17"
+    },
+    "curated/operators/rotary_cached_qk_bf16_inplace_neox/reference.py": {
+      "source_path": "internal_source/data/curated/operators/rotary_cached_qk_bf16_inplace_neox/reference.py",
+      "size_bytes": 1950,
+      "sha256": "0cb04433f7d613fbeb99b3b86ac9c10264d67ddf442bc7d17cb441ee3fa8192f"
+    },
+    "curated/operators/routed_moe_mxfp4_bf16_out/reference.py": {
+      "source_path": "internal_source/data/curated/operators/routed_moe_mxfp4_bf16_out/reference.py",
+      "size_bytes": 3128,
+      "sha256": "df228d26e8a703ba77921b000f238c8ee65d64a8daa4d4d0d66b7ec49acc61c7"
+    },
+    "curated/operators/shared_expert_sigmoid_swiglu_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/shared_expert_sigmoid_swiglu_bf16/reference.py",
+      "size_bytes": 1190,
+      "sha256": "969b8067fe08b8709b0332b009803d86532cf569c6fb1411bb0caa366b022703"
+    },
+    "curated/operators/tp_all_gather_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/tp_all_gather_bf16/reference.py",
+      "size_bytes": 904,
+      "sha256": "a7d93a850441a85baea46eff18312d11af936129697e6829a19ec7bf20d4aa48"
+    },
+    "curated/operators/tp_all_reduce_sum_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/tp_all_reduce_sum_bf16/reference.py",
+      "size_bytes": 765,
+      "sha256": "f7ddc910f8872b00d09233dd1a015e3e882ee31120207ca72c9cbd4d4aa11f6e"
+    },
+    "curated/operators/tp_reduce_scatter_sum_dim0_bf16/reference.py": {
+      "source_path": "internal_source/data/curated/operators/tp_reduce_scatter_sum_dim0_bf16/reference.py",
+      "size_bytes": 807,
+      "sha256": "8355f5027fb6dc42ff1bea93b09b1b109b74218dbf054b1a3caeb1672e7b6364"
+    }
+  },
+  "curated_root": "curated"
+}

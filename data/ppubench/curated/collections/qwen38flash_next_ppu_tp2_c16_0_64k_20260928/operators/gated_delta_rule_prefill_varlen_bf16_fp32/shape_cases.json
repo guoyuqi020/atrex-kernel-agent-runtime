@@ -1,0 +1,264 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": false,
+      "tokens": 1204
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "sequence_lengths": [
+        231
+      ],
+      "state_nonzero": false,
+      "tokens": 231
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": false,
+      "tokens": 2441
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": false,
+      "tokens": 2870
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 3,
+      "state_nonzero": false,
+      "tokens": 3207
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": false,
+      "tokens": 3590
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": false,
+      "tokens": 4480
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": false,
+      "tokens": 5177
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": false,
+      "tokens": 5807
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": false,
+      "tokens": 5945
+    }
+  },
+  "10": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": false,
+      "tokens": 7104
+    }
+  },
+  "11": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": false,
+      "tokens": 7271
+    }
+  },
+  "12": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": false,
+      "tokens": 774
+    }
+  },
+  "13": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": false,
+      "tokens": 7820
+    }
+  },
+  "14": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "sequence_lengths": [
+        8132
+      ],
+      "state_nonzero": true,
+      "tokens": 8132
+    }
+  },
+  "15": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": true,
+      "tokens": 8136
+    }
+  },
+  "16": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": true,
+      "tokens": 8136
+    }
+  },
+  "17": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": true,
+      "tokens": 8140
+    }
+  },
+  "18": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": true,
+      "tokens": 8140
+    }
+  },
+  "19": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": true,
+      "tokens": 8144
+    }
+  },
+  "20": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 4,
+      "state_nonzero": true,
+      "tokens": 8144
+    }
+  },
+  "21": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 3,
+      "state_nonzero": true,
+      "tokens": 8148
+    }
+  },
+  "22": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 1,
+      "state_nonzero": true,
+      "tokens": 8152
+    }
+  },
+  "23": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": true,
+      "tokens": 8152
+    }
+  },
+  "24": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 4,
+      "state_nonzero": true,
+      "tokens": 8164
+    }
+  },
+  "25": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 3,
+      "state_nonzero": true,
+      "tokens": 8172
+    }
+  },
+  "26": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": true,
+      "tokens": 8176
+    }
+  },
+  "27": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 14,
+      "sequence_lengths": [
+        318,
+        362,
+        365,
+        402,
+        432,
+        504,
+        649,
+        701,
+        707,
+        712,
+        714,
+        774,
+        791,
+        757
+      ],
+      "state_nonzero": false,
+      "tokens": 8188
+    }
+  },
+  "28": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 4,
+      "state_nonzero": true,
+      "tokens": 8188
+    }
+  },
+  "29": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "requests": 2,
+      "state_nonzero": true,
+      "tokens": 8192
+    }
+  }
+}

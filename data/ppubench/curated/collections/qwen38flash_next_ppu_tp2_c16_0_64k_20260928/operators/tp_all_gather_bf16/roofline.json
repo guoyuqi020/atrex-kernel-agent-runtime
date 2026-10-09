@@ -1,0 +1,179 @@
+{
+  "shapes": {
+    "0": {
+      "semantic_Q_read_bytes": 593920,
+      "semantic_Q_write_bytes": 1187840,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "1": {
+      "semantic_Q_read_bytes": 599040,
+      "semantic_Q_write_bytes": 1198080,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "2": {
+      "semantic_Q_read_bytes": 3256320,
+      "semantic_Q_write_bytes": 6512640,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "3": {
+      "semantic_Q_read_bytes": 814080,
+      "semantic_Q_write_bytes": 1628160,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "4": {
+      "semantic_Q_read_bytes": 20480,
+      "semantic_Q_write_bytes": 40960,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "5": {
+      "semantic_Q_read_bytes": 5120,
+      "semantic_Q_write_bytes": 10240,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "6": {
+      "semantic_Q_read_bytes": 40960,
+      "semantic_Q_write_bytes": 81920,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "7": {
+      "semantic_Q_read_bytes": 10240,
+      "semantic_Q_write_bytes": 20480,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "8": {
+      "semantic_Q_read_bytes": 655360,
+      "semantic_Q_write_bytes": 1310720,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "9": {
+      "semantic_Q_read_bytes": 163840,
+      "semantic_Q_write_bytes": 327680,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "10": {
+      "semantic_Q_read_bytes": 83886080,
+      "semantic_Q_write_bytes": 167772160,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "11": {
+      "semantic_Q_read_bytes": 20971520,
+      "semantic_Q_write_bytes": 41943040,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "12": {
+      "semantic_Q_read_bytes": 215040,
+      "semantic_Q_write_bytes": 430080,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "13": {
+      "semantic_Q_read_bytes": 81920,
+      "semantic_Q_write_bytes": 163840,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "14": {
+      "semantic_Q_read_bytes": 20480,
+      "semantic_Q_write_bytes": 40960,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "15": {
+      "semantic_Q_read_bytes": 281600,
+      "semantic_Q_write_bytes": 563200,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "16": {
+      "semantic_Q_read_bytes": 30720,
+      "semantic_Q_write_bytes": 61440,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "17": {
+      "semantic_Q_read_bytes": 35840,
+      "semantic_Q_write_bytes": 71680,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "18": {
+      "semantic_Q_read_bytes": 163840,
+      "semantic_Q_write_bytes": 327680,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "19": {
+      "semantic_Q_read_bytes": 40960,
+      "semantic_Q_write_bytes": 81920,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "20": {
+      "semantic_Q_read_bytes": 40960,
+      "semantic_Q_write_bytes": 81920,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "21": {
+      "semantic_Q_read_bytes": 163840,
+      "semantic_Q_write_bytes": 327680,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "22": {
+      "semantic_Q_read_bytes": 2560,
+      "semantic_Q_write_bytes": 5120,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "23": {
+      "semantic_Q_read_bytes": 10240,
+      "semantic_Q_write_bytes": 20480,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    },
+    "24": {
+      "semantic_Q_read_bytes": 599040,
+      "semantic_Q_write_bytes": 1198080,
+      "semantic_W_flops": {
+        "float32": 0
+      }
+    }
+  }
+}

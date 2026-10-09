@@ -1,0 +1,224 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 22371,
+      "profile": "prefill",
+      "query_rows": 8192
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 53361,
+      "profile": "decode",
+      "query_rows": 64
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 35486,
+      "profile": "prefill",
+      "query_rows": 2874
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 34127,
+      "profile": "prefill",
+      "query_rows": 774
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 45157,
+      "profile": "decode",
+      "query_rows": 64
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 5399,
+      "profile": "decode",
+      "query_rows": 12
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 35605,
+      "profile": "prefill",
+      "query_rows": 3841
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 47900,
+      "profile": "decode",
+      "query_rows": 64
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 18420,
+      "profile": "decode",
+      "query_rows": 44
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 6141,
+      "profile": "prefill",
+      "query_rows": 8192
+    }
+  },
+  "10": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 7190,
+      "profile": "decode",
+      "query_rows": 16
+    }
+  },
+  "11": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 17734,
+      "profile": "decode",
+      "query_rows": 40
+    }
+  },
+  "12": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 14366,
+      "profile": "decode",
+      "query_rows": 24
+    }
+  },
+  "13": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 35072,
+      "profile": "decode",
+      "query_rows": 60
+    }
+  },
+  "14": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 34776,
+      "profile": "prefill",
+      "query_rows": 8192
+    }
+  },
+  "15": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 20941,
+      "profile": "decode",
+      "query_rows": 64
+    }
+  },
+  "16": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 3868,
+      "profile": "decode",
+      "query_rows": 8
+    }
+  },
+  "17": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 17690,
+      "profile": "decode",
+      "query_rows": 36
+    }
+  },
+  "18": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 22433,
+      "profile": "decode",
+      "query_rows": 64
+    }
+  },
+  "19": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 34643,
+      "profile": "prefill",
+      "query_rows": 6005
+    }
+  },
+  "20": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 35508,
+      "profile": "decode",
+      "query_rows": 64
+    }
+  },
+  "21": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 32411,
+      "profile": "prefill",
+      "query_rows": 418
+    }
+  },
+  "22": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 49795,
+      "profile": "prefill",
+      "query_rows": 8192
+    }
+  },
+  "23": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 32120,
+      "profile": "decode",
+      "query_rows": 64
+    }
+  },
+  "24": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 133,
+      "profile": "decode",
+      "query_rows": 4,
+      "sequence_lengths": [
+        535
+      ]
+    }
+  },
+  "25": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 1888,
+      "profile": "decode",
+      "query_rows": 4,
+      "sequence_lengths": [
+        7554
+      ]
+    }
+  },
+  "26": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "compressed_rows": 1887,
+      "profile": "prefill",
+      "query_rows": 7550
+    }
+  }
+}

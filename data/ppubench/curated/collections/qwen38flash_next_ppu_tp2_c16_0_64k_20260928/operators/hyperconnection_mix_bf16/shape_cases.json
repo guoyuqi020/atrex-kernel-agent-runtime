@@ -1,0 +1,2081 @@
+{
+  "0": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            22,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "1": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            18,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "2": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            20,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "3": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            3343,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "4": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_small"
+    }
+  },
+  "5": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_small"
+    }
+  },
+  "6": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            3580,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "7": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_small"
+    }
+  },
+  "8": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            30,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "9": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "10": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4096,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "11": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1156,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "12": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            32,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "13": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            3664,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "14": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8,
+            10240
+          ],
+          "storage_offset": 81920,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_small"
+    }
+  },
+  "15": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            24,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "16": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            32,
+            10240
+          ],
+          "storage_offset": 327680,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "17": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_small"
+    }
+  },
+  "18": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            3453,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "19": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            415,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "20": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            12,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_small"
+    }
+  },
+  "21": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            10240
+          ],
+          "storage_offset": 10240,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_small"
+    }
+  },
+  "22": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            16,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "23": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            64,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_batch"
+    }
+  },
+  "24": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            3700,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "25": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1957,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  },
+  "26": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560,
+      "norm_eps": 1e-06,
+      "per_branch_norm": true
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "hyper_input": {
+          "alias_group": "hyper_input",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2617,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "norm_weight": {
+          "alias_group": "norm_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight_down": {
+          "alias_group": "weight_down",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            320,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_inject": {
+          "alias_group": "weight_inject",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            10240
+          ],
+          "storage_offset": 0,
+          "stride": [
+            10240,
+            1
+          ]
+        },
+        "weight_up": {
+          "alias_group": "weight_up",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10240,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        }
+      },
+      "profile_id": "mix_long"
+    }
+  }
+}

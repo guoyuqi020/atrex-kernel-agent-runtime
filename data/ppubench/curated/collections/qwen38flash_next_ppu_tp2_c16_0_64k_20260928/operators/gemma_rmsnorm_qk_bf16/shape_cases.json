@@ -1,0 +1,1038 @@
+{
+  "0": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            14,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "1": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            64,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "2": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "3": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            64,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "4": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "5": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            12,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "6": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            60,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "7": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_long"
+    }
+  },
+  "8": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            24,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "9": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            10,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "10": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            44,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "11": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            16,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "12": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "13": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            24,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "14": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            40,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "15": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "16": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            36,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "17": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            40,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "18": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            60,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "19": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            32,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "20": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "21": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            36,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "22": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "23": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            12,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "24": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            32,
+            1,
+            256
+          ],
+          "storage_offset": 6144,
+          "stride": [
+            6656,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_k_batch"
+    }
+  },
+  "25": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            44,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "26": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            16,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  },
+  "27": {
+    "init_kwargs": {
+      "eps": 1e-06
+    },
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            12,
+            256
+          ],
+          "storage_offset": 0,
+          "stride": [
+            3072,
+            256,
+            1
+          ]
+        }
+      },
+      "profile_id": "norm_q_small"
+    }
+  }
+}

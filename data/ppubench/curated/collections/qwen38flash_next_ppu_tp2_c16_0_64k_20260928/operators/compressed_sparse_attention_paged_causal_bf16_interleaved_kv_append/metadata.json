@@ -1,0 +1,364 @@
+{
+  "benchmark_contract": {
+    "defined_outputs": {},
+    "mutates_inputs": [
+      "kv_cache",
+      "output"
+    ]
+  },
+  "cases": {
+    "0": {
+      "current_case_sha256": "9395fefe9a3dea8ffda6c7062e2298a024d4b97434e33bd5148c9164d3e4a1ab",
+      "empirical_frequency_weight": 0.004259850905218318,
+      "frequency_weight": 0.004259850905218318,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 40,
+      "observed_call_count": 40,
+      "raw_frequency_share": 0.004259850905218318,
+      "real_input_sample_ids": []
+    },
+    "1": {
+      "current_case_sha256": "2a8eda164fa874557e4aef7eacda4ad73e33fae0a640d99c0d33def3ef3b0a69",
+      "empirical_frequency_weight": 0.025559105431309903,
+      "frequency_weight": 0.025559105431309903,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 240,
+      "observed_call_count": 228,
+      "raw_frequency_share": 0.025559105431309903,
+      "real_input_sample_ids": []
+    },
+    "2": {
+      "current_case_sha256": "6f949f4aaa3ed2bd3221ccd34f6d90973904307d6124f7dfdc498d8a03c12c4f",
+      "empirical_frequency_weight": 0.015548455804046858,
+      "frequency_weight": 0.015548455804046858,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 146,
+      "observed_call_count": 74,
+      "raw_frequency_share": 0.015548455804046858,
+      "real_input_sample_ids": []
+    },
+    "3": {
+      "current_case_sha256": "1e38d29d311082dbe5ab40c20d6d7dc8c4d5e566e19121f8029ab362cdba908d",
+      "empirical_frequency_weight": 0.07838125665601704,
+      "frequency_weight": 0.07838125665601704,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 736,
+      "observed_call_count": 736,
+      "raw_frequency_share": 0.07838125665601704,
+      "real_input_sample_ids": [
+        "compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append:csa_draft_decode_c16"
+      ]
+    },
+    "4": {
+      "current_case_sha256": "5ed8660c89009c4cee849790e6823377fec0958c7bd7e01abb4c8541c06539b3",
+      "empirical_frequency_weight": 0.005963791267305644,
+      "frequency_weight": 0.005963791267305644,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 56,
+      "observed_call_count": 36,
+      "raw_frequency_share": 0.005963791267305644,
+      "real_input_sample_ids": []
+    },
+    "5": {
+      "current_case_sha256": "dee9e6452b9edb118b27fee59fe00e4596c51ebe5b2591a9367e12752361bf1a",
+      "empirical_frequency_weight": 0.016826411075612353,
+      "frequency_weight": 0.016826411075612353,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 158,
+      "observed_call_count": 52,
+      "raw_frequency_share": 0.016826411075612353,
+      "real_input_sample_ids": []
+    },
+    "6": {
+      "current_case_sha256": "f0d5303ccb9006cdcd08092fa8ddc1fd41c8fd750c1cd71ac8f21ba3fdafe23f",
+      "empirical_frequency_weight": 0.04771033013844515,
+      "frequency_weight": 0.04771033013844515,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 448,
+      "observed_call_count": 288,
+      "raw_frequency_share": 0.04771033013844515,
+      "real_input_sample_ids": []
+    },
+    "7": {
+      "current_case_sha256": "9d0981f2624e816a5a3ce053f74ca55c6b8c200dce31d1de4898ffef81139213",
+      "empirical_frequency_weight": 0.005750798722044728,
+      "frequency_weight": 0.005750798722044728,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 54,
+      "observed_call_count": 36,
+      "raw_frequency_share": 0.005750798722044728,
+      "real_input_sample_ids": []
+    },
+    "8": {
+      "current_case_sha256": "ca0e2b24382b90f788d73da60b1235bc741c123d0a62168161537212edb55e57",
+      "empirical_frequency_weight": 0.025559105431309903,
+      "frequency_weight": 0.025559105431309903,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 240,
+      "observed_call_count": 240,
+      "raw_frequency_share": 0.025559105431309903,
+      "real_input_sample_ids": []
+    },
+    "9": {
+      "current_case_sha256": "7d1db176bf553547ecab4358fbca7b85407c7f3453999367dd9c80829aec52c5",
+      "empirical_frequency_weight": 0.010223642172523962,
+      "frequency_weight": 0.010223642172523962,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 96,
+      "observed_call_count": 96,
+      "raw_frequency_share": 0.010223642172523962,
+      "real_input_sample_ids": []
+    },
+    "10": {
+      "current_case_sha256": "6e5535e931a72a8e662c6ab3a2db138b0a441424abae2ae5c2b8565e89744779",
+      "empirical_frequency_weight": 0.020447284345047924,
+      "frequency_weight": 0.020447284345047924,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 192,
+      "observed_call_count": 168,
+      "raw_frequency_share": 0.020447284345047924,
+      "real_input_sample_ids": []
+    },
+    "11": {
+      "current_case_sha256": "480c55bd733d1cfc7fade9d267c6df3e99ff2bc2c30ff25cd077c0d1e8040f36",
+      "empirical_frequency_weight": 0.09712460063897764,
+      "frequency_weight": 0.09712460063897764,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 912,
+      "observed_call_count": 312,
+      "raw_frequency_share": 0.09712460063897764,
+      "real_input_sample_ids": []
+    },
+    "12": {
+      "current_case_sha256": "f4e6096b3d1f69148ed27889684ed458edcb3638e3f510544030581e3c733867",
+      "empirical_frequency_weight": 0.0076677316293929714,
+      "frequency_weight": 0.0076677316293929714,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 48,
+      "raw_frequency_share": 0.0076677316293929714,
+      "real_input_sample_ids": []
+    },
+    "13": {
+      "current_case_sha256": "130fdcf8e4dd6112bc652f85f1d7a71791097b765bad1e5478cd3533d044cd2d",
+      "empirical_frequency_weight": 0.033226837060702875,
+      "frequency_weight": 0.033226837060702875,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 312,
+      "observed_call_count": 312,
+      "raw_frequency_share": 0.033226837060702875,
+      "real_input_sample_ids": []
+    },
+    "14": {
+      "current_case_sha256": "6e3c85753ccc63705c1ee357209493c9f04bf377585cd6a91bf03aca86660819",
+      "empirical_frequency_weight": 0.0076677316293929714,
+      "frequency_weight": 0.0076677316293929714,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0076677316293929714,
+      "real_input_sample_ids": []
+    },
+    "15": {
+      "current_case_sha256": "6a4d702160b394419e169f379436c0866faccef9605200a9e37ca498733ef4f4",
+      "empirical_frequency_weight": 0.09712460063897764,
+      "frequency_weight": 0.09712460063897764,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 912,
+      "observed_call_count": 888,
+      "raw_frequency_share": 0.09712460063897764,
+      "real_input_sample_ids": []
+    },
+    "16": {
+      "current_case_sha256": "0c0df277cb9f14eda7c9d65a0e636ee54b5259c3a4bcc684abdb6c7564f7a4a6",
+      "empirical_frequency_weight": 0.0076677316293929714,
+      "frequency_weight": 0.0076677316293929714,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0076677316293929714,
+      "real_input_sample_ids": []
+    },
+    "17": {
+      "current_case_sha256": "42c749455ba7c3de7e63757a3823ce1321b3c61a03cc6178010106e45a936d41",
+      "empirical_frequency_weight": 0.012779552715654952,
+      "frequency_weight": 0.012779552715654952,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 120,
+      "observed_call_count": 96,
+      "raw_frequency_share": 0.012779552715654952,
+      "real_input_sample_ids": []
+    },
+    "18": {
+      "current_case_sha256": "9678527af89d80634db353865e287dff666680d4082d7d8a16660dceeddcff48",
+      "empirical_frequency_weight": 0.017891373801916934,
+      "frequency_weight": 0.016400425985090523,
+      "frequency_weight_basis": "observed_bucket_retained_after_split",
+      "mapped_call_count": 168,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.017891373801916934,
+      "real_input_sample_ids": [],
+      "split_target_shape_ids": [
+        "24"
+      ]
+    },
+    "19": {
+      "current_case_sha256": "323c032c56a7e9624c0015428ba80467c09b6b872e3def8bda3995a0507604fa",
+      "empirical_frequency_weight": 0.015335463258785943,
+      "frequency_weight": 0.015335463258785943,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 144,
+      "observed_call_count": 144,
+      "raw_frequency_share": 0.015335463258785943,
+      "real_input_sample_ids": []
+    },
+    "20": {
+      "current_case_sha256": "08ff90a729c0aeb5de94c88b6a3a1d2d17b29f0720cb1307808555ddf35b3951",
+      "empirical_frequency_weight": 0.04856230031948882,
+      "frequency_weight": 0.04856230031948882,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 456,
+      "observed_call_count": 264,
+      "raw_frequency_share": 0.04856230031948882,
+      "real_input_sample_ids": []
+    },
+    "21": {
+      "current_case_sha256": "de0c207c1a565676c4fb0eeb4efc7d9efbb5e7c32bb48f9fd08e142438d3599f",
+      "empirical_frequency_weight": 0.005111821086261981,
+      "frequency_weight": 0.005111821086261981,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 48,
+      "observed_call_count": 48,
+      "raw_frequency_share": 0.005111821086261981,
+      "real_input_sample_ids": []
+    },
+    "22": {
+      "current_case_sha256": "26f75a77793976627128e6f16c5ee0661dbd68213979c087fad52c23ae7d1223",
+      "empirical_frequency_weight": 0.3757188498402556,
+      "frequency_weight": 0.3757188498402556,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 3528,
+      "observed_call_count": 3456,
+      "raw_frequency_share": 0.3757188498402556,
+      "real_input_sample_ids": [
+        "compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append:csa_main_decode_c16"
+      ]
+    },
+    "23": {
+      "current_case_sha256": "572a54af4f3ab73304e46870d16d8fe65f3715afaa37f80547bf2b8fa8a5e8ee",
+      "empirical_frequency_weight": 0.017891373801916934,
+      "frequency_weight": 0.017891373801916934,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 168,
+      "observed_call_count": 168,
+      "raw_frequency_share": 0.017891373801916934,
+      "real_input_sample_ids": []
+    },
+    "24": {
+      "current_case_sha256": "5ec56cb87596fbef6ad9f4bda8c92b63ebf6bb0992516d6f056e15fd93d8a7b3",
+      "empirical_frequency_weight": null,
+      "estimation_reason": "同 main_prefill 和 CSA 合同；7550 与 8192 query tokens；按请求数 1/11 折减，避免单请求分走多请求桶一半。",
+      "frequency_weight": 0.0014909478168264113,
+      "frequency_weight_basis": "estimated_neighbor_split",
+      "mapped_call_count": null,
+      "observed_call_count": null,
+      "raw_frequency_share": null,
+      "real_input_sample_ids": [
+        "compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append:csa_singleton_prefill_7550"
+      ],
+      "relative_mass": 0.09090909090909091,
+      "source_shape_id": "18"
+    }
+  },
+  "description": "Source-bound Qwen4ExpCSAFlashAttentionImpl.forward on observed C16 PPU geometries",
+  "display_name": "Compressed sparse attention paged causal BF16 with KV append",
+  "operator_family": "compressed_sparse_attention",
+  "real_inputs": {
+    "availability": "uploaded_private",
+    "object_store": {
+      "backend": "oss",
+      "bucket": "418999",
+      "collection_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/"
+    },
+    "samples": {
+      "compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append:csa_draft_decode_c16": {
+        "capture_manifest_sha256": "e3e86b99d013d8cdc767f3b59a5a8218eb2e9f94db90ea2960dfc952d2477bfc",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/rank-0/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/csa_draft_decode_c16.json",
+        "sample_manifest_sha256": "264a7b7246887ea490da69efe25534e3c72823be8af19bd2fdb0c0946ebc8faa",
+        "shape_id": "3",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/manifest.json",
+        "upload_manifest_sha256": "d3b8b9b1097ec3cd2ca2d80cceee06835d25d2b57f1f2111accbe58a3e955656"
+      },
+      "compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append:csa_main_decode_c16": {
+        "capture_manifest_sha256": "e3e86b99d013d8cdc767f3b59a5a8218eb2e9f94db90ea2960dfc952d2477bfc",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/rank-0/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/csa_main_decode_c16.json",
+        "sample_manifest_sha256": "3c59079ea0c41ed1ddd689c51cecf745eb965649e42915bc8a0b4b844d8faa5e",
+        "shape_id": "22",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/manifest.json",
+        "upload_manifest_sha256": "d3b8b9b1097ec3cd2ca2d80cceee06835d25d2b57f1f2111accbe58a3e955656"
+      },
+      "compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append:csa_singleton_prefill_7550": {
+        "capture_manifest_sha256": "e3e86b99d013d8cdc767f3b59a5a8218eb2e9f94db90ea2960dfc952d2477bfc",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/rank-0/operators/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/csa_singleton_prefill_7550.json",
+        "sample_manifest_sha256": "e0f0ef7f520f98b4a6a29ffe4da2bb70dc4458f9f7fb6f97e1784a96780bf468",
+        "shape_id": "24",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/manifest.json",
+        "upload_manifest_sha256": "d3b8b9b1097ec3cd2ca2d80cceee06835d25d2b57f1f2111accbe58a3e955656"
+      }
+    },
+    "schema_version": "atrex.collection_real_inputs.v1"
+  },
+  "schema_version": "atrex.collection_operator_metadata.v2",
+  "scoring": {
+    "correctness_required_for_all_cases": true,
+    "limitations": [
+      "bounded PPU device durations, not production wall time",
+      "estimated case weights are scoring assumptions, not measured frequencies",
+      "includes Torch verification implementation cost"
+    ],
+    "normalization": "operator weights sum to one in collection; case weights sum to one per operator",
+    "operator_weight": 0.6422977566634556,
+    "operator_weight_basis": "normalized_estimated_disjoint_dual_rank_device_duration",
+    "raw_frequency_denominator_calls": 9390,
+    "schema_version": "atrex.collection_scoring.v1",
+    "selected_frequency_coverage": 1.0,
+    "shape_frequency_denominator_calls": 9390,
+    "shape_weight_basis": "frozen_census_projection_with_explicit_neighbor_estimates",
+    "shape_weight_field": "cases.frequency_weight",
+    "zero_weight_policy": "correctness_required_performance_not_scored"
+  },
+  "tags": [
+    "qwen38-flash-next",
+    "ppu1.5",
+    "tp2",
+    "c16"
+  ],
+  "validation": {
+    "correctness_scope": "full_output_and_declared_mutable_state",
+    "evidence": [
+      "independent scalar attention oracle and real replay; full KV state",
+      "all 25 cases passed full PPU evaluation with two correctness seeds",
+      "combined reference insertion passed on both TP2 ranks within declared deployment and branch scope",
+      "reference_sha256:5b7258f521a8262be3e9061eec14f106e0a4839152e7d281d7aaae8a18b867e5",
+      "input_sha256:80a2a195750a241dee1ad3b256b906c55cc0a062f5af60e2eae6b18ed0308fc7",
+      "three formal real samples exact-bound; synthetic inputs calibrated or contract-driven",
+      "solution_sha256:ec61b0fcb931059fc93bd0612541841cf71b72b351a955df04c42f945d014a89",
+      "solution_role:ppu_verification_backend_adapter",
+      "solution_entry_point:vllm.v1.attention.backends.qwen4_exp_csa.Qwen4ExpCSAFlashAttentionImpl.forward; VLLM_QWEN4_EXP_CSA_REFERENCE=1",
+      "solution_stage_receipt_sha256:f912367605a98e0b3dbfeea9b4d76d60427e40fd6f50528d1130d345362e2b01",
+      "solution_accuracy_comparison: Model constructed with case init_kwargs and called with input.py-generated tensor kwargs versus shared reference.py; declared outputs, full mutable state and alias contract",
+      "solution_accuracy_limit: verified experimental PPU deployment path including compatibility backend; not an unmodified online L20N implementation",
+      "target_eval_runner_config_json:{\"atol\":0.01,\"bench_iters\":3,\"benchmark_mode\":\"eager\",\"candidate_timeout_s\":60.0,\"config_version\":\"v1\",\"correctness_max_rel_l2\":0.001,\"cuda_graph_cache_flush_mb\":1024,\"eval_mode\":\"candidate\",\"graph_atol\":0.01,\"graph_max_rel_l2\":null,\"graph_min_cosine\":null,\"graph_rtol\":0.05,\"num_correctness_cases\":2,\"require_clock_locked\":false,\"rtol\":0.05,\"trust_mode\":\"trusted\",\"validation_mode\":\"full\",\"warmup_iters\":2}",
+      "target_eval_result_sha256:fa6a38434afff5529a8b743b429b5955de058454fde1dc8729b86c76b0fed32c",
+      "target_eval_runner_config_usage: extract target_eval_runner_config_json to a JSON file and pass run_eval --config FILE on the declared runtime; plain runner defaults use one correctness case and do not reproduce this two-case protocol",
+      "solution_init_scope: the delivered Collection explicitly supplies kv_cache_dtype, layer_k_scale and layer_v_scale; reference-only initializer defaults are outside this validated Collection range"
+    ],
+    "status": "run_eval_validated"
+  }
+}

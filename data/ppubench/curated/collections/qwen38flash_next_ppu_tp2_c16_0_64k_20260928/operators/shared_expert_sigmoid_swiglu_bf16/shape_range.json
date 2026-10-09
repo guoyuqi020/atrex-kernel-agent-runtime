@@ -1,0 +1,42 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "controls": {},
+    "layout": {
+      "down_weight": {
+        "alias_group": "down_weight",
+        "dtype": "torch.bfloat16",
+        "shape": [2560, 320],
+        "storage_offset": 0,
+        "stride": [320, 1]
+      },
+      "expert_gate_weight": {
+        "alias_group": "expert_gate_weight",
+        "dtype": "torch.bfloat16",
+        "shape": [1, 2560],
+        "storage_offset": 0,
+        "stride": [2560, 1]
+      },
+      "gate_up_weight": {
+        "alias_group": "gate_up_weight",
+        "dtype": "torch.bfloat16",
+        "shape": [640, 2560],
+        "storage_offset": 0,
+        "stride": [2560, 1]
+      },
+      "x": {
+        "alias_group": "x",
+        "dtype": "torch.bfloat16",
+        "shape": {
+          "type": "array",
+          "positions": [{"type": "integer", "min": 1, "max": 8192}, 2560],
+          "items": {"type": "integer"}
+        },
+        "storage_offset": 0,
+        "stride": [2560, 1]
+      }
+    },
+    "profile_id": {"type": "string", "values": ["shared_batch", "shared_long", "shared_small"]}
+  },
+  "cross_field_invariants": []
+}

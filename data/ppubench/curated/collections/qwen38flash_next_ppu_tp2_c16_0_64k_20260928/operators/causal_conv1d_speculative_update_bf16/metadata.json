@@ -1,0 +1,267 @@
+{
+  "benchmark_contract": {
+    "defined_outputs": {},
+    "mutates_inputs": [
+      "conv_state"
+    ]
+  },
+  "cases": {
+    "0": {
+      "current_case_sha256": "31d6dde6df1efd10b21f6bb29edc0da058b5d2cd1c08a41830e38bc45288c6e3",
+      "empirical_frequency_weight": 0.22756410256410256,
+      "frequency_weight": 0.22756410256410256,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 5112,
+      "observed_call_count": 5112,
+      "raw_frequency_share": 0.22756410256410256,
+      "real_input_sample_ids": []
+    },
+    "1": {
+      "current_case_sha256": "6d881d388e3f76eaac1cf7be2c2cebe5eccf4596ab0a3a5f5d7fc9416f1c4bc0",
+      "empirical_frequency_weight": 0.02564102564102564,
+      "frequency_weight": 0.02564102564102564,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 576,
+      "observed_call_count": 576,
+      "raw_frequency_share": 0.02564102564102564,
+      "real_input_sample_ids": []
+    },
+    "2": {
+      "current_case_sha256": "984887c8ad4c163f2129c4ae0140fcd9ef13baefb724aba3ec031ee616e2a02c",
+      "empirical_frequency_weight": 0.035256410256410256,
+      "frequency_weight": 0.035256410256410256,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 792,
+      "observed_call_count": 792,
+      "raw_frequency_share": 0.035256410256410256,
+      "real_input_sample_ids": []
+    },
+    "3": {
+      "current_case_sha256": "222f5c44dd6ec70d4caa36a360ebb4a826eb9994b4d4129bad071937ad3acc0e",
+      "empirical_frequency_weight": 0.003205128205128205,
+      "frequency_weight": 0.003205128205128205,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.003205128205128205,
+      "real_input_sample_ids": []
+    },
+    "4": {
+      "current_case_sha256": "0b228a7ee3f19a57b8be7411461fa5898c8685808abf96ead65c4e8e64fe684a",
+      "empirical_frequency_weight": 0.009615384615384616,
+      "frequency_weight": 0.009615384615384616,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 216,
+      "observed_call_count": 216,
+      "raw_frequency_share": 0.009615384615384616,
+      "real_input_sample_ids": []
+    },
+    "5": {
+      "current_case_sha256": "ae85d229b9ec9e182ebd3eff8172162e14a29254e8c57d596be97e4c10213f6a",
+      "empirical_frequency_weight": 0.46153846153846156,
+      "frequency_weight": 0.46153846153846156,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 10368,
+      "observed_call_count": 10368,
+      "raw_frequency_share": 0.46153846153846156,
+      "real_input_sample_ids": [
+        "causal_conv1d_speculative_update_bf16:conv_update_batch"
+      ]
+    },
+    "6": {
+      "current_case_sha256": "8790747efe4a04816e6e092ec0df94471d7d57bcf52aa0c63ad05950e849cc9a",
+      "empirical_frequency_weight": 0.003205128205128205,
+      "frequency_weight": 0.003205128205128205,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.003205128205128205,
+      "real_input_sample_ids": [
+        "causal_conv1d_speculative_update_bf16:conv_update_small"
+      ]
+    },
+    "7": {
+      "current_case_sha256": "ef6e89256b56e2ee30947bf9ec6ddec522c17b1ef23f769f821a1b378a635d67",
+      "empirical_frequency_weight": 0.003205128205128205,
+      "frequency_weight": 0.003205128205128205,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.003205128205128205,
+      "real_input_sample_ids": []
+    },
+    "8": {
+      "current_case_sha256": "cf310e130f938406ff30c4df08c4973e3b3a272e74820de2f213c97b5c6a68ea",
+      "empirical_frequency_weight": 0.009615384615384616,
+      "frequency_weight": 0.009615384615384616,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 216,
+      "observed_call_count": 216,
+      "raw_frequency_share": 0.009615384615384616,
+      "real_input_sample_ids": []
+    },
+    "9": {
+      "current_case_sha256": "4183a1183b8267ffbe4b0f1458d2182ac9b3267e50d89c3a87f4b347afda8299",
+      "empirical_frequency_weight": 0.022435897435897436,
+      "frequency_weight": 0.022435897435897436,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 504,
+      "observed_call_count": 504,
+      "raw_frequency_share": 0.022435897435897436,
+      "real_input_sample_ids": [
+        "causal_conv1d_speculative_update_bf16:conv_update_partial"
+      ]
+    },
+    "10": {
+      "current_case_sha256": "083dac8622c42c31e73eae5792f05737f4778cf699026f8c1492718e4ce38b32",
+      "empirical_frequency_weight": 0.022435897435897436,
+      "frequency_weight": 0.022435897435897436,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 504,
+      "observed_call_count": 504,
+      "raw_frequency_share": 0.022435897435897436,
+      "real_input_sample_ids": []
+    },
+    "11": {
+      "current_case_sha256": "0052dc47a00addee4b6e418c4392087200dc03e0979df343401963ca939da3e7",
+      "empirical_frequency_weight": 0.01282051282051282,
+      "frequency_weight": 0.01282051282051282,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 288,
+      "observed_call_count": 288,
+      "raw_frequency_share": 0.01282051282051282,
+      "real_input_sample_ids": []
+    },
+    "12": {
+      "current_case_sha256": "4246a00d99c9d9ff13e3c59b51ad3c51092d9ac27b74ab79048b3584bdb9b3b6",
+      "empirical_frequency_weight": 0.041666666666666664,
+      "frequency_weight": 0.041666666666666664,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 936,
+      "observed_call_count": 936,
+      "raw_frequency_share": 0.041666666666666664,
+      "real_input_sample_ids": []
+    },
+    "13": {
+      "current_case_sha256": "f4bfba432b0fc90e0855fad62b30ef3de735e5bd52bec2fd22debc5b6c5b973c",
+      "empirical_frequency_weight": 0.041666666666666664,
+      "frequency_weight": 0.041666666666666664,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 936,
+      "observed_call_count": 936,
+      "raw_frequency_share": 0.041666666666666664,
+      "real_input_sample_ids": []
+    },
+    "14": {
+      "current_case_sha256": "032c56c0ebfac9b9060576a051c991e42d36fc33ed548027bce942317f8604b3",
+      "empirical_frequency_weight": 0.009615384615384616,
+      "frequency_weight": 0.009615384615384616,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 216,
+      "observed_call_count": 216,
+      "raw_frequency_share": 0.009615384615384616,
+      "real_input_sample_ids": []
+    },
+    "15": {
+      "current_case_sha256": "dd9381bbcbcbfd8d765f20fc3a976c43a5b4f7e31fc19ac701b15433c42dcc3b",
+      "empirical_frequency_weight": 0.07051282051282051,
+      "frequency_weight": 0.07051282051282051,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 1584,
+      "observed_call_count": 1584,
+      "raw_frequency_share": 0.07051282051282051,
+      "real_input_sample_ids": []
+    }
+  },
+  "description": "Source-bound Qwen3.8 Flash Next TP2 C16 core path with calibrated real-input marginals and captured ABI layouts.",
+  "display_name": "causal_conv1d_speculative_update_bf16",
+  "operator_family": "causal",
+  "real_inputs": {
+    "availability": "uploaded_private",
+    "object_store": {
+      "backend": "oss",
+      "bucket": "418999",
+      "collection_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/"
+    },
+    "samples": {
+      "causal_conv1d_speculative_update_bf16:conv_update_batch": {
+        "capture_manifest_sha256": "cdd607bc616c8ad3c81d0972d174a7f1204bf16c998ca3e37503ca5aeb3ad479",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/rank-0/operators/causal_conv1d_speculative_update_bf16/conv_update_batch.json",
+        "sample_manifest_sha256": "c385cd4ee274018303e82086540ec6182082d954a165d49c9449f7c89cbb9fed",
+        "shape_id": "5",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/manifest.json",
+        "upload_manifest_sha256": "9c11472623ab19311f710bf5af7081f8d97e6d26edc14390777d6ace95cfc158"
+      },
+      "causal_conv1d_speculative_update_bf16:conv_update_partial": {
+        "capture_manifest_sha256": "cdd607bc616c8ad3c81d0972d174a7f1204bf16c998ca3e37503ca5aeb3ad479",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/rank-0/operators/causal_conv1d_speculative_update_bf16/conv_update_partial.json",
+        "sample_manifest_sha256": "d5fac2634cfd2020cd008580feff8682f796faf523c6fecc1a8a8a8de07c5b35",
+        "shape_id": "9",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/manifest.json",
+        "upload_manifest_sha256": "9c11472623ab19311f710bf5af7081f8d97e6d26edc14390777d6ace95cfc158"
+      },
+      "causal_conv1d_speculative_update_bf16:conv_update_small": {
+        "capture_manifest_sha256": "cdd607bc616c8ad3c81d0972d174a7f1204bf16c998ca3e37503ca5aeb3ad479",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/rank-0/operators/causal_conv1d_speculative_update_bf16/conv_update_small.json",
+        "sample_manifest_sha256": "3692279fa57abed7660ab522cd5d02073ebde3a8212b2bd013ad9049c39696eb",
+        "shape_id": "6",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/causal_conv1d_speculative_update_bf16/cohorts/supplement-20261005-v1/manifest.json",
+        "upload_manifest_sha256": "9c11472623ab19311f710bf5af7081f8d97e6d26edc14390777d6ace95cfc158"
+      }
+    },
+    "schema_version": "atrex.collection_real_inputs.v1"
+  },
+  "schema_version": "atrex.collection_operator_metadata.v2",
+  "scoring": {
+    "correctness_required_for_all_cases": true,
+    "limitations": [
+      "bounded PPU device durations, not production wall time",
+      "estimated case weights are scoring assumptions, not measured frequencies"
+    ],
+    "normalization": "operator weights sum to one in collection; case weights sum to one per operator",
+    "operator_weight": 2.329906143712337e-05,
+    "operator_weight_basis": "normalized_estimated_disjoint_dual_rank_device_duration",
+    "raw_frequency_denominator_calls": 22464,
+    "schema_version": "atrex.collection_scoring.v1",
+    "selected_frequency_coverage": 1.0,
+    "shape_frequency_denominator_calls": 22464,
+    "shape_weight_basis": "frozen_census_projection_with_explicit_neighbor_estimates",
+    "shape_weight_field": "cases.frequency_weight",
+    "zero_weight_policy": "correctness_required_performance_not_scored"
+  },
+  "tags": [
+    "qwen38flash",
+    "ppu",
+    "tp2",
+    "c16",
+    "real-shape",
+    "calibrated-input"
+  ],
+  "validation": {
+    "correctness_scope": "full_output_and_declared_mutable_state",
+    "evidence": [
+      "BF16 tap products and FP32 ordered accumulation; full cache state",
+      "all 16 cases passed full PPU evaluation with two correctness seeds",
+      "combined reference insertion passed on both TP2 ranks within declared deployment and branch scope",
+      "reference_sha256:9d47edb1f44f90a7fc4ee3fcf28f595dfd6bc4582ab966f959af8fa63ff6f1cb",
+      "input_sha256:aff4ea3a1fb5719a5903ce104c3e2380612cc7c6e7c25668b233c4a19b21645d",
+      "three formal real samples exact-bound; synthetic inputs calibrated or contract-driven",
+      "16 genuine C16 packed MTP geometries; ordinary nonpacked branch excluded",
+      "solution_sha256:59e87f789a7f2603b5c68b9b09a8742f10bac78282ea165838a927ce98c1c8ba",
+      "solution_role:runtime_call_adapter",
+      "solution_entry_point:vllm.model_executor.layers.mamba.ops.causal_conv1d.causal_conv1d_update",
+      "solution_stage_receipt_sha256:a4959cd143ae312a2f167b4a31dceb4e792c935618297dc899acc3e68f4811af",
+      "solution_accuracy_comparison: Model constructed with case init_kwargs and called with input.py-generated tensor kwargs versus shared reference.py; declared outputs, full mutable state and alias contract",
+      "target_eval_runner_config_json:{\"atol\":0.01,\"bench_iters\":3,\"benchmark_mode\":\"eager\",\"candidate_timeout_s\":60.0,\"config_version\":\"v1\",\"correctness_max_rel_l2\":0.001,\"cuda_graph_cache_flush_mb\":1024,\"eval_mode\":\"candidate\",\"graph_atol\":0.01,\"graph_max_rel_l2\":null,\"graph_min_cosine\":null,\"graph_rtol\":0.05,\"num_correctness_cases\":2,\"require_clock_locked\":false,\"rtol\":0.05,\"trust_mode\":\"trusted\",\"validation_mode\":\"full\",\"warmup_iters\":2}",
+      "target_eval_result_sha256:48ebd5ceeb2e919c9a80631e952ebf1e6443d13337aef28e5129342bf0b9c7fe",
+      "target_eval_runner_config_usage: extract target_eval_runner_config_json to a JSON file and pass run_eval --config FILE on the declared runtime; plain runner defaults use one correctness case and do not reproduce this two-case protocol"
+    ],
+    "status": "run_eval_validated"
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "init_kwargs": {"head_size": 256, "is_neox_style": true, "rotary_dim": 64},
+  "input_kwargs": {
+    "controls": {
+      "positions": {"type": "array", "items": {"type": "integer", "min": 0, "max": 65535}, "min_length": 1, "max_length": 8192}
+    },
+    "layout": {
+      "cos_sin_cache": {
+        "alias_group": "cos_sin_cache",
+        "dtype": "torch.bfloat16",
+        "shape": [1048576, 64],
+        "storage_offset": 0,
+        "stride": [64, 1]
+      },
+      "key": {
+        "alias_group": "key",
+        "dtype": "torch.bfloat16",
+        "shape": {
+          "type": "array",
+          "positions": [{"type": "integer", "min": 1, "max": 8192}, 256],
+          "items": {"type": "integer"}
+        },
+        "storage_offset": 0,
+        "stride": [256, 1]
+      },
+      "positions": {
+        "alias_group": "positions",
+        "dtype": "torch.int64",
+        "shape": {"type": "array", "positions": [{"type": "integer", "min": 1, "max": 8192}], "items": {"type": "integer"}},
+        "storage_offset": 0,
+        "stride": [1]
+      },
+      "query": {
+        "alias_group": "query",
+        "dtype": "torch.bfloat16",
+        "shape": {
+          "type": "array",
+          "positions": [{"type": "integer", "min": 1, "max": 8192}, 3072],
+          "items": {"type": "integer"}
+        },
+        "storage_offset": 0,
+        "stride": [3072, 1]
+      }
+    },
+    "profile_id": {
+      "type": "string",
+      "values": [
+        "rotary_cached_qk_bf16_inplace_neox__capture_1_f00453c96339",
+        "rotary_cached_qk_bf16_inplace_neox__capture_2_7ebfc642e7c0",
+        "rotary_cached_qk_bf16_inplace_neox__capture_3_c36fd77954ef"
+      ]
+    }
+  },
+  "cross_field_invariants": [
+    "layout['positions']['shape'][0] == len(controls['positions'])",
+    "layout['query']['shape'][0] == len(controls['positions']) and layout['key']['shape'][0] == len(controls['positions'])"
+  ]
+}

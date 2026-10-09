@@ -1,0 +1,1710 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5234,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            774,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_small"
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            830,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2874,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            36,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            64,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            40,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            24,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            7108,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "10": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1260,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "11": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            56,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "12": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6686,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "13": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            16,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "14": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            7400,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "15": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_small"
+    }
+  },
+  "16": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "17": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            12,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_small"
+    }
+  },
+  "18": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4532,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "19": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            3842,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "20": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4228,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "21": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            32,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "22": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "23": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            60,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "24": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            7328,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "25": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2794,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_long"
+    }
+  },
+  "26": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            44,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_batch"
+    }
+  },
+  "27": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "down_weight": {
+          "alias_group": "down_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2560,
+            320
+          ],
+          "storage_offset": 0,
+          "stride": [
+            320,
+            1
+          ]
+        },
+        "expert_gate_weight": {
+          "alias_group": "expert_gate_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "gate_up_weight": {
+          "alias_group": "gate_up_weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            640,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "shared_small"
+    }
+  }
+}

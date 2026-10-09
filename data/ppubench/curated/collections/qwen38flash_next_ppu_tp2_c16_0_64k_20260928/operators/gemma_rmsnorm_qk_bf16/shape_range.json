@@ -1,0 +1,26 @@
+{
+  "init_kwargs": {"eps": 1e-06},
+  "input_kwargs": {
+    "controls": {},
+    "layout": {
+      "weight": {"alias_group": "weight", "dtype": "torch.bfloat16", "shape": [256], "storage_offset": 0, "stride": [1]},
+      "x": {
+        "alias_group": "x",
+        "dtype": "torch.bfloat16",
+        "shape": {
+          "type": "array",
+          "positions": [{"type": "integer", "min": 1, "max": 8192}, {"type": "integer", "values": [1, 12]}, 256],
+          "items": {"type": "integer"}
+        },
+        "storage_offset": {"type": "integer", "values": [0, 6144]},
+        "stride": {"one_of": [[3072, 256, 1], [6656, 256, 1]]}
+      }
+    },
+    "profile_id": {"type": "string", "values": ["norm_k_batch", "norm_q_long", "norm_q_small"]}
+  },
+  "cross_field_invariants": [
+    "profile_id != 'norm_q_long' or (layout['x']['shape'][1] == 12 and layout['x']['stride'] == [3072, 256, 1] and layout['x']['storage_offset'] == 0)",
+    "profile_id != 'norm_q_small' or (layout['x']['shape'][1] == 12 and layout['x']['stride'] == [3072, 256, 1] and layout['x']['storage_offset'] == 0)",
+    "profile_id != 'norm_k_batch' or (layout['x']['shape'][1] == 1 and layout['x']['stride'] == [6656, 256, 1] and layout['x']['storage_offset'] == 6144)"
+  ]
+}

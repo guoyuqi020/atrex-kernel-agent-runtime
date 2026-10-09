@@ -1,0 +1,410 @@
+{
+  "benchmark_contract": {
+    "defined_outputs": {},
+    "mutates_inputs": []
+  },
+  "cases": {
+    "0": {
+      "current_case_sha256": "30b06c0ad3c1358880e27add0ba55e74e26c4948cfe842bff3d645c898e5bac9",
+      "empirical_frequency_weight": 0.025,
+      "frequency_weight": 0.025,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 144,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.025,
+      "real_input_sample_ids": []
+    },
+    "1": {
+      "current_case_sha256": "09b68513ac8ba081a5aba53d1b16aba050036240a42fc3533afef803a9db3b64",
+      "empirical_frequency_weight": 0.0375,
+      "frequency_weight": 0.0375,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 216,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0375,
+      "real_input_sample_ids": [
+        "gated_delta_rule_prefill_varlen_bf16_fp32:gated_delta_rule_prefill_varlen_bf16_fp32__capture_2_f56099fc65c8"
+      ]
+    },
+    "2": {
+      "current_case_sha256": "84b5370f65a358b0c66868fdd23106848f4c4b70937389f6cc2ddcaffa2cd05f",
+      "empirical_frequency_weight": 0.075,
+      "frequency_weight": 0.075,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 432,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.075,
+      "real_input_sample_ids": []
+    },
+    "3": {
+      "current_case_sha256": "275b7b02177d7aaecf2d21d2807eb5f033f1a76fe693f677eac8a9373a734892",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "4": {
+      "current_case_sha256": "a71dc571c881e17985ee01ebadfd304eb6c582c8c7c46d08609dafa2b8e16c83",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "5": {
+      "current_case_sha256": "360aee9c6ea1057b9d7d5f5d9ea927613f462ecbd3c7b6f15986689750f942c9",
+      "empirical_frequency_weight": 0.05,
+      "frequency_weight": 0.05,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 288,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.05,
+      "real_input_sample_ids": []
+    },
+    "6": {
+      "current_case_sha256": "742a4555ac48c24d56b9fba3b094e8bbb54bd854f0dcab704a0fb8a20e57e9b0",
+      "empirical_frequency_weight": 0.025,
+      "frequency_weight": 0.025,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 144,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.025,
+      "real_input_sample_ids": []
+    },
+    "7": {
+      "current_case_sha256": "eefa8c3ddbc2006829c31adbb7c6ab736243132dbb2bcc0d656c0a5cd89c265d",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "8": {
+      "current_case_sha256": "ec66ac7afb4a469cda453e7b4c0973fdb5034871148b441ee3c04dcce6e733aa",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "9": {
+      "current_case_sha256": "55d24ae1113cc7b072977c5dc6eb8c0e312af1ec8e502ae6698be08effcdd87d",
+      "empirical_frequency_weight": 0.05,
+      "frequency_weight": 0.05,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 288,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.05,
+      "real_input_sample_ids": []
+    },
+    "10": {
+      "current_case_sha256": "396344152e47d562cca93306506c0a68df1d04c6c99f6910fb09e3e53d19d8dc",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "11": {
+      "current_case_sha256": "b067bcf9bd8f1a22d65109cdc13a0701d84fdbce8bee944e9a700bd6ab4107c5",
+      "empirical_frequency_weight": 0.0875,
+      "frequency_weight": 0.0875,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 504,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0875,
+      "real_input_sample_ids": []
+    },
+    "12": {
+      "current_case_sha256": "0c000b27a6e4c8a2805dbe715a8702cfec59d584f8d4ac4cd91aa084638a4559",
+      "empirical_frequency_weight": 0.0375,
+      "frequency_weight": 0.0375,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 216,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0375,
+      "real_input_sample_ids": []
+    },
+    "13": {
+      "current_case_sha256": "5d8ed2d87b1bad4cb13e7f4b3c05d959c0ccd6846baa1decc853f83e8efda3d0",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "14": {
+      "current_case_sha256": "4a73d68e3352ce0412ad2390db56c7cf35a4eb65750c83585368dd4212b4be44",
+      "empirical_frequency_weight": 0.1375,
+      "frequency_weight": 0.1375,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 792,
+      "observed_call_count": 792,
+      "raw_frequency_share": 0.1375,
+      "real_input_sample_ids": [
+        "gated_delta_rule_prefill_varlen_bf16_fp32:gated_delta_rule_prefill_varlen_bf16_fp32__capture_1_8aa20d86ea0d"
+      ]
+    },
+    "15": {
+      "current_case_sha256": "5e64319b5e8028664f986d32fe4d8320080e49b5b928f53321179e2550386f6f",
+      "empirical_frequency_weight": 0.1,
+      "frequency_weight": 0.1,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 576,
+      "observed_call_count": 576,
+      "raw_frequency_share": 0.1,
+      "real_input_sample_ids": []
+    },
+    "16": {
+      "current_case_sha256": "c1ae407ae965f1b563ba21ab329669cf16e0c8efc710f3d2ca61c61ca2b3d8d9",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "17": {
+      "current_case_sha256": "5ca0802836280aeedfdbe88ed02c90b010d6e8735de7cb2963acf8f1abdfa392",
+      "empirical_frequency_weight": 0.075,
+      "frequency_weight": 0.075,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 432,
+      "observed_call_count": 432,
+      "raw_frequency_share": 0.075,
+      "real_input_sample_ids": []
+    },
+    "18": {
+      "current_case_sha256": "094c2264a6c456fcdaf5960c81a0dd998c98883800d2350839d2fa57f376454b",
+      "empirical_frequency_weight": 0.0375,
+      "frequency_weight": 0.0375,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 216,
+      "observed_call_count": 216,
+      "raw_frequency_share": 0.0375,
+      "real_input_sample_ids": []
+    },
+    "19": {
+      "current_case_sha256": "7912823ea23a4112a1ea54d8e775d439eb43c146d505822ac1fa1961ad0d973a",
+      "empirical_frequency_weight": 0.05,
+      "frequency_weight": 0.05,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 288,
+      "observed_call_count": 288,
+      "raw_frequency_share": 0.05,
+      "real_input_sample_ids": []
+    },
+    "20": {
+      "current_case_sha256": "7137ec3cc97e77f0a3825a707c1fe243eb88e5051bdf335de908b23748d7d246",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "21": {
+      "current_case_sha256": "cf5d93db2036f706ea98c427579c2ceca40eb02e9cb0b06e14be19199e510225",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "22": {
+      "current_case_sha256": "ca7c2b809c65fadf467ac186aee263f7c7bc7bd9bd5b3a2ee782e2c45cde08a1",
+      "empirical_frequency_weight": 0.025,
+      "frequency_weight": 0.025,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 144,
+      "observed_call_count": 144,
+      "raw_frequency_share": 0.025,
+      "real_input_sample_ids": []
+    },
+    "23": {
+      "current_case_sha256": "5b4f57dbd9ad5964fc1a71edef97f9575ba37fa6c7da2b89c64f48fc238fd08e",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "24": {
+      "current_case_sha256": "cea23235c3554bf67771b1df72cbb06b72ca99e217c288438b116b763f99820c",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "25": {
+      "current_case_sha256": "a69b79c3c71d3e317c9a9e6532918a44318b30c0344b07bce3fdc77006d8e2df",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "26": {
+      "current_case_sha256": "53de507b33ec108ad169fe52e8d4b6117044474c5ddd4bc5db4b0483fbc5eda1",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    },
+    "27": {
+      "current_case_sha256": "3c4a873a8a40a91eaea88bdd3f6e874e99adc6754f2f6382a42f3943f37673f0",
+      "empirical_frequency_weight": null,
+      "estimation_reason": "同 8188-token GDN prefill 和 head/statepool 合同；请求数 14 对 4，按 4/14 折减；初态为零对非零再乘 1/2。不是相同语义的实测频率。",
+      "frequency_weight": 0.0015625,
+      "frequency_weight_basis": "estimated_neighbor_split",
+      "mapped_call_count": null,
+      "observed_call_count": null,
+      "raw_frequency_share": null,
+      "real_input_sample_ids": [
+        "gated_delta_rule_prefill_varlen_bf16_fp32:gated_delta_rule_prefill_varlen_bf16_fp32__capture_3_199fd8b568eb"
+      ],
+      "relative_mass": 0.14285714285714285,
+      "source_shape_id": "28"
+    },
+    "28": {
+      "current_case_sha256": "d35c18a8c16252c137f9a38525328847d6f484295b96ba50a0aefece321371d0",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.010937500000000001,
+      "frequency_weight_basis": "observed_bucket_retained_after_split",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": [],
+      "split_target_shape_ids": [
+        "27"
+      ]
+    },
+    "29": {
+      "current_case_sha256": "ce29ed1f241a4c77bf1c82ebec302c7da225775c87985afea62666e3fef89bd4",
+      "empirical_frequency_weight": 0.0125,
+      "frequency_weight": 0.0125,
+      "frequency_weight_basis": "observed_census_projection",
+      "mapped_call_count": 72,
+      "observed_call_count": 72,
+      "raw_frequency_share": 0.0125,
+      "real_input_sample_ids": []
+    }
+  },
+  "description": "Packed sequence-first GDN mathematical reference with explicit final state and source BF16 normalization roundtrip",
+  "display_name": "Gated delta rule packed prefill BF16 / FP32 state",
+  "operator_family": "gated_delta_rule",
+  "real_inputs": {
+    "availability": "uploaded_private",
+    "object_store": {
+      "backend": "oss",
+      "bucket": "418999",
+      "collection_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/"
+    },
+    "samples": {
+      "gated_delta_rule_prefill_varlen_bf16_fp32:gated_delta_rule_prefill_varlen_bf16_fp32__capture_1_8aa20d86ea0d": {
+        "capture_manifest_sha256": "054490e3f70906362fd512d0e96b85718fb100608ea2d3521f30376ad5847573",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/rank-0/operators/gated_delta_rule_prefill_varlen_bf16_fp32/gated_delta_rule_prefill_varlen_bf16_fp32__capture_1_8aa20d86ea0d.json",
+        "sample_manifest_sha256": "02f2eae2ec5755684d2f188232931e45cc0e901272050b8f4b39bd8d64255bbe",
+        "shape_id": "14",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/manifest.json",
+        "upload_manifest_sha256": "ada9e4f06f4d953df4dc102c6d2d534460e7931697a0a11724eb1e2772ac5e1b"
+      },
+      "gated_delta_rule_prefill_varlen_bf16_fp32:gated_delta_rule_prefill_varlen_bf16_fp32__capture_2_f56099fc65c8": {
+        "capture_manifest_sha256": "054490e3f70906362fd512d0e96b85718fb100608ea2d3521f30376ad5847573",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/rank-0/operators/gated_delta_rule_prefill_varlen_bf16_fp32/gated_delta_rule_prefill_varlen_bf16_fp32__capture_2_f56099fc65c8.json",
+        "sample_manifest_sha256": "f7bf687e4dd81d73d05320e162b370b94f52560260b81d0c773660aa06540d11",
+        "shape_id": "1",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/manifest.json",
+        "upload_manifest_sha256": "ada9e4f06f4d953df4dc102c6d2d534460e7931697a0a11724eb1e2772ac5e1b"
+      },
+      "gated_delta_rule_prefill_varlen_bf16_fp32:gated_delta_rule_prefill_varlen_bf16_fp32__capture_3_199fd8b568eb": {
+        "capture_manifest_sha256": "054490e3f70906362fd512d0e96b85718fb100608ea2d3521f30376ad5847573",
+        "role": "formal",
+        "sample_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/rank-0/operators/gated_delta_rule_prefill_varlen_bf16_fp32/gated_delta_rule_prefill_varlen_bf16_fp32__capture_3_199fd8b568eb.json",
+        "sample_manifest_sha256": "8cd52a8778e7c319c78918fd6386bbccf3c49b1f30191cd91708cff8dc6e08f7",
+        "shape_id": "27",
+        "storage_prefix": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/rank-0/storages/",
+        "upload_manifest_key": "atrex-bench/real_tensors/qwen38flash_next_ppu_tp2_c16_0_64k_20260928/gated_delta_rule_prefill_varlen_bf16_fp32/cohorts/supplement-20261005-v1/manifest.json",
+        "upload_manifest_sha256": "ada9e4f06f4d953df4dc102c6d2d534460e7931697a0a11724eb1e2772ac5e1b"
+      }
+    },
+    "schema_version": "atrex.collection_real_inputs.v1"
+  },
+  "schema_version": "atrex.collection_operator_metadata.v2",
+  "scoring": {
+    "correctness_required_for_all_cases": true,
+    "limitations": [
+      "bounded PPU device durations, not production wall time",
+      "estimated case weights are scoring assumptions, not measured frequencies"
+    ],
+    "normalization": "operator weights sum to one in collection; case weights sum to one per operator",
+    "operator_weight": 0.0012013757191777844,
+    "operator_weight_basis": "normalized_estimated_disjoint_dual_rank_device_duration",
+    "raw_frequency_denominator_calls": 5760,
+    "schema_version": "atrex.collection_scoring.v1",
+    "selected_frequency_coverage": 1.0,
+    "shape_frequency_denominator_calls": 5760,
+    "shape_weight_basis": "frozen_census_projection_with_explicit_neighbor_estimates",
+    "shape_weight_field": "cases.frequency_weight",
+    "zero_weight_policy": "correctness_required_performance_not_scored"
+  },
+  "tags": [
+    "qwen38-flash-next",
+    "ppu1.5",
+    "tp2",
+    "c16",
+    "prefill"
+  ],
+  "validation": {
+    "correctness_scope": "full_output_final_state_and_immutable_inputs",
+    "evidence": [
+      "independent FP64 recurrence and source FLA; final state",
+      "all 30 cases passed full PPU evaluation with two correctness seeds",
+      "combined reference insertion passed on both TP2 ranks within declared deployment and branch scope",
+      "reference_sha256:8f7d042c5c951d479f74e121ab722b561cb1bcc8b4d86fc26fdd400bbb8698aa",
+      "input_sha256:09d767b54225634f9edfff0e4567e4aebef8ba8b8439fcfa38837d428c6da12a",
+      "three formal real samples exact-bound; synthetic inputs calibrated or contract-driven",
+      "solution_sha256:1f07a369a66494cf3be0014ff77ad6f31e61b804e3a58c085faf8ea43fd9f708",
+      "solution_role:runtime_call_adapter",
+      "solution_entry_point:vllm.model_executor.layers.fla.ops.chunk_gated_delta_rule",
+      "solution_stage_receipt_sha256:c36b5d70d5268e8636f7f14b18a861a19195b893b17ce92892a12ab65d0f955c",
+      "solution_accuracy_comparison: Model constructed with case init_kwargs and called with input.py-generated tensor kwargs versus shared reference.py; declared outputs, full mutable state and alias contract",
+      "target_eval_runner_config_json:{\"atol\":0.01,\"bench_iters\":3,\"benchmark_mode\":\"eager\",\"candidate_timeout_s\":60.0,\"config_version\":\"v1\",\"correctness_max_rel_l2\":0.01,\"cuda_graph_cache_flush_mb\":1024,\"eval_mode\":\"candidate\",\"graph_atol\":0.01,\"graph_max_rel_l2\":null,\"graph_min_cosine\":null,\"graph_rtol\":0.05,\"num_correctness_cases\":2,\"require_clock_locked\":false,\"rtol\":0.05,\"trust_mode\":\"trusted\",\"validation_mode\":\"full\",\"warmup_iters\":2}",
+      "target_eval_result_sha256:69b57941f2a339f2f91bd1f47bf5734b59356cc52547365d026114fc0e73f6bf",
+      "target_eval_runner_config_usage: extract target_eval_runner_config_json to a JSON file and pass run_eval --config FILE on the declared runtime; plain runner defaults use one correctness case and do not reproduce this two-case protocol",
+      "solution_runtime_dependency_scope: adapter file hash alone does not verify imported vLLM/Triton/PPU implementations; reuse is limited to the declared sealed runtime/source environment, and dependency changes require target revalidation"
+    ],
+    "status": "run_eval_validated"
+  }
+}

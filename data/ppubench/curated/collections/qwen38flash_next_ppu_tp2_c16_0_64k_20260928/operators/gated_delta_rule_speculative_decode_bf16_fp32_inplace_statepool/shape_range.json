@@ -1,0 +1,21 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "requests": {"type": "integer", "min": 1, "max": 16},
+      "ssm_state_indices": {
+        "type": "array",
+        "items": {"type": "array", "items": {"type": "integer", "min": 0, "max": 1281}, "length": 4},
+        "min_length": 1,
+        "max_length": 16
+      },
+      "num_accepted_tokens": {"type": "array", "items": {"type": "integer", "min": 1, "max": 4}, "min_length": 1, "max_length": 16}
+    },
+    "required": ["requests"]
+  },
+  "cross_field_invariants": [
+    "'ssm_state_indices' not in input_kwargs or (len(input_kwargs['ssm_state_indices']) == requests and len(set(sum(input_kwargs['ssm_state_indices'], []))) == 4 * requests)",
+    "'num_accepted_tokens' not in input_kwargs or len(input_kwargs['num_accepted_tokens']) == requests"
+  ]
+}

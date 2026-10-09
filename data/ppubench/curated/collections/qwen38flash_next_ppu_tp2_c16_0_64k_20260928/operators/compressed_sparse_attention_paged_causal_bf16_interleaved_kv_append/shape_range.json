@@ -1,0 +1,13 @@
+{
+  "init_kwargs": {"kv_cache_dtype": "auto", "layer_k_scale": 1.0, "layer_v_scale": 1.0, "scale": 0.0625},
+  "input_kwargs": {
+    "profile": {"type": "string", "values": ["draft_decode", "main_decode", "main_prefill"]},
+    "query_tokens": {"type": "integer", "min": 1, "max": 8192},
+    "requests": {"type": "integer", "min": 1, "max": 16}
+  },
+  "cross_field_invariants": [
+    "profile != 'main_prefill' or (requests == 1 or (query_tokens == 8192 and requests >= 11))",
+    "profile != 'main_decode' or query_tokens == 4 * requests",
+    "profile != 'draft_decode' or requests <= query_tokens <= 4 * requests"
+  ]
+}

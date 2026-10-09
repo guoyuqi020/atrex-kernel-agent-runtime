@@ -1,0 +1,16 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "tokens": {"type": "integer", "min": 1, "max": 8192},
+      "requests": {"type": "integer", "min": 1, "max": 16},
+      "state_nonzero": {"type": "boolean"},
+      "sequence_lengths": {"type": "array", "items": {"type": "integer", "min": 0, "max": 8192}, "min_length": 1, "max_length": 16}
+    },
+    "required": ["tokens", "requests"]
+  },
+  "cross_field_invariants": [
+    "'sequence_lengths' not in input_kwargs or (len(input_kwargs['sequence_lengths']) == requests and sum(input_kwargs['sequence_lengths']) == tokens)"
+  ]
+}

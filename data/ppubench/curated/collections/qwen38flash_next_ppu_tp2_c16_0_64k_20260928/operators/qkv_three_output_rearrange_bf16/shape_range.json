@@ -1,0 +1,5 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {"tokens": {"type": "integer", "min": 1, "max": 8192}},
+  "cross_field_invariants": []
+}

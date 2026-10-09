@@ -1,0 +1,82 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "controls": {
+      "activation": "silu",
+      "bias": null,
+      "cache_indices": {"type": "array", "items": {"type": "integer", "min": 0, "max": 1281}, "min_length": 1, "max_length": 16},
+      "has_initial_state": {"type": "array", "items": {"type": "boolean"}, "min_length": 1, "max_length": 16},
+      "pad_slot_id": -1,
+      "query_start_loc": {"type": "array", "items": {"type": "integer", "min": 0, "max": 8192}, "min_length": 2, "max_length": 17},
+      "block_idx_first_scheduled_token": null,
+      "block_idx_last_scheduled_token": null,
+      "initial_state_idx": null,
+      "num_computed_tokens": null,
+      "block_size_to_align": 0,
+      "metadata": null,
+      "validate_data": false
+    },
+    "layout": {
+      "cache_indices": {
+        "alias_group": "cache_indices",
+        "dtype": "torch.int32",
+        "shape": {"type": "array", "positions": [{"type": "integer", "min": 1, "max": 16}], "items": {"type": "integer"}},
+        "storage_offset": {"type": "integer", "values": [0, 4, 16, 20, 40, 48, 52, 56, 60]},
+        "stride": [4]
+      },
+      "conv_states": {
+        "alias_group": "conv_states",
+        "dtype": "torch.bfloat16",
+        "shape": [1282, 5120, 6],
+        "storage_offset": 0,
+        "stride": [917504, 1, 5120]
+      },
+      "has_initial_state": {
+        "alias_group": "has_initial_state",
+        "dtype": "torch.bool",
+        "shape": {"type": "array", "positions": [{"type": "integer", "min": 1, "max": 16}], "items": {"type": "integer"}},
+        "storage_offset": {"type": "integer", "values": [0, 1, 4, 5, 10, 12, 13, 14, 15]},
+        "stride": [1]
+      },
+      "query_start_loc": {
+        "alias_group": "query_start_loc",
+        "dtype": "torch.int32",
+        "shape": {"type": "array", "positions": [{"type": "integer", "min": 2, "max": 17}], "items": {"type": "integer"}},
+        "storage_offset": 0,
+        "stride": [1]
+      },
+      "weight": {
+        "alias_group": "weight",
+        "dtype": "torch.bfloat16",
+        "shape": [5120, 4],
+        "storage_offset": 0,
+        "stride": [4, 1]
+      },
+      "x": {
+        "alias_group": "x",
+        "dtype": "torch.bfloat16",
+        "shape": {
+          "type": "array",
+          "positions": [5120, {"type": "integer", "min": 1, "max": 8192}],
+          "items": {"type": "integer"}
+        },
+        "storage_offset": 0,
+        "stride": [1, 5120]
+      }
+    },
+    "profile_id": {"type": "string", "values": ["conv_prefill_batched", "conv_prefill_continuation", "conv_prefill_initial"]}
+  },
+  "cross_field_invariants": [
+    "layout['cache_indices']['shape'][0] == len(controls['cache_indices'])",
+    "layout['has_initial_state']['shape'][0] == len(controls['has_initial_state'])",
+    "layout['query_start_loc']['shape'][0] == len(controls['query_start_loc'])",
+    "len(controls['has_initial_state']) == len(controls['cache_indices'])",
+    "len(controls['query_start_loc']) == len(controls['cache_indices']) + 1",
+    "controls['query_start_loc'][0] == 0 and max(controls['query_start_loc']) == layout['x']['shape'][1]",
+    "controls['query_start_loc'] == sorted(controls['query_start_loc'])",
+    "len(set(controls['cache_indices'])) == len(controls['cache_indices'])",
+    "profile_id != 'conv_prefill_initial' or (len(controls['cache_indices']) == 1 and sum(controls['has_initial_state']) == 0)",
+    "profile_id != 'conv_prefill_continuation' or (len(controls['cache_indices']) == 1 and sum(controls['has_initial_state']) == 1)",
+    "profile_id != 'conv_prefill_batched' or len(controls['cache_indices']) >= 2"
+  ]
+}

@@ -1,0 +1,3176 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          2773
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            2773
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          8144
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 48,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 12,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8144
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39,
+          58,
+          77
+        ],
+        "has_initial_state": [
+          false,
+          true,
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          2047,
+          4094,
+          6141,
+          8188
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            4
+          ],
+          "storage_offset": 4,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            4
+          ],
+          "storage_offset": 1,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            5
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8188
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39
+        ],
+        "has_initial_state": [
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4070,
+          8140
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 52,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            2
+          ],
+          "storage_offset": 13,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8140
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          8136
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 56,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 14,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8136
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          6846
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            6846
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          701
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            701
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39
+        ],
+        "has_initial_state": [
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4096,
+          8192
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8192
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          8152
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 40,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 10,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8152
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39
+        ],
+        "has_initial_state": [
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4068,
+          8136
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 56,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            2
+          ],
+          "storage_offset": 14,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8136
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "10": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39,
+          58,
+          77
+        ],
+        "has_initial_state": [
+          false,
+          true,
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          2036,
+          4072,
+          6108,
+          8144
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            4
+          ],
+          "storage_offset": 48,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            4
+          ],
+          "storage_offset": 12,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            5
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8144
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "11": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          5945
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            5945
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "12": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          5830
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            5830
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "13": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          8140
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 52,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 13,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8140
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "14": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          2734
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            2734
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "15": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          231
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            231
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "16": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39
+        ],
+        "has_initial_state": [
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          3552,
+          7104
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 56,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            2
+          ],
+          "storage_offset": 14,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            7104
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "17": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39,
+          58
+        ],
+        "has_initial_state": [
+          false,
+          true,
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          1069,
+          2138,
+          3207
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 48,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            3
+          ],
+          "storage_offset": 12,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            3207
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "18": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39
+        ],
+        "has_initial_state": [
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          2904,
+          5807
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 56,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            2
+          ],
+          "storage_offset": 14,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            5807
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "19": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          7820
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            7820
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "20": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39,
+          58
+        ],
+        "has_initial_state": [
+          false,
+          true,
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          2724,
+          5448,
+          8172
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 20,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            3
+          ],
+          "storage_offset": 5,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8172
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "21": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39
+        ],
+        "has_initial_state": [
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4088,
+          8176
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 16,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            2
+          ],
+          "storage_offset": 4,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8176
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "22": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20,
+          39
+        ],
+        "has_initial_state": [
+          false,
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          1435,
+          2870
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 56,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            2
+          ],
+          "storage_offset": 14,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            2870
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "23": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          1149
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 56,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 14,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            1149
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "24": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          8132
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 60,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 15,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8132
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "25": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          362
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 56,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 14,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            362
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "26": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          7405
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 56,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 14,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            7405
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  },
+  "27": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          50,
+          69
+        ],
+        "has_initial_state": [
+          false,
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          256,
+          512
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            512
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_batched"
+    }
+  },
+  "28": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          true
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          8192
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8192
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_continuation"
+    }
+  },
+  "29": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "cache_indices": [
+          20
+        ],
+        "has_initial_state": [
+          false
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          8192
+        ],
+        "block_idx_first_scheduled_token": null,
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "num_computed_tokens": null,
+        "block_size_to_align": 0,
+        "metadata": null,
+        "validate_data": false
+      },
+      "layout": {
+        "cache_indices": {
+          "alias_group": "cache_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "conv_states": {
+          "alias_group": "conv_states",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "has_initial_state": {
+          "alias_group": "has_initial_state",
+          "dtype": "torch.bool",
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            8192
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1,
+            5120
+          ]
+        }
+      },
+      "profile_id": "conv_prefill_initial"
+    }
+  }
+}

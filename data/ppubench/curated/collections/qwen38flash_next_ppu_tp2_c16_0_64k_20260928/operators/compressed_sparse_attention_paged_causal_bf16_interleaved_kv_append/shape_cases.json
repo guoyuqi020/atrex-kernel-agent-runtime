@@ -1,0 +1,327 @@
+{
+  "0": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "draft_decode",
+      "query_tokens": 10,
+      "requests": 10
+    }
+  },
+  "1": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "draft_decode",
+      "query_tokens": 16,
+      "requests": 15
+    }
+  },
+  "2": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "draft_decode",
+      "query_tokens": 60,
+      "requests": 15
+    }
+  },
+  "3": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "draft_decode",
+      "query_tokens": 16,
+      "requests": 16
+    }
+  },
+  "4": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "draft_decode",
+      "query_tokens": 14,
+      "requests": 14
+    }
+  },
+  "5": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "draft_decode",
+      "query_tokens": 10,
+      "requests": 9
+    }
+  },
+  "6": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "draft_decode",
+      "query_tokens": 64,
+      "requests": 16
+    }
+  },
+  "7": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "draft_decode",
+      "query_tokens": 12,
+      "requests": 11
+    }
+  },
+  "8": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 40,
+      "requests": 10
+    }
+  },
+  "9": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 24,
+      "requests": 6
+    }
+  },
+  "10": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_prefill",
+      "query_tokens": 8192,
+      "requests": 14
+    }
+  },
+  "11": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_prefill",
+      "query_tokens": 8192,
+      "requests": 16
+    }
+  },
+  "12": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 48,
+      "requests": 12
+    }
+  },
+  "13": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 36,
+      "requests": 9
+    }
+  },
+  "14": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 32,
+      "requests": 8
+    }
+  },
+  "15": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 60,
+      "requests": 15
+    }
+  },
+  "16": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 12,
+      "requests": 3
+    }
+  },
+  "17": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_prefill",
+      "query_tokens": 8192,
+      "requests": 13
+    }
+  },
+  "18": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_prefill",
+      "query_tokens": 8192,
+      "requests": 11
+    }
+  },
+  "19": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 44,
+      "requests": 11
+    }
+  },
+  "20": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_prefill",
+      "query_tokens": 8192,
+      "requests": 15
+    }
+  },
+  "21": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 16,
+      "requests": 4
+    }
+  },
+  "22": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 64,
+      "requests": 16
+    }
+  },
+  "23": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_decode",
+      "query_tokens": 8,
+      "requests": 2
+    }
+  },
+  "24": {
+    "init_kwargs": {
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0,
+      "scale": 0.0625
+    },
+    "input_kwargs": {
+      "profile": "main_prefill",
+      "query_tokens": 7550,
+      "requests": 1
+    }
+  }
+}

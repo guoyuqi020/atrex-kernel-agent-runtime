@@ -1,0 +1,10 @@
+{
+  "init_kwargs": {"hc_count": 4, "hidden_size": 2560},
+  "input_kwargs": {
+    "tokens": {"type": "integer", "min": 1, "max": 8192},
+    "profile": {"type": "string", "values": ["decode", "prefill_narrow"]},
+    "residual_storage_offset": {"type": "integer", "values": [0, 81920, 327680, 41943040]},
+    "mix_aux_storage_offset": {"type": "integer", "values": [0, 128]}
+  },
+  "cross_field_invariants": ["(tokens <= 32 and profile == 'decode') or (tokens > 32 and profile == 'prefill_narrow')"]
+}

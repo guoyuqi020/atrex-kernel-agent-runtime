@@ -1,0 +1,279 @@
+{
+  "0": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        116,
+        2560
+      ]
+    }
+  },
+  "1": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        117,
+        2560
+      ]
+    }
+  },
+  "2": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        159,
+        10240
+      ]
+    }
+  },
+  "3": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        159,
+        2560
+      ]
+    }
+  },
+  "4": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        1,
+        10240
+      ]
+    }
+  },
+  "5": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        1,
+        2560
+      ]
+    }
+  },
+  "6": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        2,
+        10240
+      ]
+    }
+  },
+  "7": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        2,
+        2560
+      ]
+    }
+  },
+  "8": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        32,
+        10240
+      ]
+    }
+  },
+  "9": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        32,
+        2560
+      ]
+    }
+  },
+  "10": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        4096,
+        10240
+      ]
+    }
+  },
+  "11": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        4096,
+        2560
+      ]
+    }
+  },
+  "12": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        42,
+        2560
+      ]
+    }
+  },
+  "13": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        4,
+        10240
+      ]
+    }
+  },
+  "14": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        4,
+        2560
+      ]
+    }
+  },
+  "15": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        55,
+        2560
+      ]
+    }
+  },
+  "16": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        6,
+        2560
+      ]
+    }
+  },
+  "17": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        7,
+        2560
+      ]
+    }
+  },
+  "18": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        8,
+        10240
+      ]
+    }
+  },
+  "19": {
+    "init_kwargs": {
+      "dim": 0
+    },
+    "input_kwargs": {
+      "shape": [
+        8,
+        2560
+      ]
+    }
+  },
+  "20": {
+    "init_kwargs": {
+      "dim": -1
+    },
+    "input_kwargs": {
+      "shape": [
+        16,
+        1280
+      ]
+    }
+  },
+  "21": {
+    "init_kwargs": {
+      "dim": -1
+    },
+    "input_kwargs": {
+      "shape": [
+        16,
+        4,
+        1280
+      ]
+    }
+  },
+  "22": {
+    "init_kwargs": {
+      "dim": -1
+    },
+    "input_kwargs": {
+      "shape": [
+        1,
+        1280
+      ]
+    }
+  },
+  "23": {
+    "init_kwargs": {
+      "dim": -1
+    },
+    "input_kwargs": {
+      "shape": [
+        1,
+        4,
+        1280
+      ]
+    }
+  },
+  "24": {
+    "init_kwargs": {
+      "dim": -1
+    },
+    "input_kwargs": {
+      "shape": [
+        234,
+        1280
+      ]
+    }
+  }
+}

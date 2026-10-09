@@ -1,0 +1,982 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            24,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            24,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            32,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            64,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6656,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            40,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_qkv_long"
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6656,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_qkv_long"
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6656,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            64,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_qkv_long"
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            36,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "10": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            44,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "11": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            32,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "12": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            12,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "13": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            64,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "14": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            60,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "15": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            40,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "16": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6656,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            60,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_qkv_long"
+    }
+  },
+  "17": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            60,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "18": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            40,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "19": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            12,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "20": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6656,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            16,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_qkv_long"
+    }
+  },
+  "21": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  },
+  "22": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6656,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            2,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_qkv_long"
+    }
+  },
+  "23": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            6656,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            36,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_qkv_long"
+    }
+  },
+  "24": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            44,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "25": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            36,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "26": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_ba_small"
+    }
+  },
+  "27": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {},
+      "layout": {
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8192,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8,
+            2560
+          ],
+          "storage_offset": 0,
+          "stride": [
+            2560,
+            1
+          ]
+        }
+      },
+      "profile_id": "linear_gdnqkvz_batch"
+    }
+  }
+}

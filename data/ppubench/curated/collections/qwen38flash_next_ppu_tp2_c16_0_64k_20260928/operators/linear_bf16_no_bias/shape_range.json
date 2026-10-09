@@ -1,0 +1,36 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "controls": {},
+    "layout": {
+      "weight": {
+        "alias_group": "weight",
+        "dtype": "torch.bfloat16",
+        "shape": {
+          "type": "array",
+          "positions": [{"type": "integer", "values": [48, 6656, 8192]}, 2560],
+          "items": {"type": "integer"}
+        },
+        "storage_offset": 0,
+        "stride": [2560, 1]
+      },
+      "x": {
+        "alias_group": "x",
+        "dtype": "torch.bfloat16",
+        "shape": {
+          "type": "array",
+          "positions": [{"type": "integer", "min": 1, "max": 8192}, 2560],
+          "items": {"type": "integer"}
+        },
+        "storage_offset": 0,
+        "stride": [2560, 1]
+      }
+    },
+    "profile_id": {"type": "string", "values": ["linear_ba_small", "linear_gdnqkvz_batch", "linear_qkv_long"]}
+  },
+  "cross_field_invariants": [
+    "profile_id != 'linear_qkv_long' or layout['weight']['shape'][0] == 6656",
+    "profile_id != 'linear_ba_small' or layout['weight']['shape'][0] == 48",
+    "profile_id != 'linear_gdnqkvz_batch' or layout['weight']['shape'][0] == 8192"
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "profile": {"type": "string", "values": ["decode", "prefill"]},
+      "query_rows": {"type": "integer", "min": 1, "max": 8192},
+      "compressed_rows": {"type": "integer", "min": 1, "max": 60000},
+      "sequence_lengths": {"type": "array", "items": {"type": "integer", "min": 4, "max": 65536}, "length": 1}
+    },
+    "required": ["profile", "query_rows", "compressed_rows"]
+  },
+  "cross_field_invariants": [
+    "profile != 'decode' or (4 <= query_rows <= 64 and query_rows % 4 == 0 and compressed_rows >= query_rows // 4)",
+    "profile != 'decode' or ((query_rows != 4 or compressed_rows <= 16384) and (query_rows != 8 or compressed_rows <= 25206) and (query_rows != 12 or compressed_rows <= 46749) and (query_rows != 16 or compressed_rows <= 59299))",
+    "profile != 'prefill' or compressed_rows >= query_rows // 4",
+    "'sequence_lengths' not in input_kwargs or (profile == 'decode' and query_rows == 4 and input_kwargs['sequence_lengths'][0] // 4 == compressed_rows)"
+  ]
+}

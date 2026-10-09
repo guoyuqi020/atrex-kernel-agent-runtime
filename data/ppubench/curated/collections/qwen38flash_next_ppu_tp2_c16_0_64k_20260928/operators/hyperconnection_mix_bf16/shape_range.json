@@ -1,0 +1,49 @@
+{
+  "init_kwargs": {"hc_count": 4, "hidden_size": 2560, "norm_eps": 1e-06, "per_branch_norm": true},
+  "input_kwargs": {
+    "controls": {},
+    "layout": {
+      "hyper_input": {
+        "alias_group": "hyper_input",
+        "dtype": "torch.bfloat16",
+        "shape": {
+          "type": "array",
+          "positions": [{"type": "integer", "min": 1, "max": 8192}, 10240],
+          "items": {"type": "integer"}
+        },
+        "storage_offset": {"type": "integer", "values": [0, 10240, 81920, 327680]},
+        "stride": [10240, 1]
+      },
+      "norm_weight": {
+        "alias_group": "norm_weight",
+        "dtype": "torch.bfloat16",
+        "shape": [10240],
+        "storage_offset": 0,
+        "stride": [1]
+      },
+      "weight_down": {
+        "alias_group": "weight_down",
+        "dtype": "torch.bfloat16",
+        "shape": [320, 10240],
+        "storage_offset": 0,
+        "stride": [10240, 1]
+      },
+      "weight_inject": {
+        "alias_group": "weight_inject",
+        "dtype": "torch.bfloat16",
+        "shape": [4, 10240],
+        "storage_offset": 0,
+        "stride": [10240, 1]
+      },
+      "weight_up": {
+        "alias_group": "weight_up",
+        "dtype": "torch.bfloat16",
+        "shape": [10240, 320],
+        "storage_offset": 0,
+        "stride": [320, 1]
+      }
+    },
+    "profile_id": {"type": "string", "values": ["mix_batch", "mix_long", "mix_small"]}
+  },
+  "cross_field_invariants": []
+}

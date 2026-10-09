@@ -1,0 +1,1994 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134,
+          153,
+          172,
+          191,
+          210,
+          229,
+          248,
+          267,
+          286
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32,
+          36,
+          40,
+          44,
+          48,
+          52,
+          56,
+          60
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            15
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            15
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            16
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            60,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134,
+          153,
+          172,
+          191,
+          210,
+          229
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32,
+          36,
+          40,
+          44,
+          48
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            12
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            12
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            13
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            48,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134,
+          153,
+          172,
+          191,
+          210,
+          229,
+          248
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32,
+          36,
+          40,
+          44,
+          48,
+          52
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            13
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            13
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            14
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            52,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            5
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            5
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            20,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_partial"
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            5
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            16,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_partial"
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          50,
+          69,
+          88,
+          107,
+          126,
+          145,
+          164,
+          183,
+          202,
+          221,
+          240,
+          259,
+          278,
+          297,
+          316,
+          335
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          4,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32,
+          36,
+          40,
+          44,
+          48,
+          52,
+          56,
+          60,
+          64
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            16
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            16
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            17
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            64,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            1
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            4,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_small"
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            7
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            7
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            8
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            28,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            12,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_partial"
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          50,
+          69
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          1
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            2
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            3
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            8,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_partial"
+    }
+  },
+  "10": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134,
+          153,
+          172,
+          191,
+          210
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32,
+          36,
+          40,
+          44
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            11
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            11
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            12
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            44,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "11": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            7
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            24,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "12": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134,
+          153,
+          172
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32,
+          36
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            9
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            9
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            10
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            36,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "13": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134,
+          153,
+          172,
+          191
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32,
+          36,
+          40
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            10
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            10
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            11
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            40,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "14": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134,
+          153
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            8
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            8
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            9
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            32,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  },
+  "15": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "controls": {
+        "activation": "silu",
+        "bias": null,
+        "conv_state_indices": [
+          20,
+          39,
+          58,
+          77,
+          96,
+          115,
+          134,
+          153,
+          172,
+          191,
+          210,
+          229,
+          248,
+          267
+        ],
+        "max_query_len": 4,
+        "num_accepted_tokens": [
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2,
+          3,
+          4,
+          1,
+          2
+        ],
+        "pad_slot_id": -1,
+        "query_start_loc": [
+          0,
+          4,
+          8,
+          12,
+          16,
+          20,
+          24,
+          28,
+          32,
+          36,
+          40,
+          44,
+          48,
+          52,
+          56
+        ],
+        "block_idx_last_scheduled_token": null,
+        "initial_state_idx": null,
+        "retrieve_parent_token": null,
+        "validate_data": false
+      },
+      "layout": {
+        "conv_state": {
+          "alias_group": "conv_state",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            1282,
+            5120,
+            6
+          ],
+          "storage_offset": 0,
+          "stride": [
+            917504,
+            1,
+            5120
+          ]
+        },
+        "conv_state_indices": {
+          "alias_group": "conv_state_indices",
+          "dtype": "torch.int32",
+          "shape": [
+            14
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4
+          ]
+        },
+        "num_accepted_tokens": {
+          "alias_group": "num_accepted_tokens",
+          "dtype": "torch.int32",
+          "shape": [
+            14
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "query_start_loc": {
+          "alias_group": "query_start_loc",
+          "dtype": "torch.int32",
+          "shape": [
+            15
+          ],
+          "storage_offset": 0,
+          "stride": [
+            1
+          ]
+        },
+        "weight": {
+          "alias_group": "weight",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            5120,
+            4
+          ],
+          "storage_offset": 0,
+          "stride": [
+            4,
+            1
+          ]
+        },
+        "x": {
+          "alias_group": "x",
+          "dtype": "torch.bfloat16",
+          "shape": [
+            56,
+            5120
+          ],
+          "storage_offset": 0,
+          "stride": [
+            5120,
+            1
+          ]
+        }
+      },
+      "profile_id": "conv_update_batch"
+    }
+  }
+}
