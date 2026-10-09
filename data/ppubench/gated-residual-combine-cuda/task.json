@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "collection": "qwen38flash_next_ppu_tp2_c16_0_64k_20260928",
+  "operator": "gated_residual_combine_bf16",
+  "curated_root": "data/ppubench/curated",
+  "dsl": "cuda",
+  "expected_valid_shapes": 24,
+  "expected_test_shapes": 0,
+  "fresh_bootstrap": true,
+  "seed_kind": "NotImplementedError placeholder",
+  "roofline_mode": "no validated SOL_time_ms; latency only",
+  "runtime": {
+    "backend": "claude",
+    "worker_user": "root",
+    "host_home": "/root",
+    "launcher_mode": "container",
+    "gpu_wiki": null,
+    "roofline_builder": null,
+    "agate": {
+      "base_url": "https://atrex-gateway.alibaba-inc.com",
+      "auth_mode": "ak_sk",
+      "access_key_env": "AGATE_AK",
+      "secret_key_env": "AGATE_SK",
+      "http_timeout_s": 1800.0,
+      "wait_timeout_s": 3900.0
+    }
+  },
+  "outer_timeout_seconds": 259200
+}

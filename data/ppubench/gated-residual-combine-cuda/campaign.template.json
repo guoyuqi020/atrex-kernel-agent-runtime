@@ -1,0 +1,20 @@
+{
+  "schema_version": 3,
+  "operator": "gated_residual_combine_bf16",
+  "hardware_target": "ZW-M890P",
+  "evaluation_contract": "evaluation-contract.json",
+  "agent_problem": "agent-problem.json",
+  "workflow_command": "workflow/evolve_3.py",
+  "max_challengers": 1,
+  "optimizer_attempt_budget": 6,
+  "lineages": {
+    "cuda": {
+      "models": {
+        "optimizer": "qwen3.8-max",
+        "evolver": "qwen3.8-max"
+      },
+      "baseline_kernel": "inputs/empty-kernel",
+      "initial_evidence": "inputs/initial-evidence"
+    }
+  }
+}

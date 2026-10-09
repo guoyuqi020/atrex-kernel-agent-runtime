@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "candidate_path": "kernel.py",
+  "roofline": null,
+  "options": {
+    "num_correctness_cases": 5,
+    "bench_iters": 100,
+    "atol": 0.01,
+    "rtol": 0.05,
+    "timeout_s": 600
+  },
+  "env_vars": {},
+  "requirements": [],
+  "deps_mode": "freeze_installed",
+  "mode": "full",
+  "lock_clocks": false,
+  "harness": "atrex_bench",
+  "runner_overrides": {
+    "config_version": "v1",
+    "benchmark_mode": "eager",
+    "trust_mode": "trusted",
+    "correctness_max_rel_l2": null
+  }
+}

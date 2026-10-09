@@ -1,0 +1,90 @@
+{
+  "schema_version": "atrex.agent_problem.v1",
+  "objective": "Implement and optimize gated residual combination from scratch using self-authored CUDA C++ on Alibaba PPU ZW-M890P. Triton, CuteDSL, and prebuilt compute operators are not permitted.",
+  "evaluation": {
+    "exact_cases": "private",
+    "correctness_requirement": "Preserve the reference BF16 multiplication rounding followed by BF16 addition, all outputs, and input immutability; elementwise abs(candidate-reference) <= 0.01 + 0.05 * abs(reference).",
+    "performance_requirement": "Minimize the equal-weight geometric mean latency across all 24 Valid cases; no Test holdout.",
+    "development_cases_are_evaluation_cases": false
+  },
+  "operator_contract": {
+    "entrypoint": "torch.nn.Module Model(hc_count=4, hidden_size=2560).forward(block_output, residual, mix_aux)",
+    "inputs": {
+      "block_output": "BF16 [T,H]",
+      "residual": "BF16 [T,C*H]",
+      "mix_aux": "BF16 [T,C]"
+    },
+    "output": "BF16 [T,C*H], out[t,c*H+h] = BF16(residual[t,c*H+h] + BF16(block_output[t,h] * mix_aux[t,c]))",
+    "layout": "Inputs are contiguous logical tensors but residual and mix_aux can be views with nonzero storage offsets. Return a new output; do not mutate any input.",
+    "hardware": "PPU ZW-M890P exposes CUDA-compatible PyTorch. Query Runtime env/dev for the actual compiler/toolchain. No managed clock locking."
+  },
+  "workload_profile": {
+    "fixed_hc_count": 4,
+    "fixed_hidden_size": 2560,
+    "profiles": [
+      "decode",
+      "prefill_narrow"
+    ]
+  },
+  "distribution_profile": {},
+  "shape_domain": {
+    "init_kwargs": {
+      "hc_count": 4,
+      "hidden_size": 2560
+    },
+    "input_kwargs": {
+      "tokens": {
+        "type": "integer",
+        "min": 1,
+        "max": 8192
+      },
+      "profile": {
+        "type": "string",
+        "values": [
+          "decode",
+          "prefill_narrow"
+        ]
+      },
+      "residual_storage_offset": {
+        "type": "integer",
+        "values": [
+          0,
+          81920,
+          327680,
+          41943040
+        ]
+      },
+      "mix_aux_storage_offset": {
+        "type": "integer",
+        "values": [
+          0,
+          128
+        ]
+      }
+    },
+    "cross_field_invariants": [
+      "(tokens <= 32 and profile == 'decode') or (tokens > 32 and profile == 'prefill_narrow')"
+    ]
+  },
+  "invariants": [
+    "C=4 and H=2560",
+    "1 <= T <= 8192",
+    "All inputs and outputs are BF16",
+    "Preserve input data and handle nonzero tensor storage offsets"
+  ],
+  "coverage_regimes": [
+    {
+      "name": "decode",
+      "tokens": "1..32"
+    },
+    {
+      "name": "prefill",
+      "tokens": "33..8192"
+    },
+    {
+      "name": "views",
+      "requirement": "nonzero storage offset in residual and mix_aux"
+    }
+  ],
+  "development_cases": []
+}
