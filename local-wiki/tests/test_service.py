@@ -109,8 +109,7 @@ async def _request(
         sent.append(message)
 
     raw_headers = [
-        (name.encode("latin-1"), value.encode("latin-1"))
-        for name, value in (headers or {}).items()
+        (name.encode("latin-1"), value.encode("latin-1")) for name, value in (headers or {}).items()
     ]
     await app(
         {"type": "http", "method": method, "path": path, "headers": raw_headers},
@@ -325,8 +324,13 @@ async def test_optional_bearer_auth_and_readiness(tmp_path: Path) -> None:
 @pytest.mark.anyio
 @pytest.mark.parametrize("backend", ["claude", "qodercli"])
 @pytest.mark.parametrize("dsl", list(Dsl))
+@pytest.mark.parametrize("trace_mode", ["disabled", "enabled", "unwritable"])
 async def test_real_corpus_query_passes_through_http_verbatim(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, backend: str, dsl: Dsl
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    backend: str,
+    dsl: Dsl,
+    trace_mode: str,
 ) -> None:
     """Use real copied retrieval and corpus; replace only the paid model process."""
     intent = {
@@ -341,7 +345,7 @@ async def test_real_corpus_query_passes_through_http_verbatim(
         "hardware_requests": [{"kind": "product", "value": "sm120", "field": None, "vs": None}],
     }
     cli = tmp_path / backend
-    envelope = json.dumps({"result": intent})
+    envelope = json.dumps({"result": intent, "usage": {"input_tokens": 23, "output_tokens": 11}})
     cli.write_text(
         f"#!{sys.executable}\n"
         "import sys\n"
@@ -356,18 +360,29 @@ async def test_real_corpus_query_passes_through_http_verbatim(
     monkeypatch.setenv("PATH", f"{tmp_path}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("ATREX_WIKI_BRIDGE_CLI", backend)
     monkeypatch.delenv("ATREX_WIKI_METRICS_LOG", raising=False)
-    monkeypatch.delenv("ATREX_WIKI_TASK_ID", raising=False)
+    monkeypatch.delenv("ATREX_ENVIRONMENT_RESTART_HANDOFF_ID", raising=False)
+    monkeypatch.setenv("ATREX_WIKI_TASK_ID", "http-test-task")
+    profile_root = tmp_path / "query-profile"
+    if trace_mode == "disabled":
+        monkeypatch.delenv("ATREX_WIKI_PROFILE_ROOT", raising=False)
+    else:
+        monkeypatch.setenv("ATREX_WIKI_PROFILE_ROOT", str(profile_root))
+        if trace_mode == "unwritable":
+            # A file in place of the directory fails reliably, even as root.
+            profile_root.write_text("not a directory", encoding="utf-8")
     settings = _settings(tmp_path).model_copy(
         update={"reference_root": CORPUS, "agent_cli": backend, "query_timeout_seconds": 30}
     )
     app = build_application(settings, {})
     original_run = subprocess.run
     outputs: list[dict[str, Any]] = []
+    errors: list[str] = []
 
     def capture(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[bytes]:
         process = original_run(*args, **kwargs)
         assert process.returncode == 0, process.stderr.decode()
         outputs.append(json.loads(process.stdout))
+        errors.append(process.stderr.decode())
         return process
 
     monkeypatch.setattr(subprocess, "run", capture)
@@ -388,6 +403,34 @@ async def test_real_corpus_query_passes_through_http_verbatim(
             assert record["wiki_id"] == f"gpu_wiki::{key}"
         # Alias resolution and component lanes now belong to AKA, not this adapter.
         assert any("isolated scope lane" in note for note in content["notes"])
+        if trace_mode == "enabled":
+            events = list((profile_root / "raw/query_events").glob("*/*.json"))
+            assert len(events) == 1
+            event = json.loads(events[0].read_text())
+            identity = json.loads((profile_root / "run.json").read_text())
+            assert event["schema_version"] == "atrex-wiki-query-event-v2"
+            assert event["query_id"] == content["query_id"]
+            assert event["run_id"] == identity["run_id"]
+            assert event["task_id"] == "http-test-task"
+            assert event["status"] == "ok"
+            assert event["bridge_input_tokens"] == 23
+            assert event["bridge_output_tokens"] == 11
+            assert event["bridge_intent"]["operator_terms"] == ["fused_moe_fp8"]
+            assert event["normalized_intents"]
+            assert event["result"]["served"] == len(content["records"])
+            assert [record["wiki_id"] for record in event["returned_records"]] == [
+                record["wiki_id"] for record in content["records"].values()
+            ]
+            assert all("payload" not in record for record in event["returned_records"])
+            assert any(
+                store["store_id"] == "gpu_wiki" and store["wiki_revision"].startswith("sha256:")
+                for store in event["wiki_stores"]
+            )
+        elif trace_mode == "unwritable":
+            assert "Wiki query trace could not be written" in errors[0]
+            assert profile_root.read_text() == "not a directory"
+        else:
+            assert not profile_root.exists()
     finally:
         app.close()
 

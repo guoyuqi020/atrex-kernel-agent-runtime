@@ -280,6 +280,7 @@ class RuntimeJournalService:
                             "evidence": experiment["evidence"],
                             "analysis": experiment["analysis"],
                             "action": experiment["action"],
+                            "knowledge_used": experiment["knowledge_used"],
                         }
                         for experiment in self._visible_experiments(request.attempt_id)
                     ]
@@ -919,8 +920,11 @@ class RuntimeJournalService:
             if "directions" in self.tool_modules
             else _EXPERIMENT_FIELDS - {"direction_id"}
         )
-        if set(value) != expected_fields:
-            raise ValueError(f"Experiment fields must be exactly {sorted(expected_fields)}")
+        if set(value) - {"knowledge_used"} != expected_fields:
+            raise ValueError(
+                f"Experiment fields must be exactly {sorted(expected_fields)} "
+                "with optional knowledge_used"
+            )
         for field in expected_fields - {"action", "before", "after"}:
             _text(value.get(field), f"Experiment {field}")
         if "directions" in self.tool_modules:

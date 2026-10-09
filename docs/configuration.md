@@ -60,6 +60,29 @@ Optional query-only service URL, bearer-token environment name, timeout, and req
 bounds. Runtime freezes queries before returning results. There is no feedback, upload, or Outbox
 configuration.
 
+`enabled` defaults to `false`. Set `gpu_wiki.enabled: true` to expose `wiki-query` to Bootstrap and
+Optimizer sessions (including dev shells), issue Attempt-scoped Wiki authority and enable the
+Runtime `/v1/wiki/query` endpoint. The live tool contract and conditional Agent instructions use
+the same switch. This is independent of `optimizer.tool_modules` (Direction/Experiment journals).
+An absent/null `gpu_wiki`, omitted `enabled`, or `enabled: false` hides the tool and instructions,
+issues no Wiki authority, and leaves the endpoint unavailable without loading Wiki credentials.
+Keep the service URL and limits when toggling the flag; no second Gateway-operation setting is
+needed. Evolver can see the next Optimizer's tool availability, but receives no Wiki capability.
+
+For example, keep the other `gpu_wiki` fields and change `"enabled": false` to `"enabled": true`
+in [runtime.example.json](../runtime.example.json). Restart Runtime and the campaign worker; newly
+created workspaces receive the new immutable tool contract. Existing or resumed workspaces retain
+their frozen contract until a new workspace is created. Existing sealed Agent revisions must contain
+the opt-in Wiki tool implementation: changing a deployment flag does not update pinned Agent
+source or a session that is already running. With the switch off, the API also rejects previously
+issued Wiki capabilities after the service restarts. The Wiki service itself is a separate process;
+select its internal corpus with `local-wiki/configs/internal.example.json`.
+
+Agent input is only `{"query":"a focused hardware/optimization question"}`. The tool supplies
+Attempt identity, idempotency and authorization; Runtime supplies trusted operator/DSL/hardware
+context and freezes the response before returning it. Treat historical Wiki statements as scoped
+references to test, not evidence that this Attempt's kernel is correct or faster.
+
 ### `campaign`
 
 Deployment policy shared by every scheduled Campaign:

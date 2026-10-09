@@ -1,5 +1,11 @@
 # GPU Wiki
 
+In an AKA campaign, use the enabled `gpu-wiki.query` plugin through
+`python3 tools/plugin.py call gpu-wiki.query --input wiki_request.json`.
+The input is a JSON object with a `request` string and optional `max_records`, `max_bytes`,
+and `exclude`. Follow the campaign's injected plugin instructions. The direct commands below
+remain available for standalone Wiki maintenance and queries.
+
 GPU Wiki is the structured knowledge system used by ATREX Kernel Agent (AKA).
 It turns optimization traces and agent sessions into validated JSON knowledge,
 serves that knowledge through a lightweight query path, and mines completed AKA
@@ -164,6 +170,17 @@ an independent JSON value. For attribution, consumers copy the top-level
 them from mapping keys. Evidence, retrieval metadata, rank decomposition, bridge
 commentary, and other engine-side fields are deliberately not served, so they
 cannot anchor AKA's judgement.
+
+AKA sets `ATREX_WIKI_PROFILE_ROOT` to the incumbent campaign workspace. After
+CLI and request validation, `query_nl.py` writes one immutable, compact JSON
+event from its cleanup path, including dry-run and bridge-failure statuses plus
+compact per-store retrieval-failure diagnostics. Argument-parse errors and
+invalid or empty requests rejected before a query workspace exists do not emit
+an event. Events contain the request,
+normalized scope, returned canonical IDs, rank, and timing; returned payloads
+and coding-agent sessions are not copied. Consumers outside AKA may set the same
+environment variable to an output directory they own; without it, querying
+remains read-only and creates no telemetry files.
 
 ### Direct structured queries
 

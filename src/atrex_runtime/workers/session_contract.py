@@ -164,6 +164,8 @@ def materialize_session_contract(
         for name, binding in _COMMAND_BINDINGS.items()
         if name not in set().union(*_MODULE_COMMANDS.values()) or name in enabled_commands
     }
+    if wiki_available:
+        bindings["wiki-query"] = {"kind": "runtime-query", "operation": "wiki_query"}
 
     destination.mkdir(parents=True, mode=0o700)
     try:

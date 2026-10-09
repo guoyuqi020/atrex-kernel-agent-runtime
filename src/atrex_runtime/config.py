@@ -200,6 +200,7 @@ class GpuWikiSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    enabled: bool = False
     base_url: str
     bearer_token_env: str | None = None
     timeout_seconds: float = Field(gt=0)
@@ -616,7 +617,11 @@ class SameAllocationAbbaComparisonSettings(BaseModel):
 
     method: Literal["same_allocation_abba"]
     repeats: int = Field(
-        default=2, ge=2, le=ABBA_MAX_SIDE_REPEATS, multiple_of=2, strict=True,
+        default=2,
+        ge=2,
+        le=ABBA_MAX_SIDE_REPEATS,
+        multiple_of=2,
+        strict=True,
         description=ABBA_REPEATS_DESCRIPTION,
     )
     minimum_improvement_percent: float = Field(default=0.0, ge=0, lt=100)
@@ -905,6 +910,11 @@ class RuntimeSettings(BaseModel):
     gpu_wiki: GpuWikiSettings | None = None
     gate_policy: GatePolicySettings | None = None
     campaign: CampaignRuntimeSettings | None = None
+
+    @property
+    def gpu_wiki_enabled(self) -> bool:
+        """Enable Agent knowledge access only through the explicit deployment switch."""
+        return self.gpu_wiki is not None and self.gpu_wiki.enabled
 
     @model_validator(mode="after")
     def _validate_sandbox(self) -> RuntimeSettings:

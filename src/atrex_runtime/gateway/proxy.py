@@ -1569,6 +1569,10 @@ class GatewayProxyService:
             journal = report.get(field)
             if not isinstance(journal, list):
                 raise InfrastructureError(f"Attempt Report has invalid {field}")
+            if field == "experiments":
+                if any(not isinstance(item, dict) for item in journal):
+                    raise InfrastructureError("Attempt Report has invalid experiments")
+                journal = [{"knowledge_used": [], **item} for item in journal]
             if journal:
                 journals.append(cast(JsonValue, journal))
         return GatewayAdapterResult(

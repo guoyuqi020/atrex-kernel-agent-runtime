@@ -139,7 +139,7 @@ recording is disabled; use the Direction index for hypotheses that have no such 
 ### Experiment history
 
 Call `list-experiments` with `{"file":"scratch/experiments-index.json"}`. It writes IDs, names,
-hypotheses, changes, evidence, analyses, and actions to that file; the response contains only status,
+hypotheses, changes, evidence, analyses, actions, and `knowledge_used` to that file; the response contains only status,
 file, and count. This index already contains useful recorded conclusions. Call `load-experiment`
 with `{"experiment_id":"experiment_<id>"}` when you need the complete selected record, especially
 its exact `before`/`after` Kernel and Result Artifact digests. If the index answers the question,
@@ -152,6 +152,12 @@ When both Journal modules are enabled, `load-direction` also provides `associate
 for all linked visible Experiments and `supporting_experiment_ids` for the latest explicit closure
 selection. Load the relevant Experiments to follow that evidence; do not infer support from lifecycle
 status alone. An Experiment's Direction association is not required when that module is disabled.
+
+When recording an Experiment that applies Wiki knowledge, include optional `knowledge_used` entries
+with the exact `record_id`, a concise `finding`, and its concrete `application` in this Experiment.
+Use `[]` when none was used; old records without this field also read as `[]`. Historical knowledge
+can be cited even when live Wiki access is disabled. This is your attribution, not measurement
+evidence or proof that the knowledge helped; retain the required before/after Result references.
 
 ### Measurements, source, and gaps
 

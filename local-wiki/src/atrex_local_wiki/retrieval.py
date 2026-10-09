@@ -1,9 +1,10 @@
-"""Adapter over the pinned GPU Wiki's public query and record interfaces."""
+"""Adapter over the selected GPU Wiki's native natural-language query interface."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+import re
 import subprocess
 import threading
 from collections.abc import Mapping
@@ -11,6 +12,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .models import JsonValue, KnowledgeQueryV1
+
+_INDEXED_TOOLS = (
+    "query_nl.py",
+    "query.py",
+    "agent_launch.py",
+    "hardware_identity.py",
+    "operator_scope.py",
+    "wiki_profile.py",
+)
+type _FileSignature = tuple[int, int, int, int, int]
 
 
 class GpuWikiQueryError(ValueError):
@@ -49,14 +60,20 @@ class CorpusIndex:
         self._query_tool = self._root / "tools" / "query_nl.py"
         self._kernel_index = self._root / "kernel_wiki" / "records" / "index.json"
         self._hardware_index = self._root / "hardware_wiki" / "records" / "index.json"
+        self._search_index = self._root / "search_index"
+        # An incomplete indexed Store must fail rather than silently querying its
+        # older kernel/hardware record directories with the public contract.
+        self._indexed = self._search_index.exists() or (self._root / "tools/query.py").exists()
+        self._digest_cache: dict[Path, tuple[_FileSignature, bytes]] = {}
+        self._revision_lock = threading.Lock()
         self._validate_layout()
 
     def check_health(self) -> None:
-        """Fail when the pinned tools or either public record store disappear."""
+        """Fail when a dependency of the selected native interface disappears."""
         self._validate_layout()
 
     def query(self, request: KnowledgeQueryV1) -> GpuWikiQueryResult:
-        """Return the public ``query_nl.py`` envelope without rewriting its contents."""
+        """Return the native ``query_nl.py`` envelope without rewriting its contents."""
         description = (
             f"Target hardware reported by the runtime: {request.hardware_target}. "
             f"Required DSL: {request.dsl}. Operator: {request.operator}. "
@@ -81,6 +98,7 @@ class CorpusIndex:
             self._query_timeout_seconds + 30 if self._query_timeout_seconds is not None else None
         )
         with self._query_slots:
+            before = self._query_revision() if self._indexed else None
             try:
                 process = subprocess.run(
                     command,
@@ -110,17 +128,29 @@ class CorpusIndex:
                 value.get("notes"), list
             ):
                 raise GpuWikiQueryError("GPU Wiki records/notes have incompatible types")
-            return GpuWikiQueryResult(_json_object(value), self._revision())
+            revision = self._query_revision()
+            if before is not None and before != revision:
+                raise GpuWikiQueryError("GPU Wiki Store changed while the query was running; retry")
+            return GpuWikiQueryResult(_json_object(value), revision)
 
     def _validate_layout(self) -> None:
-        required = (self._query_tool, self._kernel_index, self._hardware_index)
-        missing = [str(path) for path in required if path.is_symlink() or not path.is_file()]
+        required = self._interface_files()
+        missing = [str(path) for path in required if not self._regular_store_file(path)]
         if missing:
-            raise ValueError(f"GPU Wiki public interface is incomplete: {missing}")
+            raise ValueError(f"GPU Wiki native interface is incomplete: {missing}")
         if not self._python.is_absolute() or not self._python.is_file():
             raise ValueError("GPU Wiki Python executable must be an existing absolute file")
 
     def _revision(self) -> str:
+        if self._indexed:
+            with self._revision_lock:
+                digest = hashlib.sha256()
+                for path in sorted(self._interface_files()):
+                    digest.update(path.relative_to(self._root).as_posix().encode())
+                    digest.update(b"\0")
+                    digest.update(self._cached_file_digest(path))
+                    digest.update(b"\0")
+                return "sha256:" + digest.hexdigest()
         digest = hashlib.sha256()
         for path in (self._query_tool, self._kernel_index, self._hardware_index):
             digest.update(path.relative_to(self._root).as_posix().encode())
@@ -128,6 +158,85 @@ class CorpusIndex:
             digest.update(path.read_bytes())
             digest.update(b"\0")
         return "sha256:" + digest.hexdigest()
+
+    def _query_revision(self) -> str:
+        try:
+            self._validate_layout()
+            return self._revision()
+        except (OSError, ValueError) as error:
+            raise GpuWikiQueryError(f"GPU Wiki Store is unavailable: {error}") from error
+
+    def _interface_files(self) -> tuple[Path, ...]:
+        if not self._indexed:
+            return self._query_tool, self._kernel_index, self._hardware_index
+        manifest_path = self._search_index / "index.json"
+        if not self._regular_store_file(manifest_path):
+            raise ValueError(f"GPU Wiki search index is missing or unsafe: {manifest_path}")
+        try:
+            manifest = json.loads(manifest_path.read_bytes())
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise ValueError("GPU Wiki search index manifest is unreadable") from error
+        if (
+            not isinstance(manifest, dict)
+            or manifest.get("schema") != "gpu-search-1.0"
+            or manifest.get("manifest_schema") != "gpu-search-manifest-1.1"
+            or not isinstance(manifest.get("store_id"), str)
+            or not manifest["store_id"].strip()
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", str(manifest.get("index_digest"))) is None
+        ):
+            raise ValueError("GPU Wiki search index manifest is incompatible")
+        shards = manifest.get("shards")
+        if not isinstance(shards, dict) or not shards:
+            raise ValueError("GPU Wiki search index manifest has no shards")
+        files = {self._root / "tools" / name for name in _INDEXED_TOOLS}
+        files.add(manifest_path)
+        for relative in shards.values():
+            if (
+                not isinstance(relative, str)
+                or not relative
+                or Path(relative).is_absolute()
+                or ".." in Path(relative).parts
+            ):
+                raise ValueError("GPU Wiki search index has an unsafe shard path")
+            files.add(self._search_index / relative)
+        governance = self._search_index / "wiki_governance.json"
+        archives = set((self._search_index / "governance_revisions").glob("*/governance.json"))
+        if governance.exists() or governance.is_symlink():
+            files.add(governance)
+        elif not archives:
+            # Without a governance projection the native implementation hides all
+            # records. Do not advertise that empty Store as ready.
+            raise ValueError("GPU Wiki search index has no governance projection")
+        files.update(archives)
+        evidence = self._search_index / "profile_evidence.json"
+        if evidence.exists() or evidence.is_symlink():
+            files.add(evidence)
+        return tuple(files)
+
+    def _regular_store_file(self, path: Path) -> bool:
+        return path.is_file() and not any(
+            parent.is_symlink() for parent in (path, *path.parents) if parent != self._root
+        )
+
+    def _cached_file_digest(self, path: Path) -> bytes:
+        stat = path.stat()
+        signature = (stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+        cached = self._digest_cache.get(path)
+        if cached is not None and cached[0] == signature:
+            return cached[1]
+        with path.open("rb") as stream:
+            value = hashlib.file_digest(stream, "sha256").digest()
+        after = path.stat()
+        if signature != (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        ):
+            raise ValueError(f"GPU Wiki file changed while computing its revision: {path}")
+        self._digest_cache[path] = signature, value
+        return value
 
 
 def _json_object(value: object) -> dict[str, JsonValue]:

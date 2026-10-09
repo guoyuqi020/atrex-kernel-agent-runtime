@@ -12,8 +12,9 @@ GPU Wiki 是外源知识，lineage Experience 是 Agent 自己生产的本地历
 
 ## 决策
 
-每个已配置的 Optimizer 获得 Core `wiki-query` Tool 和 Attempt 范围 Runtime
-Capability。Query 只向 `POST /v1/wiki/query` 发送不可变 Manifest 中的 Attempt ID、聚焦问题和
+仅当 `gpu_wiki.enabled` 显式为 `true` 时，Bootstrap 和 Optimizer 才获得 `wiki-query` 工具、
+条件式说明和 Attempt 范围 Runtime Capability。默认值为 `false`，独立于 Direction／Experiment
+模块；关闭时 Runtime 查询接口也不可用。Query 只向 `POST /v1/wiki/query` 发送不可变 Manifest 中的 Attempt ID、聚焦问题和
 幂等键；Agent 可见 Content 是 GPU Wiki 准确的 `records`/`notes` 投影，`records` Mapping Key
 就是稳定 Record ID，每个 Value 都是完整的安全服务 Record。可信 Runtime 从权威存储重建
 Campaign、lineage、Epoch、Branch、Ordinal、Kernel Agent Revision、operator、DSL、硬件、

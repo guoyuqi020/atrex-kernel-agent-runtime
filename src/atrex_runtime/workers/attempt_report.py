@@ -57,6 +57,23 @@ class AttemptExperimentSubjectV1(BaseModel):
         return parsed
 
 
+class AttemptKnowledgeUseV1(BaseModel):
+    """One Agent-declared knowledge record that materially affected the work."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    record_id: str = Field(min_length=1)
+    finding: str = Field(min_length=1)
+    application: str = Field(min_length=1)
+
+    @field_validator("record_id", "finding", "application")
+    @classmethod
+    def _validate_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Knowledge-use fields cannot be blank")
+        return value
+
+
 class AttemptExperimentV8(BaseModel):
     """One before/after experiment recorded before terminal handoff."""
 
@@ -74,6 +91,15 @@ class AttemptExperimentV8(BaseModel):
     evidence: str = Field(min_length=1)
     analysis: str = Field(min_length=1)
     action: Literal["keep_after", "restore_before", "abandon_direction", "baseline", "adopt"]
+    # Historical Journals and clients predate per-Experiment knowledge attribution.
+    knowledge_used: tuple[AttemptKnowledgeUseV1, ...] = ()
+
+    @field_validator("knowledge_used", mode="before")
+    @classmethod
+    def _validate_knowledge_array(cls, value: object) -> object:
+        if not isinstance(value, (list, tuple)):
+            raise ValueError("Experiment knowledge_used must be an array")
+        return value
 
     @field_validator(
         "recorded_at",
@@ -258,23 +284,6 @@ class AttemptProfileEvidenceV1(BaseModel):
         if not any(item.operation == "profile" for item in self.supporting_results):
             raise ValueError("Profile evidence requires at least one profile result")
         return self
-
-
-class AttemptKnowledgeUseV1(BaseModel):
-    """One external knowledge record that materially affected the work."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    record_id: str = Field(min_length=1)
-    finding: str = Field(min_length=1)
-    application: str = Field(min_length=1)
-
-    @field_validator("record_id", "finding", "application")
-    @classmethod
-    def _validate_text(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Knowledge-use fields cannot be blank")
-        return value
 
 
 class AttemptFindingV1(BaseModel):

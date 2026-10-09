@@ -1139,7 +1139,9 @@ async def test_runtime_journal_history_reads_terminal_report_artifacts(
     experiment_history = await query("experiment_history")
 
     assert directions.result == {"journals": [direction_events]}
-    assert experiment_history.result == {"journals": [experiments]}
+    assert experiment_history.result == {
+        "journals": [[{**item, "knowledge_used": []} for item in experiments]]
+    }
     assert adapter.requests == []
     control.close()
     registry.close()
@@ -1419,6 +1421,7 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
             "evidence": "the authoritative Evaluate result",
             "analysis": "the candidate remained correct",
             "action": "keep_after",
+            "knowledge_used": [],
         }
     ]
     assert "sequence" not in cast(dict[str, Any], loaded_experiment.result)

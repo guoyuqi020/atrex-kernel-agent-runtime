@@ -13,6 +13,7 @@ from ..composition.campaign import (
     build_core_process_config,
     build_evolution_process_config,
     build_optimizer_session_contract_policy,
+    build_worker_gateway_operations,
     build_worker_launcher,
 )
 from ..config import RuntimeSettings
@@ -44,7 +45,6 @@ from ..gateway.control import (
     AttemptTimedWorkerGatewayAuthorityProvider,
     SqliteGatewayControl,
 )
-from ..gateway.control_models import GatewayOperation
 from ..ports import BuildChallengerRequest
 from ..registry.sqlite import SqliteRegistry
 from ..secrets import read_capability_signing_key
@@ -96,7 +96,7 @@ def open_optimizer_dev_shell(
             ),
             redaction_patterns=evidence_settings.redaction_patterns,
         )
-        operations = frozenset(GatewayOperation(value) for value in campaign.gateway_operations)
+        operations = build_worker_gateway_operations(settings)
         service = OptimizerDevShell(
             registry,
             LocalAttemptWorkspaceAssembler(
@@ -128,7 +128,7 @@ def open_optimizer_dev_shell(
                 environment=campaign.optimizer.environment.resolve(os.environ),
                 tool_modules=campaign.optimizer.tool_modules,
             ),
-            wiki_enabled=False,
+            wiki_enabled=settings.gpu_wiki_enabled,
         )
         result = service.open(
             shell_name=shell_name,
@@ -171,9 +171,7 @@ def open_temporary_optimizer_dev_shell(
         raise ValueError("temporary-dev-shell requires exactly one configured DSL")
     supplied_public_contract = spec.shape_train or spec.agent_problem
     if supplied_public_contract is None:
-        raise ValueError(
-            "temporary-dev-shell requires a supplied Shape Train or Agent Problem"
-        )
+        raise ValueError("temporary-dev-shell requires a supplied Shape Train or Agent Problem")
     dsl = selected[0]
     lineage_spec = spec.lineages[dsl]
 
@@ -238,7 +236,7 @@ def open_temporary_optimizer_dev_shell(
             ),
             suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
-        operations = frozenset(GatewayOperation(value) for value in campaign.gateway_operations)
+        operations = build_worker_gateway_operations(settings)
         service = TemporaryOptimizerDevShell(
             artifacts,
             control,
@@ -256,7 +254,7 @@ def open_temporary_optimizer_dev_shell(
             operations=operations,
             max_calls=campaign.gateway_max_calls,
             capability_lifetime=timedelta(seconds=campaign.gateway_capability_lifetime_seconds),
-            wiki_enabled=False,
+            wiki_enabled=settings.gpu_wiki_enabled,
         )
         result = service.open(
             shell_name=shell_name,
@@ -343,7 +341,9 @@ def open_evolver_dev_shell(
                 evolver_bundle_digest=evolution_config.bundle_artifact_digest,
                 attempt_workspaces_root=campaign.attempt_workspaces_root,
                 next_optimizer_contract_policy=(
-                    build_optimizer_session_contract_policy(campaign)
+                    build_optimizer_session_contract_policy(
+                        campaign, wiki_available=settings.gpu_wiki_enabled
+                    )
                 ),
             ),
             sessions,
@@ -458,7 +458,9 @@ def open_temporary_evolver_dev_shell(
                 evolver_bundle_digest=evolution_config.bundle_artifact_digest,
                 attempt_workspaces_root=campaign.attempt_workspaces_root,
                 next_optimizer_contract_policy=(
-                    build_optimizer_session_contract_policy(campaign)
+                    build_optimizer_session_contract_policy(
+                        campaign, wiki_available=settings.gpu_wiki_enabled
+                    )
                 ),
             ),
             SubprocessEvolutionSessionDriver(

@@ -21,4 +21,6 @@ coverage/
 .DS_Store
 /runtime.json
 /local-wiki/state/
+/local-wiki/corpus/internal_gpu_wiki/
+/local-wiki/corpus/internal_gpu_wiki.source.json
 /workspaces/

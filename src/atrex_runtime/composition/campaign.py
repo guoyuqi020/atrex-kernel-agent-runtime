@@ -209,9 +209,7 @@ def build_campaign_runtime(
             control,
             registry,
             campaign.gateway_proxy_url,
-            operations=frozenset(
-                GatewayOperation(operation) for operation in campaign.gateway_operations
-            ),
+            operations=build_worker_gateway_operations(settings),
             max_calls=campaign.gateway_max_calls,
             lifetime=timedelta(seconds=campaign.gateway_capability_lifetime_seconds),
         )
@@ -237,7 +235,7 @@ def build_campaign_runtime(
             registry,
             optimizer_config,
             independent_final_evaluation=False,
-            wiki_enabled=False,
+            wiki_enabled=settings.gpu_wiki_enabled,
             worker_sessions=registry,
             kernel_trials=control,
             backend=campaign.optimizer.agent_backend,
@@ -262,7 +260,9 @@ def build_campaign_runtime(
                     evolver_bundle_digest=evolution_config.bundle_artifact_digest,
                     attempt_workspaces_root=campaign.attempt_workspaces_root,
                     next_optimizer_contract_policy=(
-                        build_optimizer_session_contract_policy(campaign)
+                        build_optimizer_session_contract_policy(
+                            campaign, wiki_available=settings.gpu_wiki_enabled
+                        )
                     ),
                 ),
                 evolution_sessions,
@@ -396,8 +396,22 @@ def build_evolution_process_config(
     )
 
 
+def build_worker_gateway_operations(settings: RuntimeSettings) -> frozenset[GatewayOperation]:
+    """Apply the single Wiki switch to every Optimizer/bootstrap authority path."""
+    campaign = settings.campaign
+    if campaign is None:
+        raise ValueError("Worker authority requires Campaign runtime configuration")
+    operations = {GatewayOperation(value) for value in campaign.gateway_operations}
+    operations.discard(GatewayOperation.WIKI_QUERY)
+    if settings.gpu_wiki_enabled:
+        operations.add(GatewayOperation.WIKI_QUERY)
+    return frozenset(operations)
+
+
 def build_optimizer_session_contract_policy(
     campaign: CampaignRuntimeSettings,
+    *,
+    wiki_available: bool = False,
 ) -> SessionContractPolicy:
     """Describe the exact next-Optimizer limits visible to an Evolver."""
     worker = campaign.optimizer
@@ -412,7 +426,7 @@ def build_optimizer_session_contract_policy(
             else float(worker.max_session_tokens)
         ),
         max_attempt_report_bytes=worker.max_attempt_report_bytes,
-        wiki_available=False,
+        wiki_available=wiki_available,
         tool_modules=worker.tool_modules,
     )
 

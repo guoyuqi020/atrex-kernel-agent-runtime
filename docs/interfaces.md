@@ -291,8 +291,8 @@ helpers are supported for a shared custom input generator and Shapes.
 | `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, lifecycle status, hypothesis_status, and any declared ancestry to that file and returns only status, file, and count. |
 | `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction, including hypothesis_status, all associated_experiment_ids and the latest explicitly selected supporting_experiment_ids. |
 | `find-kernel-directions` | With exactly one `kernel_artifact_digest`, returns distinct `direction_ids` linked through visible Experiments; it does not return Experiment IDs. |
-| `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, and action. Runtime freezes the Trials' Kernel and Result Artifact identities. Every Experiment needs at least one Kernel-bound Gateway Result. `abandon_direction` may be one-sided; Bootstrap `baseline` requires only `after`. Returns the stable Experiment ID. |
-| `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, hypothesis, change, evidence, analysis, and action from frozen history plus the current live Journal, then returns only status, file, and count. |
+| `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, action, and optional `knowledge_used`. Runtime freezes the Trials' Kernel and Result Artifact identities. Every Experiment needs at least one Kernel-bound Gateway Result. `abandon_direction` may be one-sided; Bootstrap `baseline` requires only `after`. Returns the stable Experiment ID. |
+| `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, hypothesis, change, evidence, analysis, action, and `knowledge_used` from frozen history plus the current live Journal, then returns only status, file, and count. |
 | `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
 | `find-kernel-experiments` | With exactly one `kernel_artifact_digest`, returns visible `experiment_ids` citing that Kernel Artifact as before or after; it does not return Direction IDs. |
 | `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
@@ -447,6 +447,20 @@ the live Runtime Journal merged with authorized frozen history; only their reque
 files are written under `scratch/`. A Bootstrap Session starts without prior journal history; after it succeeds, its
 terminal journals, Kernel Trials, and Result Artifacts become the root history of ordinary Attempts
 in that Lineage.
+
+An Experiment may declare Wiki knowledge it applied in `knowledge_used`:
+
+```json
+{"knowledge_used":[{"record_id":"<exact Wiki record ID>","finding":"What the record taught us","application":"How it informed this Experiment's change or test"}]}
+```
+
+Each item has exactly these three nonblank string fields. Omission and historical records without
+the field read as `[]`; use an empty array when no knowledge was applied. List/load tools, Journal
+snapshots, and the terminal Report retain the declarations. This per-Experiment field supplements
+the existing Attempt-level `knowledge_used`; neither list is automatically synthesized from the
+other. Declaring historical knowledge does not require live Wiki access to be enabled. Runtime
+validates the structure but does not verify that an ID was queried, that the knowledge was applied,
+or that it caused a performance change. This attribution does not replace required Result evidence.
 
 With Experiments enabled, use `record-experiment` with `action="adopt"` to select an unchanged
 Kernel from visible history.

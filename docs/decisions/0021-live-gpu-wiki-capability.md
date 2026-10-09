@@ -12,8 +12,10 @@ GPU Wiki is an external knowledge source, while lineage experience is Agent-prod
 
 ## Decision
 
-Each configured Optimizer receives a `wiki-query` Core tool plus an Attempt-scoped
-Runtime capability. Query sends only its immutable manifest Attempt ID, a focused question, and an
+Only when `gpu_wiki.enabled` is explicitly `true`, Bootstrap and Optimizer sessions receive a
+`wiki-query` tool, conditional instructions and an Attempt-scoped Runtime capability. The switch
+defaults to `false` and is independent of Direction/Experiment modules; the Runtime proxy endpoint
+is disabled too when the switch is off. Query sends only its immutable manifest Attempt ID, a focused question, and an
 idempotency key to `POST /v1/wiki/query`; its Agent-facing content is GPU Wiki's exact
 `records`/`notes` projection. A stable `records` mapping key is the Record ID and each value is the
 complete safe served Record. The trusted Runtime reconstructs Campaign, lineage,

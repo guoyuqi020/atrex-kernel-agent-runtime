@@ -542,6 +542,7 @@ def _materialize_evolver_journal(
         for raw in journal_experiments:
             if not isinstance(raw, dict):
                 raise ValueError("Evolver Experiment is invalid")
+            raw = {"knowledge_used": [], **raw}
             experiment_id = raw.get("experiment_id")
             if (
                 not isinstance(experiment_id, str)

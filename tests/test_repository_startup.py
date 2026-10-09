@@ -91,8 +91,13 @@ def test_checked_in_configuration_builds_server_and_campaign_runtime(tmp_path: P
         pass
 
 
-def test_campaign_and_bootstrap_do_not_issue_wiki_authority(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize("wiki_enabled", (None, False, True))
+@pytest.mark.parametrize("explicit_wiki_operation", (False, True))
+def test_campaign_and_bootstrap_wiki_authority_follows_only_the_switch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    wiki_enabled: bool | None,
+    explicit_wiki_operation: bool,
 ) -> None:
     from atrex_runtime.composition import bootstrap, campaign
     from atrex_runtime.gateway.control import SqliteGatewayControl
@@ -100,7 +105,26 @@ def test_campaign_and_bootstrap_do_not_issue_wiki_authority(
     from atrex_runtime.registry.sqlite import SqliteRegistry
 
     settings = _settings(tmp_path)
-    assert settings.gpu_wiki is not None  # Even a configured service does not expose an Agent tool.
+    assert settings.gpu_wiki is not None
+    assert settings.campaign is not None
+    settings = settings.model_copy(
+        update={
+            "gpu_wiki": (
+                None
+                if wiki_enabled is None
+                else settings.gpu_wiki.model_copy(update={"enabled": wiki_enabled})
+            ),
+            # Even legacy/programmatic policies cannot bypass the disabled switch.
+            "campaign": settings.campaign.model_copy(
+                update={
+                    "gateway_operations": (
+                        *settings.campaign.gateway_operations,
+                        *(("wiki_query",) if explicit_wiki_operation else ()),
+                    ),
+                }
+            ),
+        }
+    )
     observed: list[dict[str, Any]] = []
 
     def watch(module: Any, name: str) -> None:
@@ -123,18 +147,24 @@ def test_campaign_and_bootstrap_do_not_issue_wiki_authority(
     )
     try:
         bootstrap.build_core_lineage_baseline_generator(
-            settings, LocalArtifactStore(settings.storage.artifacts_root),
-            registry, control, _environment(),
+            settings,
+            LocalArtifactStore(settings.storage.artifacts_root),
+            registry,
+            control,
+            _environment(),
         )
     finally:
         control.close()
         registry.close()
     policies = [item for item in observed if "operations" in item]
     assert len(policies) == 2
-    assert all(GatewayOperation.WIKI_QUERY not in item["operations"] for item in policies)
+    assert all(
+        (GatewayOperation.WIKI_QUERY in item["operations"]) is bool(wiki_enabled)
+        for item in policies
+    )
     sessions = [item for item in observed if "wiki_enabled" in item]
     assert len(sessions) == 2
-    assert all(item["wiki_enabled"] is False for item in sessions)
+    assert all(item["wiki_enabled"] is bool(wiki_enabled) for item in sessions)
 
 
 def test_checked_in_comparison_evaluator_is_the_pinned_submodule(tmp_path: Path) -> None:

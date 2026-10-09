@@ -3,8 +3,9 @@
 [English](README.md) | 中文
 
 独立 Local GPU Wiki 服务、浏览器与 HTTP 查询仍可使用。
-Agent 的 `wiki-query` Runtime Tool 已暂时移除；下文托管/临时 Agent Shell 的工具调用流程
-仅作为历史参考保留，当前不再支持。
+Agent 的 `wiki-query` 工具按需启用。使用下文 Agent Shell 流程前，把本示例 `runtime.json`
+的 `gpu_wiki.enabled` 改为 `true`，并使用包含可选 Wiki 工具的 Agent 源码。默认值为 `false`；
+只配置服务 URL 不会授予 Agent 查询权限。
 
 从 Lima 挂载的工作区运行时，应创建 Linux 本地虚拟环境，不要复用仓库中的 macOS
 `.venv`：
@@ -50,12 +51,14 @@ curl -fsS http://127.0.0.1:8091/healthz
 ```json
 {
   "gpu_wiki": {
+    "enabled": false,
     "base_url": "http://127.0.0.1:8091"
   }
 }
 ```
 
 真实配置还包含 Timeout 和字节限制字段，不要用上面的缩略片段覆盖完整对象。
+执行下文 Agent 流程前，将 `enabled` 改为 `true`。
 
 ## 3. 快速路径：打开用完即毁的 Wiki Agent Shell
 

@@ -43,6 +43,10 @@ from atrex_runtime.knowledge.client import HttpGpuWikiClient, HttpxGpuWikiTransp
 from atrex_runtime.knowledge.proxy import WikiProxyAsgiApp, WikiProxyLimits, WikiProxyService
 from atrex_runtime.registry.sqlite import SqliteRegistry
 from atrex_runtime.secrets import read_capability_signing_key, required_secret
+from atrex_runtime.workers.session_contract import (
+    materialize_session_contract,
+    runtime_contract_environment,
+)
 
 _DIGEST = parse_artifact_digest("sha256:" + "0" * 64)
 
@@ -83,7 +87,7 @@ def _prepare_workspace(
     for relative in (
         ".runtime",
         "input/kernel",
-        "input/evidence/epochs/00000001/attempts",
+        "input/evidence/epochs/00000001/trajectories/00000001/attempts",
         "work/kernel",
         "scratch",
         "sessions",
@@ -118,6 +122,7 @@ def _prepare_workspace(
             "visibility": {
                 "completed_epochs": "all_completed_branches",
                 "current_attempts_before": 1,
+                "current_trajectory_ordinal": 1,
             },
         },
     )
@@ -156,10 +161,36 @@ def _prepare_workspace(
         "ATREX_EVIDENCE_PROMPT_PATH": str(prompt_path),
         "ATREX_OPTIMIZER_REPOSITORY": str(optimizer),
         "ATREX_SESSION_TIMEOUT_SECONDS": "3600",
-        "ATREX_TOKEN_BUDGET": "1",
+        "ATREX_USAGE_BUDGET": "1",
+        "ATREX_USAGE_UNIT": "provider_tokens",
+        # The shell has Wiki-only authority and cannot evaluate a Kernel. Supply
+        # the current context shape without claiming a benchmark-specific tolerance.
+        "ATREX_CORRECTNESS_POLICY_JSON": json.dumps(
+            {
+                "comparison": "elementwise",
+                "formula": "abs(candidate - reference) <= atol + rtol * abs(reference)",
+                "default_tolerance": {"atol": 0.0, "rtol": 0.0},
+                "output_tolerances": {},
+            }
+        ),
         "ATREX_TOKEN_USAGE_REPORT": str(workspace / "scratch/token-usage.json"),
         "ATREX_SESSION_TRACE_PATH": str(workspace / "sessions/core"),
     }
+    contract = materialize_session_contract(
+        workspace,
+        phase="optimization_attempt",
+        dsl=dsl.value,
+        hardware_target=subject.hardware_target,
+        agent_backend="claude",
+        model=None,
+        session_timeout_seconds=3600,
+        usage_unit="provider_tokens",
+        usage_budget=1,
+        max_attempt_report_bytes=1_048_576,
+        wiki_available=True,
+        tool_modules=(),
+    )
+    environment.update(runtime_contract_environment(contract))
     return workspace, environment
 
 
@@ -180,8 +211,8 @@ def _serve(
         control: SqliteGatewayControl | None = None
         try:
             wiki = settings.gpu_wiki
-            if wiki is None:
-                raise ValueError("temporary Wiki shell requires gpu_wiki configuration")
+            if wiki is None or not wiki.enabled:
+                raise ValueError("temporary Wiki shell requires gpu_wiki.enabled=true")
             registry = SqliteRegistry(root / "registry.sqlite")
             control = SqliteGatewayControl(
                 root / "gateway.sqlite", registry, signing_key=signing_key
@@ -252,8 +283,8 @@ def main(argv: list[str] | None = None) -> int:
     args = _arguments(argv)
     settings = RuntimeSettings.from_file(args.config)
     wiki = settings.gpu_wiki
-    if wiki is None:
-        raise ValueError("temporary Wiki shell requires gpu_wiki configuration")
+    if wiki is None or not wiki.enabled:
+        raise ValueError("temporary Wiki shell requires gpu_wiki.enabled=true")
     core_repository = Path(__file__).resolve().parents[2] / "src/kernel-design-agents"
     if not (core_repository / "atrex-bundle.json").is_file():
         raise FileNotFoundError(f"KDA Optimizer Bundle is unavailable: {core_repository}")

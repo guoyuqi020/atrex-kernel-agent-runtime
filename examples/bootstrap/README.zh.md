@@ -9,8 +9,9 @@
 Candidate 提交到真实Agate；只有权威评测正确后，Runtime 才会登记 Baseline Kernel
 并将 Lineage 置为 Ready。
 
-这不是 Mock 流程，会调用 QoderCLI 并消耗远端 GPU 资源。示例不会启动 Local Agate；除非
-显式设置 `ATREX_WIKI_URL`，否则 GPU Wiki 也默认关闭。
+这不是 Mock 流程，会调用 QoderCLI 并消耗远端 GPU 资源。示例不会启动 Local Agate。
+GPU Wiki 默认关闭；启用时设置 `ATREX_WIKI_URL`，并在本例 Runtime 模板中设置
+`gpu_wiki.enabled: true`。
 
 本目录自行持有 [`runtime.json`](runtime.json) 部署模板与 [`campaign.json`](campaign.json)
 拓扑；二者只引用 [`../shared/vecadd`](../shared/vecadd) 中的标准只读 VecAdd 输入，不依赖其他

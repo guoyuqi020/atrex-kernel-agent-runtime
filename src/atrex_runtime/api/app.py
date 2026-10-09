@@ -292,8 +292,9 @@ def build_runtime_application(
             limits,
         )
         wiki_proxy = None
-        if settings.gpu_wiki is not None:
+        if settings.gpu_wiki_enabled:
             wiki = settings.gpu_wiki
+            assert wiki is not None
             wiki_limits = WikiProxyLimits(
                 wiki.max_proxy_request_bytes,
                 wiki.max_query_bytes,

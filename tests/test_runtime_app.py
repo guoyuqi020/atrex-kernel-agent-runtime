@@ -168,10 +168,14 @@ def test_application_wires_agent_abba_with_optimizer_gate(tmp_path: Path) -> Non
     )
     assert template.campaign is not None
     gate = template.campaign.gate_policy
-    gate = gate.model_copy(update={
-        "optimizer": gate.optimizer.model_copy(update={"correctness_cases": 7, "bench_iters": 23}),
-        "performance_timeout_seconds": 40,
-    })
+    gate = gate.model_copy(
+        update={
+            "optimizer": gate.optimizer.model_copy(
+                update={"correctness_cases": 7, "bench_iters": 23}
+            ),
+            "performance_timeout_seconds": 40,
+        }
+    )
     settings = _settings(tmp_path).model_copy(update={"gate_policy": gate})
     app = build_runtime_application(settings, _environment(), sdk_loader=CapturingSdkLoader())
     try:
@@ -188,23 +192,8 @@ def test_application_wires_agent_abba_with_optimizer_gate(tmp_path: Path) -> Non
         app.close()
 
 
-def test_disabled_wiki_does_not_construct_a_service_client(tmp_path: Path, monkeypatch) -> None:
-    def unexpected_client(*_args, **_kwargs):
-        pytest.fail("disabled Wiki must not create a transport or contact the service")
-
-    monkeypatch.setattr("atrex_runtime.api.app.HttpxGpuWikiTransport", unexpected_client)
-    settings = _settings(tmp_path).model_copy(update={"gpu_wiki": None})
-    app = build_runtime_application(settings, _environment(), sdk_loader=CapturingSdkLoader())
-    try:
-        assert app._wiki_proxy is None
-    finally:
-        app.close()
-
-
-@pytest.mark.anyio
-async def test_application_owns_wiki_secret_and_routes_worker_proxy(tmp_path: Path) -> None:
-    value = _config_value()
-    value["gpu_wiki"] = {
+def _wiki_config_value() -> dict[str, object]:
+    return {
         "base_url": "https://wiki.example.test",
         "bearer_token_env": "TEST_WIKI_TOKEN",
         "timeout_seconds": 10,
@@ -212,6 +201,65 @@ async def test_application_owns_wiki_secret_and_routes_worker_proxy(tmp_path: Pa
         "max_query_bytes": 2048,
         "max_response_bytes": 8192,
     }
+
+
+def test_gpu_wiki_requires_explicit_opt_in() -> None:
+    value = _config_value()
+    assert RuntimeSettings.model_validate(value).gpu_wiki_enabled is False
+    value["gpu_wiki"] = _wiki_config_value()
+    settings = RuntimeSettings.model_validate(value)
+    assert settings.gpu_wiki is not None
+    assert settings.gpu_wiki.enabled is False
+    assert settings.gpu_wiki_enabled is False
+    value["gpu_wiki"] = _wiki_config_value() | {"enabled": True}
+    assert RuntimeSettings.model_validate(value).gpu_wiki_enabled is True
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mode", ("absent", "default", "disabled"))
+async def test_disabled_wiki_has_no_client_secret_requirement_or_route(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mode: str,
+) -> None:
+    def unexpected_client(*_args, **_kwargs):
+        pytest.fail("disabled Wiki must not create a transport or contact the service")
+
+    monkeypatch.setattr("atrex_runtime.api.app.HttpxGpuWikiTransport", unexpected_client)
+    value = _config_value()
+    if mode != "absent":
+        value["gpu_wiki"] = _wiki_config_value() | (
+            {"enabled": False} if mode == "disabled" else {}
+        )
+    path = tmp_path / "runtime.json"
+    path.write_text(json.dumps(value), encoding="utf-8")
+    settings = RuntimeSettings.from_file(path)
+    # TEST_WIKI_TOKEN is deliberately absent, even for a configured endpoint.
+    app = build_runtime_application(settings, _environment(), sdk_loader=CapturingSdkLoader())
+    try:
+        assert app._wiki_proxy is None
+        sent: list[dict[str, object]] = []
+
+        async def unused_receive() -> dict[str, object]:
+            raise AssertionError("disabled Wiki must reject before reading a query body")
+
+        async def send(message: dict[str, object]) -> None:
+            sent.append(message)
+
+        await app(
+            {"type": "http", "method": "POST", "path": "/v1/wiki/query", "headers": []},
+            unused_receive,
+            send,
+        )
+        assert sent[0]["status"] == 404
+    finally:
+        app.close()
+
+
+@pytest.mark.anyio
+async def test_application_owns_wiki_secret_and_routes_worker_proxy(tmp_path: Path) -> None:
+    value = _config_value()
+    value["gpu_wiki"] = _wiki_config_value() | {"enabled": True}
     path = tmp_path / "runtime.json"
     path.write_text(json.dumps(value), encoding="utf-8")
     settings = RuntimeSettings.from_file(path)

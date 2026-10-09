@@ -9,6 +9,7 @@ from .control_models import GatewayKernelTrialRecord
 def artifact_experiment_view(value: Mapping[str, object]) -> dict[str, object]:
     """Project an old immutable Journal without requiring its redundant Trial IDs."""
     result = dict(value)
+    result.setdefault("knowledge_used", [])
     for side in ("before", "after"):
         subject = result.get(side)
         if isinstance(subject, Mapping):

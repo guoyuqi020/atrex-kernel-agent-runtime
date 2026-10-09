@@ -6,6 +6,8 @@ from pathlib import Path
 
 import pytest
 
+from atrex_runtime.composition.campaign import build_optimizer_session_contract_policy
+from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.workers.session_contract import (
     RUNTIME_CONTRACT_ENVIRONMENT_KEY,
     materialize_session_contract,
@@ -112,3 +114,55 @@ def test_session_contract_exposes_only_enabled_tool_modules(
     assert ("find-kernel-experiments" in tools) == ("experiments" in modules)
     assert tools["kernel-pareto-frontier"]["operation"] == "kernel_pareto_frontier"
     assert "attempt-report" in tools
+
+
+@pytest.mark.parametrize("wiki_available", (False, True))
+@pytest.mark.parametrize("phase", ("framework_baseline", "optimization_attempt"))
+def test_session_contract_exposes_wiki_independently_of_journal_modules(
+    tmp_path: Path,
+    wiki_available: bool,
+    phase: str,
+) -> None:
+    path = materialize_session_contract(
+        tmp_path,
+        phase=phase,
+        dsl="cuda",
+        hardware_target="ZW-M890P",
+        agent_backend="claude",
+        model=None,
+        session_timeout_seconds=3600,
+        usage_unit="provider_tokens",
+        usage_budget=1000,
+        max_attempt_report_bytes=100_000,
+        wiki_available=wiki_available,
+        tool_modules=(),
+    )
+    tools = json.loads((path / "tools.json").read_text())
+    environment = json.loads((path / "environment.json").read_text())
+    assert environment["services"]["wiki"] is wiki_available
+    assert ("wiki-query" in tools["bindings"]) is wiki_available
+    if wiki_available:
+        assert tools["bindings"]["wiki-query"] == {
+            "kind": "runtime-query",
+            "operation": "wiki_query",
+        }
+    # Wiki is a Runtime service, not an Agate GPU operation or Journal module.
+    assert "wiki_query" not in tools["gateway"]["operations"]
+    assert "update-direction" not in tools["bindings"]
+    assert "record-experiment" not in tools["bindings"]
+
+
+@pytest.mark.parametrize("wiki_available", (False, True))
+def test_next_optimizer_contract_policy_preserves_wiki_availability(
+    wiki_available: bool,
+) -> None:
+    settings = RuntimeSettings.from_file(
+        Path(__file__).resolve().parents[1] / "runtime.example.json"
+    )
+    assert settings.campaign is not None
+    policy = build_optimizer_session_contract_policy(
+        settings.campaign,
+        wiki_available=wiki_available,
+    )
+    assert policy.wiki_available is wiki_available
+    assert policy.tool_modules == settings.campaign.optimizer.tool_modules

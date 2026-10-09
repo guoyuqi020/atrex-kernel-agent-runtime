@@ -55,6 +55,24 @@ Commit SHA，并直接封存对应本地 Commit，不执行 Fetch 或其他网�
 可选只查询 Wiki URL、Bearer Token 环境变量名、超时与 Request/Query/Response 上限。Runtime 在
 返回结果前冻结查询。不存在 Feedback、Upload 或 Outbox 配置。
 
+`enabled` 默认为 `false`。设置 `gpu_wiki.enabled: true` 后，Bootstrap、Optimizer（含开发
+Shell）才会看到 `wiki-query` 工具与对应说明、获得 Attempt 范围查询权限；Runtime 同时启用
+`/v1/wiki/query`。它独立于 `optimizer.tool_modules` 的 Direction／Experiment 开关。
+`gpu_wiki` 缺省/null、未填 `enabled` 或设为 `false` 时，均不加载 Wiki 工具/说明、不发查询
+权限，API 入口不可用，也不要求 Wiki 凭据。切换时保留 URL 和限制字段，无需再配置一个
+Gateway operation。Evolver 能看到后续 Optimizer 的工具可用性，但自身不会获得 Wiki 权限。
+
+例如在 [runtime.example.json](../runtime.example.json) 的 `gpu_wiki` 中把 `"enabled": false`
+改为 `true`，其他字段保留。修改后重启 Runtime 和 campaign worker，新建工作区获得新的
+不可变工具契约；恢复已有工作区仍会复用原契约，直到创建新工作区。
+已冻结的 Agent 版本须包含本次新增工具实现；切换部署配置不会更新固定的 Agent
+源码或已经运行的会话。关闭开关并重启服务后，旧 Wiki capability 也无法通过该 API 查询。
+知识服务是独立进程；内部知识源使用 `local-wiki/configs/internal.example.json` 选择。
+
+Agent 只填写 `{"query":"一个具体的硬件或优化问题"}`。工具负责 Attempt 身份、幂等键和认证，
+Runtime 补充可信算子/DSL/硬件上下文并冻结返回值。Wiki 历史结论只作为有适用范围的参考，
+不能替代本次 kernel 的精度和性能评测。
+
 ### `campaign`
 
 所有 Campaign 共用的部署策略：

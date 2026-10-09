@@ -10,7 +10,8 @@ the Runtime Gateway Tool to a real Agate service, and registers a ready Lineage 
 correct authoritative evaluation.
 
 This is not a mock workflow. It invokes QoderCLI and consumes GPU resources. It does not start
-a Local Agate service. GPU Wiki is disabled unless `ATREX_WIKI_URL` is explicitly provided.
+a Local Agate service. GPU Wiki defaults to disabled. To enable it, provide `ATREX_WIKI_URL`
+and set `gpu_wiki.enabled` to `true` in the Runtime template used by this example.
 
 This directory owns its [`runtime.json`](runtime.json) deployment template and
 [`campaign.json`](campaign.json) topology. Both point only to the canonical read-only VecAdd inputs

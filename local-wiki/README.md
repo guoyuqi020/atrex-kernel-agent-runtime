@@ -6,7 +6,7 @@ This directory is a local HTTP adapter for the independent Atrex GPU Wiki. It is
 integration tests only. Query behavior is executed by the corpus's own implementation.
 
 The adapter does not implement its own retrieval algorithm. For every query it executes the
-corpus's `gpu-wiki/tools/query_nl.py`, including its bridge Agent, intent
+selected corpus's `tools/query_nl.py`, including its bridge Agent, intent
 validation, operator aliases and component lanes, safe widening, `kernel_wiki` ranking, `hardware_wiki` exact lookup,
 and served-record projection. Query `content` is therefore:
 
@@ -15,8 +15,9 @@ and served-record projection. Query `content` is therefore:
 ```
 
 The complete query result passes through verbatim, including attribution IDs and all notes.
-An unavailable private `internal_gpu_wiki` store is reported by upstream without preventing
-queries against the public store.
+With the public corpus, an unavailable legacy private `internal_gpu_wiki` store is reported by
+upstream without preventing public queries. A standalone indexed internal corpus must be selected
+directly using the configuration below; it cannot be loaded through that legacy sibling slot.
 
 Runtime continues to provide the versioned HTTP envelope, digest verification, Attempt authority,
 and freezing. Every `records` mapping value is already the complete safe
@@ -31,7 +32,7 @@ Runtime treats the Wiki as a read-only external knowledge source.
 | --- | --- |
 | `GET /` or `GET /ui` | Local browser query client. |
 | `GET /healthz` | Process liveness. |
-| `GET /readyz` | Upstream tools, both indexes, and SQLite readiness. |
+| `GET /readyz` | Selected corpus tools, indexes/data dependencies, and SQLite readiness. |
 | `POST /v1/knowledge/query` | Strict Runtime query; `content` is upstream `query_id/records/notes`. |
 
 ## Corpus
@@ -43,6 +44,54 @@ on the next start.
 
 The source commit and copy boundary are recorded in [corpus/README.md](corpus/README.md).
 Its original Apache-2.0 license and NOTICE are preserved beside it.
+
+### Internal indexed corpus
+
+The adapter also accepts the standalone internal Wiki's `query_nl.py → query.py → search_index`
+layout. Its `query_id/records/notes` envelope is compatible with Runtime. Record contents, including
+nested `wiki_identity`, governance metadata, evidence limitations and generation-reference match
+labels, pass through unchanged. The adapter does not convert these records to the public schema or
+merge the two corpora. `reference_root` selects one upstream implementation per service.
+
+Use [configs/internal.example.json](configs/internal.example.json) to serve the internal corpus on
+the same local port as the public example. Import an authorized checkout first:
+
+```bash
+# Run from the Runtime repository root; the destination must be new/empty.
+mkdir -p local-wiki/corpus/internal_gpu_wiki
+set -o pipefail
+git -C /path/to/atrex-kernel-agent-internal archive \
+  2076c865cc6618d810cfe2bf09b4fc395536693e:internal_source/gpu-wiki \
+  | tar -x -C local-wiki/corpus/internal_gpu_wiki
+PYTHONPATH=local-wiki/src .venv/bin/python -m atrex_local_wiki serve \
+  --config local-wiki/configs/internal.example.json
+```
+
+This pin is from `codex/ppu15-agent-wiki`; provenance and the import boundary are in
+[corpus/README.md](corpus/README.md). The internal snapshot and its writable state are Git-ignored.
+To update it, stop the service, export into a new empty directory and replace the reference tree;
+do not overlay archives, which can leave deleted upstream files behind. Startup then refreshes
+the writable store. Readiness rejects incomplete indexed stores instead of silently using legacy
+retrieval. Snapshot revisions cover native tools, declared shards and governance/evidence inputs;
+unchanged file hashes are cached to avoid rereading the full index on each request.
+Readiness checks layout, manifest format and dependency presence; validation of shard contents and
+governance eligibility remains upstream-owned. A malformed/stale governance projection can still
+cause native retrieval to hide records even when all dependency files exist.
+
+Runtime sends the complete hardware/DSL/operator context and original question to the native
+front door. Arbitrary HTTP queries use its Claude/Qoder intent bridge; they do not match the
+upstream fixed-sentence model-free shortcut. At this internal pin, Claude uses `--bare` and the
+bridge environment does not forward `ANTHROPIC_BASE_URL` or `ANTHROPIC_MODEL`. Validate the chosen
+bridge CLI/provider separately before deployment; copying local Claude settings alone is not a
+verified custom-provider setup. Deterministic native retrieval and a fake intent CLI can test the
+index and HTTP contract without contacting a model.
+
+This config connects the knowledge service only. In the separate Runtime deployment config,
+`gpu_wiki.enabled` defaults to `false`; set it to `true` to expose `wiki-query`, its conditional
+instructions and Attempt-scoped authority to Bootstrap/Optimizer. It is independent of the
+Direction/Experiment modules. Use Core/KDA source containing the optional Wiki implementation,
+then restart Runtime/campaign workers for newly created workspaces; existing sealed Agent source is not
+replaced by a config toggle. See [Runtime configuration](../docs/configuration.md#gpu_wiki).
 
 ## Run
 
@@ -60,6 +109,17 @@ intent extraction and operator resolution are entirely upstream-owned. The old l
 `max_concurrent_queries` bounds simultaneous `query_nl.py` subprocesses and defaults to `16`.
 Additional requests wait for a slot. This prevents unbounded model/subprocess fan-out without
 serializing unrelated read-only queries behind one global lock.
+
+The pinned Wiki supports optional query evidence. Set `ATREX_WIKI_PROFILE_ROOT` in the service
+environment to a writable run-data directory to save its immutable query events; use
+`ATREX_WIKI_TASK_ID` for task attribution. Events include the request, normalized intent, returned
+record IDs/ranks, timing and token counters, but not record payloads or coding-agent transcripts.
+Without the profile-root variable, no query-event files are created. Trace write failures do not
+change the query response. Keep this output outside `corpus/`.
+
+Upstream's AKA plugin and restart-handoff orchestrator are not part of the standalone HTTP service.
+The adapter calls `query_nl.py` directly, and ordinary bridge launches need no AKA orchestrator.
+Do not pass AKA's `ATREX_ENVIRONMENT_RESTART_HANDOFF_ID` into this standalone deployment.
 
 ```bash
 PYTHONPATH=local-wiki/src \

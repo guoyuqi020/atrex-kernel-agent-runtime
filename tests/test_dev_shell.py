@@ -72,6 +72,9 @@ class FakeWorkspaces:
 class FakeSessions:
     """Expose the final launch environment without executing the Core entrypoint."""
 
+    def __init__(self, wiki_enabled: bool) -> None:
+        self.wiki_enabled = wiki_enabled
+
     def prepare_launch(
         self,
         prepared: PreparedAttempt,
@@ -79,8 +82,8 @@ class FakeSessions:
     ) -> SimpleNamespace:
         assert config.gateway_endpoint == "http://runtime.test"
         assert config.gateway_capability == "attempt-capability"
-        assert config.wiki_endpoint == "http://runtime.test"
-        assert config.wiki_capability == "attempt-capability"
+        assert config.wiki_endpoint == ("http://runtime.test" if self.wiki_enabled else None)
+        assert config.wiki_capability == ("attempt-capability" if self.wiki_enabled else None)
         return SimpleNamespace(
             environment={
                 **dict(config.environment),
@@ -176,12 +179,17 @@ class FakeTemporaryControl:
 
 
 class FakeTemporarySessions:
+    def __init__(self, wiki_enabled: bool) -> None:
+        self.wiki_enabled = wiki_enabled
+
     def prepare_launch(
         self,
         prepared: PreparedAttempt,
         config: OptimizerSessionConfig,
     ) -> SimpleNamespace:
         assert config.gateway_capability == "temporary-capability"
+        assert config.wiki_endpoint == ("http://runtime.test" if self.wiki_enabled else None)
+        assert config.wiki_capability == ("temporary-capability" if self.wiki_enabled else None)
         assert (prepared.root / ".runtime/attempt.json").is_file()
         assert (prepared.root / "work/kernel/kernel.py").is_file()
         return SimpleNamespace(environment={})
@@ -195,9 +203,11 @@ class FakeTemporarySessions:
         return runtime_argv
 
 
+@pytest.mark.parametrize("wiki_enabled", (False, True))
 def test_dev_shell_creates_real_attempt_and_retains_workspace(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    wiki_enabled: bool,
 ) -> None:
     database = tmp_path / "registry.sqlite"
     with SqliteRegistry(database) as bootstrap_registry:
@@ -221,7 +231,7 @@ def test_dev_shell_creates_real_attempt_and_retains_workspace(
             registry,
             workspaces,  # type: ignore[arg-type]
             FakeEvidence(),  # type: ignore[arg-type]
-            FakeSessions(),  # type: ignore[arg-type]
+            FakeSessions(wiki_enabled),  # type: ignore[arg-type]
             FakeAuthorities(),  # type: ignore[arg-type]
             RegistryLineageLeaseManager(
                 registry,
@@ -229,7 +239,7 @@ def test_dev_shell_creates_real_attempt_and_retains_workspace(
                 heartbeat_seconds=5,
             ),
             OptimizerSessionConfig(environment=(("PATH", "/usr/bin:/bin"),)),
-            wiki_enabled=True,
+            wiki_enabled=wiki_enabled,
             shell_runner=run_shell,
             clock=lambda: NOW,
         )
@@ -261,7 +271,11 @@ def test_dev_shell_creates_real_attempt_and_retains_workspace(
         registry.close()
 
 
-def test_temporary_dev_shell_skips_registry_and_destroys_workspace(tmp_path: Path) -> None:
+@pytest.mark.parametrize("wiki_enabled", (False, True))
+def test_temporary_dev_shell_skips_registry_and_destroys_workspace(
+    tmp_path: Path,
+    wiki_enabled: bool,
+) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     lineage_id = new_lineage_id()
     epoch_id = new_epoch_id()
@@ -330,14 +344,14 @@ def test_temporary_dev_shell_skips_registry_and_destroys_workspace(tmp_path: Pat
     service = TemporaryOptimizerDevShell(
         artifacts,
         control,  # type: ignore[arg-type]
-        FakeTemporarySessions(),  # type: ignore[arg-type]
+        FakeTemporarySessions(wiki_enabled),  # type: ignore[arg-type]
         OptimizerSessionConfig(environment=()),
         workspace_root=tmp_path / "workspaces",
         gateway_endpoint="http://runtime.test",
         operations=frozenset({GatewayOperation.HEALTH}),
         max_calls=1,
         capability_lifetime=timedelta(minutes=5),
-        wiki_enabled=False,
+        wiki_enabled=wiki_enabled,
         shell_runner=run_shell,
     )
     result = service.open(

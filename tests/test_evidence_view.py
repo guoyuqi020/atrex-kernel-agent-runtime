@@ -1353,3 +1353,38 @@ def test_evolver_journal_includes_prior_suggested_directions(tmp_path: Path) -> 
     assert index[0]["direction_id"] == direction_id
     assert index[0]["latest_action"] == "suggest"
     assert record["events"][0]["status"] == "suggested"
+
+
+def test_evolver_journal_normalizes_legacy_knowledge_without_rewriting_history(
+    tmp_path: Path,
+) -> None:
+    lineage = tmp_path / "lineage"
+    experiment_id = "experiment_" + "a" * 32
+    experiment = {"experiment_id": experiment_id, "name": "Historical baseline"}
+    bootstrap = lineage / "bootstrap/report.json"
+    _write(bootstrap, {"experiments": [experiment]})
+    bootstrap_bytes = bootstrap.read_bytes()
+    _write(lineage / "epochs/00000001.json", {})
+    knowledge = [{"record_id": "record-1", "finding": "Finding", "application": "Application"}]
+    second_id = "experiment_" + "b" * 32
+    _write(
+        lineage / "journals/00000001/current.json",
+        {
+            "experiments": [
+                {**experiment, "knowledge_used": []},
+                {"experiment_id": second_id, "knowledge_used": knowledge},
+            ]
+        },
+    )
+
+    destination = tmp_path / "evolver-journal"
+    _materialize_evolver_journal(destination, lineage, 1)
+
+    assert json.loads((destination / f"experiments/{experiment_id}.json").read_text()) == {
+        **experiment,
+        "knowledge_used": [],
+    }
+    assert json.loads((destination / f"experiments/{second_id}.json").read_text())[
+        "knowledge_used"
+    ] == knowledge
+    assert bootstrap.read_bytes() == bootstrap_bytes

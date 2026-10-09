@@ -132,7 +132,9 @@ Reports, Directions, and Experiments needed to classify a material signal.
 `journal/directions/index.json` and `journal/experiments/index.json` index Bootstrap and the completed Lineage's
 append-only Journal. Read selected `<id>.json` files for full Direction events and Experiments,
 including entries from Attempts without terminal Reports. Gateway measurements are facts;
-Agent-authored analyses are interpretations. Findings separate one explicit claim, `claim_kind`,
+Agent-authored analyses are interpretations. An Experiment's `knowledge_used` attributes exact Wiki
+record IDs, findings, and applications; it does not prove retrieval, adoption, or causal benefit.
+Missing historical `knowledge_used` reads as `[]`. Findings separate one explicit claim, `claim_kind`,
 `assessment`, tested `scope`, and exact `supporting_results`; Experiment links are optional evidence
 organization. `root_cause: null` means unknown. Missing historical assessments and insufficient
 support mean unresolved, even if free prose sounds certain. Runtime validates bindings and operation

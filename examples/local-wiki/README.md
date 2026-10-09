@@ -3,8 +3,9 @@
 English | [中文](README.zh.md)
 
 The standalone Local GPU Wiki server and browser/API queries remain available.
-The Agent-facing `wiki-query` Runtime Tool is temporarily removed. The managed/temporary Agent
-shell walkthroughs below are retained as historical reference, not currently supported workflows.
+The Agent-facing `wiki-query` tool is opt-in. Set `gpu_wiki.enabled` to `true` in this example's
+`runtime.json` before using the Agent shell workflows below. The default is `false`; configuring a
+service URL alone grants no Agent access. Use Agent source containing the optional Wiki tool.
 
 When running from a Lima-mounted checkout, create a Linux-local environment instead of reusing the
 repository's macOS `.venv`:
@@ -50,13 +51,15 @@ This example's checked-in [`runtime.json`](runtime.json) contains:
 ```json
 {
   "gpu_wiki": {
+    "enabled": false,
     "base_url": "http://127.0.0.1:8091"
   }
 }
 ```
 
 The real configuration contains the remaining timeout and byte-limit fields;
-do not replace the complete object with this abbreviated fragment.
+do not replace the complete object with this abbreviated fragment. Change `enabled` to `true`
+before the Agent workflows below.
 
 ## 3. Fast path: open a disposable Wiki Agent shell
 

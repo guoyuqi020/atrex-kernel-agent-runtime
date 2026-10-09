@@ -62,6 +62,7 @@ from ..workers import (
 from ..workers.attempt_report import AttemptReportV12
 from .campaign import (
     build_core_process_config,
+    build_worker_gateway_operations,
     build_worker_launcher,
 )
 from .gateway import build_authoritative_candidate_evaluator, source_tree_client
@@ -879,7 +880,7 @@ def build_core_lineage_baseline_generator(
     campaign = settings.campaign
     if campaign is None:
         return None
-    operations = frozenset(GatewayOperation(value) for value in campaign.gateway_operations)
+    operations = build_worker_gateway_operations(settings)
     resolved_finalizer = finalizer or build_authoritative_candidate_evaluator(
         settings, artifacts, registry, control, environment
     )
@@ -906,7 +907,7 @@ def build_core_lineage_baseline_generator(
         max_calls=campaign.gateway_max_calls,
         capability_lifetime=timedelta(seconds=campaign.gateway_capability_lifetime_seconds),
         environment=campaign.optimizer.environment.resolve(environment),
-        wiki_enabled=False,
+        wiki_enabled=settings.gpu_wiki_enabled,
         backend=campaign.optimizer.agent_backend,
         max_infrastructure_retries=campaign.max_infrastructure_retries,
     )

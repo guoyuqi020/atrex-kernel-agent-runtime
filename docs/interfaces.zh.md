@@ -259,8 +259,8 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称、生命周期状态、hypothesis_status 和已声明的谱系关系原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction，包括 hypothesis_status、全部 associated_experiment_ids 以及最近一次关闭时显式选中的 supporting_experiment_ids。 |
 | `find-kernel-directions` | 请求只包含 `kernel_artifact_digest`，返回可见 Experiment 关联的、去重后的 `direction_ids`；不返回 Experiment ID。 |
-| `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis` 与 Action；Runtime 冻结所选 Result 与对应 Kernel 的身份。每条 Experiment 至少绑定一个 Kernel 对应的 Gateway Result；abandon_direction 可单边，Bootstrap baseline 只需 after。返回稳定 Experiment ID。 |
-| `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis 和 Action 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
+| `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis`、Action 与可选的 `knowledge_used`；Runtime 冻结所选 Result 与对应 Kernel 的身份。每条 Experiment 至少绑定一个 Kernel 对应的 Gateway Result；abandon_direction 可单边，Bootstrap baseline 只需 after。返回稳定 Experiment ID。 |
+| `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis、Action 和 `knowledge_used` 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `find-kernel-experiments` | 请求只包含 `kernel_artifact_digest`，返回把该 Kernel Artifact 记录为 before 或 after 的可见 `experiment_ids`；不返回 Direction ID。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
@@ -388,6 +388,18 @@ Direction 的规范化状态是下一方向的唯一来源。Runtime 不信任 A
 Runtime Journal 与授权冻结历史的合并视图，只有显式请求的紧凑索引文件会写到 `scratch/`。
 Bootstrap Session 开始时没有更早 Journal；成功后，
 其终态 Journal、Kernel Trial 与 Result Artifact 会成为该 Lineage 后续普通 Attempt 的根历史。
+
+Experiment 可以通过 `knowledge_used` 声明本实验采用的 Wiki 知识：
+
+```json
+{"knowledge_used":[{"record_id":"<Wiki 返回的精确记录 ID>","finding":"从该记录获得的启发","application":"具体用于本次实验的哪项改动或测试"}]}
+```
+
+每项只包含这三个非空字符串字段。未使用知识时填 `[]`；省略字段以及缺少字段的历史记录也按
+`[]` 读取。list/load、Journal 快照和最终 Report 都保留这些声明。该字段补充现有的
+Attempt 级 `knowledge_used`，两级列表不会自动相互生成。声明历史知识不要求当前启用 Wiki 查询。
+Runtime 校验结构，但不验证 ID 是否查询过、知识是否实际采用或是否带来性能收益；此声明不能
+替代必需的 Result 证据。
 
 启用 Experiments 时，采纳可见历史中的原样 Kernel，使用 `record-experiment` 的
 `action="adopt"`，before/after 都填写

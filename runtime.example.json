@@ -57,6 +57,7 @@
     }
   },
   "gpu_wiki": {
+    "enabled": false,
     "base_url": "http://127.0.0.1:8091",
     "timeout_seconds": 30,
     "max_proxy_request_bytes": 131072,
