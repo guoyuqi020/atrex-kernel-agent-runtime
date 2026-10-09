@@ -21,7 +21,10 @@ Agent 可编辑的 Candidate 内。不同 DSL 可以有不同源码树和编辑�
 原 GDN Manifest 的 `measurement`、`bringup` 和旧生命周期设置只作为来源元数据接受，
 **不覆盖 Runtime Gate**。正确性 cases、性能迭代、repeats、锁频和晋升仍由 Runtime 配置决定。
 只支持 snapshot 导入；非空 `runtime_support` 和其他 repository-search 模式会被拒绝。
-需要预先在 Agate GPU 环境提供声明的 distribution/version；评测时不会自动安装 Agent 选择的包。
+原生 Eval 会将锁定的 `runtime_requirements` 中的 distribution/version 与 Evaluation Contract
+的 `requirements` 合并，由 Agate 按 `deps_mode` 处理依赖；默认模式可能安装尚不满足版本要求
+的依赖。这些是封存的任务声明，不是 Agent 自选的软件包。源码树诊断仍要求 GPU 环境预先提供
+声明的依赖。
 
 ## 工作区与可信校验
 
@@ -51,22 +54,30 @@ Production Gate 校验固定支持文件，并把可编辑文件作为同一 DSL
 
 ## 评测与 Bootstrap
 
-Agent 工具接口不变，Core/KDA 原有目录 Bundle 提交能力可直接使用。源码树普通 Evaluate
-内部改走 Agate Dev：上传固定 Runtime driver、部署配置锁定 commit 的 Atrex Bench evaluator、
-整棵源码、适配器、包根路径、私有输入/Shape 和 Gate 参数。Journal 中仍记为逻辑 Evaluate，
-不是 Agent 自由运行 Dev 后自报的证据。原单文件任务继续使用原生 Agate Eval。
+Agent 工具接口不变，Core/KDA 原有目录 Bundle 提交能力可直接使用。新提交的单文件及源码树
+普通 `full`、`correctness_only`、Agent 探索 ABBA 和 Runtime 权威 ABBA 均使用 **Agate 原生 Eval**。
+普通两种模式继续使用 Runtime 的 Shape 分批、覆盖校验和结果聚合；自定义输入/Shape、普通
+重复评测的策略保持不变。
 
-公共 SDK 提交层会将超过 4 MiB 的 Dev 文件映射自动改走 Agate OSS；上限按解码后的 UTF-8
-字节数统计，包含 ABBA 两侧源码和评测器。Runtime 创建确定性 ZIP，通过 `prepare_uploads`
-和 `upload_file` 上传，再用 `oss_files` 携带不透明引用。少量 inline 引导代码先校验 SHA-256，
-按原路径还原文件，再执行原命令。预约、PUT、提交分别沿用退避重试；提交重试复用已上传引用。
-逻辑请求和缓存身份、Gate 输入、同 allocation ABBA 语义均不改变。无需增加 Agent 工具、
-OSS 凭证或配置项，但 Agate 服务必须支持 SDK 上传接口。
+Runtime 将完整封存源码树作为 OSS archive 上传，并显式指定 `entry_point`。源码内容和路径
+保持不变，不拼接文件、不改写 import，也不生成单文件实现。ABBA 的 Candidate B 和 Baseline A
+分别使用独立的源码 archive 和入口。请求携带可信 input/reference、本批 Shape 及 Gate 策略；
+原生评测器版本由封存 Contract 的 `atrex_bench_version` 指定，配置的执行预算由
+`runner_overrides` 控制。不再上传 Runtime 锁定 commit 的评测器，也不再用旧 Dev Driver 的
+外层超时覆盖 Performance 预算。
 
-已支持 full、`correctness_only`、自定义输入/Shape、普通重复评测、Agent 探索 ABBA，以及
-Runtime 权威 ABBA。源码树 ABBA 使用 Dev Driver，单文件 ABBA 使用 Agate 原生 Eval ABBA
-API；两条路径各步都在同一 Allocation 中使用独立进程和独立 JIT Cache，并沿用整段测量的
-锁频策略，防止 A/B 模块与缓存混用。
+此路径要求 `atrex-gateway-client>=0.14.3,<0.15`，且 Agate 服务支持原生 Eval 源码归档。
+目前 archive 契约要求 `source.package_root` 为 `"."`，不支持另外指定包导入根目录。SDK
+不兼容或多文件请求参数不受支持时明确报错，不回退 Dev，也不改写源码来适配。不需要新增
+Agent 工具或给 Agent 提供 OSS 凭据。
+
+原生 ABBA 支持 1–8 个完整 `A, B, B, A` Block。单文件和多文件 Kernel 的 Runtime `repeats`
+都表示每侧测量次数，且必须为 `{2, 4, 6, 8, 10, 12, 14, 16}` 中的整数；布尔值、字符串和
+浮点数均不合法。Runtime 将其换算为 `repeats / 2` 个原生 Block。非法值直接向 Agent 返回
+参数校验错误，不回退 Dev。每个 Shape Batch 的完整排程仍在同一 Allocation 内执行，沿用
+Runtime 锁频策略。缺少原生 Request Builder 时返回明确的配置错误，不提交 GPU 作业；单文件
+同样不会回退 Dev。已提交的旧 Dev 评测作业和已保存结果保留只读恢复能力，不因此创建新的
+Dev 评测作业。
 
 源码树 Bootstrap 使用配置的 Optimizer backend 启动完整 framework-baseline Session
 （GDN 输入包使用 Claude）。Runtime 将源码范围追加到本次 Session 的 Bootstrap Prompt
@@ -81,7 +92,8 @@ Evaluate 相同的规则封存整树、校验匹配的 Agent 证据，再独立�
 
 ## Profile、Check 与 Disassemble
 
-现有工具通过 Runtime 生成的 Agate Dev 驱动支持完整源码树，无需 Agent 自己拼命令：
+Profile、Check 与 Disassemble 仍通过 Runtime 生成的 Agate Dev 驱动支持完整源码树。
+Agent 的 `dev` 工具也仍是 Dev 操作；原生 Eval 迁移不改变这些诊断路径：
 
 ```json
 {"operation":"profile","level":"sol","shape_id":"0"}
@@ -111,6 +123,11 @@ input/case，不上传 evaluator 或 Reference model。声明依赖需在 GPU �
 `requirements` 只校验已安装版本，Dev 不安装软件，两种 `deps_mode` 都没有安装阶段。
 Dev allocation 上限为 600 秒，预留 30 秒清理时间。
 
+这些 Dev 请求的文件映射超过 4 MiB（按解码后的 UTF-8 字节数统计）时，公共 SDK 层会将其
+改走 OSS：通过 `prepare_uploads` 和 `upload_file` 上传确定性 ZIP，以 `oss_files` 携带
+不透明引用，并在按原路径还原前校验 SHA-256。提交重试复用已上传引用。这套 Dev 文件映射
+传输与原生 Eval 的源码 archive 相互独立。
+
 Runtime 仍按原逻辑操作记录归属、源码与结果，不把这些操作降格成任意 Dev 证据。
 作业绑定与上游幂等键按 Attempt 的恢复代次隔离，避免中断后新 Session 与历史作业冲突。
 同一代次中，重复请求会继续读取已登记的作业，不再额外创建 Dev 作业；历史归属和结果保留。
@@ -131,9 +148,11 @@ Runtime 仍按原逻辑操作记录归属、源码与结果，不把这些操作
 ## 实现与验证
 
 - `kernel_sources.py`：Git 导入、源码锁、编辑范围、整树身份、Prompt 投影。
-- `gateway/source_tree.py`：逻辑 Evaluate 的 Dev 传输和可恢复结果解析。
+- `gateway/eval_sources.py`：原样源码归档，以及 ABBA 两侧独立的 Candidate/Baseline 描述。
+- `gateway/source_tree.py`：原生源码树 Eval 路由、诊断 Dev 路由和历史结果恢复。
 - `gateway/source_diagnostics.py`：固定源码树 NCU、编译/运行、sanitizer 驱动。
-- `gateway/abba.py`、`abba_remote.py`：固定驱动、完整 A/B 源码、进程及缓存隔离。
+- `gateway/abba.py`、`agent_abba.py`：原生 ABBA 提交及权威/探索结果账本。
+- `gateway/abba_remote.py`：旧 Dev 结果协议，用于只读恢复。
 - `gateway/proxy.py`、`workers/core.py`：评测提交与最终提名的统一封存。
 - `workers/lineage_bootstrap.py`、`composition/bootstrap.py`、`gateway/finalization.py`：Agent Bootstrap、整树提名与权威终评。
 - `tests/test_kernel_sources.py`：commit 锚定、越界修改、源码身份、Prompt 哈希、真实子进程导入、

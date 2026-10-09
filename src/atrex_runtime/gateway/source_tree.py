@@ -1,4 +1,4 @@
-"""Transport multi-file Evaluate through the trusted Dev evaluator, not Agent commands."""
+"""Transport sealed trees through native Eval and Runtime-owned diagnostics."""
 
 from __future__ import annotations
 
@@ -8,9 +8,10 @@ from typing import Any, cast
 
 from ..domain.errors import InfrastructureError
 from ..kernel_sources import KernelSourceBundle, KernelSourceContract
-from .abba import CommitPinnedAtrexBenchEvaluator, build_abba_source_request
+from .abba import CommitPinnedAtrexBenchEvaluator
 from .abba_remote import RESULT_PREFIX
 from .contract import AgateEvaluationContractV1
+from .eval_sources import prepare_eval_sources
 from .protocol import AGATE_MAX_JOB_TIMEOUT_S
 from .source_diagnostics import DIAGNOSTIC_PREFIX
 
@@ -62,33 +63,13 @@ class SourceTreeAgateClient:
                 kind, payload, source, contract, raw["hardware_target"]
             )
             return self._client.submit_job("dev", request)  # type: ignore[attr-defined,no-any-return]
-        if self._evaluator is None:
-            raise ValueError("source-tree Evaluate requires gate_policy.evaluator")
-        timeout = float(contract.options.timeout_s)
-        request = build_abba_source_request(
-            hardware_target=raw["hardware_target"],
-            contract=contract,
-            shape_ids=sorted(contract.shapes),
-            schedule=[{"revision": "candidate", "repeat": 0}],
-            incumbent_source=source,
-            candidate_source=source,
-            evaluator_files=self._evaluator.files(),
-            per_run_timeout_seconds=timeout,
-            allocation_timeout_seconds=timeout + 120,
+        candidate, _, attachments = prepare_eval_sources(
+            source, requirements=contract.requirements
         )
-        files = cast(dict[str, str], request["files"])
-        driver = json.loads(files["request.json"])
-        driver["raw_result"] = True
-        # A single Evaluate has no incumbent; do not upload a second identical tree.
-        for path in tuple(files):
-            if path.startswith("snapshots/incumbent/"):
-                del files[path]
-        driver["sources"]["incumbent"] = driver["sources"]["candidate"]
-        files["request.json"] = json.dumps(driver)
-        files.setdefault("reference/metadata.json", "{}")
-        request["idempotency_key"] = payload.get("idempotency_key")
-        request["dev_note"] = "trusted source-tree Evaluate"
-        return self._client.submit_job("dev", request)  # type: ignore[attr-defined,no-any-return]
+        request = {key: value for key, value in payload.items() if key != SOURCE_REQUEST_KEY}
+        request.update(attachments)
+        request["candidate"] = candidate
+        return self._client.submit_job("eval", request)  # type: ignore[attr-defined,no-any-return]
 
     def get_job(self, job_id: str, **kwargs: Any) -> dict[str, object]:
         job = self._client.get_job(job_id, **kwargs)  # type: ignore[attr-defined]

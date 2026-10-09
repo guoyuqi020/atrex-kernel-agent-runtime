@@ -6,6 +6,12 @@ Sources: `atrex-bench-new-qwen38-fa4-gdn` and `fa4-prefill-aka-r0-startpoint-202
 Assets and the formal operator evaluation definition match the supplied packages. Runtime
 scheduling and measurement policy are not identical to the original smoke checks.
 
+This is an asset audit and a snapshot of the former Runtime Dev transport. The evaluator-upload
+and timeout observations below describe that audited version. New multi-file ordinary Evaluate
+and ABBA submissions use [Agate native Eval](../../docs/source-trees.md#evaluation-and-bootstrap):
+the Contract's `atrex_bench_version` selects the evaluator and `runner_overrides` supplies its
+budgets. The old Dev driver's 600-second performance override does not apply to that path.
+
 ## Exact asset checks
 
 - Reference and input generator match both the new Benchmark and R0 package byte-for-byte.
@@ -44,7 +50,7 @@ seed 1. The public training domain never substitutes for validation Shapes. The 
 exists only to reproduce the original commands from temporary pristine R0 inputs; it is not an
 acceptance gate or a test of an Agent-modified Candidate.
 
-## Caller-owned measurement differences
+## Caller-owned measurement differences at the time of the audit
 
 The supplied Benchmark owns input and correctness policy, while caller settings own case counts,
 warmup, timeouts and ABBA. Compared with bare `run_eval.py` defaults:
@@ -61,9 +67,10 @@ warmup, timeouts and ABBA. Compared with bare `run_eval.py` defaults:
 Thus evaluator code and acceptance definition match, but complete execution conditions do not.
 Hash equality is not evidence of equal latency across policies or measurement windows.
 
-Currently `performance_timeout_seconds=120` does not override ordinary source-tree performance:
-the reused Driver Builder uses `evaluation_timeout_seconds=600`. This audit records the actual
-transport rather than assuming the configured value is applied; a transport regression test covers it.
+In the audited Dev transport, `performance_timeout_seconds=120` did not override ordinary
+source-tree performance: the reused Driver Builder used `evaluation_timeout_seconds=600`.
+This records the historical submission rather than assuming the configured value was applied;
+it is not the current native Eval timeout policy.
 
 In this deployment Agate resource `L20D` denotes B300. Preserve the supplied
 `NVIDIA B300 (SM100)` Roofline values; Runtime transport only strips the parenthesized suffix.

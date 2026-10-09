@@ -9,6 +9,7 @@ import threading
 from pathlib import Path
 
 import pytest
+from atrex_gateway_client import build_eval_request_from_content
 from conftest import NOW, digest
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
@@ -24,6 +25,10 @@ from atrex_runtime.domain.models import (
 from atrex_runtime.gateway.abba import (
     AgateSameAllocationAbbaRunner,
     CommitPinnedAtrexBenchEvaluator,
+    _parse_native_abba_payload,
+    _schedule,
+    _uses_native_abba,
+    build_native_abba_request,
 )
 from atrex_runtime.gateway.contract import (
     AgateEvaluationContext,
@@ -31,6 +36,7 @@ from atrex_runtime.gateway.contract import (
     AgateEvaluationOptionsV1,
 )
 from atrex_runtime.gateway.result_metrics import gateway_result_sol_summary
+from atrex_runtime.kernel_sources import KernelSourceBundle, KernelSourceContract
 
 
 class FakeContextResolver:
@@ -45,10 +51,10 @@ class FakeEvaluator:
     commit = "f" * 40
 
     def files(self) -> dict[str, str]:
-        return {"atrex-bench/src/atrex_bench/__init__.py": ""}
+        pytest.fail("native ABBA must not export a custom Dev evaluator")
 
     def bundle_digest(self) -> str:
-        return "sha256:" + "e" * 64
+        pytest.fail("native ABBA must not inspect a custom Dev evaluator")
 
 
 class FakeJournal:
@@ -89,93 +95,6 @@ class FakeAgateClient:
         self.requests: list[dict[str, object]] = []
 
     def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
-        assert kind == "dev"
-        files = request["files"]
-        assert isinstance(files, dict)
-        abba_request = json.loads(files["request.json"])
-        with self._lock:
-            job_id = f"dv_abba_{len(self.requests)}"
-            self.requests.append(request)
-        runs = []
-        for step in abba_request["schedule"]:
-            revision = step["revision"]
-            latency = 100.0 if revision == "incumbent" else 90.0
-            runs.append(
-                {
-                    **step,
-                    "exit_code": 0,
-                    "result": {
-                        "all_pass": True,
-                        "latency_us_geomean": latency,
-                        "latency_us_by_shape": {
-                            shape_id: latency for shape_id in abba_request["shape_ids"]
-                        },
-                        "sol_pct_by_shape": {
-                            shape_id: 50.0 if revision == "candidate" else 25.0
-                            for shape_id in abba_request["shape_ids"]
-                        },
-                    },
-                    "stdout_tail": "",
-                    "stderr_tail": "",
-                }
-            )
-        payload = {"schema_version": 1, "runs": runs, "error": None}
-        self.jobs[job_id] = {
-            "job_id": job_id,
-            "status": "succeeded",
-            "command_ok": True,
-            "result": {
-                "stdout": "__ATREX_RUNTIME_ABBA_RESULT__="
-                + json.dumps(payload, separators=(",", ":")),
-                "stderr": "",
-                "exit_code": 0,
-            },
-        }
-        return {"job_id": job_id, "status": "queued"}
-
-    def get_job(
-        self,
-        job_id: str,
-        wait: bool = False,
-        timeout: float = 30.0,
-        include_spec: bool = False,
-    ) -> dict[str, object]:
-        assert wait and timeout == 90 and not include_spec
-        return self.jobs[job_id]
-
-
-def _native_request_builder(
-    candidate: str,
-    reference: dict[str, object],
-    gpu: str,
-    **fields: object,
-) -> dict[str, object]:
-    return {"candidate": candidate, "reference": reference, "gpu": gpu, **fields}
-
-
-def _native_evaluation(shape_ids: list[str], latency_us: float) -> dict[str, object]:
-    return {
-        "error": None,
-        "passed": {
-            "compile": {"status": "passed"},
-            "correctness": {shape_id: {"status": "passed"} for shape_id in shape_ids},
-        },
-        "correctness": {"shapes": {shape_id: {} for shape_id in shape_ids}},
-        "performance": {
-            "shapes": {
-                shape_id: {
-                    "error": None,
-                    "samples": [{"end_to_end_time_ms": latency_us / 1000}],
-                    "sol": {"pct": 50.0 if latency_us == 90 else 25.0},
-                }
-                for shape_id in shape_ids
-            }
-        },
-    }
-
-
-class NativeAgateClient(FakeAgateClient):
-    def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
         assert kind == "eval"
         reference = request["reference"]
         abba = request["abba"]
@@ -211,7 +130,7 @@ class NativeAgateClient(FakeAgateClient):
                 }
             )
         with self._lock:
-            job_id = f"ev_native_abba_{len(self.requests)}"
+            job_id = f"ev_abba_{len(self.requests)}"
             self.requests.append(request)
         self.jobs[job_id] = {
             "job_id": job_id,
@@ -220,6 +139,49 @@ class NativeAgateClient(FakeAgateClient):
             "result": {"abba": {"sdk_results": blocks, "valid": True}},
         }
         return {"job_id": job_id, "status": "queued"}
+
+
+    def get_job(
+        self,
+        job_id: str,
+        wait: bool = False,
+        timeout: float = 30.0,
+        include_spec: bool = False,
+    ) -> dict[str, object]:
+        assert wait and timeout == 90 and not include_spec
+        return self.jobs[job_id]
+
+
+def _native_request_builder(
+    candidate: str | dict[str, object],
+    reference: dict[str, object],
+    gpu: str,
+    **fields: object,
+) -> dict[str, object]:
+    return {"candidate": candidate, "reference": reference, "gpu": gpu, **fields}
+
+
+def _native_evaluation(shape_ids: list[str], latency_us: float) -> dict[str, object]:
+    return {
+        "error": None,
+        "passed": {
+            "compile": {"status": "passed"},
+            "correctness": {shape_id: {"status": "passed"} for shape_id in shape_ids},
+        },
+        "correctness": {"shapes": {shape_id: {} for shape_id in shape_ids}},
+        "performance": {
+            "shapes": {
+                shape_id: {
+                    "error": None,
+                    "samples": [{"end_to_end_time_ms": latency_us / 1000}],
+                    "sol": {"pct": 50.0 if latency_us == 90 else 25.0},
+                }
+                for shape_id in shape_ids
+            }
+        },
+    }
+
+
 
 
 def test_commit_pinned_evaluator_exports_only_required_runtime(tmp_path: Path) -> None:
@@ -331,6 +293,7 @@ async def test_abba_runner_uses_one_allocation_per_shape_batch_and_records_runs(
         artifacts,
         journal,  # type: ignore[arg-type]
         FakeEvaluator(),  # type: ignore[arg-type]
+        build_eval_request_from_content,
         wait_timeout_s=90,
     )
 
@@ -347,18 +310,9 @@ async def test_abba_runner_uses_one_allocation_per_shape_batch_and_records_runs(
 
     assert len(client.requests) == 2
     assert len({request["idempotency_key"] for request in client.requests}) == 2
-    assert all(
-        request["command"] == "python3 __atrex_abba.py request.json" for request in client.requests
-    )
-    assert all(
-        json.loads(request["files"]["request.json"])["lock_clocks"] is lock_clocks
-        for request in client.requests
-    )
-    assert all(
-        json.loads(request["files"]["request.json"])["evaluator"]["clock_lock_mode"]
-        == ("external" if lock_clocks else "off")
-        for request in client.requests
-    )
+    assert all(request["lock_clocks"] is lock_clocks for request in client.requests)
+    assert all(request["abba"]["repeats"] == 1 for request in client.requests)
+    assert all("files" not in request and "command" not in request for request in client.requests)
     assert [run.latency_us for run in result.incumbent_runs] == pytest.approx([100] * 2)
     assert [run.latency_us for run in result.candidate_runs] == pytest.approx([90] * 2)
     assert result.incumbent_latency_us == pytest.approx(100)
@@ -369,7 +323,7 @@ async def test_abba_runner_uses_one_allocation_per_shape_batch_and_records_runs(
     assert {
         frozenset(str(measurement.agate_job_id).split(",")) for measurement in journal.measurements
     } == {
-        frozenset(("dv_abba_0", "dv_abba_1")),
+        frozenset(("ev_abba_0", "ev_abba_1")),
     }
     assert any(kind == "comparison.abba_completed" for kind, _, _ in journal.events)
     assert result.gateway_result_digest is not None
@@ -433,17 +387,11 @@ async def test_authoritative_abba_uses_its_single_measurement_without_a_median(
             job = self.jobs[str(accepted["job_id"])]
             result = job["result"]
             assert isinstance(result, dict)
-            stdout = result["stdout"]
-            assert isinstance(stdout, str)
-            payload = json.loads(stdout.split("=", 1)[1])
-            for run in payload["runs"]:
-                measurement = run["result"]
-                measurement["latency_us_geomean"] *= 2
-                measurement["latency_us_by_shape"] = {
-                    shape: latency * 2
-                    for shape, latency in measurement["latency_us_by_shape"].items()
-                }
-            result["stdout"] = "__ATREX_RUNTIME_ABBA_RESULT__=" + json.dumps(payload)
+            for block in result["abba"]["sdk_results"]:
+                for run in block["abba"]["runs"]:
+                    for shape in run["result"]["performance"]["shapes"].values():
+                        for sample in shape["samples"]:
+                            sample["end_to_end_time_ms"] *= 2
             return accepted
 
     client = OutlierClient()
@@ -491,7 +439,7 @@ class FlakyAgateClient(FakeAgateClient):
             job_id = str(accepted["job_id"])
             self.jobs[job_id] = {
                 "job_id": job_id,
-                "kind": "dev",
+                "kind": "eval",
                 "status": "failed",
                 "command_ok": None,
                 "trace_id": "req-8567eddfc34a",
@@ -505,8 +453,11 @@ async def _run_pair(
     tmp_path: Path,
     *,
     shape_batch_size: int = 3,
-    repeats: int = 1,
-    request_builder: object | None = None,
+    repeats: int = 2,
+    request_builder: object | None = build_eval_request_from_content,
+    source_tree: bool = False,
+    replay: bool = False,
+    allocation_timeout_seconds: float = 500,
 ) -> tuple[object, FakeJournal]:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     incumbent_dir = tmp_path / "incumbent"
@@ -515,6 +466,10 @@ async def _run_pair(
     candidate_dir.mkdir()
     (incumbent_dir / "kernel.py").write_text("INCUMBENT = True\n", encoding="utf-8")
     (candidate_dir / "kernel.py").write_text("CANDIDATE = True\n", encoding="utf-8")
+    if source_tree:
+        for root in (incumbent_dir, candidate_dir):
+            (root / "helpers").mkdir()
+            (root / "helpers/impl.py").write_text(f"SIDE = {root.name!r}\n", encoding="utf-8")
     incumbent = KernelRevision(
         new_kernel_revision_id(),
         None,
@@ -539,6 +494,7 @@ async def _run_pair(
         options=AgateEvaluationOptionsV1(
             num_correctness_cases=1, bench_iters=10, atol=0.01, rtol=0.01, timeout_s=60
         ),
+        kernel_sources={Dsl.TRITON: _source_contract()} if source_tree else {},
     )
     context = AgateEvaluationContext(
         "vecadd", "H20", Dsl.TRITON, contract, digest("evaluation-contract")
@@ -559,16 +515,202 @@ async def _run_pair(
         repeats=repeats,
         purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
         per_run_timeout_seconds=100,
-        allocation_timeout_seconds=500,
+        allocation_timeout_seconds=allocation_timeout_seconds,
         shape_batch_size=shape_batch_size,
         max_parallel_shape_batches=2,
     )
+    if replay:
+        replayed = await runner.run_pair(
+            incumbent,
+            candidate,
+            repeats=repeats,
+            purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
+            per_run_timeout_seconds=100,
+            allocation_timeout_seconds=allocation_timeout_seconds,
+            shape_batch_size=shape_batch_size,
+            max_parallel_shape_batches=2,
+        )
+        assert replayed.gateway_result_digest == result.gateway_result_digest
     return result, journal
+
+
+def _source_contract() -> KernelSourceContract:
+    return KernelSourceContract(
+        source_revision="a" * 40,
+        seed_digest=digest("native-source-seed"),
+        package_root=".",
+        editable_roots=("kernel.py", "helpers"),
+        immutable_files={},
+    )
+
+
+@pytest.mark.anyio
+async def test_authoritative_multi_file_abba_uses_native_eval_and_reuses_batches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def no_dev_evaluator(_self: FakeEvaluator) -> dict[str, str]:
+        pytest.fail("native source-tree ABBA must not export a Dev evaluator")
+
+    monkeypatch.setattr(FakeEvaluator, "files", no_dev_evaluator)
+    client = FakeAgateClient()
+    result, journal = await _run_pair(
+        client,
+        tmp_path,
+        repeats=4,
+        request_builder=build_eval_request_from_content,
+        source_tree=True,
+        replay=True,
+        allocation_timeout_seconds=900,
+    )
+
+    assert len(client.requests) == 2  # Five Shapes, batches of three; replay uses the cache.
+    assert len({request["idempotency_key"] for request in client.requests}) == 2
+    assert sorted(len(request["reference"]["shapes"]) for request in client.requests) == [2, 3]
+    for request in client.requests:
+        assert request["candidate"] == {
+            "archive": "archives/candidate.tar.gz", "entry_point": "kernel.py"
+        }
+        assert request["abba"] == {
+            "baseline": {"archive": "archives/baseline.tar.gz", "entry_point": "kernel.py"},
+            "repeats": 2,
+        }
+        archives = request["__atrex_eval_archives"]
+        assert archives["archives/baseline.tar.gz"]["helpers/impl.py"] == "SIDE = 'incumbent'\n"
+        assert archives["archives/candidate.tar.gz"]["helpers/impl.py"] == "SIDE = 'candidate'\n"
+        assert request["lock_clocks"] is True
+        assert "command" not in request and "files" not in request
+    assert [run.latency_us for run in result.incumbent_runs] == pytest.approx([100] * 4)
+    assert [run.latency_us for run in result.candidate_runs] == pytest.approx([90] * 4)
+    assert len(journal.measurements) == 8
+    assert sum(kind == "comparison.abba_batch_reused" for kind, _, _ in journal.events) == 2
+
+
+@pytest.mark.parametrize("tree_side", ("baseline", "candidate"))
+def test_native_abba_supports_mixed_inline_and_archive_sources(tree_side: str) -> None:
+    tree = KernelSourceBundle(
+        {"kernel.py": "from helpers.impl import run\n", "helpers/impl.py": "def run(): pass\n"},
+        _source_contract(),
+        "kernel.py",
+    )
+    incumbent = tree if tree_side == "baseline" else "BASELINE = True\n"
+    candidate = tree if tree_side == "candidate" else "CANDIDATE = True\n"
+    assert _uses_native_abba(_native_request_builder, incumbent, candidate, 2)
+    contract = AgateEvaluationContractV1(
+        candidate_path="kernel.py", reference_py="REFERENCE = True\n", input_py="INPUT = True\n",
+        shapes={"s": [1]},
+        options=AgateEvaluationOptionsV1(
+            num_correctness_cases=1, bench_iters=10, atol=0.01, rtol=0.01, timeout_s=60
+        ),
+    )
+    request = build_native_abba_request(
+        build_eval_request_from_content,
+        hardware_target="L20D", operator="mixed", dsl="triton", contract=contract,
+        shape_ids=["s"], repeats=2, incumbent_source=incumbent, candidate_source=candidate,
+        allocation_timeout_seconds=600, name="native-mixed-abba",
+    )
+    assert request["__atrex_eval_archives"] == {f"archives/{tree_side}.tar.gz": tree.files}
+    if tree_side == "baseline":
+        assert request["candidate"] == candidate
+        assert request["abba"]["baseline"]["entry_point"] == "kernel.py"
+    else:
+        assert request["abba"]["baseline"] == incumbent
+        assert request["candidate"]["entry_point"] == "kernel.py"
+
+
+@pytest.mark.parametrize("repeats", (0, 1, 3, 17, 18, 20, True, False, 2.0, "2", None))
+@pytest.mark.parametrize("source_tree", (False, True))
+@pytest.mark.parametrize("has_builder", (False, True))
+def test_abba_never_falls_back_to_dev_for_unsupported_schedule(
+    repeats: object, source_tree: bool, has_builder: bool,
+) -> None:
+    tree = KernelSourceBundle({"kernel.py": "SOURCE = True\n"}, _source_contract(), "kernel.py")
+    source = tree if source_tree else "SOURCE = True\n"
+    with pytest.raises(ValueError) as failure:
+        _uses_native_abba(
+            _native_request_builder if has_builder else None, source, "CANDIDATE = True\n", repeats
+        )
+    assert "2, 4, 6, 8, 10, 12, 14, 16" in str(failure.value)
+    assert "measurements per side; 2 means A, B, B, A" in str(failure.value)
+    assert f"got {repeats!r}" in str(failure.value)
+    assert "not executed through Dev" in str(failure.value)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("repeats", (1, 3, 18, True, 2.0, "2"))
+async def test_authoritative_abba_rejects_invalid_repeats_before_loading_sources(
+    tmp_path: Path, repeats: object,
+) -> None:
+    class UnusedContext:
+        def resolve(self, _revision: KernelRevision) -> AgateEvaluationContext:
+            pytest.fail("invalid repeats must fail before resolving or loading a source")
+
+    client = FakeAgateClient()
+    runner = AgateSameAllocationAbbaRunner(
+        client, UnusedContext(), LocalArtifactStore(tmp_path / "artifacts"),
+        FakeJournal(), FakeEvaluator(), wait_timeout_s=90,
+    )
+    with pytest.raises(ValueError, match="not executed through Dev"):
+        await runner.run_pair(
+            None, None, repeats=repeats, purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
+            per_run_timeout_seconds=120, allocation_timeout_seconds=600,
+            shape_batch_size=1, max_parallel_shape_batches=1,
+        )
+    assert client.requests == []
+
+
+@pytest.mark.parametrize("source_tree", (False, True))
+def test_abba_requires_native_request_builder_for_all_sources(source_tree: bool) -> None:
+    tree = KernelSourceBundle({"kernel.py": "SOURCE = True\n"}, _source_contract(), "kernel.py")
+    source = tree if source_tree else "SOURCE = True\n"
+    with pytest.raises(ValueError) as failure:
+        _uses_native_abba(None, source, source, 2)
+    assert str(failure.value) == (
+        "Native Agate Eval request builder is unavailable. ABBA requires native Eval; "
+        "Dev fallback is disabled. Ask the Runtime operator to repair the Agate SDK configuration."
+    )
+
+
+@pytest.mark.anyio
+async def test_authoritative_abba_rejects_missing_builder_before_loading_sources(
+    tmp_path: Path,
+) -> None:
+    class UnusedContext:
+        def resolve(self, _revision: KernelRevision) -> AgateEvaluationContext:
+            pytest.fail("missing builder must fail before resolving or loading a source")
+
+    client = FakeAgateClient()
+    runner = AgateSameAllocationAbbaRunner(
+        client, UnusedContext(), LocalArtifactStore(tmp_path / "artifacts"),
+        FakeJournal(), FakeEvaluator(), wait_timeout_s=90,
+    )
+    with pytest.raises(ValueError, match="Dev fallback is disabled"):
+        await runner.run_pair(
+            None, None, repeats=2, purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
+            per_run_timeout_seconds=120, allocation_timeout_seconds=600,
+            shape_batch_size=1, max_parallel_shape_batches=1,
+        )
+    assert client.requests == []
+
+
+@pytest.mark.parametrize("invalid", ("order", "incomplete"))
+def test_native_abba_parser_rejects_invalid_same_allocation_evidence(invalid: str) -> None:
+    client = FakeAgateClient()
+    accepted = client.submit_job(
+        "eval", {"reference": {"shapes": {"s": [1]}}, "abba": {"repeats": 1}}
+    )
+    job = client.jobs[str(accepted["job_id"])]
+    runs = job["result"]["abba"]["sdk_results"][0]["abba"]["runs"]
+    if invalid == "order":
+        runs[0], runs[1] = runs[1], runs[0]
+    else:
+        runs.pop()
+    with pytest.raises(InfrastructureError, match=r"run order|incomplete runs"):
+        _parse_native_abba_payload(job, _schedule(2), ["s"])
 
 
 @pytest.mark.anyio
 async def test_authoritative_single_file_abba_uses_native_agate_eval(tmp_path: Path) -> None:
-    client = NativeAgateClient()
+    client = FakeAgateClient()
 
     result, journal = await _run_pair(
         client,
@@ -601,8 +743,11 @@ async def test_authoritative_single_file_abba_uses_native_agate_eval(tmp_path: P
 
 
 @pytest.mark.anyio
-async def test_native_agate_abba_preserves_candidate_correctness_failure(tmp_path: Path) -> None:
-    class IncorrectNativeClient(NativeAgateClient):
+@pytest.mark.parametrize("source_tree", (False, True))
+async def test_native_agate_abba_preserves_candidate_correctness_failure(
+    tmp_path: Path, source_tree: bool,
+) -> None:
+    class IncorrectNativeClient(FakeAgateClient):
         def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
             accepted = super().submit_job(kind, request)
             job = self.jobs[str(accepted["job_id"])]
@@ -627,6 +772,7 @@ async def test_native_agate_abba_preserves_candidate_correctness_failure(tmp_pat
         shape_batch_size=5,
         repeats=2,
         request_builder=_native_request_builder,
+        source_tree=source_tree,
     )
 
     assert len(client.requests) == 1
@@ -695,15 +841,11 @@ async def test_abba_negative_kernel_measurement_is_not_retried(tmp_path: Path) -
             job_id = str(accepted["job_id"])
             result = self.jobs[job_id]["result"]
             assert isinstance(result, dict)
-            stdout = result["stdout"]
-            assert isinstance(stdout, str)
-            payload = json.loads(stdout.split("=", 1)[1])
-            for run in payload["runs"]:
-                if run["revision"] == "candidate":
-                    run["result"]["all_pass"] = False
-            result["stdout"] = "__ATREX_RUNTIME_ABBA_RESULT__=" + json.dumps(
-                payload, separators=(",", ":")
-            )
+            for block in result["abba"]["sdk_results"]:
+                for run in block["abba"]["runs"]:
+                    if run["revision"] == "candidate":
+                        for shape in run["result"]["passed"]["correctness"].values():
+                            shape["status"] = "failed"
             return accepted
 
     client = IncorrectCandidateClient()
@@ -747,7 +889,7 @@ async def test_abba_poll_error_retries_with_a_fresh_job(
     result, journal = await _run_pair(client, tmp_path)
 
     assert len(client.requests) == 3
-    assert client.failed_job_id == "dv_abba_0"
+    assert client.failed_job_id == "ev_abba_0"
     retries = [
         payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
     ]
@@ -841,9 +983,7 @@ async def test_abba_batch_infrastructure_errors_are_retried(
                 self.jobs[job_id] = {"job_id": job_id, "status": "running"}
             else:
                 self.jobs[job_id]["result"] = {
-                    "stdout": "remote process exited without an ABBA sentinel",
-                    "stderr": "",
-                    "exit_code": 0,
+                    "abba": {"sdk_results": []},
                 }
             return accepted
 

@@ -70,7 +70,7 @@
   出错字段，并附上对应的本地 `request_schema`。Evaluate 包含规范的
   `full`/`correctness_only` 模式、完整评测所需的 `latency_prediction`、内联/文件参数及形式互斥约束，同时提供针对该字段的有界
   `recovery` 步骤。Evaluate 支持可选 `candidate_path`；其 `comparison` 对象要求
-  `method: "abba"` 及 `baseline_path`，`repeats` 范围为 2–20。启用比较时 `mode` 必须为
+  `method: "abba"` 及 `baseline_path`，`repeats` 只接受整数 `{2, 4, 6, 8, 10, 12, 14, 16}`。启用比较时 `mode` 必须为
   `full`。嵌套字段错误指向 `comparison.method`、`comparison.baseline_path` 或
   `comparison.repeats`；输入文件
   错误指向 `input_path`/`shapes_path`。这些操作已有的 Runtime `issues`、`request_schema` 和 `recovery`
@@ -124,8 +124,12 @@ Shapes 继续复用私有 Contract，Reference 和可信评测策略保持不变
 的对应关系。HTTP 接收文件内容，不接收本地文件路径。
 
 携带 `comparison: {method: "abba", repeats: 2}` 的 `evaluate` Wire Request 通过 `baseline`（A）
-和 `candidate`（B）上传两个源码 Bundle。`comparison.repeats` 默认 2，范围 2–20；比较要求
-`mode: "full"`，`input_py` 和 `shapes` 仍可选。Runtime 校验并封存两侧源码，在每个 Shape
+和 `candidate`（B）上传两个源码 Bundle。`comparison.repeats` 默认 2，单文件和多文件 Kernel
+都只接受严格整数 `{2, 4, 6, 8, 10, 12, 14, 16}`；布尔值、字符串和浮点数均不合法。非法值
+返回指向 `comparison.repeats` 的错误，不提交作业或回退 Dev。原生 Block 数为 `repeats / 2`。
+比较要求 `mode: "full"`，`input_py` 和 `shapes` 仍可选。所有新的 Evaluate 和 ABBA 请求都要求
+原生 Eval Request Builder；缺少时返回配置错误，不提交 GPU 作业，单文件也不回退 Dev。
+Runtime 校验并封存两侧源码，在每个 Shape
 Batch 的同一 Allocation 内交错观测；`comparison.repeats: 2` 生成
 A、B、B、A，更长 Schedule 还须满足 Allocation 预算。ABBA 始终仅用于探索，不能满足
 `candidate_ready` 或触发 Retention/Promotion。响应返回 B 的

@@ -78,8 +78,8 @@ tables and progress messages are operator presentation.
   `full`/`correctness_only` modes, the full-mode `latency_prediction`, inline/file parameters,
   and mutually exclusive forms, plus bounded
   field-specific `recovery` steps. Evaluate accepts optional `candidate_path` and a nested
-  `comparison` object requiring `method: "abba"` and `baseline_path`, with `repeats` bounded to
-  2–20. A comparison requires `mode: "full"`. Nested errors identify `comparison.method`,
+  `comparison` object requiring `method: "abba"` and `baseline_path`, with `repeats` restricted to
+  integers `{2, 4, 6, 8, 10, 12, 14, 16}`. A comparison requires `mode: "full"`. Nested errors identify `comparison.method`,
   `comparison.baseline_path`, or `comparison.repeats`; input-file errors identify `input_path` or
   `shapes_path`. Existing Runtime-supplied `issues`, `request_schema`, and `recovery` for these
   operations are preserved rather than replaced by local fallback guidance.
@@ -144,8 +144,14 @@ contents and the mapping from `input_kwargs` to `_make_inputs`, its return dicti
 `Model.forward`, and `init_kwargs` to the Model constructor. HTTP accepts contents, not file paths.
 
 An `evaluate` wire request with `comparison: {method: "abba", repeats: 2}` carries source Bundles in
-both `baseline` (A) and `candidate` (B). `comparison.repeats` defaults to 2 (range 2–20), and the
-comparison requires `mode: "full"`; `input_py` and `shapes` remain optional.
+both `baseline` (A) and `candidate` (B). `comparison.repeats` defaults to 2 and accepts only strict
+integers `{2, 4, 6, 8, 10, 12, 14, 16}` for either single-file or multi-file Kernels. Booleans, strings
+and floating-point values are invalid. Invalid values return an error for `comparison.repeats`
+without submitting a job or falling back to Dev. The native block count is `repeats / 2`.
+The comparison requires `mode: "full"`; `input_py` and `shapes` remain optional.
+All new Evaluate and ABBA requests require the native Eval request builder. If it is unavailable,
+Runtime returns a configuration error without submitting a GPU job; single-file requests have no
+Dev fallback either.
 Runtime validates and seals both sources. Per-side observations are interleaved within one
 allocation per Shape batch; `comparison.repeats: 2` produces A, B, B, A, and larger schedules must fit the
 allocation budget. ABBA is always exploratory and does not satisfy `candidate_ready` or trigger

@@ -1,4 +1,4 @@
-"""Trusted same-allocation ABBA over native Eval and source-tree Dev jobs."""
+"""Trusted same-allocation ABBA with strict complete-block repetition counts."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from typing import cast
 
 import anyio
 
+from ..abba_policy import validate_abba_repeats
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest
@@ -35,6 +36,7 @@ from .batched_evaluate import sorted_shape_ids, subset_shape_document
 from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContextResolver
 from .correctness import merge_correctness_summaries
+from .eval_sources import prepare_eval_sources
 from .execution import call_agate_json
 from .job_recovery import JobExecution, run_with_job_recovery
 from .stability import (
@@ -49,7 +51,6 @@ _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 # retried; the ceiling keeps a permanently unavailable Agate from hanging the selection.
 _ABBA_BATCH_RETRIES = 10
 _ABBA_RETRY_DELAY_SECONDS = 60.0
-_NATIVE_ABBA_MAX_BLOCKS = 8
 
 
 class AbbaBatchFailure(InfrastructureError):
@@ -112,6 +113,7 @@ def _utc_now() -> str:
 
 
 def _schedule(repeats: int) -> list[dict[str, int | str]]:
+    repeats = validate_abba_repeats(repeats)
     schedule: list[dict[str, int | str]] = []
     for repeat in range(repeats):
         revisions = ("incumbent", "candidate") if repeat % 2 == 0 else ("candidate", "incumbent")
@@ -125,15 +127,22 @@ def _uses_native_abba(
     candidate_source: str | KernelSourceBundle,
     repeats: int,
 ) -> bool:
-    """Return whether Agate can execute this exact Runtime schedule natively."""
-    return (
-        request_builder is not None
-        and isinstance(incumbent_source, str)
-        and isinstance(candidate_source, str)
-        and repeats >= 2
-        and repeats % 2 == 0
-        and repeats // 2 <= _NATIVE_ABBA_MAX_BLOCKS
-    )
+    """Validate native ABBA prerequisites; no alternative transport is permitted."""
+    validate_abba_repeats(repeats)
+    _require_native_abba_builder(request_builder)
+    return True
+
+
+def _require_native_abba_builder(
+    request_builder: AgateRequestBuilder | None,
+) -> AgateRequestBuilder:
+    if request_builder is None:
+        raise ValueError(
+            "Native Agate Eval request builder is unavailable. ABBA requires native Eval; "
+            "Dev fallback is disabled. Ask the Runtime operator to repair the Agate SDK "
+            "configuration."
+        )
+    return request_builder
 
 
 def build_native_abba_request(
@@ -145,12 +154,13 @@ def build_native_abba_request(
     contract: AgateEvaluationContractV1,
     shape_ids: list[str],
     repeats: int,
-    incumbent_source: str,
-    candidate_source: str,
+    incumbent_source: str | KernelSourceBundle,
+    candidate_source: str | KernelSourceBundle,
     allocation_timeout_seconds: float,
     name: str,
 ) -> dict[str, object]:
     """Build one native Agate Eval ABBA request for an even Runtime side count."""
+    _validate_native_inputs(shape_ids, incumbent_source, candidate_source, repeats)
     reference: dict[str, object] = {
         "operator": operator,
         "reference_py": contract.reference_py,
@@ -165,12 +175,14 @@ def build_native_abba_request(
         reference["roofline"] = strip_roofline_hardware_suffix(roofline)
     options = cast(dict[str, object], contract.options.model_dump(mode="python"))
     options["timeout_s"] = math.ceil(allocation_timeout_seconds)
-    _validate_native_inputs(shape_ids, incumbent_source, candidate_source, repeats)
     blocks = repeats // 2
     runner_overrides = cast(Mapping[str, object], contract.runner_overrides) or None
-    abba = {"baseline": incumbent_source, "repeats": blocks}
-    return request_builder(
-        candidate_source,
+    candidate, baseline, attachments = prepare_eval_sources(
+        candidate_source, incumbent_source, requirements=contract.requirements
+    )
+    abba = {"baseline": baseline, "repeats": blocks}
+    request = request_builder(
+        candidate,
         reference,
         hardware_target,
         name=name,
@@ -186,16 +198,23 @@ def build_native_abba_request(
         runner_overrides=runner_overrides,
         abba=abba,
     )
+    return {**request, **attachments}
 
 
 def _validate_native_inputs(
-    shape_ids: list[str], incumbent_source: str, candidate_source: str, repeats: int
+    shape_ids: list[str],
+    incumbent_source: str | KernelSourceBundle,
+    candidate_source: str | KernelSourceBundle,
+    repeats: int,
 ) -> None:
     """Validate non-empty native inputs without duplicating SDK validation messages."""
-    if not shape_ids or not incumbent_source.strip() or not candidate_source.strip():
+    validate_abba_repeats(repeats)
+    sources = (incumbent_source, candidate_source)
+    if not shape_ids or any(
+        not (source if isinstance(source, str) else source.files.get(source.entrypoint, "")).strip()
+        for source in sources
+    ):
         raise ValueError("native ABBA requires Shapes and two non-empty Kernel sources")
-    if repeats < 2 or repeats % 2 or repeats // 2 > _NATIVE_ABBA_MAX_BLOCKS:
-        raise ValueError("native ABBA requires an even side repetition count from 2 through 16")
 
 
 def build_abba_source_request(
@@ -422,7 +441,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         self._contexts = contexts
         self._artifacts = artifacts
         self._journal = journal
-        self._evaluator = evaluator
+        # Keep the evaluator constructor argument for existing callers; native Eval owns execution.
         self._request_builder = request_builder
         self._wait_timeout_s = wait_timeout_s
         self._clock = clock
@@ -440,8 +459,10 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         max_parallel_shape_batches: int,
     ) -> KernelPairMeasurementResult:
         """Submit exact interleaved schedules and persist every authoritative run."""
-        if repeats <= 0 or shape_batch_size <= 0 or max_parallel_shape_batches <= 0:
-            raise ValueError("ABBA repetition and batch limits must be positive")
+        repeats = validate_abba_repeats(repeats)
+        _require_native_abba_builder(self._request_builder)
+        if shape_batch_size <= 0 or max_parallel_shape_batches <= 0:
+            raise ValueError("ABBA batch limits must be positive")
         schedule = _schedule(repeats)
         if per_run_timeout_seconds * len(schedule) + 30 > allocation_timeout_seconds:
             raise ValueError("ABBA schedule cannot fit inside one allocation timeout")
@@ -456,12 +477,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             raise ValueError("same-allocation ABBA requires a full evaluation contract")
         incumbent_source = self._kernel_source(incumbent, contract)
         candidate_source = self._kernel_source(candidate, contract)
-        native = _uses_native_abba(
-            self._request_builder, incumbent_source, candidate_source, repeats
-        )
-        transport = "agate_native_eval_abba" if native else "runtime_dev_abba"
-        evaluator_files = {} if native else await anyio.to_thread.run_sync(self._evaluator.files)
-        evaluator_bundle_digest = None if native else self._evaluator.bundle_digest()
+        transport = "agate_native_eval_abba"
         shape_ids = list(sorted_shape_ids(contract))
         if contract.shape_split is None:
             valid_shape_ids = shape_ids
@@ -490,7 +506,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     "candidate_artifact_digest": candidate.artifact_digest,
                     "evaluation_contract_digest": context.evaluation_contract_digest,
                     "evaluation_contract": contract.model_dump(mode="json"),
-                    "evaluator_bundle_digest": evaluator_bundle_digest,
+                    "evaluator_bundle_digest": None,
                     "transport": transport,
                     "purpose": purpose.value,
                     "schedule": schedule,
@@ -535,9 +551,6 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                                 schedule=schedule,
                                 incumbent_source=incumbent_source,
                                 candidate_source=candidate_source,
-                                evaluator_files=evaluator_files,
-                                transport=transport,
-                                per_run_timeout_seconds=per_run_timeout_seconds,
                                 allocation_timeout_seconds=allocation_timeout_seconds,
                                 purpose=purpose,
                                 incumbent=incumbent,
@@ -716,9 +729,9 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             "operation": "same_allocation_abba",
             "comparison_id": comparison_id,
             "execution_transport": transport,
-            "atrex_bench_commit": None if native else self._evaluator.commit,
-            "atrex_bench_version": contract.atrex_bench_version if native else None,
-            "evaluator_bundle_digest": evaluator_bundle_digest,
+            "atrex_bench_commit": None,
+            "atrex_bench_version": contract.atrex_bench_version,
+            "evaluator_bundle_digest": None,
             "evaluation_contract_digest": (
                 None
                 if context.evaluation_contract_digest is None
@@ -799,9 +812,9 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             {
                 "comparison_id": comparison_id,
                 "execution_transport": transport,
-                "atrex_bench_commit": None if native else self._evaluator.commit,
-                "atrex_bench_version": contract.atrex_bench_version if native else None,
-                "evaluator_bundle_digest": evaluator_bundle_digest,
+                "atrex_bench_commit": None,
+                "atrex_bench_version": contract.atrex_bench_version,
+                "evaluator_bundle_digest": None,
                 "purpose": purpose.value,
                 "incumbent_kernel_revision_id": incumbent.id,
                 "candidate_kernel_revision_id": candidate.id,
@@ -840,48 +853,25 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         schedule: list[dict[str, int | str]],
         incumbent_source: str | KernelSourceBundle,
         candidate_source: str | KernelSourceBundle,
-        evaluator_files: dict[str, str],
-        transport: str,
-        per_run_timeout_seconds: float,
         allocation_timeout_seconds: float,
         purpose: KernelMeasurementPurpose,
         incumbent: KernelRevision,
         candidate: KernelRevision,
     ) -> tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str]:
-        if transport == "agate_native_eval_abba":
-            if (
-                self._request_builder is None
-                or not isinstance(incumbent_source, str)
-                or not isinstance(candidate_source, str)
-            ):
-                raise AssertionError("native ABBA transport resolved incompatible inputs")
-            submission = build_native_abba_request(
-                self._request_builder,
-                hardware_target=hardware_target,
-                operator=context_name,
-                dsl=dsl,
-                contract=contract,
-                shape_ids=shape_ids,
-                repeats=len(schedule) // 2,
-                incumbent_source=incumbent_source,
-                candidate_source=candidate_source,
-                allocation_timeout_seconds=allocation_timeout_seconds,
-                name=f"runtime-abba-{context_name}",
-            )
-            job_kind = "eval"
-        else:
-            submission = build_abba_source_request(
-                hardware_target=hardware_target,
-                contract=contract,
-                shape_ids=shape_ids,
-                schedule=schedule,
-                incumbent_source=incumbent_source,
-                candidate_source=candidate_source,
-                evaluator_files=evaluator_files,
-                per_run_timeout_seconds=per_run_timeout_seconds,
-                allocation_timeout_seconds=allocation_timeout_seconds,
-            )
-            job_kind = "dev"
+        transport = "agate_native_eval_abba"
+        submission = build_native_abba_request(
+            _require_native_abba_builder(self._request_builder),
+            hardware_target=hardware_target,
+            operator=context_name,
+            dsl=dsl,
+            contract=contract,
+            shape_ids=shape_ids,
+            repeats=len(schedule) // 2,
+            incumbent_source=incumbent_source,
+            candidate_source=candidate_source,
+            allocation_timeout_seconds=allocation_timeout_seconds,
+            name=f"runtime-abba-{context_name}",
+        )
         task_digest = canonical_json_digest(
             {
                 "comparison_id": comparison_id,
@@ -905,12 +895,12 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     "gateway_result_digest": cached,
                 },
             )
-            job, payload, completed_at = self._cached_batch(cached, schedule, shape_ids, transport)
+            job, payload, completed_at = self._cached_batch(cached, schedule, shape_ids)
             return job, payload, cached, completed_at
         submission["idempotency_key"] = f"runtime-abba:{task_digest}:retry-{retry}"
 
         async def execute(submission: dict[str, object]) -> JobExecution:
-            accepted = await self._call(lambda: self._client.submit_job(job_kind, submission))
+            accepted = await self._call(lambda: self._client.submit_job("eval", submission))
             job_id = accepted.get("job_id")
             if not isinstance(job_id, str) or not job_id:
                 raise InfrastructureError("Agate ABBA acceptance has no job_id")
@@ -941,11 +931,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             raise InfrastructureError("Agate ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:
             raise AbbaBatchFailure(job)
-        payload = (
-            _parse_native_abba_payload(job, schedule, shape_ids)
-            if transport == "agate_native_eval_abba"
-            else _parse_remote_payload(job, schedule)
-        )
+        payload = _parse_native_abba_payload(job, schedule, shape_ids)
         completed_at = self._clock()
         stored = self._artifacts.put_json(
             {"job": job, "payload": payload, "completed_at": completed_at},
@@ -953,9 +939,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         )
         canonical = self._journal.record_authoritative_abba_batch(task_digest, stored)
         if canonical != stored:
-            job, payload, completed_at = self._cached_batch(
-                canonical, schedule, shape_ids, transport
-            )
+            job, payload, completed_at = self._cached_batch(canonical, schedule, shape_ids)
             return job, payload, canonical, completed_at
         return job, payload, stored, completed_at
 
@@ -964,7 +948,6 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         digest: ArtifactDigest,
         schedule: list[dict[str, int | str]],
         shape_ids: list[str],
-        transport: str,
     ) -> tuple[dict[str, JsonValue], dict[str, JsonValue], str]:
         artifact = self._artifacts.verify(digest)
         if artifact.kind is not ArtifactKind.GATEWAY_RESULT:
@@ -983,11 +966,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             or not isinstance(completed_at, str)
         ):
             raise InfrastructureError("Cached ABBA batch is incomplete")
-        parsed = (
-            _parse_native_abba_payload(job, schedule, shape_ids)
-            if transport == "agate_native_eval_abba"
-            else _parse_remote_payload(job, schedule)
-        )
+        parsed = _parse_native_abba_payload(job, schedule, shape_ids)
         if parsed != payload:
             raise InfrastructureError("Cached ABBA batch disagrees with its Agate result")
         return job, payload, completed_at

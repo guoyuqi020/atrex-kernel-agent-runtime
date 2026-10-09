@@ -32,8 +32,11 @@ GDN's old `measurement`, `bringup`, and lifecycle fields are accepted as source-
 metadata, **not** as Runtime policy. Runtime Gate settings control correctness cases, performance
 iterations, repeats, clock locking and promotion. Only snapshot source imports are supported;
 nonempty `runtime_support` uploads and alternative repository-search modes are rejected.
-Provision declared distributions/versions in the Agate environment; Runtime does not install
-arbitrary Agent-selected packages during evaluation.
+For native Eval, Runtime merges the locked `runtime_requirements` distributions/versions with the
+Evaluation Contract's `requirements`. Agate handles those dependencies according to `deps_mode`;
+its default mode may install dependencies whose required versions are missing. These declarations
+are sealed task policy, not Agent-selected packages. Source-tree diagnostics still require the
+declared dependencies to be provisioned in the GPU environment.
 
 ## Workspace and identity
 
@@ -69,26 +72,34 @@ that arbitrary Python execution cannot interfere with an evaluator.
 ## Evaluation and Bootstrap
 
 The Agent-facing `evaluate` tool remains unchanged. Core/KDA already send directory bundles.
-For source trees, Runtime transports each shape batch through **Agate Dev with a fixed driver**
-and the deployment's commit-pinned Atrex Bench evaluator. The source snapshot, adapter, package
-root, private input generator/shapes and Gate options are staged together. This is a logical
-Evaluate operation in the durable journal, not Agent-controlled Dev evidence. Native single-file
-Eval transport remains unchanged.
+All new single-file and source-tree evaluations use **Agate native Eval** for ordinary `full` and
+`correctness_only` evaluation, Agent exploratory ABBA, and Runtime authoritative ABBA. Both ordinary modes retain
+Runtime's Shape batching, coverage checks and result aggregation. Custom input/Shape overrides
+and ordinary repeated measurement keep their existing policy.
 
-The common SDK submission boundary automatically moves Dev file maps larger than 4 MiB
-(decoded UTF-8 bytes, including both ABBA snapshots and the evaluator) to Agate OSS. Runtime
-creates one deterministic ZIP, calls `prepare_uploads` and `upload_file`, and attaches its opaque
-reference via `oss_files`. A small inline bootstrap verifies SHA-256 and restores the exact paths
-before the original command runs. Upload preparation, PUT and submission follow the usual retry
-policy independently; submission retries reuse the uploaded reference. Logical request/cache
-identity, Gate inputs and same-allocation ABBA semantics do not change. No additional Agent tool,
-OSS credentials or configuration is required; the Agate service must support the SDK upload API.
+Runtime uploads the complete sealed source tree as an OSS archive and supplies an explicit
+`entry_point`. It preserves source bytes and paths, without merging files, rewriting imports, or
+generating a single-file implementation. For ABBA, candidate B and baseline A have separate source
+archives and entry points. Requests carry the trusted input/reference, Shape batch and Gate policy;
+the sealed Contract's `atrex_bench_version` selects the native evaluator, and `runner_overrides`
+controls its configured execution budgets. Runtime no longer uploads its commit-pinned evaluator
+or replaces the performance budget with the former Dev driver's outer timeout.
 
-Supported: full Evaluate, `correctness_only`, custom input/shape overrides, ordinary repeated
-measurement, Agent exploratory ABBA, and Runtime authoritative ABBA. Source-tree ABBA uses the Dev
-driver, while single-file ABBA uses Agate's native Eval ABBA API. In either path every step gets a
-fresh process and independent JIT caches within the same allocation, and the complete A/B schedule
-shares the existing Runtime clock-lock policy.
+This requires `atrex-gateway-client>=0.14.3,<0.15` and Agate support for native Eval source archives.
+The current archive contract requires `source.package_root` to be `"."`; a separate package import
+root is unsupported. An incompatible SDK or unsupported multi-file request fails explicitly;
+Runtime does not fall back to Dev or modify the sources to make it fit. No additional Agent tool
+or Agent-held OSS credentials are needed.
+
+Native ABBA accepts 1–8 complete `A, B, B, A` blocks. For both single-file and multi-file Kernels,
+Runtime's `repeats` counts measurements per side and must be an integer in
+`{2, 4, 6, 8, 10, 12, 14, 16}`. Booleans, strings and floating-point values are invalid. Runtime
+maps this to `repeats / 2` native blocks. Invalid values return an Agent-visible validation error
+without a Dev fallback. The complete schedule stays in one allocation per Shape batch and
+retains Runtime's clock-lock policy. A missing native request builder is an explicit configuration
+error: Runtime submits no GPU job and never falls back to Dev, including for single-file Kernels.
+Previously submitted Dev evaluation jobs and stored results retain read-only recovery support;
+this compatibility never creates a new Dev evaluation job.
 
 Source-tree Bootstrap launches the configured Optimizer backend for a complete framework-baseline
 Session (Claude in the GDN kit). Runtime adds the source scope to a session-local copy of the
@@ -106,7 +117,9 @@ weaken Journal validation.
 
 ## Profile, Check and Disassemble
 
-The existing tools also support whole source trees through a Runtime-generated Dev driver:
+Profile, Check and Disassemble still support whole source trees through a Runtime-generated
+Agate Dev driver. The Agent's `dev` tool also remains a Dev operation; the native Eval migration
+does not change these diagnostic paths:
 
 ```json
 {"operation":"profile","level":"sol","shape_id":"0"}
@@ -140,6 +153,12 @@ sealed Candidate. Declared dependencies must already be provisioned; `requiremen
 against installed distributions, not installed by Dev. There is no dependency installer in either
 `deps_mode`. The Dev allocation is capped at 600 seconds, reserving 30 seconds for cleanup.
 
+For these Dev requests, the common SDK boundary moves file maps larger than 4 MiB (decoded UTF-8
+bytes) to OSS. It uploads a deterministic ZIP via `prepare_uploads` and `upload_file`, attaches
+its opaque reference through `oss_files`, and verifies SHA-256 before restoring the exact paths.
+Submission retries reuse the uploaded reference. This Dev file-map transport is separate from
+native Eval's source archives.
+
 The logical operation remains Profile/Check/Disassemble in Runtime's durable job ownership and
 result history. Job binding and upstream idempotency keys are scoped to the Attempt recovery
 generation: a new Session after an interrupted Attempt does not collide with old jobs. Within
@@ -164,9 +183,11 @@ must be validated on the selected deployment; local tests use a CPU evaluator do
 ## Implementation and verification
 
 - `kernel_sources.py`: source import, lock, scope validation, canonical tree and prompt projection.
-- `gateway/source_tree.py`: logical Evaluate ↔ trusted Dev transport, restart-safe result parsing.
+- `gateway/eval_sources.py`: exact source archives and independent ABBA candidate/baseline descriptors.
+- `gateway/source_tree.py`: native source-tree Eval routing, diagnostic Dev routing and legacy result recovery.
 - `gateway/source_diagnostics.py`: fixed source-tree NCU, compile/launch and sanitizer drivers.
-- `gateway/abba.py`, `abba_remote.py`: shared fixed driver, complete A/B trees and process isolation.
+- `gateway/abba.py`, `agent_abba.py`: native ABBA submission and authoritative/exploratory result ledgers.
+- `gateway/abba_remote.py`: legacy Dev result protocol for read-only recovery.
 - `gateway/proxy.py`, `workers/core.py`: identical submission/nomination sealing.
 - `workers/lineage_bootstrap.py`, `composition/bootstrap.py`, `gateway/finalization.py`: Agent Bootstrap, source nomination and authoritative finalization.
 - `tests/test_kernel_sources.py`: exact commit, scope attacks, directory identity, prompt digest,

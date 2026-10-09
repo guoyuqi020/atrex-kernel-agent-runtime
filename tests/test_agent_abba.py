@@ -1,4 +1,4 @@
-"""Agent source-based ABBA preserves the trusted runner without promotion authority."""
+"""Agent native Eval ABBA preserves trusted evidence without promotion authority."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from atrex_gateway_client import build_eval_request_from_content
 from pydantic import ValidationError
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.domain.errors import InfrastructureError
 from atrex_runtime.domain.ids import new_attempt_id
 from atrex_runtime.domain.models import Dsl
-from atrex_runtime.gateway.abba_remote import RESULT_PREFIX
 from atrex_runtime.gateway.agent_abba import AgentAbbaGatewayAdapter
 from atrex_runtime.gateway.contract import (
     AgateEvaluationContext,
@@ -26,6 +26,7 @@ from atrex_runtime.gateway.contract import (
 )
 from atrex_runtime.gateway.control_models import GatewayOperation
 from atrex_runtime.gateway.proxy import GatewayAdapterRequest, GatewayAdapterResult
+from atrex_runtime.kernel_sources import KernelSourceContract
 
 _PRIVATE = "private-input-reference-or-log-must-not-escape"
 
@@ -43,12 +44,14 @@ class FakeDelegate:
 class FakeEvaluator:
     commit: str = "a" * 40
     calls: int = 0
+    digest_calls: int = 0
 
     def files(self) -> dict[str, str]:
         self.calls += 1
         return {"atrex-bench/src/atrex_bench/__init__.py": ""}
 
     def bundle_digest(self) -> str:
+        self.digest_calls += 1
         return "sha256:" + "b" * 64
 
 
@@ -60,8 +63,17 @@ class FakeContexts:
         return self.context
 
 
-class FakeAgate:
-    """Return deterministic trusted-driver summaries while enforcing upstream idempotency."""
+def _native_request_builder(
+    candidate: str | dict[str, object],
+    reference: dict[str, object],
+    gpu: str,
+    **fields: object,
+) -> dict[str, object]:
+    return {"candidate": candidate, "reference": reference, "gpu": gpu, **fields}
+
+
+class NativeFakeAgate:
+    """Return native ABBA evidence while enforcing upstream idempotency."""
 
     def __init__(self) -> None:
         self.requests: list[dict[str, Any]] = []
@@ -75,55 +87,39 @@ class FakeAgate:
         self._lock = threading.Lock()
 
     def submit_job(self, kind: str, request: dict[str, Any]) -> dict[str, Any]:
-        assert kind == "dev"
-        key = request["idempotency_key"]
+        assert kind == "eval"
+        assert "command" not in request and "files" not in request
         with self._lock:
+            key = request["idempotency_key"]
             if key in self.keys:
                 return {"job_id": self.keys[key], "status": "queued"}
-            job_id = f"dv_agent_abba_{len(self.requests)}"
+            job_id = f"ev_agent_abba_{len(self.requests)}"
             self.keys[key] = job_id
             self.requests.append(deepcopy(request))
-            driver = json.loads(request["files"]["request.json"])
-            shape_ids = driver["shape_ids"]
-            runs = []
-            for step in driver["schedule"]:
-                factor = 1 if step["revision"] == "incumbent" else 0.5
-                if self.vary_repeats and step["repeat"]:
-                    factor *= 4 if step["revision"] == "incumbent" else 9
-                by_shape = {
-                    shape_id: (100 if shape_id == "0" else 400) * factor
-                    for shape_id in shape_ids
-                }
-                runs.append({
-                    **step,
-                    "exit_code": 0,
-                    "result": {
-                        "all_pass": True,
-                        "correctness": {"max_abs_err": 0.001, "max_rel_err": 0.002},
-                        "latency_us_by_shape": by_shape,
-                        "private_shape": _PRIVATE,
-                    },
-                    "stdout_tail": _PRIVATE,
-                    "stderr_tail": _PRIVATE,
-                })
-            payload: dict[str, Any] = {"schema_version": 1, "runs": runs, "error": None}
-            if self.failure == "schedule":
-                runs[0]["revision"] = "candidate"
-            elif self.failure == "missing_shape":
-                runs[0]["result"]["latency_us_by_shape"] = {"999": 1.0}
-            elif self.failure == "result_error":
-                runs[0]["result"]["error"] = _PRIVATE
-            elif self.failure == "incorrect":
-                for run in runs:
-                    if run["revision"] == "candidate":
-                        run["result"]["all_pass"] = False
-                        run["result"]["error"] = _PRIVATE
-            elif self.failure == "driver":
-                payload["error"] = _PRIVATE
+            blocks = self._blocks(request)
             job: dict[str, Any] = {
-                "job_id": job_id, "status": "succeeded", "command_ok": True,
-                "result": {"stdout": RESULT_PREFIX + json.dumps(payload), "exit_code": 0},
+                "job_id": job_id,
+                "status": "succeeded",
+                "command_ok": True,
+                "result": {"abba": {"sdk_results": blocks, "valid": True}},
+                "stdout_tail": _PRIVATE,
+                "stderr_tail": _PRIVATE,
             }
+            first = blocks[0]["abba"]["runs"][0]
+            if self.failure == "schedule":
+                first["revision"] = "candidate"
+            elif self.failure == "missing_shape":
+                first["result"]["performance"]["shapes"] = {"999": {"samples": []}}
+            elif self.failure == "result_error":
+                first["result"]["error"] = _PRIVATE
+            elif self.failure == "incorrect":
+                for block in blocks:
+                    for run in block["abba"]["runs"]:
+                        if run["revision"] == "candidate":
+                            for value in run["result"]["passed"]["correctness"].values():
+                                value["status"] = "failed"
+            elif self.failure == "sdk_evidence":
+                job["result"] = {"error": _PRIVATE, "abba": {"sdk_results": None}}
             if self.failure == "job":
                 job.update(status="failed", error={"reason": "code_execution_failed",
                                                    "details": {"logs_tail": _PRIVATE}})
@@ -138,51 +134,24 @@ class FakeAgate:
             self.jobs[job_id] = job
         return {"job_id": job_id, "status": "queued"}
 
-    def get_job(
-        self, job_id: str, wait: bool = False, timeout: float = 30.0,
-        include_spec: bool = False,
-    ) -> dict[str, Any]:
-        assert wait and timeout == 90 and not include_spec
-        with self._lock:
-            self.active += 1
-            self.peak_active = max(self.active, self.peak_active)
-        try:
-            if self.fetch_delay:
-                time.sleep(self.fetch_delay)
-            return deepcopy(self.jobs[job_id])
-        finally:
-            with self._lock:
-                self.active -= 1
-
-
-def _native_request_builder(
-    candidate: str,
-    reference: dict[str, object],
-    gpu: str,
-    **fields: object,
-) -> dict[str, object]:
-    return {"candidate": candidate, "reference": reference, "gpu": gpu, **fields}
-
-
-class NativeFakeAgate(FakeAgate):
-    def submit_job(self, kind: str, request: dict[str, Any]) -> dict[str, Any]:
-        assert kind == "eval"
-        reference = request["reference"]
-        abba = request["abba"]
-        shape_ids = list(reference["shapes"])
-        expected = [
+    def _blocks(self, request: dict[str, Any]) -> list[dict[str, Any]]:
+        shape_ids = list(request["reference"]["shapes"])
+        expected: list[dict[str, Any]] = [
             {"index": 0, "revision": "baseline", "label": "A", "repeat": 0},
             {"index": 1, "revision": "candidate", "label": "B", "repeat": 0},
             {"index": 2, "revision": "candidate", "label": "B", "repeat": 1},
             {"index": 3, "revision": "baseline", "label": "A", "repeat": 1},
         ]
         blocks = []
-        for _ in range(abba["repeats"]):
+        for index in range(request["abba"]["repeats"]):
             runs = []
             for step in expected:
-                latency = 100.0 if step["revision"] == "baseline" else 50.0
+                factor = 1 if step["revision"] == "baseline" else 0.5
+                if self.vary_repeats and index * 2 + step["repeat"]:
+                    factor *= 4 if step["revision"] == "baseline" else 9
                 raw = {
                     "error": None,
+                    "private_shape": _PRIVATE,
                     "passed": {
                         "compile": {"status": "passed"},
                         "correctness": {
@@ -202,38 +171,47 @@ class NativeFakeAgate(FakeAgate):
                         "shapes": {
                             shape_id: {
                                 "error": None,
-                                "samples": [{"end_to_end_time_ms": latency / 1000}],
+                                "samples": [{
+                                    "end_to_end_time_ms": (
+                                        (100 if shape_id == "0" else 400) * factor / 1000
+                                    ),
+                                }],
                             }
                             for shape_id in shape_ids
                         }
                     },
                 }
                 runs.append({**step, "result": raw})
-            blocks.append(
-                {
-                    "eval_mode": "abba",
-                    "error": None,
-                    "passed": {"abba": {"status": "passed"}},
-                    "abba": {"schedule": expected, "runs": runs, "comparison": {}},
-                }
-            )
+            blocks.append({
+                "eval_mode": "abba",
+                "error": None,
+                "passed": {"abba": {"status": "passed"}},
+                "abba": {"schedule": expected, "runs": runs, "comparison": {}},
+            })
+        return blocks
+
+    def get_job(
+        self, job_id: str, wait: bool = False, timeout: float = 30.0,
+        include_spec: bool = False,
+    ) -> dict[str, Any]:
+        assert wait and timeout == 90 and not include_spec
         with self._lock:
-            job_id = f"ev_agent_abba_{len(self.requests)}"
-            self.requests.append(deepcopy(request))
-            self.jobs[job_id] = {
-                "job_id": job_id,
-                "status": "succeeded",
-                "command_ok": True,
-                "result": {"abba": {"sdk_results": blocks, "valid": True}},
-            }
-        return {"job_id": job_id, "status": "queued"}
+            self.active += 1
+            self.peak_active = max(self.active, self.peak_active)
+        try:
+            if self.fetch_delay:
+                time.sleep(self.fetch_delay)
+            return deepcopy(self.jobs[job_id])
+        finally:
+            with self._lock:
+                self.active -= 1
 
 
 @dataclass
 class Case:
     adapter: AgentAbbaGatewayAdapter
     request: GatewayAdapterRequest
-    client: FakeAgate
+    client: NativeFakeAgate
     contexts: FakeContexts
     evaluator: FakeEvaluator
     artifacts: LocalArtifactStore
@@ -261,12 +239,12 @@ def case(tmp_path: Path) -> Case:
         env_vars={"TRUSTED_ENV": "yes"}, lock_clocks=True,
     )
     contexts = FakeContexts(AgateEvaluationContext("vector_add", "H20", Dsl.TRITON, contract))
-    client = FakeAgate()
+    client = NativeFakeAgate()
     delegate = FakeDelegate()
     evaluator = FakeEvaluator()
     adapter = AgentAbbaGatewayAdapter(
         delegate, client, contexts, artifacts, evaluator,  # type: ignore[arg-type]
-        wait_timeout_s=90, correctness_cases=3, bench_iters=17,
+        build_eval_request_from_content, wait_timeout_s=90, correctness_cases=3, bench_iters=17,
     )
     request = GatewayAdapterRequest(
         attempt_id=new_attempt_id(), operation=GatewayOperation.EVALUATE,
@@ -294,28 +272,23 @@ async def test_agent_abba_uses_exact_sources_schedule_and_gate_policy(
     assert result.status == "completed" and result.evaluation is None
     assert result.profile_result is None and case.delegate.requests == []
     assert len(case.client.requests) == 2
+    assert case.evaluator.calls == 0
     for submitted in case.client.requests:
-        assert submitted["command"] == "python3 __atrex_abba.py request.json"
-        assert submitted["spec"] == {"target_hardware": ["H20"]}
-        assert submitted["timeout_s"] == 600
+        assert submitted["spec"]["target_hardware"] == ["H20"]
+        assert submitted["spec"]["languages"] == ["triton"]
         assert submitted["env_vars"] == {"TRUSTED_ENV": "yes"}
-        files = submitted["files"]
-        assert files["snapshots/incumbent.py"] == "SIDE = 'baseline'\n"
-        assert files["snapshots/candidate.py"] == "SIDE = 'candidate'\n"
-        assert files["reference/reference.py"] == contract.reference_py
-        assert files["reference/input.py"] == contract.input_py
-        driver = json.loads(files["request.json"])
-        assert driver["schedule"] == [
-            {"revision": "incumbent", "repeat": 0}, {"revision": "candidate", "repeat": 0},
-            {"revision": "candidate", "repeat": 1}, {"revision": "incumbent", "repeat": 1},
-        ]
-        assert driver["lock_clocks"] is lock_clocks
-        config = driver["evaluator"]
-        assert config["clock_lock_mode"] == ("external" if lock_clocks else "off")
+        assert submitted["candidate"] == "SIDE = 'candidate'\n"
+        assert submitted["abba"] == {"baseline": "SIDE = 'baseline'\n", "repeats": 1}
+        assert submitted["reference"]["reference_py"] == contract.reference_py
+        assert submitted["reference"]["input_py"] == contract.input_py
+        assert submitted.get("lock_clocks", False) is lock_clocks
+        assert submitted["mode"] == "full"
+        config = submitted["options"]
+        assert config["timeout_s"] == 600
         assert config["atol"] == 0.01 and config["rtol"] == 0.02
         assert config["num_correctness_cases"] == 3 and config["bench_iters"] == 17
-        assert config["validation_mode"] == "full"
-        assert len(driver["shape_ids"]) == 1
+        assert len(submitted["reference"]["shapes"]) == 1
+        assert "command" not in submitted and "files" not in submitted
     public = result.worker_result
     assert public["schedule"] == [
         {"side": "A", "repeat": 0}, {"side": "B", "repeat": 0},
@@ -361,9 +334,73 @@ async def test_agent_single_file_abba_uses_native_agate_eval(case: Case) -> None
     assert case.evaluator.calls == 0
     assert all(request["abba"]["repeats"] == 1 for request in client.requests)
     assert all(request["options"]["timeout_s"] == 600 for request in client.requests)
-    assert result.worker_result["baseline"]["latency_us_geomean"] == pytest.approx(100)
-    assert result.worker_result["candidate"]["latency_us_geomean"] == pytest.approx(50)
+    assert result.worker_result["baseline"]["latency_us_geomean"] == pytest.approx(200)
+    assert result.worker_result["candidate"]["latency_us_geomean"] == pytest.approx(100)
     assert result.result["execution_transport"] == "agate_native_eval_abba"
+
+
+@pytest.mark.anyio
+async def test_agent_multi_file_abba_uses_native_eval_without_custom_evaluator(
+    case: Case, tmp_path: Path,
+) -> None:
+    digests = []
+    for label in ("baseline", "candidate"):
+        tree = tmp_path / f"tree-{label}"
+        (tree / "impl").mkdir(parents=True)
+        (tree / "kernel.py").write_text("from impl.kernel import run\n", encoding="utf-8")
+        (tree / "impl/kernel.py").write_text(f"SIDE = {label!r}\n", encoding="utf-8")
+        digests.append(case.artifacts.put_directory(tree, ArtifactKind.KERNEL))
+    source_contract = KernelSourceContract(
+        source_revision="a" * 40, seed_digest=digests[0], package_root=".",
+        editable_roots=("kernel.py", "impl"), immutable_files={},
+        runtime_requirements=({"distribution": "triton", "import": "triton", "version": ">=3"},),
+    )
+    contract = case.contexts.context.contract.model_copy(update={
+        "kernel_sources": {Dsl.TRITON: source_contract},
+        "requirements": ("numpy>=2",),
+    })
+    case.contexts.context = replace(case.contexts.context, contract=contract)
+    request = replace(
+        case.request,
+        baseline_candidate_digest=digests[0],
+        baseline_candidate_path=case.artifacts.verify(digests[0]).payload_path,
+        candidate_digest=digests[1],
+        candidate_path=case.artifacts.verify(digests[1]).payload_path,
+    )
+    client = NativeFakeAgate()
+    adapter = AgentAbbaGatewayAdapter(
+        case.delegate, client, case.contexts, case.artifacts, None,
+        build_eval_request_from_content, wait_timeout_s=90, correctness_cases=3, bench_iters=17,
+    )
+
+    result = await adapter.execute(request)
+    replayed = await adapter.execute(request)
+
+    assert result.status == replayed.status == "completed"
+    assert result.result["execution_transport"] == "agate_native_eval_abba"
+    assert result.result["evaluator_bundle_digest"] is None
+    assert len(client.requests) == 2  # One same-allocation ABBA per Shape, with stable retry keys.
+    assert len({payload["idempotency_key"] for payload in client.requests}) == 2
+    assert result.worker_result == replayed.worker_result
+    assert result.worker_result["shape_batch_count"] == 2
+    assert result.worker_result["speedup"] == pytest.approx(2)
+    assert _PRIVATE not in json.dumps(result.worker_result)
+    for payload in client.requests:
+        assert len(payload["reference"]["shapes"]) == 1
+        assert payload["candidate"] == {
+            "archive": "archives/candidate.tar.gz", "entry_point": "kernel.py"
+        }
+        assert payload["abba"] == {
+            "baseline": {"archive": "archives/baseline.tar.gz", "entry_point": "kernel.py"},
+            "repeats": 1,
+        }
+        archives = payload["__atrex_eval_archives"]
+        assert archives["archives/baseline.tar.gz"]["impl/kernel.py"] == "SIDE = 'baseline'\n"
+        assert archives["archives/candidate.tar.gz"]["impl/kernel.py"] == "SIDE = 'candidate'\n"
+        assert payload["requirements"] == ["numpy>=2", "triton>=3"]
+        assert payload["options"]["timeout_s"] == 600
+        assert payload["lock_clocks"] is True
+        assert "files" not in payload and "command" not in payload
 
 
 @pytest.mark.anyio
@@ -381,19 +418,20 @@ async def test_agent_abba_aggregates_both_shapes_and_repeats_geometrically(case:
 async def test_agent_abba_uses_nested_comparison_repeats_for_each_side(case: Case) -> None:
     adapter = AgentAbbaGatewayAdapter(
         case.delegate, case.client, case.contexts, case.artifacts, case.evaluator,  # type: ignore[arg-type]
-        wait_timeout_s=90, per_run_timeout_seconds=80,
+        build_eval_request_from_content, wait_timeout_s=90, per_run_timeout_seconds=60,
     )
     result = await adapter.execute(replace(case.request, parameters={
-        "comparison": {"method": "abba", "repeats": 3},
+        "comparison": {"method": "abba", "repeats": 4},
     }))
     assert result.evaluation is None
-    assert result.worker_result["comparison"] == {"method": "abba", "repeats": 3}
+    assert result.worker_result["comparison"] == {"method": "abba", "repeats": 4}
     assert result.worker_result["schedule"] == [
         {"side": "A", "repeat": 0}, {"side": "B", "repeat": 0},
         {"side": "B", "repeat": 1}, {"side": "A", "repeat": 1},
         {"side": "A", "repeat": 2}, {"side": "B", "repeat": 2},
+        {"side": "B", "repeat": 3}, {"side": "A", "repeat": 3},
     ]
-    assert len(result.worker_result["measurements"]) == 6
+    assert len(result.worker_result["measurements"]) == 8
     assert "repeats" not in result.worker_result
 
 
@@ -412,12 +450,12 @@ async def test_agent_abba_custom_components_apply_to_both_sides_without_mutation
         case.request, parameters={**case.request.parameters, **overrides},
     ))
     for submitted in case.client.requests:
-        files = submitted["files"]
-        assert "reference/metadata.json" not in files and "reference/roofline.json" not in files
-        assert files["reference/reference.py"] == original["reference_py"]
-        assert files["reference/input.py"] == overrides.get("input_py", original["input_py"])
+        reference = submitted["reference"]
+        assert "metadata" not in reference and "roofline" not in reference
+        assert reference["reference_py"] == original["reference_py"]
+        assert reference["input_py"] == overrides.get("input_py", original["input_py"])
         expected = overrides.get("shapes", original["shapes"])
-        assert set(json.loads(files["reference/shapes.json"])).issubset(expected)
+        assert set(reference["shapes"]).issubset(expected)
     assert result.worker_result["input_scope"] == "custom"
     assert case.contexts.context.contract.model_dump(mode="json") == original
     assert overrides == before
@@ -436,29 +474,47 @@ async def test_agent_abba_replay_is_idempotent_and_generation_scoped(case: Case)
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("failure", ["incorrect", "schedule", "missing_shape", "driver",
+@pytest.mark.parametrize("failure", ["incorrect", "schedule", "missing_shape", "sdk_evidence",
                                       "result_error", "job"])
 async def test_agent_abba_negative_or_malformed_outcomes_never_report_speedup(
     case: Case, failure: str,
 ) -> None:
     case.client.failure = failure
     result = await case.adapter.execute(case.request)
-    assert result.status == ("completed" if failure == "incorrect" else "failed")
+    measured_failure = failure in {"incorrect", "missing_shape", "result_error"}
+    assert result.status == ("completed" if measured_failure else "failed")
     assert result.evaluation is None
     assert result.worker_result["correct"] is False
     assert result.worker_result["speedup"] is None
     assert result.worker_result["improvement_pct"] is None
-    assert result.worker_result["candidate"]["correctness"]["status"] == "FAIL"
+    failed_side = "baseline" if failure in {"missing_shape", "result_error"} else "candidate"
+    assert result.worker_result[failed_side]["correctness"]["status"] == "FAIL"
     assert _PRIVATE not in json.dumps(result.worker_result)
     assert len(result.result["jobs"]) == 2
 
 
 @pytest.mark.anyio
 async def test_agent_abba_rejects_oversized_schedule_before_evaluator_export(case: Case) -> None:
-    with pytest.raises(ValueError, match=r"repeats=3.*750s.*600s"):
+    with pytest.raises(ValueError, match=r"repeats=4.*990s.*600s"):
         await case.adapter.execute(replace(case.request, parameters={
-            "comparison": {"method": "abba", "repeats": 3},
+            "comparison": {"method": "abba", "repeats": 4},
         }))
+    assert case.client.requests == [] and case.evaluator.calls == 0
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("repeats", (0, 1, 3, 17, 18, 20, True, False, 2.0, "2", None))
+async def test_agent_abba_rejects_invalid_repeats_before_budget_or_dev(
+    case: Case, repeats: object,
+) -> None:
+    with pytest.raises(ValidationError) as failure:
+        await case.adapter.execute(replace(case.request, parameters={
+            "comparison": {"method": "abba", "repeats": repeats},
+        }))
+    assert "2, 4, 6, 8, 10, 12, 14, 16" in str(failure.value)
+    assert "measurements per side; 2 means A, B, B, A" in str(failure.value)
+    assert f"got {repeats!r}" in str(failure.value)
+    assert "not executed through Dev" in str(failure.value)
     assert case.client.requests == [] and case.evaluator.calls == 0
 
 
@@ -482,6 +538,55 @@ async def test_agent_abba_validates_direct_adapter_parameters(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("with_evaluator", [False, True])
+@pytest.mark.parametrize("source_tree", [False, True])
+async def test_agent_abba_requires_native_builder_without_export_or_gpu_submission(
+    case: Case, tmp_path: Path, with_evaluator: bool, source_tree: bool,
+) -> None:
+    request = case.request
+    if source_tree:
+        digests = []
+        for label in ("baseline", "candidate"):
+            root = tmp_path / f"missing-builder-{label}"
+            root.mkdir()
+            (root / "kernel.py").write_text("from helper import SIDE\n", encoding="utf-8")
+            (root / "helper.py").write_text(f"SIDE = {label!r}\n", encoding="utf-8")
+            digests.append(case.artifacts.put_directory(root, ArtifactKind.KERNEL))
+        source_contract = KernelSourceContract(
+            source_revision="a" * 40, seed_digest=digests[0], package_root=".",
+            editable_roots=("kernel.py", "helper.py"), immutable_files={},
+            runtime_requirements=(),
+        )
+        contract = case.contexts.context.contract.model_copy(update={
+            "kernel_sources": {Dsl.TRITON: source_contract},
+        })
+        case.contexts.context = replace(case.contexts.context, contract=contract)
+        request = replace(
+            request,
+            baseline_candidate_digest=digests[0],
+            baseline_candidate_path=case.artifacts.verify(digests[0]).payload_path,
+            candidate_digest=digests[1],
+            candidate_path=case.artifacts.verify(digests[1]).payload_path,
+        )
+    adapter = AgentAbbaGatewayAdapter(
+        case.delegate, case.client, case.contexts, case.artifacts,
+        case.evaluator if with_evaluator else None,  # type: ignore[arg-type]
+        request_builder=None, wait_timeout_s=90,
+    )
+
+    with pytest.raises(ValueError) as failure:
+        await adapter.execute(request)
+
+    assert str(failure.value) == (
+        "Native Agate Eval request builder is unavailable. ABBA requires native Eval; "
+        "Dev fallback is disabled. Ask the Runtime operator to repair the Agate SDK configuration."
+    )
+    assert case.client.requests == [] and case.client.jobs == {}
+    assert case.delegate.requests == []
+    assert case.evaluator.calls == case.evaluator.digest_calls == 0
+
+
+@pytest.mark.anyio
 @pytest.mark.parametrize("operation,parameters", [
     (GatewayOperation.DEV, {"comparison": {"method": "abba"}}),
     (GatewayOperation.EVALUATE, {}),
@@ -500,9 +605,7 @@ async def test_agent_abba_keeps_non_comparison_delegation_lazy_without_evaluator
     delegated = replace(case.request, operation=operation, parameters=parameters)
     assert (await adapter.execute(delegated)).result == {"delegated": True}
     assert case.delegate.requests == [delegated]
-    with pytest.raises(ValueError, match="commit-pinned Atrex Bench evaluator"):
-        await adapter.execute(case.request)
-    assert case.client.requests == []
+    assert case.client.requests == [] and case.evaluator.calls == 0
 
 
 @pytest.mark.anyio
@@ -536,7 +639,11 @@ async def test_agent_abba_infra_recovery_retains_exact_schedule_and_source(
     prefix = "logs-retry:" if failure == "logs_once" else "infra-retry:"
     retried = next(row for row in case.client.requests
                    if row["idempotency_key"].startswith(prefix))
-    assert retried["files"] == original["files"]
+    assert {key: value for key, value in retried.items() if key != "idempotency_key"} == {
+        key: value for key, value in original.items() if key != "idempotency_key"
+    }
+    assert retried["abba"] == original["abba"]
+    assert retried["candidate"] == original["candidate"]
 
 
 @pytest.mark.anyio

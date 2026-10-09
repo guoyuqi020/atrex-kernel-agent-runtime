@@ -1,4 +1,4 @@
-"""Multi-file source identity, edit scope, Dev execution, and fresh-process isolation."""
+"""Multi-file source identity, native Eval, and legacy driver isolation."""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 import pytest
 
@@ -26,6 +27,7 @@ from atrex_runtime.gateway.control import (
     GatewayOperation,
     SqliteGatewayControl,
 )
+from atrex_runtime.gateway.eval_sources import EVAL_ARCHIVES_KEY
 from atrex_runtime.gateway.execution import build_evaluation_request
 from atrex_runtime.gateway.finalization import (
     AgateAuthoritativeCandidateEvaluator,
@@ -256,8 +258,75 @@ class LocalDevClient:
         return self.jobs[job_id]
 
 
+class LocalEvalClient:
+    """CPU native-Eval double; imports the submitted tree, never runs the Dev driver."""
+
+    def __init__(self, root):
+        self.root, self.requests, self.jobs = root, [], {}
+
+    def submit_job(self, kind, request):
+        assert kind == "eval"
+        assert SOURCE_REQUEST_KEY not in request and "files" not in request
+        source = request["candidate"]
+        files = request[EVAL_ARCHIVES_KEY][source["archive"]]
+        job_id = f"eval_{uuid4().hex}"
+        self.requests.append(request)
+        root = self.root / job_id
+        root.mkdir(parents=True)
+        for name, content in files.items():
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content)
+        completed = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import json,runpy,sys; print(json.dumps(runpy.run_path(sys.argv[1])['VALUE']))",
+                source["entry_point"],
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        )
+        latency_us = json.loads(completed.stdout)
+        ids = request["reference"]["shapes"]
+        mode = request["mode"]
+        result = {
+            "passed": {
+                "compile": {"status": "passed"},
+                "correctness": {shape: {"status": "passed"} for shape in ids},
+            },
+            "correctness": {
+                "shapes": {shape: {"cases": [{"outputs": []}]} for shape in ids}
+            },
+            "mode": mode,
+        }
+        if mode == "full":
+            result["performance"] = {
+                "shapes": {
+                    shape: {
+                        "error": None,
+                        "samples": [{"end_to_end_time_ms": latency_us / 1000}],
+                    }
+                    for shape in ids
+                }
+            }
+        self.jobs[job_id] = {
+            "job_id": job_id,
+            "kind": "eval",
+            "status": "succeeded",
+            "result": result,
+        }
+        return {"job_id": job_id}
+
+    def get_job(self, job_id, **kwargs):
+        return self.jobs[job_id]
+
+
 @pytest.mark.parametrize("mode", ["full", "correctness_only"])
-def test_source_evaluate_dev_and_recovered_poll(source_seed, tmp_path, mode):
+def test_source_evaluate_native_and_recovered_poll(source_seed, tmp_path, mode):
     seed = source_seed
     contract = evaluation_contract(seed.contract, mode=mode)
     source = read_kernel_source(seed.working, "kernel.py", seed.contract)
@@ -272,15 +341,22 @@ def test_source_evaluate_dev_and_recovered_poll(source_seed, tmp_path, mode):
         idempotency_key="source-test",
     )
     assert SOURCE_REQUEST_KEY in json.loads(json.dumps(payload))
-    sdk = LocalDevClient(tmp_path / "jobs")
-    accepted = SourceTreeAgateClient(sdk, EvaluatorFiles()).submit_job("eval", payload)
+    sdk = LocalEvalClient(tmp_path / "jobs")
+    accepted = SourceTreeAgateClient(sdk, None).submit_job("eval", payload)
     # New wrapper, no local ID map: this is the restarted Runtime's poll path.
-    job = SourceTreeAgateClient(sdk, EvaluatorFiles()).get_job(accepted["job_id"])
+    job = SourceTreeAgateClient(sdk, None).get_job(accepted["job_id"])
     assert job["result"]["mode"] == mode
-    assert job["result"]["performance"]["shapes"]["s0"]["samples"][0]["end_to_end_time_ms"] == 0.002
-    assert "source_tree_execution" in job
+    if mode == "full":
+        samples = job["result"]["performance"]["shapes"]["s0"]["samples"]
+        assert samples[0]["end_to_end_time_ms"] == 0.002
+    else:
+        assert "performance" not in job["result"]
+    assert job == sdk.jobs[accepted["job_id"]]
+    assert "source_tree_execution" not in job
     assert "example_kernel/impl/value.py" in source.files
-    assert "measurement" not in json.loads(sdk.requests[0]["files"]["request.json"])["evaluator"]
+    assert sdk.requests[0][EVAL_ARCHIVES_KEY] == {"archives/candidate.tar.gz": source.files}
+    assert sdk.requests[0]["idempotency_key"] == "source-test"
+    assert "measurement" not in (sdk.requests[0].get("runner_overrides") or {})
     with pytest.raises(ValueError, match="unsupported source-tree operation"):
         SourceTreeAgateClient(sdk, EvaluatorFiles()).submit_job("unknown", payload)
 
@@ -358,9 +434,9 @@ def test_source_bootstrap_runs_agent_journal_then_trusted_stages(
         "example", "cpu-test", Dsl.CUTEDSL, evaluation_contract(seed.contract)
     )
     contexts = SimpleNamespace(resolve=lambda _attempt: context)
-    sdk = LocalDevClient(tmp_path / "jobs")
+    sdk = LocalEvalClient(tmp_path / "jobs")
     evaluator = AgateAuthoritativeCandidateEvaluator(
-        SourceTreeAgateClient(sdk, EvaluatorFiles()),
+        SourceTreeAgateClient(sdk, None),
         builder,
         contexts,
         seed.artifacts,
@@ -582,9 +658,9 @@ async def test_optimizer_source_evaluate_preserves_custom_inputs_and_gate(
     contract = evaluation_contract(source_seed.contract)
     context = AgateEvaluationContext("example", "cpu-test", Dsl.CUTEDSL, contract)
     jobs = SqliteAgateJobStore(tmp_path / "jobs.sqlite")
-    sdk = LocalDevClient(tmp_path / "jobs")
+    sdk = LocalEvalClient(tmp_path / "jobs")
     adapter = AgateGatewayAdapter(
-        SourceTreeAgateClient(sdk, EvaluatorFiles()),
+        SourceTreeAgateClient(sdk, None),
         builder,
         SimpleNamespace(resolve=lambda _attempt: context),
         jobs,
@@ -606,20 +682,30 @@ async def test_optimizer_source_evaluate_preserves_custom_inputs_and_gate(
             parameters={
                 "mode": mode,
                 "input_py": "custom input",
-                "shapes": {"99": {"init_kwargs": {}, "input_kwargs": {}}},
+                "shapes": {
+                    "99": {"init_kwargs": {}, "input_kwargs": {}},
+                    "100": {"init_kwargs": {}, "input_kwargs": {}},
+                },
             },
         )
         result = await adapter.execute(request)
         assert result.status == "completed"
-        assert len(sdk.requests) == 1  # no accidental single-file Profile fallback
-        files = sdk.requests[0]["files"]
-        assert files["reference/input.py"] == "custom input"
-        assert json.loads(files["reference/shapes.json"]) == {
-            "99": {"init_kwargs": {}, "input_kwargs": {}}
-        }
-        options = json.loads(files["request.json"])["evaluator"]
-        assert options["num_correctness_cases"] == 3 and options["bench_iters"] == 17
-        assert options["validation_mode"] == mode
+        assert len(sdk.requests) == 2  # one native Eval per custom shape, no Profile fallback
+        assert {
+            shape for payload in sdk.requests for shape in payload["reference"]["shapes"]
+        } == {"99", "100"}
+        for payload in sdk.requests:
+            assert payload["reference"]["input_py"] == "custom input"
+            assert len(payload["reference"]["shapes"]) == 1
+            assert next(iter(payload["reference"]["shapes"].values())) == {
+                "init_kwargs": {}, "input_kwargs": {}
+            }
+            assert payload["options"]["num_correctness_cases"] == 3
+            assert payload["options"]["bench_iters"] == 17
+            assert payload["mode"] == mode
+            assert payload[EVAL_ARCHIVES_KEY]["archives/candidate.tar.gz"] == (
+                source_seed.contract.validate_tree(source_seed.working)
+            )
         assert (result.evaluation is not None) == (mode == "full")
     finally:
         jobs.close()

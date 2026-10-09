@@ -112,7 +112,8 @@ Copy the **entire** historical Kernel Artifact for `comparison.baseline_path`. T
 {"operation":"disassemble","fmt":"sass"}
 ```
 
-Runtime stages the whole tree and fixed drivers through Agate Dev. Provision NCU (Profile and
+For these diagnostics, Runtime stages the whole tree and fixed drivers through Agate Dev.
+Ordinary Evaluate and ABBA use native Eval source archives. Provision NCU (Profile and
 Disassemble) and Compute Sanitizer (sanitized Check) in the GPU image. No local Agent shell/GPU
 execution is needed. Check triggers a one-case compile/launch probe, not full correctness.
 Inspect the diagnostic `passed` field even when the operation completed. PTX output requires

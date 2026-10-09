@@ -139,7 +139,7 @@ class AgateRequestBuilder(Protocol):
 
     def __call__(
         self,
-        candidate: str,
+        candidate: str | Mapping[str, object],
         reference: Mapping[str, object],
         gpu: str,
         *,

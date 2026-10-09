@@ -9,8 +9,13 @@ from pathlib import Path, PurePosixPath
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .abba_policy import (
+    ABBA_MAX_SIDE_REPEATS,
+    ABBA_REPEATS_DESCRIPTION,
+    validate_abba_repeats,
+)
 from .domain.models import Dsl
 from .kernel_agents import KernelAgentBundleLimits
 
@@ -610,11 +615,19 @@ class SameAllocationAbbaComparisonSettings(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     method: Literal["same_allocation_abba"]
-    repeats: int = Field(default=2, gt=0)
+    repeats: int = Field(
+        default=2, ge=2, le=ABBA_MAX_SIDE_REPEATS, multiple_of=2, strict=True,
+        description=ABBA_REPEATS_DESCRIPTION,
+    )
     minimum_improvement_percent: float = Field(default=0.0, ge=0, lt=100)
     allocation_timeout_seconds: int = Field(default=600, gt=0)
     shape_batch_size: int = Field(default=1, gt=0)
     max_parallel_shape_batches: int = Field(default=16, gt=0)
+
+    @field_validator("repeats", mode="before")
+    @classmethod
+    def _validate_repeats(cls, value: object) -> int:
+        return validate_abba_repeats(value)
 
 
 ComparisonSettings = Annotated[

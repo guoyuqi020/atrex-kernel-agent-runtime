@@ -131,6 +131,18 @@ These calls cannot replace the full trusted-contract evaluation required for `ca
 Kernel retention, or Agent promotion. Omit overrides and use `mode: "full"` (or omit `mode`) for that
 evaluation; full Evaluate requires a prediction, while its result format remains unchanged.
 
+All new single-file and multi-file evaluations use Agate native Eval for both `full` and
+`correctness_only`, with the same Shape batching and coverage requirements. A missing native request
+builder returns an explicit configuration error without submitting a GPU job; there is no Dev
+fallback. For multi-file Kernels, Runtime uploads the complete sealed tree as an OSS
+archive and supplies its `entry_point`; it does not rewrite the source. This requires
+`atrex-gateway-client>=0.14.3,<0.15`, native archive support, and `source.package_root="."`.
+Unsupported multi-file requests fail explicitly rather than falling back to Dev. The sealed
+Contract supplies `atrex_bench_version`, `runner_overrides`, and dependency policy; native Eval
+handles dependencies, including locked source `runtime_requirements`, according to `deps_mode`.
+Source-tree Profile/Check/Disassemble and Agent `dev` still use Dev. See the
+[source-tree contract](source-trees.md) for transport and compatibility details.
+
 ### Custom input file example
 
 This paired example is for a public vector-add ABI, `Model.forward(left, right)`, with no Model
@@ -218,8 +230,11 @@ comparison.
 {"operation": "evaluate", "latency_prediction": "retained", "candidate_path": "scratch/candidate-kernel", "comparison": {"method": "abba", "baseline_path": "scratch/baseline-kernel", "repeats": 2}, "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
 ```
 
-`comparison.repeats` defaults to 2 and counts observations per side, producing A, B, B, A. Its accepted range
-is 2–20, subject to the schedule fitting Runtime's allocation budget. Each Shape batch measures both
+`comparison.repeats` defaults to 2 and counts observations per side, producing A, B, B, A. For both
+single-file and multi-file Kernels it must be an integer in `{2, 4, 6, 8, 10, 12, 14, 16}`;
+booleans, strings and floating-point values are rejected. Invalid values return an error identifying
+`comparison.repeats`, without submitting a job or falling back to Dev. The schedule must also fit
+Runtime's allocation budget. Each Shape batch measures both
 sides within one allocation; different Shape batches may use different allocations. ABBA always
 uses `mode: "full"` (normally omitted), and rejects `correctness_only`. Both sides share the
 selected input generator and Shapes. The same independent `input_py`/`shapes` overrides and
@@ -315,10 +330,19 @@ An ordinary Attempt uses `kernel_retention_comparison`:
   batch. Each repeat measures both revisions; pair order alternates between `A, B` and `B, A`, so
   two repeats produce `A, B, B, A`. Runtime executes that complete schedule once, validates Shape
   coverage, and computes the authoritative geomean without a cross-job median. An explicit
-  correctness failure fails the comparison. Every physical run remains recorded. Single-file
-  Kernels use Agate's native Eval ABBA API; Runtime reconstructs its authoritative ledger from the
-  returned raw SDK runs. Multi-file source trees retain the commit-pinned Dev driver because the
-  native wire schema carries one source file per side.
+  correctness failure fails the comparison. Every physical run remains recorded. Both single-file
+  Kernels and multi-file source trees use Agate's native Eval ABBA API for supported schedules;
+  Runtime reconstructs its authoritative ledger from the returned raw SDK runs. For source trees,
+  baseline A and candidate B use independent OSS archives and `entry_point` values, preserving
+  the complete sources on each side.
+
+Native ABBA supports 1–8 complete blocks. Runtime counts `repeats` per side and sends `repeats / 2`
+blocks. Both single-file and multi-file comparisons require strict integer values
+`{2, 4, 6, 8, 10, 12, 14, 16}`; an invalid value fails explicitly and never selects Dev. Missing or
+incompatible native request builders cause an explicit configuration error for both Kernel forms,
+without submitting a GPU job. Previously submitted Dev jobs and their stored results retain
+read-only recovery support, which never submits a new Dev evaluation. These transport rules also
+apply to Agent exploratory ABBA; it still has no promotion authority.
 
 For authoritative ABBA, Runtime records each completed physical Shape batch under an identity
 covering the exact revision pair, sealed Contract, execution transport, evaluator where applicable,

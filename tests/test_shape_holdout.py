@@ -8,6 +8,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from atrex_gateway_client import build_eval_request_from_content
 from conftest import NOW, digest
 from pydantic import ValidationError
 from test_agate_abba import FakeAgateClient as AbbaClient
@@ -338,7 +339,7 @@ async def test_agent_abba_uses_only_valid_inputs(case: Case) -> None:
     assert {
         shape_id
         for request in case.client.requests
-        for shape_id in json.loads(request["files"]["reference/shapes.json"])
+        for shape_id in request["reference"]["shapes"]
     } == set(aliases)
     assert set(result.worker_result["candidate"]["latency_us_by_shape"]) == set(
         aliases
@@ -389,14 +390,15 @@ async def test_authoritative_abba_uses_the_full_valid_population(
         artifacts,
         journal,
         FakeEvaluator(),
+        build_eval_request_from_content,
         wait_timeout_s=90,
     )
     result = await runner.run_pair(
         *revisions,
-        repeats=1,
+        repeats=2,
         purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
         per_run_timeout_seconds=100,
-        allocation_timeout_seconds=250,
+        allocation_timeout_seconds=500,
         shape_batch_size=1,
         max_parallel_shape_batches=16,
     )
@@ -404,7 +406,7 @@ async def test_authoritative_abba_uses_the_full_valid_population(
     assert {
         sid
         for payload in client.requests
-        for sid in json.loads(payload["files"]["reference/shapes.json"])
+        for sid in payload["reference"]["shapes"]
     } == set(contract.shapes)
     assert len(contract.for_agent().shapes) == shape_count
     assert set(contract.validation_shape_ids or ()) == set(contract.shapes)

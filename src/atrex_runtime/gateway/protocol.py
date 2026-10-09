@@ -8,6 +8,11 @@ from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from ..abba_policy import (
+    ABBA_MAX_SIDE_REPEATS,
+    ABBA_REPEATS_DESCRIPTION,
+    validate_abba_repeats,
+)
 from ..artifacts.local import JsonValue
 from ..domain.ids import (
     AttemptId,
@@ -91,7 +96,15 @@ class EvaluateComparisonV2(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     method: Literal["abba"]
-    repeats: int = Field(default=2, ge=2, le=20)
+    repeats: int = Field(
+        default=2, ge=2, le=ABBA_MAX_SIDE_REPEATS, multiple_of=2, strict=True,
+        description=ABBA_REPEATS_DESCRIPTION,
+    )
+
+    @field_validator("repeats", mode="before")
+    @classmethod
+    def _validate_repeats(cls, value: object) -> int:
+        return validate_abba_repeats(value)
 
 
 class EvaluateParametersV2(BaseModel):

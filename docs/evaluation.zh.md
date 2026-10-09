@@ -110,6 +110,15 @@ Workspace 目录下且为普通文件，绝对路径、路径穿越、符号链�
 Promotion 所要求的可信 Contract 完整评测。需要完整评测时应省略输入覆盖，并设置
 `mode: "full"` 或省略 `mode`，并填写预测；结果格式保持不变。
 
+新提交的单文件和多文件 `full`、`correctness_only` 均使用 Agate 原生 Eval，继续按相同规则
+进行 Shape 分批和覆盖校验。缺少原生 Request Builder 时返回明确配置错误，不提交 GPU
+作业、不回退 Dev。对于多文件，Runtime 将完整封存源码树作为 OSS archive 上传，指定 `entry_point`，
+不改写源码。此路径要求 `atrex-gateway-client>=0.14.3,<0.15`、服务端原生 archive 支持，以及
+`source.package_root="."`。不支持的多文件请求明确报错，不回退 Dev。封存 Contract 指定
+`atrex_bench_version`、`runner_overrides` 和依赖策略；原生 Eval 按 `deps_mode` 处理依赖，
+其中包含锁定的源码 `runtime_requirements`。源码树 Profile/Check/Disassemble 和 Agent
+`dev` 仍使用 Dev。传输和兼容边界详见[源码树契约](source-trees.zh.md)。
+
 ### 自定义输入文件示例
 
 以下配套示例针对公开的向量加法 ABI：`Model.forward(left, right)`，Model 无构造参数，输入为
@@ -193,8 +202,10 @@ Workspace 相对路径，指向普通 `.py` 文件或 Kernel Bundle 目录。单
 {"operation": "evaluate", "latency_prediction": "retained", "candidate_path": "scratch/candidate-kernel", "comparison": {"method": "abba", "baseline_path": "scratch/baseline-kernel", "repeats": 2}, "input_path": "scratch/custom-input.py", "shapes_path": "scratch/custom-shapes.json"}
 ```
 
-`comparison.repeats` 默认 2，表示每侧的观测次数，生成 A、B、B、A 顺序。取值范围为 2–20，但 Schedule
-还须满足 Runtime 的 Allocation 预算。每个 Shape Batch 在同一个 Allocation 内测量两侧；不同
+`comparison.repeats` 默认 2，表示每侧的观测次数，生成 A、B、B、A 顺序。单文件和多文件 Kernel
+都只接受 `{2, 4, 6, 8, 10, 12, 14, 16}` 中的整数，拒绝布尔值、字符串和浮点数。非法值直接
+返回指向 `comparison.repeats` 的错误，不提交作业或回退 Dev。Schedule 还须满足 Runtime 的
+Allocation 预算。每个 Shape Batch 在同一个 Allocation 内测量两侧；不同
 Shape Batch 可以使用不同 Allocation。ABBA 始终使用 `mode: "full"`（通常省略），拒绝
 `correctness_only`。两侧共用选定的输入生成器和 Shapes，支持与 Evaluate 相同的独立
 `input_py`/`shapes` 覆盖及 `input_path`/`shapes_path` 文件参数；省略的组件继续复用私有
@@ -274,9 +285,15 @@ Candidate 校验、编译和正确性失败、未分类错误及已取消的 Job
   Repeat 各测一次 A、B，并在 `A, B` 与 `B, A` 之间交替，因此两个 Repeat 形成
   `A, B, B, A`。Runtime 执行一次完整 Schedule，校验 Shape 覆盖，再计算权威几何平均延迟，
   不再跨 Job 取中位数。明确的正确性失败使比较失败；每次物理
-  测量仍分别记录。单文件 Kernel 使用 Agate 原生 Eval ABBA API，Runtime 根据返回的原始 SDK
-  Runs 重建权威账本；多文件源码树继续使用 Commit 固定的 Dev Driver，因为原生 Wire Schema
-  每侧只携带一个源码文件。
+  测量仍分别记录。单文件 Kernel 和多文件源码树在受支持的排程下都使用 Agate 原生 Eval
+  ABBA API，Runtime 根据返回的原始 SDK Runs 重建权威账本。源码树 Baseline A 和 Candidate B
+  使用独立 OSS archive 和 `entry_point`，保留每一侧的完整源码。
+
+原生 ABBA 支持 1–8 个完整 Block。Runtime 的 `repeats` 按每侧次数计数，发送
+`repeats / 2` 个 Block。单文件和多文件比较都只接受 `{2, 4, 6, 8, 10, 12, 14, 16}` 中的严格
+整数，非法值明确报错，绝不据此选择 Dev。单文件和多文件都在缺少或不兼容原生 Request
+Builder 时返回明确配置错误，不提交 GPU 作业。已提交的旧 Dev 作业和已保存结果保留只读
+恢复能力，不因此提交新的 Dev 评测。Agent 探索 ABBA 也遵循这些传输规则，但仍没有晋升权限。
 
 权威 ABBA 将每个已完成的物理 Shape Batch 按精确 Revision Pair、封存 Contract、执行传输、
 适用时的 Evaluator、用途、Schedule 和测量轮次登记。恢复相同的比较时，Runtime 从 Registry 和 Artifact Store 读取

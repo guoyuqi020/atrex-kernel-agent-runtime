@@ -4,6 +4,11 @@
 
 核对来源：`atrex-bench-new-qwen38-fa4-gdn` 与 `fa4-prefill-aka-r0-startpoint-20260915`。文件与正式算子评测定义保持一致；Runtime 的调度/测量策略不等同于原始冒烟检查。
 
+本页是资产核对及旧 Runtime Dev 传输的快照；下文的评测器上传、超时行为描述的是当时接受
+核对的版本。新提交的多文件普通 Evaluate 和 ABBA 已使用[Agate 原生 Eval](../../docs/source-trees.zh.md#评测与-bootstrap)，
+由 Contract 的 `atrex_bench_version` 选择评测器，`runner_overrides` 指定预算。旧 Dev Driver
+强制使用 600 秒 Performance 预算的行为不适用于原生路径。
+
 ## 逐字一致的资产
 
 | 资产 | 核对结果 |
@@ -35,11 +40,11 @@
 
 原始两份资料本来就区分冒烟与正式 Benchmark，因此不能要求两者所有参数和判断都相同。新增 `smoke` 入口只为了准确复现原始两种冒烟命令；它从固定 R0 物化临时目录，不提交终态报告、不注册 Kernel，不测试 Agent 已修改的 Candidate。
 
-## Runtime 自己选择的测量策略
+## 核对时 Runtime 选择的测量策略
 
-新版 Benchmark 明确规定输入和逐元素正确性策略，Warmup、超时、Case 数及 ABBA 排程由调用方控制。当前任务与不带额外配置的 `run_eval.py` 默认值的区别如下：
+新版 Benchmark 明确规定输入和逐元素正确性策略，Warmup、超时、Case 数及 ABBA 排程由调用方控制。核对时任务与不带额外配置的 `run_eval.py` 默认值的区别如下：
 
-| 参数 | 提供的 `run_eval.py` 默认值 | 当前 Runtime 配置 |
+| 参数 | 提供的 `run_eval.py` 默认值 | 核对时 Runtime 配置 |
 | --- | --- | --- |
 | 模式 | eager | eager |
 | Warmup / Bench | 10ms / 100ms | 10ms / 100ms；字段名仍是 `warmup_iters` / `bench_iters` |
@@ -50,7 +55,9 @@
 
 这不是逐字复现原始 CLI 的完整执行条件，但仍使用同一份正式评测实现及正确性定义。SHA256 核对不能证明不同测量策略或不同运行窗口产生相同 Latency。
 
-当前 `performance_timeout_seconds=120` 配置不会覆盖普通源码树 Evaluate 的 Performance 预算：复用的 Driver Builder 用 `evaluation_timeout_seconds=600` 覆盖它。这里按实际提交参数记录，不把声明值当成生效值；该行为有传输层回归测试覆盖。
+核对时的 Dev 传输中，`performance_timeout_seconds=120` 配置没有覆盖普通源码树 Evaluate
+的 Performance 预算：复用的 Driver Builder 使用了 `evaluation_timeout_seconds=600`。这里
+记录历史实际提交参数，不把声明值当成生效值；这不是当前原生 Eval 的超时策略。
 
 本环境的 Agate 资源 `L20D` 对应 B300。原始 Roofline 标签为 `NVIDIA B300 (SM100)`，数值不改动；Runtime 传输只移除硬件名括号后缀。是否成功取得 SOL/NCU 仍需远端运行验证，不能用文件一致性核对代替 GPU 验证。
 

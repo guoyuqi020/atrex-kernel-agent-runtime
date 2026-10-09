@@ -12,6 +12,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from atrex_gateway_client import build_eval_request_from_content
 from conftest import digest
 from test_source_tree_example_schedule import REPOSITORY, _module
 
@@ -22,8 +23,10 @@ from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.domain.models import Dsl
 from atrex_runtime.gateway.abba import CommitPinnedAtrexBenchEvaluator, build_abba_source_request
 from atrex_runtime.gateway.contract import AgateEvaluationContractV1
+from atrex_runtime.gateway.eval_sources import EVAL_ARCHIVES_KEY
+from atrex_runtime.gateway.execution import build_evaluation_request
 from atrex_runtime.gateway.oss_client import AGATE_MAX_INLINE_DEV_BYTES, OssAgateClient
-from atrex_runtime.gateway.source_tree import SourceTreeAgateClient, attach_source_tree
+from atrex_runtime.gateway.source_tree import SourceTreeAgateClient
 from atrex_runtime.kernel_sources import KernelSourceBundle, SourceManifest, import_source_tree
 from atrex_runtime.workers.problem_generalization import validate_public_operator_contract
 
@@ -572,10 +575,7 @@ def test_actual_eval_transport_preserves_supplied_contract_and_sources(
 ) -> None:
     workspace = tmp_path / "FA4"
     runner.prepare(INPUTS, workspace, None, None)
-    settings = RuntimeSettings.from_file(workspace / "runtime.json")
-    evaluator = CommitPinnedAtrexBenchEvaluator(
-        **settings.campaign.gate_policy.evaluator.model_dump(exclude={"agate_package_version"})
-    )
+    campaign = CampaignSpecV3.from_file(workspace / "campaign.json")
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     imported = import_source_tree(
         workspace / "task/source_manifest.json", workspace / "source", artifacts
@@ -586,6 +586,8 @@ def test_actual_eval_transport_preserves_supplied_contract_and_sources(
         (workspace / "evaluation-contract.json").read_bytes()
     ).model_copy(
         update={
+            "deps_mode": "freeze_installed",
+            "requirements": ("packaging>=24",),
             "options": AgateEvaluationContractV1.model_validate_json(
                 (workspace / "evaluation-contract.json").read_bytes()
             ).options.model_copy(update={"num_correctness_cases": 5}),
@@ -604,31 +606,47 @@ def test_actual_eval_transport_preserves_supplied_contract_and_sources(
             submissions.append((kind, payload))
             return {"job_id": "test", "status": "submitted"}
 
-    client = SourceTreeAgateClient(Client(), evaluator)
-    client.submit_job("eval", attach_source_tree({}, source, contract, "L20D"))
+    request = build_evaluation_request(
+        build_eval_request_from_content,
+        candidate_source=source,
+        operator=campaign.operator,
+        contract=contract,
+        hardware_target="L20D",
+        dsl=Dsl.CUTEDSL,
+        name="fa4-source-transport",
+        idempotency_key="fa4-source-transport",
+    )
+    client = SourceTreeAgateClient(Client(), None)
+    client.submit_job("eval", request)
     kind, payload = submissions[0]
-    assert kind == "dev" and payload["spec"]["target_hardware"] == ["L20D"]
-    files = payload["files"]
-    request = json.loads(files["request.json"])
-    assert request["raw_result"] is True and request["lock_clocks"] is True
-    assert request["schedule"] == [{"revision": "candidate", "repeat": 0}]
-    assert request["evaluator"]["num_correctness_cases"] == 5
-    assert request["evaluator"]["warmup_iters"] == 10
-    assert request["evaluator"]["bench_iters"] == 100
-    assert request["evaluator"]["candidate_timeout_s"] == 120
-    # Ordinary tree Evaluate currently gives its evaluator the outer performance budget.
-    assert request["evaluator"]["perf_timeout_s"] == 600
-    assert request["evaluator"]["clock_lock_mode"] == "external"
-    assert json.loads(files["reference/shapes.json"]) == contract.shapes
-    assert json.loads(files["reference/metadata.json"]) == contract.metadata
-    assert files["reference/reference.py"] == contract.reference_py
-    assert files["reference/input.py"] == contract.input_py
-    for name, text in source.files.items():
-        assert files[f"snapshots/candidate/{name}"] == text
-    for name, text in evaluator.files().items():
-        assert files[name] == text
+    assert kind == "eval" and payload["spec"]["target_hardware"] == ["L20D"]
+    assert payload["candidate"] == {
+        "archive": "archives/candidate.tar.gz", "entry_point": "kernel.py"
+    }
+    assert payload[EVAL_ARCHIVES_KEY] == {"archives/candidate.tar.gz": source.files}
+    assert "files" not in payload and "command" not in payload
+    assert payload["lock_clocks"] is True
+    assert payload["options"] == contract.options.model_dump()
+    assert payload["options"]["num_correctness_cases"] == 5
+    assert payload["options"]["bench_iters"] == 100
+    assert payload["runner_overrides"] == contract.runner_overrides
+    assert payload["runner_overrides"]["perf_timeout_s"] == 120
+    assert payload["mode"] == contract.mode
+    assert payload["deps_mode"] == contract.deps_mode
+    assert payload.get("harness") == contract.harness
+    assert payload.get("atrex_bench_version") == contract.atrex_bench_version
+    dependencies = list(contract.requirements)
+    for requirement in source.contract.runtime_requirements:
+        dependency = requirement["distribution"] + requirement.get("version", "")
+        if dependency not in dependencies:
+            dependencies.append(dependency)
+    assert payload["requirements"] == dependencies
+    assert payload["reference"]["shapes"] == contract.shapes
+    assert payload["reference"]["metadata"] == contract.metadata
+    assert payload["reference"]["reference_py"] == contract.reference_py
+    assert payload["reference"]["input_py"] == contract.input_py
     original_roofline = json.loads((INPUTS / "task/roofline.json").read_text())
-    transmitted_roofline = json.loads(files["reference/roofline.json"])
+    transmitted_roofline = payload["reference"]["roofline"]
     for shape_id, entry in original_roofline["shapes"].items():
         transmitted = transmitted_roofline["shapes"][shape_id]
         assert transmitted["SOL_time_ms"] == {

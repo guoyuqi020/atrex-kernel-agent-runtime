@@ -1,4 +1,4 @@
-"""Agent native-Eval or source-tree-Dev ABBA without promotion authority."""
+"""Agent ABBA with complete A/B/B/A blocks and no promotion authority."""
 
 from __future__ import annotations
 
@@ -19,10 +19,8 @@ from .abba import (
     AgateSameAllocationAbbaRunner,
     CommitPinnedAtrexBenchEvaluator,
     _parse_native_abba_payload,
-    _parse_remote_payload,
+    _require_native_abba_builder,
     _schedule,
-    _uses_native_abba,
-    build_abba_source_request,
     build_native_abba_request,
 )
 from .agate import AgateClient, AgateRequestBuilder, _nested_infrastructure_error
@@ -81,7 +79,6 @@ class AgentAbbaGatewayAdapter:
         self._client = client
         self._contexts = contexts
         self._artifacts = artifacts
-        self._evaluator = evaluator
         self._request_builder = request_builder
         self._wait_timeout_s = wait_timeout_s
         self._correctness_cases = correctness_cases
@@ -98,6 +95,7 @@ class AgentAbbaGatewayAdapter:
         parameters = EvaluateParametersV2.model_validate(request.parameters)
         assert parameters.comparison is not None
         repeats = parameters.comparison.repeats
+        request_builder = _require_native_abba_builder(self._request_builder)
         schedule = _schedule(repeats)
         required_seconds = len(schedule) * self._per_run_timeout_seconds + 30
         if required_seconds > self._allocation_timeout_seconds:
@@ -112,27 +110,7 @@ class AgentAbbaGatewayAdapter:
         context = self._effective_context(request, parameters)
         baseline_source = self._source(request.baseline_candidate_digest, context)
         candidate_source = self._source(request.candidate_digest, context)
-        native = _uses_native_abba(
-            self._request_builder, baseline_source, candidate_source, repeats
-        )
-        transport = "agate_native_eval_abba" if native else "runtime_dev_abba"
-        if not native and self._evaluator is None:
-            raise ValueError(
-                "Agent ABBA requires a configured commit-pinned Atrex Bench evaluator "
-                "for this source or repeat layout"
-            )
-        evaluator_files = (
-            {}
-            if native
-            else await anyio.to_thread.run_sync(
-                cast(CommitPinnedAtrexBenchEvaluator, self._evaluator).files
-            )
-        )
-        evaluator_digest = (
-            None
-            if native
-            else cast(CommitPinnedAtrexBenchEvaluator, self._evaluator).bundle_digest()
-        )
+        transport = "agate_native_eval_abba"
         shape_ids = list(sorted_shape_ids(context.contract))
         comparison_id = hashlib.sha256(
             canonical_json_text(
@@ -144,7 +122,7 @@ class AgentAbbaGatewayAdapter:
                     "candidate": request.candidate_digest,
                     "parameters": parameters.model_dump(mode="json"),
                     "contract": context.contract.model_dump(mode="json"),
-                    "evaluator_bundle_digest": evaluator_digest,
+                    "evaluator_bundle_digest": None,
                     "transport": transport,
                 }
             ).encode()
@@ -155,48 +133,21 @@ class AgentAbbaGatewayAdapter:
         async def run_batch(index: int, shape_id: str) -> None:
             async with limiter:
                 key = hashlib.sha256(f"{comparison_id}:{shape_id}".encode()).hexdigest()
-                if native:
-                    if (
-                        self._request_builder is None
-                        or not isinstance(baseline_source, str)
-                        or not isinstance(candidate_source, str)
-                    ):
-                        raise AssertionError("native Agent ABBA resolved incompatible inputs")
-                    payload = build_native_abba_request(
-                        self._request_builder,
-                        hardware_target=context.agate_gpu,
-                        operator=context.operator,
-                        dsl=context.dsl.value,
-                        contract=context.contract,
-                        shape_ids=[shape_id],
-                        repeats=repeats,
-                        incumbent_source=baseline_source,
-                        candidate_source=candidate_source,
-                        allocation_timeout_seconds=self._allocation_timeout_seconds,
-                        name=f"agent-abba-{context.operator}",
-                    )
-                    payload["idempotency_key"] = f"agent-abba:{key}"
-                    kind = "eval"
-                else:
-                    payload = build_abba_source_request(
-                        hardware_target=context.agate_gpu,
-                        contract=context.contract,
-                        shape_ids=[shape_id],
-                        schedule=schedule,
-                        incumbent_source=baseline_source,
-                        candidate_source=candidate_source,
-                        evaluator_files=evaluator_files,
-                        per_run_timeout_seconds=self._per_run_timeout_seconds,
-                        allocation_timeout_seconds=self._allocation_timeout_seconds,
-                    )
-                    payload.update(
-                        idempotency_key=f"agent-abba:{key}",
-                        dev_note="Agent same-allocation ABBA experiment",
-                    )
-                    kind = "dev"
-                batches[index] = await self._run_batch(
-                    payload, schedule, [shape_id], kind=kind, transport=transport
+                payload = build_native_abba_request(
+                    request_builder,
+                    hardware_target=context.agate_gpu,
+                    operator=context.operator,
+                    dsl=context.dsl.value,
+                    contract=context.contract,
+                    shape_ids=[shape_id],
+                    repeats=repeats,
+                    incumbent_source=baseline_source,
+                    candidate_source=candidate_source,
+                    allocation_timeout_seconds=self._allocation_timeout_seconds,
+                    name=f"agent-abba-{context.operator}",
                 )
+                payload["idempotency_key"] = f"agent-abba:{key}"
+                batches[index] = await self._run_batch(payload, schedule, [shape_id])
 
         try:
             async with anyio.create_task_group() as tasks:
@@ -237,13 +188,9 @@ class AgentAbbaGatewayAdapter:
             **public,
             "comparison_id": comparison_id,
             "execution_transport": transport,
-            "atrex_bench_commit": (
-                None
-                if native
-                else cast(CommitPinnedAtrexBenchEvaluator, self._evaluator).commit
-            ),
-            "atrex_bench_version": context.contract.atrex_bench_version if native else None,
-            "evaluator_bundle_digest": evaluator_digest,
+            "atrex_bench_commit": None,
+            "atrex_bench_version": context.contract.atrex_bench_version,
+            "evaluator_bundle_digest": None,
             "evaluation_contract_digest": context.evaluation_contract_digest,
             "evaluation_parameters": cast(
                 JsonValue, parameters.model_dump(mode="json", exclude_none=True)
@@ -305,12 +252,9 @@ class AgentAbbaGatewayAdapter:
         payload: dict[str, object],
         schedule: list[dict[str, int | str]],
         shape_ids: list[str],
-        *,
-        kind: str,
-        transport: str,
     ) -> _BatchResult:
         async def execute(submission: dict[str, object]) -> JobExecution:
-            accepted = await self._call(lambda: self._client.submit_job(kind, submission))
+            accepted = await self._call(lambda: self._client.submit_job("eval", submission))
             job_id = accepted.get("job_id")
             if not isinstance(job_id, str) or not job_id:
                 raise InfrastructureError("Agent ABBA acceptance has no job_id")
@@ -330,11 +274,7 @@ class AgentAbbaGatewayAdapter:
             if type(code) is not int or code != 0:
                 return _BatchResult(job, None, {"message": "ABBA command exited unsuccessfully"})
         try:
-            parsed = (
-                _parse_native_abba_payload(job, schedule, shape_ids)
-                if transport == "agate_native_eval_abba"
-                else _parse_remote_payload(job, schedule)
-            )
+            parsed = _parse_native_abba_payload(job, schedule, shape_ids)
             self._validate_batch(parsed, shape_ids)
         except InfrastructureError as error:
             return _BatchResult(job, None, {"message": str(error)})

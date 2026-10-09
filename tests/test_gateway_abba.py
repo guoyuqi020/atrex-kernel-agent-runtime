@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 from pydantic import TypeAdapter, ValidationError
 from test_attempt_report import _value as _report_value
 from test_gateway_proxy import NOW_DATETIME, _request, _service
@@ -24,6 +25,7 @@ from atrex_runtime.domain.errors import (
 )
 from atrex_runtime.domain.ids import ArtifactDigest, AttemptId, new_attempt_id
 from atrex_runtime.domain.models import Attempt
+from atrex_runtime.gateway.agent_abba import AgentAbbaGatewayAdapter
 from atrex_runtime.gateway.control_models import GatewayCapabilityPolicy, GatewayOperation
 from atrex_runtime.gateway.protocol import (
     EvaluateRequestV2,
@@ -31,7 +33,11 @@ from atrex_runtime.gateway.protocol import (
     GatewayProxyRequestV2,
     gateway_agent_request_schema,
 )
-from atrex_runtime.gateway.proxy import GatewayAdapterResult
+from atrex_runtime.gateway.proxy import (
+    GatewayAdapterResult,
+    GatewayProxyAsgiApp,
+    GatewayProxyLimits,
+)
 from atrex_runtime.serialization import canonical_json_digest
 
 BASELINE_SOURCE = "def kernel(): return 'baseline'\n"
@@ -111,7 +117,7 @@ class RecordingPolicy:
     [
         {},
         {
-            "comparison": {"method": "abba", "repeats": 3},
+            "comparison": {"method": "abba", "repeats": 4},
             "input_py": "def _make_inputs(N): return [N]\n",
             "shapes": {"7": {"N": 32}},
         },
@@ -536,7 +542,9 @@ def test_abba_protocol_defaults_and_agent_schema_require_uploaded_sources() -> N
     assert comparison_properties["method"]["const"] == "abba"
     assert comparison_properties["repeats"]["default"] == 2
     assert comparison_properties["repeats"]["minimum"] == 2
-    assert comparison_properties["repeats"]["maximum"] == 20
+    assert comparison_properties["repeats"]["maximum"] == 16
+    assert comparison_properties["repeats"]["multipleOf"] == 2
+    assert "do not fall back to Dev" in comparison_properties["repeats"]["description"]
     assert comparison_properties["baseline_path"]["type"] == "string"
     assert "baseline_path" in comparison["required"]
     for path in ("candidate_path", "input_path", "shapes_path"):
@@ -567,6 +575,62 @@ def test_full_evaluate_requires_prediction_but_correctness_only_does_not() -> No
     correctness_only.pop("baseline")
     correctness_only["mode"] = "correctness_only"
     assert EvaluateRequestV2.model_validate(correctness_only).latency_prediction is None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("repeats", [3, 18])
+async def test_invalid_abba_repeats_returns_agent_error_before_adapter(tmp_path, repeats):
+    registry, control, attempt, capability, service, adapter = _service(tmp_path)
+    app = GatewayProxyAsgiApp(service, GatewayProxyLimits(64 * 1024, 8, 16 * 1024))
+    try:
+        request = _abba_value(attempt)
+        request["comparison"]["repeats"] = repeats
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/v1/operations", json=request,
+                headers={"Authorization": f"Bearer {capability.token}"},
+            )
+        assert response.status_code == 400
+        body = response.json()
+        assert "comparison.repeats" in body["detail"]
+        assert f"got {repeats}" in body["detail"]
+        assert "2, 4, 6, 8, 10, 12, 14, 16" in body["detail"]
+        assert "not executed through Dev" in body["detail"]
+        assert body["request_schema"]
+        assert adapter.requests == []
+    finally:
+        control.close()
+        registry.close()
+
+
+@pytest.mark.anyio
+async def test_missing_native_builder_returns_agent_error_without_gpu_fallback(tmp_path):
+    registry, control, attempt, capability, service, adapter = _service(tmp_path)
+    service._adapter = AgentAbbaGatewayAdapter(
+        adapter,
+        object(),  # Any attempt to submit or poll a job fails this test.
+        object(),  # Configuration failure must precede context/source resolution.
+        LocalArtifactStore(tmp_path / "artifacts"),
+        object(),  # A supplied legacy evaluator must not enable Dev fallback.
+        request_builder=None,
+        wait_timeout_s=90,
+    )
+    app = GatewayProxyAsgiApp(service, GatewayProxyLimits(64 * 1024, 8, 16 * 1024))
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.post(
+                "/v1/operations", json=_abba_value(attempt),
+                headers={"Authorization": f"Bearer {capability.token}"},
+            )
+        assert response.status_code == 400
+        detail = response.json()["detail"]
+        assert "Native Agate Eval request builder is unavailable" in detail
+        assert "Dev fallback is disabled" in detail
+        assert "Runtime operator" in detail
+        assert adapter.requests == []
+    finally:
+        control.close()
+        registry.close()
 
 
 @pytest.mark.parametrize(

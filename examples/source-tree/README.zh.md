@@ -93,7 +93,8 @@ NVIDIA 源码树诊断也可以直接调用原工具：
 {"operation":"disassemble","fmt":"sass"}
 ```
 
-Runtime 自动将整个源码树和固定驱动交给 Agate Dev，不需要 Agent 本地执行 GPU 命令。
+这些诊断由 Runtime 将整个源码树和固定驱动交给 Agate Dev，不需要 Agent 本地执行 GPU 命令；
+普通 Evaluate 和 ABBA 则使用原生 Eval 源码归档。
 GPU 镜像需要提供 NCU（Profile/Disassemble）和 Compute Sanitizer（带 sanitize 的 Check）。
 Check 是单个 case 的编译/运行探针，不代表完整正确性通过。即使操作 completed，仍需检查
 诊断 `passed`；PTX 导出依赖工具链。详见[源码树设计和接口](../../docs/source-trees.zh.md)。
