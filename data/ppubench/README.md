@@ -32,6 +32,13 @@ ppubench/
 `~/atrex-runs` 只保存运行数据、配置快照和备份，不作为题目配置来源。
 当前可准备的任务为 [Gated residual combine：PPU CUDA 从零实现](gated-residual-combine-cuda/README.md)。
 
+通过 `scripts/ppubench/campaign.py prepare` 准备的 PPU 题目默认开启 GPU Wiki，
+与 Direction/Experiment 模块开关独立。服务地址来自题目 `policy.json` 的
+`runtime.wiki_url`；`task.json` 的 `runtime.gpu_wiki` 可覆盖连接参数，显式设置
+`{"enabled": false}` 或 `null` 可关闭。该默认值只影响新准备的 PPU 工作区。
+运行前使用 [内部 Wiki 配置](../../local-wiki/configs/internal.example.json) 启动知识服务，
+语料导入和服务依赖见 [Local Wiki 说明](../../local-wiki/README.md#internal-indexed-corpus)。
+
 ## 接入评测
 
 `curated/` 是原始题库快照。标准 Eval bundle 需要将共享 `reference.py` 与对应 Collection 的 `input.py`、`solution.py`、`metadata.json` 放在同一算子目录，并将 `shape_cases.json` 投影为 `shapes.json`。

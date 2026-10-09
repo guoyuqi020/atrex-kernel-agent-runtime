@@ -42,6 +42,9 @@ KDA 与 Runtime 的 Evaluator/Evolver 配置固定为这些提交，不使用旧
 - 每臂 3 条 trajectory、5 个 epoch；每条每轮 3 次 attempt，共 15 次，
   每臂最多并发 3 次。臂间不共享 Bootstrap 之后的历史，不运行 Evolver。
 - 生产门禁开启，PPU 禁用锁频；普通 Evaluate 和 ABBA 均使用原生 Eval。
+- GPU Wiki 默认开启，Bootstrap 与全部八臂均可查询，与 Direction/Experiment 开关独立。
+  服务地址由 `policy.json` 的 `runtime.wiki_url` 指定；`task.json` 中设置
+  `runtime.gpu_wiki.enabled: false`（或 `runtime.gpu_wiki: null`）可关闭。
 
 ## 准备与运行
 
@@ -56,7 +59,10 @@ python scripts/ppubench/campaign.py prepare \
 准备操作只生成并校验本地文件，不启动模型或 GPU 作业。`--port` 可覆盖模板中的
 8771；默认 creation key 为工作区目录名，新实验应使用不同工作区与 key。
 
-Runtime 及模型凭据应由运行环境提供。先启动 Runtime，再在另一个进程运行：
+Runtime 及模型凭据应由运行环境提供。先按 [内部 Wiki 部署说明](../../../local-wiki/README.md#internal-indexed-corpus)
+导入语料并启动知识服务；默认配置为 `local-wiki/configs/internal.example.json`，监听
+`http://127.0.0.1:8091`。知识服务单独运行，下面的命令及沙箱 `launch` 不会自动启动它。
+再启动 Runtime，并在另一个进程运行：
 
 ```bash
 atrex-kernel-agent-runtime serve --config workspaces/residual-ppu-cuda-trial/runtime.json

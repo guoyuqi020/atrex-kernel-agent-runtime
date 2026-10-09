@@ -14,7 +14,9 @@
     "worker_user": "root",
     "host_home": "/root",
     "launcher_mode": "container",
-    "gpu_wiki": null,
+    "gpu_wiki": {
+      "enabled": true
+    },
     "roofline_builder": null,
     "agate": {
       "base_url": "https://atrex-gateway.alibaba-inc.com",

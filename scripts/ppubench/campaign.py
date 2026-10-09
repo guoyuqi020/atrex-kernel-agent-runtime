@@ -107,7 +107,13 @@ def prepare(args):
         bench_commit=heads["bench"],
     )
     cfg["agate"].update(runtime["agate"])
-    cfg["gpu_wiki"] = runtime["gpu_wiki"]
+    # PPU tasks opt in by default; keep endpoint/limits from the production policy.
+    wiki_overrides = runtime.get("gpu_wiki", {})
+    cfg["gpu_wiki"] = (
+        None
+        if wiki_overrides is None
+        else {**cfg["gpu_wiki"], "enabled": True, **wiki_overrides}
+    )
     cfg["campaign"]["roofline_builder"] = runtime["roofline_builder"]
     cfg["campaign"]["launcher"]["backend_credentials"]["host_home"] = None
     RuntimeSettings.model_validate(cfg)
