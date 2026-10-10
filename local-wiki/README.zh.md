@@ -81,8 +81,10 @@ PYTHONPATH=local-wiki/src .venv/bin/python -m atrex_local_wiki serve \
 就绪检查验证目录布局、Manifest 格式及依赖文件存在性；分片内容和治理资格仍由上游校验。
 治理文件格式错误或过期时，即使依赖文件齐全，原生检索也可能按规则隐藏记录。
 
-HTTP 请求保留完整硬件、DSL、算子和原始问题。任意问题会走内部库的 Claude/Qoder 意图解析，
-不匹配上游固定句式的免模型入口。该内部版本的 Claude 使用 `--bare`，Bridge 环境未透传
+适配器只向原生检索入口原样传入 Agent 的问题。硬件、DSL 和算子仍保留在 HTTP 归因元数据中，
+但不会自动拼入检索问题。需要限定范围时，Agent 可在问题中明确产品、架构、DSL 或算子；
+通用问题不自动继承当前题目的范围限制。一般自然语言问题会走内部库的 Claude/Qoder 意图解析，
+符合上游固定句式的问题可走免模型入口。该内部版本的 Claude 使用 `--bare`，Bridge 环境未透传
 `ANTHROPIC_BASE_URL`、`ANTHROPIC_MODEL`；部署前须单独验证所用 CLI 与模型端点，不能认为复制
 本地 Claude settings 就已完成自定义端点配置。原生确定性查询和模拟意图 CLI 可用于验证索引
 与 HTTP 契约，无需请求模型。
@@ -139,7 +141,7 @@ Token 计数，可区分模型等待与本地检索开销。预加载不会消�
 Local Wiki 不保存模型凭证。
 
 当前 Bridge 使用 `claude`（默认）或 `qodercli` 的无工具 JSON 协议，不支持 `codex`；这只限制
-Wiki 的意图提取，不影响 Optimizer/Evolver 的 Backend 选择。Runtime 上下文和 Agent 问题以文本
+Wiki 的意图提取，不影响 Optimizer/Evolver 的 Backend 选择。仅将 Agent 原始问题以文本
 传入，意图提取和算子解析完全由上游负责。旧的本地 `operator_families` Override 已移除。
 
 两种执行模式下，`max_concurrent_queries` 都限制同时运行的原生查询数，默认值为 `16`；其余请求等待

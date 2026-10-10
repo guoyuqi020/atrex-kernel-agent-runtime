@@ -78,9 +78,13 @@ Readiness checks layout, manifest format and dependency presence; validation of 
 governance eligibility remains upstream-owned. A malformed/stale governance projection can still
 cause native retrieval to hide records even when all dependency files exist.
 
-Runtime sends the complete hardware/DSL/operator context and original question to the native
-front door. Arbitrary HTTP queries use its Claude/Qoder intent bridge; they do not match the
-upstream fixed-sentence model-free shortcut. At this internal pin, Claude uses `--bare` and the
+The adapter passes only the Agent's original question, unchanged, to the native front door.
+Hardware, DSL and operator remain in HTTP attribution metadata but are not injected into
+the retrieval question. The Agent can include a product, architecture, DSL or operator when
+it wants that scope; generic questions carry no task-derived scope constraints.
+General natural-language queries use its Claude/Qoder intent bridge. Questions matching the
+upstream fixed-sentence shortcut can use its model-free path. At this internal pin, Claude uses
+`--bare` and the
 bridge environment does not forward `ANTHROPIC_BASE_URL` or `ANTHROPIC_MODEL`. Validate the chosen
 bridge CLI/provider separately before deployment; copying local Claude settings alone is not a
 verified custom-provider setup. Deterministic native retrieval and a fake intent CLI can test the
@@ -150,7 +154,7 @@ credential is stored by local-wiki.
 
 The current bridge supports `claude` (default) and `qodercli`, using their no-tools JSON
 protocols. It does not support `codex`; this restriction applies only to the Wiki intent bridge,
-not to Optimizer/Evolver backends. Runtime context and the Agent's question are sent as prose;
+not to Optimizer/Evolver backends. Only the Agent's question is sent as prose;
 intent extraction and operator resolution are entirely upstream-owned. The old local
 `operator_families` override has been removed.
 

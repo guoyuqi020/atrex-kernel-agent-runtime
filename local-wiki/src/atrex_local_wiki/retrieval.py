@@ -101,15 +101,12 @@ class CorpusIndex:
 
     def query(self, request: KnowledgeQueryV1) -> GpuWikiQueryResult:
         """Return the native ``query_nl.py`` envelope without rewriting its contents."""
-        description = (
-            f"Target hardware reported by the runtime: {request.hardware_target}. "
-            f"Required DSL: {request.dsl}. Operator: {request.operator}. "
-            f"Optimization question: {request.query}"
-        )
+        # Trusted task metadata stays in the HTTP audit record. Injecting it into
+        # the question can impose retrieval scopes the Agent did not request.
         command: list[str] = [
             str(self._python),
             str(self._query_tool),
-            description,
+            request.query,
             "--store-root",
             str(self._root),
             "--max-bytes",

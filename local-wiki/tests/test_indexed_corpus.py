@@ -148,11 +148,7 @@ async def test_native_envelope_is_runtime_compatible_and_full_question_is_preser
             "notes": ["generation-reference; not a measured product result"],
         }
         invocation = json.loads((settings.store_root / "invocation.json").read_text())
-        assert invocation["question"] == (
-            f"Target hardware reported by the runtime: {request.hardware_target}. "
-            "Required DSL: cuda. Operator: flash-attn-fp8. "
-            f"Optimization question: {request.query}"
-        )
+        assert invocation["question"] == request.query
         assert invocation["agent_cli"] == "claude"
         assert invocation["timeout"] == "20"
         assert invocation["max_records"] == "5"

@@ -145,7 +145,7 @@ def test_preheats_before_first_query_and_reuses_same_revision(
     argv, timeout = workers[0].calls[0]
     assert timeout == 90
     assert argv[-6:] == ["--agent-cli", "claude", "--timeout", "60", "--max-records", "7"]
-    assert "Operator: gated_residual_combine" in argv[0]
+    assert argv[0] == query_request().query
 
 
 def test_revision_change_rebuilds_once_and_closes_unused_generation(

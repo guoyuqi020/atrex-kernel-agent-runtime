@@ -120,7 +120,7 @@ async def _request(
 
 
 @pytest.mark.anyio
-async def test_query_response_is_runtime_compatible_and_architecture_scoped(
+async def test_query_response_is_runtime_compatible_and_preserves_agent_question(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -168,8 +168,7 @@ async def test_query_response_is_runtime_compatible_and_architecture_scoped(
     assert response.content["query_id"] == "wiki-query-0123456789abcdef0123456789abcdef"
     assert records[record_id]["wiki_id"] == f"gpu_wiki::{record_id}"
     assert Path(commands[0][1]).name == "query_nl.py"
-    assert "Target hardware reported by the runtime: nvidia-h100" in commands[0][2]
-    assert "Operator: reduction." in commands[0][2]
+    assert commands[0][2] == query.query
     assert "store family scope" not in commands[0][2]
     assert "--agent-cli" not in commands[0]
     assert "--timeout" not in commands[0]
@@ -351,7 +350,8 @@ async def test_real_corpus_query_passes_through_http_verbatim(
         "import sys\n"
         "assert sys.argv[sys.argv.index('--tools') + 1] == ''\n"
         "assert '--dangerously-skip-permissions' not in sys.argv\n"
-        "assert 'Operator: fused_moe_fp8.' in sys.argv[-1]\n"
+        "assert 'Operator: fused_moe_fp8.' not in sys.argv[-1]\n"
+        f"assert 'On sm_120 using {dsl.value}, how should I tile fused_moe_fp8?' in sys.argv[-1]\n"
         "assert 'sm_120' in sys.argv[-1]\n"
         f"print({envelope!r})\n",
         encoding="utf-8",
@@ -387,7 +387,12 @@ async def test_real_corpus_query_passes_through_http_verbatim(
 
     monkeypatch.setattr(subprocess, "run", capture)
     query = _query().model_copy(
-        update={"dsl": dsl, "operator": "fused_moe_fp8", "hardware_target": "sm_120"}
+        update={
+            "dsl": dsl,
+            "operator": "fused_moe_fp8",
+            "hardware_target": "sm_120",
+            "query": f"On sm_120 using {dsl.value}, how should I tile fused_moe_fp8?",
+        }
     )
     try:
         status, body = await _request(app, "/v1/knowledge/query", query.canonical_json_bytes())
