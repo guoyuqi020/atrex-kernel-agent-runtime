@@ -322,6 +322,17 @@ are retained, without advancing Session recovery generations. This also applies 
 and Agent ABBA. Candidate validation, compilation and correctness failures, unclassified errors,
 and cancelled Jobs are not infrastructure retries.
 
+Authoritative ABBA and Bootstrap final Evaluate also inspect the nested Bench results, including
+native ABBA SDK runs, when a Job says `succeeded`. Explicit device-busy/unavailable or device-not-ready
+errors trigger a new Job for that whole failed batch, preserving sources, inputs, tolerances and the
+complete A/B/B/A schedule. Bootstrap allows two replacement Jobs; authoritative ABBA shares its
+ten-retry batch budget with transport/malformed-result errors, waiting 60 seconds between attempts.
+Bootstrap waits 5 then 10 seconds. Every failed raw result is sealed and referenced by a Runtime
+event with its Job ID and diagnostic. Exhaustion raises an infrastructure error without committing a
+negative Kernel verdict or caching the failed ABBA batch. Real numerical mismatches, performance
+regressions, OOM, illegal memory access, compilation errors and unclassified failures do not activate
+this inferred-device retry policy. Existing explicit `error_class=infra` recovery remains unchanged.
+
 An ordinary Attempt uses `kernel_retention_comparison`:
 
 - `evaluate`: independently measures incumbent A and Candidate B for the configured number of

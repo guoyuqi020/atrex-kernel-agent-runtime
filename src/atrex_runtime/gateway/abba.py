@@ -37,6 +37,7 @@ from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContextResolver
 from .correctness import merge_correctness_summaries
 from .eval_sources import prepare_eval_sources
+from .evaluation_failures import embedded_device_failure
 from .execution import call_agate_json
 from .job_recovery import JobExecution, run_with_job_recovery
 from .stability import (
@@ -926,7 +927,35 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             )
             return job_id, job
 
-        _, job = await run_with_job_recovery(submission, execute)
+        job_id, job = await run_with_job_recovery(submission, execute)
+        diagnostic = embedded_device_failure(job)
+        if diagnostic is not None:
+            digest = self._artifacts.put_json(job, ArtifactKind.GATEWAY_RESULT)
+            self._journal.record_runtime_event(
+                "comparison.abba_evaluation_infrastructure_failed",
+                candidate.id,
+                {
+                    "comparison_id": comparison_id,
+                    "task_digest": task_digest,
+                    "batch_index": batch_index,
+                    "agate_job_id": job_id,
+                    "gateway_result_digest": digest,
+                    "reason": "evaluation_device_unavailable",
+                    "detail": diagnostic,
+                    "failure": retry + 1,
+                    "max_retries": _ABBA_BATCH_RETRIES,
+                },
+            )
+            # Share the existing per-batch budget with transport/malformed-result
+            # failures rather than nesting another loop that could reset its ceiling.
+            raise AbbaBatchFailure({
+                **job,
+                "error": {
+                    "error_class": "infra",
+                    "reason": "evaluation_device_unavailable",
+                    "message": diagnostic,
+                },
+            })
         if job.get("status") not in _TERMINAL:
             raise InfrastructureError("Agate ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:

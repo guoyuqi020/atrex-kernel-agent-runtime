@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 from conftest import digest
+from evaluation_failure_fixture import device_failure_result
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.domain.ids import (
@@ -284,7 +285,9 @@ def _subject(attempt_id: object) -> BootstrapGatewaySubject:
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("failure_reason", [None, "logs_unavailable", "exec_failed"])
+@pytest.mark.parametrize(
+    "failure_reason", [None, "logs_unavailable", "exec_failed", "embedded_device_unavailable"]
+)
 @pytest.mark.parametrize("holdout", [False, True])
 async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     tmp_path: Path,
@@ -311,6 +314,9 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
             fetched.append(job_id)
             job = super().get_job(job_id, wait, timeout, include_spec)
             if failure_reason is not None and job_id == "ev_final_0":
+                if failure_reason == "embedded_device_unavailable":
+                    shape_id = next(iter(self.submitted[0]["reference"]["shapes"]))
+                    return {**job, "result": device_failure_result(shape_id)}
                 return {
                     "job_id": job_id,
                     "status": "failed",
@@ -399,13 +405,25 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
         sid for request in client.submitted for sid in request["reference"]["shapes"]
     } == shape_ids
     if failure_reason is not None:
-        prefix = "logs-retry:" if failure_reason == "logs_unavailable" else "infra-retry:"
+        prefix = (
+            "eval-device-retry:" if failure_reason == "embedded_device_unavailable"
+            else "logs-retry:" if failure_reason == "logs_unavailable"
+            else "infra-retry:"
+        )
         replacement = next(
             r for r in client.submitted if str(r["idempotency_key"]).startswith(prefix)
         )
         assert {k: v for k, v in replacement.items() if k != "idempotency_key"} == {
             k: v for k, v in client.submitted[0].items() if k != "idempotency_key"
         }
+    if failure_reason == "embedded_device_unavailable":
+        failures = [p for k, _, p in events.values
+                    if k == "gateway.authoritative_evaluation_infrastructure_failed"]
+        assert len(failures) == 1
+        assert failures[0]["agate_job_id"] == "ev_final_0"
+        stored = artifacts.verify(failures[0]["gateway_result_digest"])
+        assert "HGGC-capable" in (stored.payload_path / "value.json").read_text()
+        assert all(e.correct for e in control.list_evaluations(attempt_id))
     assert client.submitted[0]["gpu"] == "L20N"
     options = client.submitted[0]["options"]
     assert isinstance(options, dict)
@@ -438,7 +456,8 @@ async def test_finalizer_re_evaluates_nominated_kernel_and_commits_authority(
     assert [item.source.value for item in evaluations] == ["agent", "runtime_final"]
     assert evaluations[-1].kernel_artifact_digest == candidate_digest
     assert control.get_committed_outcome(attempt_id) == outcome
-    assert [kind for kind, _aggregate, _payload in events.values] == [
+    assert [kind for kind, _aggregate, _payload in events.values
+            if kind != "gateway.authoritative_evaluation_infrastructure_failed"] == [
         "gateway.authoritative_evaluation_submitted",
     ] * expected_jobs + ["gateway.authoritative_evaluation_completed"]
     control.close()
@@ -773,5 +792,67 @@ async def test_finalizer_records_validation_rejection_as_authoritative_outcome(
         "shape_batch_count": 1,
     }
     assert control.get_committed_outcome(attempt_id) == outcome
+    control.close()
+    registry.close()
+
+
+@pytest.mark.anyio
+async def test_finalizer_device_retry_exhaustion_does_not_poison_bootstrap_outcome(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from atrex_runtime.gateway.job_recovery import EvaluationJobRetriesExhausted
+
+    async def sleep(_delay: float) -> None:
+        pass
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
+
+    class Client(RepeatedFinalClient):
+        def get_job(self, job_id: str, **_kwargs: object) -> dict[str, object]:
+            return {
+                "job_id": job_id, "status": "succeeded", "result": device_failure_result("0"),
+            }
+
+    registry = SqliteRegistry(tmp_path / "registry.sqlite")
+    control = SqliteGatewayControl(
+        tmp_path / "gateway.sqlite", registry, signing_key=b"f" * 32, clock=lambda: NOW,
+    )
+    attempt_id = new_attempt_id()
+    control.issue_bootstrap(
+        _subject(attempt_id),
+        GatewayCapabilityPolicy(
+            frozenset({GatewayOperation.EVALUATE}), 8, NOW + timedelta(hours=1),
+        ),
+    )
+    candidate_root = tmp_path / "candidate"
+    candidate_root.mkdir()
+    (candidate_root / "kernel.py").write_text("def kernel(): pass\n")
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    candidate_digest = artifacts.put_directory(candidate_root, ArtifactKind.KERNEL)
+    agent_result = artifacts.put_json({"agent": "pass"}, ArtifactKind.GATEWAY_RESULT)
+    control.record_evaluation(
+        attempt_id, source=GatewayEvaluationSource.AGENT, idempotency_key="agent-final",
+        kernel_artifact_digest=candidate_digest, gateway_result_digest=agent_result,
+        correct=True, latency_us=8.0, agate_job_id="ev_agent",
+    )
+    client = Client()
+    events = FakeEvents()
+    finalizer = AgateAuthoritativeCandidateEvaluator(
+        client,  # type: ignore[arg-type]
+        _builder, FakeContexts(), artifacts, control, events, wait_timeout_s=100.0,
+        bootstrap_stages=(BootstrapEvaluationStage(2), BootstrapEvaluationStage(5)),
+        clock=lambda: NOW,
+    )
+    with pytest.raises(BaseExceptionGroup) as caught:
+        await finalizer.finalize(attempt_id, candidate_digest)
+    assert all(isinstance(e, EvaluationJobRetriesExhausted) for e in caught.value.exceptions)
+    assert len(client.submitted) == 3
+    assert control.get_committed_outcome(attempt_id) is None
+    assert [e.source.value for e in control.list_evaluations(attempt_id)] == ["agent"]
+    failures = [p for k, _, p in events.values
+                if k == "gateway.authoritative_evaluation_infrastructure_failed"]
+    assert len(failures) == 3
+    assert len({p["gateway_result_digest"] for p in failures}) == 3
+    assert not any(k == "gateway.authoritative_evaluation_completed" for k, _, _ in events.values)
     control.close()
     registry.close()

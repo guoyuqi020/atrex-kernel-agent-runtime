@@ -534,7 +534,29 @@ class AgateAuthoritativeCandidateEvaluator:
             return job_id, job
 
         try:
-            job_id, job = await run_with_job_recovery(payload, execute)
+            def record_device_failure(
+                job_id: str, job: dict[str, JsonValue], diagnostic: str, failure: int,
+            ) -> None:
+                digest = self._store_result(job, None)
+                self._events.record_runtime_event(
+                    "gateway.authoritative_evaluation_infrastructure_failed",
+                    attempt_id,
+                    {
+                        **event_base,
+                        "agate_job_id": job_id,
+                        "gateway_result_digest": digest,
+                        "reason": "evaluation_device_unavailable",
+                        "detail": diagnostic,
+                        "failure": failure,
+                        "max_retries": 2,
+                    },
+                )
+
+            job_id, job = await run_with_job_recovery(
+                payload, execute,
+                max_evaluation_retries=2,
+                on_evaluation_failure=record_device_failure,
+            )
         except AgateCandidateRejection as rejection:
             return (
                 {"status": "rejected", "error": rejection.payload},

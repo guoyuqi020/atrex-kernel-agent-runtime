@@ -282,6 +282,15 @@ Agate 重试策略。网络错误重试原请求；终态失败明确标记为 `
 已完成的同组批次保持不变，不推进 Session Recovery Generation；权威和 Agent ABBA 同样适用。
 Candidate 校验、编译和正确性失败、未分类错误及已取消的 Job 不按基础设施错误重试。
 
+权威 ABBA 和 Bootstrap 终评还会检查 Job 内部的 Bench 结果（包括原生 ABBA SDK Runs），
+避免把外层 `succeeded`、内部设备不可用的结果当作 Kernel 错误。明确的设备忙、不可用或尚未
+初始化会重提整个失败批次，保留源码、输入、容差及完整 A/B/B/A Schedule。Bootstrap 最多重试
+2 次，分别等待 5、10 秒；权威 ABBA 与传输/格式错误共用每批最多 10 次的预算，每次等待
+60 秒。每次失败的原始结果均封存，Runtime Event 记录 Job ID、诊断和 Artifact 引用。
+耗尽后抛出基础设施错误，不提交负面的 Kernel 正确性结论，也不缓存失败的 ABBA 批次。
+真实数值不一致、性能退化、OOM、非法内存访问、编译错误和未分类错误不会触发这项设备重试。
+已有明确 `error_class=infra` 的持续恢复策略保持不变。
+
 普通 Attempt 使用 `kernel_retention_comparison`：
 
 - `evaluate`：按配置重复次数分别测量 Incumbent A 与 Candidate B；Candidate 必须正确并超过配置

@@ -11,6 +11,7 @@ from pathlib import Path
 import pytest
 from atrex_gateway_client import build_eval_request_from_content
 from conftest import NOW, digest
+from evaluation_failure_fixture import DEVICE_ERROR, device_failure_result
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.domain.errors import InfrastructureError
@@ -23,6 +24,7 @@ from atrex_runtime.domain.models import (
     KernelRevision,
 )
 from atrex_runtime.gateway.abba import (
+    AbbaBatchFailure,
     AgateSameAllocationAbbaRunner,
     CommitPinnedAtrexBenchEvaluator,
     _parse_native_abba_payload,
@@ -458,6 +460,7 @@ async def _run_pair(
     source_tree: bool = False,
     replay: bool = False,
     allocation_timeout_seconds: float = 500,
+    journal: FakeJournal | None = None,
 ) -> tuple[object, FakeJournal]:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     incumbent_dir = tmp_path / "incumbent"
@@ -499,7 +502,7 @@ async def _run_pair(
     context = AgateEvaluationContext(
         "vecadd", "H20", Dsl.TRITON, contract, digest("evaluation-contract")
     )
-    journal = FakeJournal()
+    journal = journal or FakeJournal()
     runner = AgateSameAllocationAbbaRunner(
         client,
         FakeContextResolver(context),  # type: ignore[arg-type]
@@ -1060,3 +1063,83 @@ async def test_failed_abba_command_is_retried(
     assert retries[0]["reason"] == "nonzero_exit"
     assert retries[0]["retryable"] is True
     assert result.gateway_result_digest is not None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("source_tree", [False, True])
+@pytest.mark.parametrize("failed_side", ["baseline", "candidate"])
+async def test_abba_retries_embedded_device_failure_without_negative_measurements(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source_tree: bool, failed_side: str,
+) -> None:
+    delays: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        delays.append(delay)
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
+
+    class Client(FakeAgateClient):
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            accepted = super().submit_job(kind, request)
+            if accepted["job_id"] == "ev_abba_0":
+                result = self.jobs["ev_abba_0"]["result"]
+                comparison = result["abba"]
+                comparison["valid"] = False
+                runs = comparison["sdk_results"][0]["abba"]["runs"]
+                row = next(run for run in runs if run["revision"] == failed_side)
+                row["result"] = device_failure_result(next(iter(request["reference"]["shapes"])))
+            return accepted
+
+    client = Client()
+    result, journal = await _run_pair(client, tmp_path, source_tree=source_tree, replay=True)
+    assert len(client.requests) == 3  # One replacement; sibling and replay reuse results.
+    assert delays == [60]
+    assert all(run.correct for run in (*result.incumbent_runs, *result.candidate_runs))
+    assert all(m.correct for m in journal.measurements)
+    assert len(journal.abba_batches) == 2
+    replacement = next(
+        r for r in client.requests if str(r["idempotency_key"]).endswith(":retry-1")
+    )
+    assert {k: v for k, v in replacement.items() if k != "idempotency_key"} == {
+        k: v for k, v in client.requests[0].items() if k != "idempotency_key"
+    }
+    failures = [p for k, _, p in journal.events
+                if k == "comparison.abba_evaluation_infrastructure_failed"]
+    assert len(failures) == 1
+    assert failures[0]["agate_job_id"] == "ev_abba_0"
+    assert DEVICE_ERROR in failures[0]["detail"]
+    stored = LocalArtifactStore(tmp_path / "artifacts").verify(
+        failures[0]["gateway_result_digest"]
+    )
+    assert json.loads((stored.payload_path / "value.json").read_text()) == client.jobs["ev_abba_0"]
+    retries = [p for k, _, p in journal.events if k == "comparison.abba_batch_retried"]
+    assert len(retries) == 1 and retries[0]["reason"] == "evaluation_device_unavailable"
+
+
+@pytest.mark.anyio
+async def test_persistent_embedded_abba_device_failure_does_not_reset_retry_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def sleep(_delay: float) -> None:
+        pass
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
+
+    class Client(FakeAgateClient):
+        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+            accepted = super().submit_job(kind, request)
+            # Preserve the successful transport envelope and fail one native SDK run.
+            self.jobs[accepted["job_id"]]["result"]["abba"]["sdk_results"][0]["abba"]["runs"][1][
+                "result"
+            ] = device_failure_result("shape-0")
+            return accepted
+
+    client = Client()
+    journal = FakeJournal()
+    with pytest.raises(BaseExceptionGroup) as caught:
+        await _run_pair(client, tmp_path, shape_batch_size=5, journal=journal)
+    assert len(client.requests) == 11  # First execution plus ten; no second outer retry loop.
+    assert all(isinstance(e, AbbaBatchFailure) for e in caught.value.exceptions)
+    assert journal.abba_batches == {} and journal.measurements == []
+    assert len([k for k, _, _ in journal.events
+                if k == "comparison.abba_evaluation_infrastructure_failed"]) == 11

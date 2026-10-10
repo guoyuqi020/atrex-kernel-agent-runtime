@@ -162,3 +162,61 @@ def test_explicit_poll_does_not_retry_or_resubmit() -> None:
 
     result = RetryingAgateClient(Client(), sleeper=unexpected_sleep).get_job("ev_failed")
     assert result == lost_logs()
+
+
+@pytest.mark.anyio
+async def test_embedded_device_retry_limit_and_original_payload_are_preserved(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from evaluation_failure_fixture import DEVICE_ERROR, device_failure_result
+
+    from atrex_runtime.gateway.job_recovery import EvaluationJobRetriesExhausted
+
+    payload = {"idempotency_key": "original", "candidate": "source", "lock_clocks": True}
+    requests: list[dict[str, object]] = []
+    failures: list[tuple[str, dict[str, JsonValue], str, int]] = []
+    delays: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        delays.append(delay)
+
+    async def execute(request: dict[str, object]) -> JobExecution:
+        requests.append(request)
+        job_id = f"ev_{len(requests)}"
+        return job_id, {
+            "job_id": job_id, "status": "succeeded", "result": device_failure_result("10"),
+        }
+
+    monkeypatch.setattr("atrex_runtime.gateway.job_recovery.anyio.sleep", sleep)
+    with pytest.raises(EvaluationJobRetriesExhausted, match="after 3 executions"):
+        await run_with_job_recovery(
+            payload, execute, max_evaluation_retries=2,
+            on_evaluation_failure=lambda *args: failures.append(args),
+        )
+    assert len(requests) == len(failures) == 3
+    assert delays == [5, 10]
+    assert all(f[2] == DEVICE_ERROR for f in failures)
+    assert len({r["idempotency_key"] for r in requests}) == 3
+    assert all(r["candidate"] == "source" and r["lock_clocks"] is True for r in requests)
+    assert payload["idempotency_key"] == "original"
+    replacement_key = requests[1]["idempotency_key"]
+    requests.clear()
+    with pytest.raises(EvaluationJobRetriesExhausted):
+        await run_with_job_recovery(payload, execute, max_evaluation_retries=2)
+    assert requests[1]["idempotency_key"] == replacement_key
+
+
+@pytest.mark.anyio
+async def test_embedded_device_retry_backoff_remains_cancellable() -> None:
+    from evaluation_failure_fixture import device_failure_result
+
+    calls = 0
+    with anyio.CancelScope() as scope:
+        async def execute(_request: dict[str, object]) -> JobExecution:
+            nonlocal calls
+            calls += 1
+            scope.cancel()
+            return "ev_cancel", {"status": "succeeded", "result": device_failure_result("10")}
+
+        await run_with_job_recovery({}, execute, max_evaluation_retries=2)
+    assert scope.cancelled_caught and calls == 1
