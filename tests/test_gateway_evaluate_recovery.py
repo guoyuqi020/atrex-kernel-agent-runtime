@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import timedelta
 from pathlib import Path
@@ -167,6 +168,205 @@ class Scenario:
         self.jobs.close()
         self.control.close()
         self.registry.close()
+
+
+def reconnect_service(scenario):
+    control = SqliteGatewayControl(
+        scenario.root / 'gateway.sqlite', scenario.registry, signing_key=b'p' * 32,
+        clock=lambda: NOW_DATETIME,
+    )
+    service = GatewayProxyService(
+        control, LocalArtifactStore(scenario.root / 'artifacts'), scenario.service._adapter,
+        GatewayProxyLimits(65536, 8, 16384), scenario.registry, clock=lambda: NOW_DATETIME,
+    )
+    return control, service
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('mode', ['full', 'abba', 'correctness_only'])
+@pytest.mark.parametrize('owner_fails', [False, True])
+async def test_identical_http_reconnect_waits_and_returns_original_result(
+    tmp_path, monkeypatch, mode, owner_fails,
+):
+    scenario = Scenario(tmp_path, mode == 'abba')
+    second = None
+    try:
+        if mode == 'correctness_only':
+            scenario.request['mode'] = mode
+            scenario.request.pop('latency_prediction', None)
+        started, release, waiting = anyio.Event(), anyio.Event(), anyio.Event()
+        original = scenario.service._adapter.execute
+        calls = []
+
+        async def blocked(request):
+            calls.append(request)
+            result = await original(request)
+            if len(calls) == 1:
+                started.set()
+                await release.wait()
+                if owner_fails:
+                    raise InfrastructureError('original HTTP executor exited before commit')
+            return result
+
+        monkeypatch.setattr(scenario.service._adapter, 'execute', blocked)
+        second, service = reconnect_service(scenario)
+        original_lease = second.evaluate_request_execution
+
+        @contextmanager
+        def observe_reconnect(authorization):
+            with original_lease(authorization) as acquired:
+                if not acquired:
+                    waiting.set()
+                yield acquired
+
+        monkeypatch.setattr(second, 'evaluate_request_execution', observe_reconnect)
+        responses = {}
+
+        async def post(label, target):
+            responses[label] = await scenario.post(service=target)
+
+        with anyio.fail_after(10):
+            async with anyio.create_task_group() as group:
+                group.start_soon(post, 'original', scenario.service)
+                await started.wait()
+                jobs = {item[2] for item in scenario.client.submissions}
+                group.start_soon(post, 'reconnect', service)
+                await waiting.wait()
+                assert not responses  # No intermediate running/duplicate result reaches Core.
+                assert len(calls) == 1
+                assert len(scenario.rows('gateway_active_calls')) == 1
+                assert scenario.rows('gateway_capabilities')[0]['used_calls'] == 1
+                release.set()
+        assert responses['original'].status_code == (503 if owner_fails else 200)
+        response = responses['reconnect']
+        assert response.status_code == 200, response.text
+        assert response.json()['result']['correct'] is True
+        if not owner_fails:
+            assert response.json() == responses['original'].json()
+            assert len(calls) == 1
+        assert {item[2] for item in scenario.client.submissions} == jobs
+        assert not scenario.client.cancellations
+        assert not scenario.rows('gateway_active_calls')
+        replay = await scenario.post(service=service)
+        assert replay.json() == response.json()
+        # A new key is a new submission, so completed semantic duplicates stay rejected.
+        if mode != 'correctness_only':
+            duplicate = await scenario.post(
+                {**scenario.request, 'idempotency_key': 'completed-new-submission'},
+                service=service,
+            )
+            assert duplicate.status_code == 400
+            assert duplicate.json()['error'] == 'duplicate_gateway_task'
+            assert duplicate.json()['previous_result_artifact_digest'] == (
+                response.json()['result_artifact_digest']
+            )
+            scenario.assert_completed()
+    finally:
+        if second is not None:
+            second.close()
+        scenario.close()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('abba', [False, True])
+async def test_cancelling_a_waiting_reconnect_does_not_cancel_the_original(
+    tmp_path, monkeypatch, abba,
+):
+    scenario = Scenario(tmp_path, abba)
+    second = None
+    try:
+        started, release, waiting, waiter_cancelled = (
+            anyio.Event(), anyio.Event(), anyio.Event(), anyio.Event()
+        )
+        original = scenario.service._adapter.execute
+
+        async def blocked(request):
+            result = await original(request)
+            started.set()
+            await release.wait()
+            return result
+
+        monkeypatch.setattr(scenario.service._adapter, 'execute', blocked)
+        second, service = reconnect_service(scenario)
+        original_lease = second.evaluate_request_execution
+
+        @contextmanager
+        def observe_reconnect(authorization):
+            with original_lease(authorization) as acquired:
+                if not acquired:
+                    waiting.set()
+                yield acquired
+
+        monkeypatch.setattr(second, 'evaluate_request_execution', observe_reconnect)
+        responses = []
+
+        async def first():
+            responses.append(await scenario.post())
+
+        async def reconnect(*, task_status=anyio.TASK_STATUS_IGNORED):
+            with anyio.CancelScope() as scope:
+                task_status.started(scope)
+                await scenario.post(service=service)
+            waiter_cancelled.set()
+
+        with anyio.fail_after(10):
+            async with anyio.create_task_group() as group:
+                group.start_soon(first)
+                await started.wait()
+                scope = await group.start(reconnect)
+                await waiting.wait()
+                scope.cancel()
+                await waiter_cancelled.wait()
+                assert not responses
+                assert len(scenario.rows('gateway_active_calls')) == 1
+                assert not scenario.client.cancellations
+                release.set()
+        assert responses[0].status_code == 200, responses[0].text
+        replay = await scenario.post(service=service)
+        assert replay.json() == responses[0].json()
+        assert len(scenario.client.submissions) == 2
+        scenario.assert_completed()
+    finally:
+        if second is not None:
+            second.close()
+        scenario.close()
+
+
+@pytest.mark.anyio
+async def test_reused_http_key_with_changed_content_is_rejected_without_waiting(
+    tmp_path, monkeypatch,
+):
+    scenario = Scenario(tmp_path, False)
+    try:
+        started, release = anyio.Event(), anyio.Event()
+        original = scenario.service._adapter.execute
+
+        async def blocked(request):
+            started.set()
+            await release.wait()
+            return await original(request)
+
+        monkeypatch.setattr(scenario.service._adapter, 'execute', blocked)
+        responses = []
+
+        async def first():
+            responses.append(await scenario.post())
+
+        with anyio.fail_after(10):
+            async with anyio.create_task_group() as group:
+                group.start_soon(first)
+                await started.wait()
+                changed = {**scenario.request, 'latency_prediction': 'improved'}
+                response = await scenario.post(changed)
+                assert response.status_code == 409, response.text
+                assert 'reused for a different request' in response.json()['detail']
+                assert not responses
+                release.set()
+        assert responses[0].status_code == 200
+        assert len(scenario.client.submissions) == 2
+        scenario.assert_completed()
+    finally:
+        scenario.close()
 
 
 @pytest.mark.anyio

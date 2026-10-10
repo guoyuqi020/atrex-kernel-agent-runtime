@@ -732,6 +732,26 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         )
 
     @contextmanager
+    def evaluate_request_execution(self, authorization: GatewayAuthorization) -> Iterator[bool]:
+        """Lease one HTTP request so reconnects wait rather than resubmit its task.
+
+        Authorization has already verified that this key names identical content.
+        Keep this lease separate from the semantic task lease: another request for
+        the same Kernel must still follow the existing deduplication policy.
+        """
+        key = json.dumps(
+            [
+                "evaluate-request",
+                str(authorization.attempt_id),
+                authorization.recovery_generation,
+                authorization.idempotency_key,
+            ],
+            separators=(",", ":"),
+        )
+        with execution_lock(self._execution_lock_directory, key) as acquired:
+            yield acquired
+
+    @contextmanager
     def operation_execution(self, authorization: GatewayAuthorization) -> Iterator[str | None]:
         """Atomically exclude terminal handoff from executing Gateway calls.
 

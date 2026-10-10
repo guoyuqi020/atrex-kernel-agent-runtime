@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Protocol, cast
 
+import anyio
 from pydantic import TypeAdapter, ValidationError
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
@@ -914,9 +915,26 @@ class GatewayProxyService:
             idempotency_key=request.idempotency_key,
             request_digest=str(request_digest),
         )
-        with self._control.operation_execution(authorization) as call_id, ExitStack() as executions:
-            return await self._execute_authorized(
-                request, request_digest, authorization, executions, call_id
+        while True:
+            # A timed-out HTTP connection does not end the original evaluation.
+            # Serialize its identical reconnects before the semantic task guard,
+            # then replay the committed response or recover an exited executor.
+            with ExitStack() as executions:
+                acquired = not isinstance(request, EvaluateRequestV2) or executions.enter_context(
+                    self._control.evaluate_request_execution(authorization)
+                )
+                if acquired:
+                    with self._control.operation_execution(authorization) as call_id:
+                        return await self._execute_authorized(
+                            request, request_digest, authorization, executions, call_id
+                        )
+            await anyio.sleep(0.25)
+            # Waiting must not bypass revocation, expiry or generation fencing.
+            authorization = self._control.authorize(
+                GatewayCapability(token, request.attempt_id),
+                operation,
+                idempotency_key=request.idempotency_key,
+                request_digest=str(request_digest),
             )
 
     async def _execute_authorized(

@@ -287,6 +287,10 @@ contract.
 - A later Agent invocation of the identical task is rejected before Agate execution. The error names
   `previous_result_artifact_digest` and directs the Agent to `result-artifact-read`; transport retry
   of the original invocation remains idempotent and replays the same response.
+- An identical HTTP reconnect while Evaluate is running waits inside Runtime for the original
+  response, including correctness-only and ABBA calls. It does not return an intermediate duplicate
+  error, consume another call allowance, or submit another Agate job. The request lease is released
+  automatically when its executor exits, allowing the reconnect to recover unfinished work.
 
 This rule prevents an Agent from spending evaluator capacity or choosing among repeated samples by
 resubmitting unchanged code. Changing the Kernel, Baseline, input domain, or measurement parameters

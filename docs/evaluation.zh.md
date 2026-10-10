@@ -251,6 +251,9 @@ Agate 调用，对逐 Shape 延迟取几何平均，不再额外重复三次或�
 - Agent 再次主动提交已完成的完全相同任务时，Runtime 会在调用 Agate 前拒绝，并返回
   `previous_result_artifact_digest`，引导 Agent 使用 `result-artifact-read` 复用结果；同一次调用的
   网络重连仍保持幂等，并回放原响应。
+- 同一 HTTP 请求在 Evaluate 执行期间重连时，由 Runtime 等待原响应，覆盖普通、
+  `correctness_only` 和 ABBA；不向 Agent 返回中间 duplicate 错误，不额外消耗调用预算或提交
+  Agate 作业。请求锁在执行者退出时自动释放，重连请求可接管未完成工作的恢复。
 - 若任务记录为 `running`，且原 Runtime 执行者已退出，重试会逐批调用 Agate Get：有完整结果的
   批次直接复用并补齐数据库；作业不存在、失败、已取消或没有结果的批次重新提交，仍在运行的
   旧作业先取消。替换 Job ID 原子更新，重启中断或更换请求 ID 不会丢失原作业的恢复身份。
