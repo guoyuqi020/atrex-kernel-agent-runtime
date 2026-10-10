@@ -248,9 +248,14 @@ Agate 调用，对逐 Shape 延迟取几何平均，不再额外重复三次或�
 - Runtime 只返回一个 Agent 可见 Result Artifact，并附带
   `measurement_aggregation: {"repetitions": 1, "method": "single_measurement"}`；原始返回只作为
   私有 Evidence 保存。单 Job 内 GPU Benchmark 采样及 ABBA 配置的 A/B Schedule 不变。
-- Agent 再次主动提交完全相同的任务时，Runtime 会在调用 Agate 前拒绝，并返回
+- Agent 再次主动提交已完成的完全相同任务时，Runtime 会在调用 Agate 前拒绝，并返回
   `previous_result_artifact_digest`，引导 Agent 使用 `result-artifact-read` 复用结果；同一次调用的
   网络重连仍保持幂等，并回放原响应。
+- 若任务记录为 `running`，且原 Runtime 执行者已退出，重试会逐批调用 Agate Get：有完整结果的
+  批次直接复用并补齐数据库；作业不存在、失败、已取消或没有结果的批次重新提交，仍在运行的
+  旧作业先取消。替换 Job ID 原子更新，重启中断或更换请求 ID 不会丢失原作业的恢复身份。
+  网络或鉴权错误会保留记录并返回错误，不按“作业不存在”处理。普通 Evaluate 和 ABBA
+  使用同一恢复机制；仍有活跃执行者时保持并发去重，不取消其作业。
 
 该规则避免 Agent 通过重复提交未修改代码消耗评测资源或挑选有利样本。修改 Kernel、Baseline、
 输入域或测量参数后会形成新的任务。

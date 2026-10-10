@@ -95,6 +95,7 @@ from .control_schema import (
     GATEWAY_SCHEMA_VERSION as GATEWAY_SCHEMA_VERSION,
 )
 from .control_schema import migrate_gateway_schema
+from .execution_lock import execution_lock
 
 
 def _validate_profile_supporting_results(
@@ -219,6 +220,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         self._clock = clock
         self._suggestion_ttl_epochs = suggestion_ttl_epochs
         database_path = Path(path)
+        self._execution_lock_directory = database_path.with_name(database_path.name + ".locks")
         database_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self._connection = sqlite3.connect(
             str(database_path),
@@ -730,18 +732,18 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         )
 
     @contextmanager
-    def operation_execution(self, authorization: GatewayAuthorization) -> Iterator[None]:
+    def operation_execution(self, authorization: GatewayAuthorization) -> Iterator[str | None]:
         """Atomically exclude terminal handoff from executing Gateway calls.
 
         Track execution, not unfilled authorization rows: validation failures, cancelled
         requests and exceptions must not permanently block a report. Separate call IDs
         keep simultaneous HTTP reconnects from releasing each other's reservation.
-        A crashed process fails closed until the Attempt rotates recovery generation.
+        Orphaned Evaluate calls are cleared when their task execution lease is recovered.
         """
         operation = authorization.operation
         is_report = operation is GatewayOperation.ATTEMPT_REPORT
         if operation in _IMPLICIT_RUNTIME_OPERATIONS and not is_report:
-            yield
+            yield None
             return
         call_id = uuid4().hex
         with self._transaction() as connection:
@@ -774,7 +776,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 ),
             )
         try:
-            yield
+            yield call_id
         finally:
             with self._transaction() as connection:
                 connection.execute("DELETE FROM gateway_active_calls WHERE call_id = ?", (call_id,))
@@ -801,17 +803,74 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             raise TypeError("persisted operation result Artifact Digest must be text")
         return parse_artifact_digest(value)
 
+    @contextmanager
+    def evaluate_task_execution(
+        self,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        task_digest: ArtifactDigest,
+        active_call_id: str | None,
+    ) -> Iterator[tuple[bool, ArtifactDigest | None, tuple[AttemptId, int, str] | None]]:
+        """Claim orphaned work only when no live process owns its execution lease.
+
+        The returned recovery identity names the original physical jobs, even if
+        this is the second crash or the Agent retries with another request key.
+        Hold this context until the logical result is durably committed.
+        """
+        with execution_lock(self._execution_lock_directory, str(task_digest)) as acquired:
+            if not acquired:
+                yield False, None, None
+                return
+            with self._lock:
+                previous = self._connection.execute(
+                    "SELECT * FROM gateway_evaluate_tasks WHERE task_digest = ?",
+                    (str(task_digest),),
+                ).fetchone()
+            owned, result = self.reserve_evaluate_task(
+                attempt_id, idempotency_key, task_digest,
+                recover_orphan=True, active_call_id=active_call_id,
+            )
+            recovery = None
+            if previous is not None and owned:
+                recovery = (
+                    parse_attempt_id(previous["execution_attempt_id"]),
+                    int(previous["execution_generation"]),
+                    str(previous["execution_key"]),
+                )
+            yield owned, result, recovery
+
+    def reconcile_evaluate_replay(
+        self, attempt_id: AttemptId, idempotency_key: str, active_call_id: str | None,
+    ) -> None:
+        """Finish a crash after committing the response but before releasing the task."""
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT task_digest FROM gateway_evaluate_tasks
+                   WHERE attempt_id = ? AND recovery_generation = ? AND idempotency_key = ?""",
+                (attempt_id, self._subject_generation(attempt_id), idempotency_key),
+            ).fetchone()
+        if row is not None:
+            with self.evaluate_task_execution(
+                attempt_id, idempotency_key, parse_artifact_digest(row["task_digest"]),
+                active_call_id,
+            ):
+                pass
+
     def reserve_evaluate_task(
         self,
         attempt_id: AttemptId,
         idempotency_key: str,
         task_digest: ArtifactDigest,
+        *,
+        recover_orphan: bool = False,
+        active_call_id: str | None = None,
     ) -> tuple[bool, ArtifactDigest | None]:
         """Reserve one exact full-Evaluate task across the visible Lineage.
 
         The boolean is true only when this caller owns execution.  A false result
         carries the completed Result Artifact, or None while another request owns
         an unfinished execution.
+        recover_orphan requires holding the task's OS execution lease.
         """
         digest = parse_artifact_digest(str(task_digest))
         generation = self._subject_generation(attempt_id)
@@ -827,8 +886,9 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     """INSERT INTO gateway_evaluate_tasks(
                            task_digest, lineage_id, attempt_id, recovery_generation,
                            idempotency_key, status, result_artifact_digest,
-                           created_at, completed_at
-                       ) VALUES (?, ?, ?, ?, ?, 'running', NULL, ?, NULL)""",
+                           created_at, completed_at, execution_attempt_id,
+                           execution_generation, execution_key
+                       ) VALUES (?, ?, ?, ?, ?, 'running', NULL, ?, NULL, ?, ?, ?)""",
                     (
                         str(digest),
                         str(lineage_id),
@@ -836,11 +896,27 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         generation,
                         idempotency_key,
                         now,
+                        str(attempt_id),
+                        generation,
+                        idempotency_key,
                     ),
                 )
                 return True, None
             if str(row["lineage_id"]) != str(lineage_id):
                 raise InvalidTransitionError("Evaluate task Digest crossed a Lineage boundary")
+            if recover_orphan:
+                # Remove the old barrier atomically with ownership transfer. A second
+                # crash must not strand a barrier belonging to the previous owner.
+                connection.execute(
+                    """DELETE FROM gateway_active_calls
+                       WHERE attempt_id = ? AND recovery_generation = ?
+                         AND idempotency_key = ? AND operation = 'evaluate'
+                         AND call_id IS NOT ?""",
+                    (
+                        row["attempt_id"], row["recovery_generation"],
+                        row["idempotency_key"], active_call_id,
+                    ),
+                )
             result_value = row["result_artifact_digest"]
             if row["status"] == "completed":
                 if not isinstance(result_value, str):
@@ -874,10 +950,10 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 )
             except KeyError:
                 # Bootstrap Gateway subjects deliberately exist before their
-                # Attempt row. A newer recovery generation is the only safe
-                # signal that such an unfinished reservation is stale.
+                # Attempt row. Recovery without a newer generation requires the
+                # execution lease proving that the former executor has stopped.
                 owner_is_running = True
-            if not owner_is_running or (
+            if recover_orphan or not owner_is_running or (
                 owner_attempt_id == attempt_id and owner_generation < generation
             ):
                 connection.execute(
@@ -1844,7 +1920,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                            (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                         values,
                     )
-                elif tuple(existing) != values:
+                elif tuple(existing)[:-1] != values[:-1]:
                     raise InvalidTransitionError(
                         "Gateway measurement identity resolved to different evidence"
                     )
@@ -1859,7 +1935,8 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         kernel_artifact_digest=candidate,
                         gateway_result_digest=result,
                         point=point,
-                        created_at=created_at,
+                        # Retrying persistence later must retain the original timestamp.
+                        created_at=created_at if existing is None else str(existing["created_at"]),
                     )
                 )
         return tuple(records)

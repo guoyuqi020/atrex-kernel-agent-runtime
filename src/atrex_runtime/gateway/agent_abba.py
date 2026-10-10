@@ -23,11 +23,18 @@ from .abba import (
     _schedule,
     build_native_abba_request,
 )
-from .agate import AgateClient, AgateRequestBuilder, _nested_infrastructure_error
+from .agate import (
+    AgateClient,
+    AgateJobBinding,
+    AgateRequestBuilder,
+    SqliteAgateJobStore,
+    _nested_infrastructure_error,
+)
 from .batched_evaluate import (
     EVALUATE_MAX_PARALLEL_BATCHES,
     sorted_shape_ids,
 )
+from .bound_jobs import execute_bound_job
 from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContext, AgateEvaluationContextResolver
 from .control_models import GatewayOperation
@@ -59,6 +66,7 @@ class AgentAbbaGatewayAdapter:
         evaluator: CommitPinnedAtrexBenchEvaluator | None,
         request_builder: AgateRequestBuilder | None = None,
         *,
+        jobs: SqliteAgateJobStore | None = None,
         wait_timeout_s: float,
         correctness_cases: int = 5,
         bench_iters: int = 100,
@@ -78,6 +86,7 @@ class AgentAbbaGatewayAdapter:
             raise ValueError("Agent ABBA sampling counts must be positive")
         self._delegate = delegate
         self._client = client
+        self._jobs = jobs
         self._contexts = contexts
         self._artifacts = artifacts
         self._request_builder = request_builder
@@ -148,7 +157,7 @@ class AgentAbbaGatewayAdapter:
                     name=f"agent-abba-{context.operator}",
                 )
                 payload["idempotency_key"] = f"agent-abba:{key}"
-                batches[index] = await self._run_batch(payload, schedule, [shape_id])
+                batches[index] = await self._run_batch(request, payload, schedule, [shape_id])
 
         try:
             async with anyio.create_task_group() as tasks:
@@ -259,19 +268,29 @@ class AgentAbbaGatewayAdapter:
 
     async def _run_batch(
         self,
+        request: GatewayAdapterRequest,
         payload: dict[str, object],
         schedule: list[dict[str, int | str]],
         shape_ids: list[str],
     ) -> _BatchResult:
         async def execute(submission: dict[str, object]) -> JobExecution:
-            accepted = await self._call(lambda: self._client.submit_job("eval", submission))
-            job_id = accepted.get("job_id")
-            if not isinstance(job_id, str) or not job_id:
-                raise InfrastructureError("Agent ABBA acceptance has no job_id")
-            job = await self._call(
-                lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
+            return await execute_bound_job(
+                self._client,
+                self._jobs,
+                AgateJobBinding(
+                    job_id="",
+                    attempt_id=request.attempt_id,
+                    idempotency_key=str(submission["idempotency_key"]),
+                    kind="eval",
+                    expected_shape_ids=tuple(shape_ids),
+                    input_scope=EvaluateParametersV2.model_validate(request.parameters).input_scope,
+                ),
+                submission,
+                call=self._call,
+                submit_call=self._call,
+                wait_timeout_s=self._wait_timeout_s,
+                recover=request.recover_running_task,
             )
-            return job_id, job
 
         _, job = await run_with_job_recovery(payload, execute)
         if job.get("status") not in {"succeeded", "failed", "cancelled"}:

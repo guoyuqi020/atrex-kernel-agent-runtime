@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-GATEWAY_SCHEMA_VERSION = 14
+GATEWAY_SCHEMA_VERSION = 15
 
 
 def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
@@ -195,7 +195,7 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
         )
-    elif row["value"] in (12, 13):
+    elif row["value"] in (12, 13, 14):
         connection.execute(
             "UPDATE metadata SET value = ? WHERE key = 'schema_version'",
             (GATEWAY_SCHEMA_VERSION,),
@@ -203,6 +203,7 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
     elif row["value"] != GATEWAY_SCHEMA_VERSION:
         raise RuntimeError(f"unsupported Gateway schema version: {row['value']}")
     _migrate_gateway_v13(connection)
+    _migrate_gateway_v15(connection)
     connection.execute(
         """CREATE TABLE IF NOT EXISTS gateway_active_calls(
             call_id TEXT PRIMARY KEY,
@@ -218,6 +219,30 @@ def migrate_gateway_schema(connection: sqlite3.Connection) -> None:
     connection.execute(
         """CREATE INDEX IF NOT EXISTS gateway_active_calls_subject
            ON gateway_active_calls(attempt_id, recovery_generation, operation)"""
+    )
+
+
+def _migrate_gateway_v15(connection: sqlite3.Connection) -> None:
+    """Keep physical job identity stable across HTTP retries and Runtime restarts."""
+    columns = {
+        row["name"] for row in connection.execute("PRAGMA table_info(gateway_evaluate_tasks)")
+    }
+    for name, column_type in (
+        ("execution_attempt_id", "TEXT"),
+        ("execution_generation", "INTEGER"),
+        ("execution_key", "TEXT"),
+    ):
+        if name not in columns:
+            connection.execute(
+                f"ALTER TABLE gateway_evaluate_tasks ADD COLUMN {name} {column_type}"
+            )
+    connection.execute(
+        """UPDATE gateway_evaluate_tasks
+           SET execution_attempt_id = COALESCE(execution_attempt_id, attempt_id),
+               execution_generation = COALESCE(execution_generation, recovery_generation),
+               execution_key = COALESCE(execution_key, idempotency_key)
+           WHERE execution_attempt_id IS NULL OR execution_generation IS NULL
+              OR execution_key IS NULL"""
     )
 
 

@@ -12,6 +12,7 @@ import shutil
 import statistics
 import tempfile
 from collections.abc import Callable, Mapping
+from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -446,6 +447,9 @@ class GatewayAdapterRequest:
     # A positive value identifies one of the Proxy-owned executions that form a
     # single logical measurement. The adapter must not add its own repeat layer.
     measurement_repetition: int | None = None
+    # Only the holder of the durable Evaluate task's execution lease may recover
+    # old jobs. Ordinary concurrent HTTP retries must never replace live jobs.
+    recover_running_task: bool = False
 
     @property
     def is_comparison(self) -> bool:
@@ -910,14 +914,18 @@ class GatewayProxyService:
             idempotency_key=request.idempotency_key,
             request_digest=str(request_digest),
         )
-        with self._control.operation_execution(authorization):
-            return await self._execute_authorized(request, request_digest, authorization)
+        with self._control.operation_execution(authorization) as call_id, ExitStack() as executions:
+            return await self._execute_authorized(
+                request, request_digest, authorization, executions, call_id
+            )
 
     async def _execute_authorized(
         self,
         request: GatewayProxyRequestV2,
         request_digest: ArtifactDigest,
         authorization: GatewayAuthorization,
+        executions: ExitStack,
+        active_call_id: str | None,
     ) -> GatewayProxyResponseV2:
         operation = authorization.operation
         replayable = operation not in _OBSERVATIONAL_OPERATIONS
@@ -931,6 +939,10 @@ class GatewayProxyService:
             else None
         )
         if existing_response is not None:
+            if isinstance(request, EvaluateRequestV2) and request.mode == "full":
+                self._control.reconcile_evaluate_replay(
+                    request.attempt_id, request.idempotency_key, active_call_id
+                )
             return self._load_response(existing_response)
 
         candidate_digest: ArtifactDigest | None = None
@@ -1006,14 +1018,26 @@ class GatewayProxyService:
                 lineage_id,
                 self._control.evaluation_identity(request.attempt_id),
             )
-            evaluate_task_owned, previous_result = self._control.reserve_evaluate_task(
-                request.attempt_id,
-                request.idempotency_key,
-                evaluate_task_digest,
+            evaluate_task_owned, previous_result, recovery = executions.enter_context(
+                self._control.evaluate_task_execution(
+                    request.attempt_id,
+                    request.idempotency_key,
+                    evaluate_task_digest,
+                    active_call_id,
+                )
             )
             if not evaluate_task_owned:
                 raise DuplicateGatewayTaskError(
                     None if previous_result is None else str(previous_result)
+                )
+            if recovery is not None:
+                original_attempt, original_generation, original_key = recovery
+                adapter_request = replace(
+                    adapter_request,
+                    attempt_id=original_attempt,
+                    recovery_generation=original_generation,
+                    idempotency_key=original_key,
+                    recover_running_task=True,
                 )
         self._events.record_runtime_event(
             "gateway.operation_submitted",
@@ -1159,12 +1183,8 @@ class GatewayProxyService:
                     recovery_generation=authorization.recovery_generation,
                 )
         except Exception as error:
-            if evaluate_task_owned and evaluate_task_digest is not None:
-                self._control.abandon_evaluate_task(
-                    request.attempt_id,
-                    request.idempotency_key,
-                    evaluate_task_digest,
-                )
+            # Keep the original physical-job identity after an interrupted request.
+            # The lease is released by ExitStack; the next caller probes Agate first.
             # The HTTP boundary logs the complete chain, including these correlation notes.
             # Never attach the request body or bearer capability.
             error.add_note(
@@ -1186,88 +1206,74 @@ class GatewayProxyService:
             )
             raise
 
-        operation_artifact_committed = False
-        try:
+        # Keep the task recoverable if result persistence is interrupted.
+        self._events.record_runtime_event(
+            "gateway.operation_completed",
+            request.attempt_id,
+            {
+                **event_base,
+                "status": result.status,
+                "gateway_result_digest": result_digest,
+                "job_id": result.job_id,
+                "correct": (
+                    agent_payload.get("correct") if isinstance(agent_payload, dict) else None
+                ),
+                "latency_us": (
+                    agent_payload.get("latency_us_geomean")
+                    if isinstance(agent_payload, dict)
+                    else None
+                ),
+                "profile_status": (
+                    None
+                    if not isinstance(result.profile_result, dict)
+                    else result.profile_result.get("status")
+                ),
+                "normalized_measurement_count": len(measurement_records),
+            },
+        )
+
+        result_artifact_digest = self._store_result_artifact(
+            operation=request.operation,
+            status=result.status,
+            kernel_artifact_digest=(
+                None if candidate_digest is None else str(candidate_digest)
+            ),
+            authorization=authorization,
+            job_id=result.job_id,
+            evaluation=(
+                None
+                if isinstance(request, EvaluateRequestV2) and not request.is_contract_evaluation
+                else result.evaluation
+            ),
+            result=agent_payload,
+        )
+        if replayable:
+            self._control.commit_operation_artifact(
+                request.attempt_id,
+                request.idempotency_key,
+                operation,
+                result_artifact_digest,
+            )
+        if evaluate_task_owned and evaluate_task_digest is not None:
+            self._control.complete_evaluate_task(
+                request.attempt_id,
+                request.idempotency_key,
+                evaluate_task_digest,
+                result_artifact_digest,
+            )
+        response = self._load_response(result_artifact_digest)
+        if evaluation_record is not None:
             self._events.record_runtime_event(
-                "gateway.operation_completed",
+                "gateway.evaluation_recorded",
                 request.attempt_id,
                 {
                     **event_base,
-                    "status": result.status,
-                    "gateway_result_digest": result_digest,
-                    "job_id": result.job_id,
-                    "correct": (
-                        agent_payload.get("correct") if isinstance(agent_payload, dict) else None
-                    ),
-                    "latency_us": (
-                        agent_payload.get("latency_us_geomean")
-                        if isinstance(agent_payload, dict)
-                        else None
-                    ),
-                    "profile_status": (
-                        None
-                        if not isinstance(result.profile_result, dict)
-                        else result.profile_result.get("status")
-                    ),
-                    "normalized_measurement_count": len(measurement_records),
+                    "evaluation_id": evaluation_record.id,
+                    "evaluation_ordinal": evaluation_record.ordinal,
+                    "source": evaluation_record.source.value,
                 },
             )
-
-            result_artifact_digest = self._store_result_artifact(
-                operation=request.operation,
-                status=result.status,
-                kernel_artifact_digest=(
-                    None if candidate_digest is None else str(candidate_digest)
-                ),
-                authorization=authorization,
-                job_id=result.job_id,
-                evaluation=(
-                    None
-                    if isinstance(request, EvaluateRequestV2) and not request.is_contract_evaluation
-                    else result.evaluation
-                ),
-                result=agent_payload,
-            )
-            if replayable:
-                self._control.commit_operation_artifact(
-                    request.attempt_id,
-                    request.idempotency_key,
-                    operation,
-                    result_artifact_digest,
-                )
-                operation_artifact_committed = True
-            if evaluate_task_owned and evaluate_task_digest is not None:
-                self._control.complete_evaluate_task(
-                    request.attempt_id,
-                    request.idempotency_key,
-                    evaluate_task_digest,
-                    result_artifact_digest,
-                )
-            response = self._load_response(result_artifact_digest)
-            if evaluation_record is not None:
-                self._events.record_runtime_event(
-                    "gateway.evaluation_recorded",
-                    request.attempt_id,
-                    {
-                        **event_base,
-                        "evaluation_id": evaluation_record.id,
-                        "evaluation_ordinal": evaluation_record.ordinal,
-                        "source": evaluation_record.source.value,
-                    },
-                )
-            return response
-        except Exception:
-            if (
-                evaluate_task_owned
-                and evaluate_task_digest is not None
-                and not operation_artifact_committed
-            ):
-                self._control.abandon_evaluate_task(
-                    request.attempt_id,
-                    request.idempotency_key,
-                    evaluate_task_digest,
-                )
-            raise
+        return response
 
     def _register_attempt_report(
         self,

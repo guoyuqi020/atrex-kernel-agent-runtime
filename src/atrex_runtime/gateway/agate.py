@@ -34,6 +34,7 @@ from .batched_evaluate import (
     ShapeBatchedEvaluateExecutor,
     ShapeBatchOutcome,
 )
+from .bound_jobs import execute_bound_job
 from .contract import (
     AgateEvaluationContext,
     AgateEvaluationContextResolver,
@@ -328,6 +329,23 @@ class SqliteAgateJobStore:
         if row is None or row["attempt_id"] != attempt_id:
             raise PermissionError("Agate job is not owned by this Attempt")
         return self._row_binding(row)
+
+    def replace_job(self, previous: AgateJobBinding, job_id: str) -> None:
+        """Atomically replace a stale binding after an idempotent submission succeeds.
+
+        Keep the old ID until acceptance: a crash in between can derive the same
+        replacement submission key and recover it without allocating twice.
+        """
+        if not job_id or job_id == previous.job_id:
+            raise InfrastructureError("Agate replacement did not allocate a new job_id")
+        with self._transaction() as connection:
+            updated = connection.execute(
+                """UPDATE agate_jobs SET job_id = ?
+                   WHERE job_id = ? AND attempt_id = ? AND idempotency_key = ?""",
+                (job_id, previous.job_id, previous.attempt_id, previous.idempotency_key),
+            )
+            if updated.rowcount != 1:
+                raise InvalidTransitionError("Agate job binding changed during recovery")
 
     def find_request(self, attempt_id: AttemptId, idempotency_key: str) -> AgateJobBinding | None:
         """Recover a submitted job before allocating another one for the same request."""
@@ -653,28 +671,29 @@ class AgateGatewayAdapter:
         )
 
         async def execute(submission: dict[str, object]) -> JobExecution:
-            job_id = await self._submit_bound_job(
-                submission,
-                attempt_id=request.attempt_id,
-                idempotency_key=(
-                    str(submission["idempotency_key"])
-                    if submission.get("idempotency_key") != payload.get("idempotency_key")
-                    else binding_key
+            return await execute_bound_job(
+                self._client,
+                self._jobs,
+                AgateJobBinding(
+                    job_id="",
+                    attempt_id=request.attempt_id,
+                    idempotency_key=(
+                        str(submission["idempotency_key"])
+                        if submission.get("idempotency_key") != payload.get("idempotency_key")
+                        else binding_key
+                    ),
+                    kind=kind,
+                    operation=request.operation,
+                    evaluation_mode=evaluation_mode,
+                    expected_shape_ids=expected,
+                    input_scope=input_scope,
                 ),
-                kind=kind,
-                operation=request.operation,
-                evaluation_mode=evaluation_mode,
-                expected_shape_ids=expected,
-                input_scope=input_scope,
+                submission,
+                call=self._call,
+                submit_call=partial(self._call, validation_is_candidate=True),
+                wait_timeout_s=self._wait_timeout_s,
+                recover=request.recover_running_task,
             )
-            job = await self._call(
-                lambda: self._client.get_job(
-                    job_id,
-                    wait=True,
-                    timeout=self._wait_timeout_s,
-                )
-            )
-            return job_id, job
 
         try:
             _, job = await run_with_job_recovery(payload, execute)
