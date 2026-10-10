@@ -216,7 +216,10 @@ def build_runtime_application(
             optimizer_bench_iters=(
                 100 if gate_policy is None else gate_policy.optimizer.bench_iters
             ),
-            profile_without_roofline=True,
+            # Agent Evaluate must publish its completed correctness/latency without
+            # waiting for an implicitly queued SOL job. Profile is an explicit tool;
+            # the authoritative finalizer retains its independent SOL collection.
+            profile_without_roofline=False,
             connection_summary={
                 "url": connection.base_url,
                 "auth": connection.auth_mode,

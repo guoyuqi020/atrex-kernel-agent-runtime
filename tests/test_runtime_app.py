@@ -5,15 +5,18 @@ from __future__ import annotations
 import base64
 import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
 
 import pytest
+from httpx import ASGITransport, AsyncClient
 
 from atrex_runtime.api.app import RuntimeApplication, build_runtime_application
 from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.gateway.agate import AgateConnectionConfig
 from atrex_runtime.gateway.agent_abba import AgentAbbaGatewayAdapter
+from atrex_runtime.gateway.control import GatewayCapabilityPolicy, GatewayOperation
 from atrex_runtime.gateway.proxy import GatewayProxyAsgiApp
 
 
@@ -184,10 +187,78 @@ def test_application_wires_agent_abba_with_optimizer_gate(tmp_path: Path) -> Non
         assert adapter._correctness_cases == 7
         assert adapter._bench_iters == 23
         assert adapter._per_run_timeout_seconds == 40
-        assert adapter._evaluator is not None
-        assert adapter._evaluator.commit == gate.evaluator.commit
-        # Startup must not export/fetch the evaluator or submit any GPU jobs.
-        assert adapter._evaluator._files is None
+        # Native Eval ABBA uses the SDK builder, not the removed Dev evaluator.
+        assert isinstance(adapter._request_builder, UnusedBuilder)
+    finally:
+        app.close()
+
+
+@pytest.mark.anyio
+async def test_http_evaluate_commits_without_implicit_profile_but_explicit_profile_works(
+    tmp_path: Path,
+) -> None:
+    from test_agate_gateway_adapter import (
+        CapturingBuilder,
+        EvalProfileAgateClient,
+        StaticContexts,
+        _contract,
+        _successful_job,
+    )
+    from test_gateway_proxy import _insert_attempt, _request
+
+    from atrex_runtime.domain.models import Dsl
+    from atrex_runtime.gateway.contract import AgateEvaluationContext
+
+    class ExplicitProfileClient(EvalProfileAgateClient):
+        allow_profile = False
+
+        def submit_job(self, kind, request):
+            if kind == "profile" and not self.allow_profile:
+                # Reproduces an optional SOL request that would never finish.
+                raise AssertionError("completed Evaluate must not wait for automatic Profile")
+            return super().submit_job(kind, request)
+
+    client = ExplicitProfileClient(_successful_job())
+    app = build_runtime_application(
+        _settings(tmp_path), _environment(),
+        sdk_loader=lambda _config: (client, CapturingBuilder()),
+    )
+    try:
+        service = app._proxy._service
+        control = service._control
+        attempt = _insert_attempt(control._registry)
+        capability = control.issue(
+            attempt.id,
+            GatewayCapabilityPolicy(
+                frozenset(GatewayOperation), 4, datetime.now(UTC) + timedelta(hours=1),
+            ),
+        )
+        # Isolate application wiring from dataset and source-policy fixtures.
+        service._candidate_diff = None
+        service._candidate_production = None
+        service._contexts = StaticContexts(
+            AgateEvaluationContext("vector_add", "H20", Dsl.TRITON, _contract()),
+        )
+        service._adapter._delegate._contexts = service._contexts
+        headers = {"Authorization": f"Bearer {capability.token}"}
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://runtime") as http:
+            request = json.loads(_request(attempt))
+            response = await http.post("/v1/operations", json=request, headers=headers)
+            assert response.status_code == 200, response.text
+            assert response.json()["result"]["correct"] is True
+            assert len(control.list_evaluations(attempt.id)) == 1
+            assert [kind for kind, _ in client.submitted] == ["eval", "eval"]
+            # The completion is durable; replay performs no additional upstream work.
+            replay = await http.post("/v1/operations", json=request, headers=headers)
+            assert replay.json() == response.json()
+            assert len(client.submitted) == 2
+            client.allow_profile = True
+            request.pop("latency_prediction")
+            request.update(operation="profile", idempotency_key="explicit-sol", level="sol")
+            profile = await http.post("/v1/operations", json=request, headers=headers)
+            assert profile.status_code == 200, profile.text
+            assert profile.json()["status"] == "completed"
+            assert client.submitted[-1][0] == "profile"
     finally:
         app.close()
 
