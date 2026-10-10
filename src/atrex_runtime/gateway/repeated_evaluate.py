@@ -45,9 +45,18 @@ def repeated_evaluate_result(
     )
 
 
-def repeated_evaluate_worker_result(evaluations: tuple[EvaluationV2, ...]) -> JsonValue:
-    """Expose bounded repeat measurements without private Shape inputs or failures."""
+def repeated_evaluate_worker_result(
+    evaluations: tuple[EvaluationV2, ...],
+    *,
+    worker_results: tuple[JsonValue, ...] = (),
+) -> JsonValue:
+    """Preserve measurements and already-projected errors across repeat aggregation."""
     aggregate = aggregate_evaluations(evaluations)
+    errors: list[JsonValue] = [
+        {"repeat": repeat, "error": result["error"]}
+        for repeat, result in enumerate(worker_results)
+        if isinstance(result, dict) and result.get("error") is not None
+    ]
     return cast(
         JsonValue,
         {
@@ -65,5 +74,9 @@ def repeated_evaluate_worker_result(evaluations: tuple[EvaluationV2, ...]) -> Js
                 for repeat, evaluation in enumerate(evaluations)
             ],
             "hidden_case_details": "shape inputs and failure details withheld",
+            **(
+                {"error": {"category": "evaluate_repetition_failed", "details": errors}}
+                if errors else {}
+            ),
         },
     )

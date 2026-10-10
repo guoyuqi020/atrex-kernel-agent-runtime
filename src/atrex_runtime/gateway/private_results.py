@@ -91,12 +91,20 @@ def project_private_job(raw: JsonValue) -> JsonValue:
     if isinstance(raw, dict) and raw.get("status") == "rejected":
         return project_candidate_rejection(raw.get("error"))
     if isinstance(raw, dict) and raw.get("status") in {"failed", "cancelled"}:
-        return {
-            "status": raw.get("status"),
-            "job_id": raw.get("job_id"),
-            "error": _project_job_failure(raw.get("error")),
-        }
+        return project_job_failure(raw)
     return _strip_private_fields(raw)
+
+
+def project_job_failure(job: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    """Project a failed execution even when its outer Job status says succeeded."""
+    diagnostic: dict[str, JsonValue] = {
+        "status": job.get("status"),
+        "job_id": job.get("job_id"),
+        "error": _project_job_failure(job.get("error")),
+    }
+    if isinstance(job.get("command_ok"), bool):
+        diagnostic["command_ok"] = job["command_ok"]
+    return diagnostic
 
 
 def project_compile_job(raw: JsonValue) -> JsonValue:
@@ -126,6 +134,7 @@ def _project_job_failure(error: JsonValue) -> JsonValue:
     logs = _unescape(details.get("logs_tail"))
     projected: dict[str, JsonValue] = {}
     for key, source in (
+        ("error_class", error.get("error_class")),
         ("failure_origin", details.get("failure_origin")),
         ("failure_rule", details.get("failure_rule")),
         ("reason", error.get("reason")),
@@ -266,4 +275,9 @@ def _positive_number(value: JsonValue | None) -> float | None:
     return number if number > 0 and math.isfinite(number) else None
 
 
-__all__ = ["project_compile_job", "project_private_evaluation", "project_private_job"]
+__all__ = [
+    "project_compile_job",
+    "project_job_failure",
+    "project_private_evaluation",
+    "project_private_job",
+]

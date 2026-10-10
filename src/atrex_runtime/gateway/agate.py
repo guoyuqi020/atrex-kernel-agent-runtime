@@ -737,7 +737,17 @@ class AgateGatewayAdapter:
                     if context.contract.mode == "correctness_only"
                     else "Agate Eval batch did not complete"
                 )
-                raise InfrastructureError(message)
+                # Preserve the already-projected diagnostic through the task group
+                # and HTTP boundary. Never interpolate the private raw Job here.
+                diagnostic = {
+                    "batch_index": batch.index,
+                    "job_id": mapped.job_id,
+                    "status": mapped.status,
+                    "diagnostic": mapped.worker_result,
+                }
+                raise InfrastructureError(
+                    f"{message}: {json.dumps(diagnostic, ensure_ascii=False)}"
+                )
             evaluation = mapped.evaluation
             correctness: bool | None = None
             if context.contract.mode == "correctness_only":
@@ -799,9 +809,15 @@ class AgateGatewayAdapter:
                 idempotency_key=binding_key,
             )
 
-        async with anyio.create_task_group() as tasks:
-            for repeat in range(self._optimizer_evaluate_repeats):
-                tasks.start_soon(run_one, repeat)
+        try:
+            async with anyio.create_task_group() as tasks:
+                for repeat in range(self._optimizer_evaluate_repeats):
+                    tasks.start_soon(run_one, repeat)
+        except BaseExceptionGroup as errors:
+            infrastructure = _nested_infrastructure_error(errors)
+            if infrastructure is not None:
+                raise infrastructure from errors
+            raise
         completed = tuple(result for result in results if result is not None)
         if len(completed) != self._optimizer_evaluate_repeats:
             raise AssertionError("ordinary Evaluate repetition did not produce a result")
@@ -818,7 +834,10 @@ class AgateGatewayAdapter:
                 evaluations,
             ),
             evaluation=aggregate,
-            worker_result=repeated_evaluate_worker_result(evaluations),
+            worker_result=repeated_evaluate_worker_result(
+                evaluations,
+                worker_results=tuple(result.worker_result for result in completed),
+            ),
         )
 
     async def _profile_evaluation(
@@ -1450,10 +1469,7 @@ class AgateGatewayAdapter:
                 result=job,
                 job_id=job_id,
                 worker_result=(
-                    {
-                        "status": "cancelled",
-                        "hidden_case_details": "shape inputs and failure details withheld",
-                    }
+                    project_private_job(job)
                     if operation is GatewayOperation.EVALUATE
                     else _worker_view(job, operation)
                 ),

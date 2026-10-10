@@ -33,8 +33,9 @@ from .contract import AgateEvaluationContext, AgateEvaluationContextResolver
 from .control_models import GatewayOperation
 from .correctness import correctness_summary
 from .execution import call_agate_json
+from .failures import infrastructure_detail
 from .job_recovery import JobExecution, run_with_job_recovery
-from .private_results import project_private_job
+from .private_results import project_job_failure
 from .protocol import AGATE_MAX_JOB_TIMEOUT_S, EvaluateParametersV2
 from .proxy import GatewayAdapter, GatewayAdapterRequest, GatewayAdapterResult
 
@@ -183,6 +184,15 @@ class AgentAbbaGatewayAdapter:
             public["error"] = {
                 "category": "abba_execution_failed",
                 "message": "ABBA could not complete its scheduled measurements",
+                "details": [
+                    {
+                        "batch_index": index,
+                        "job_id": batch.job.get("job_id"),
+                        "diagnostic": batch.error,
+                    }
+                    for index, batch in enumerate(completed)
+                    if batch.payload is None
+                ],
             }
         raw: dict[str, JsonValue] = {
             **public,
@@ -267,17 +277,22 @@ class AgentAbbaGatewayAdapter:
         if job.get("status") not in {"succeeded", "failed", "cancelled"}:
             raise InfrastructureError("Agent ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:
-            return _BatchResult(job, None, project_private_job(job))
+            return _BatchResult(job, None, project_job_failure(job))
         command_result = job.get("result")
         if isinstance(command_result, dict) and command_result.get("exit_code") is not None:
             code = command_result["exit_code"]
             if type(code) is not int or code != 0:
-                return _BatchResult(job, None, {"message": "ABBA command exited unsuccessfully"})
+                message = (
+                    f"ABBA command exited unsuccessfully: exit_code={code}"
+                    if type(code) is int
+                    else "ABBA command returned an invalid exit code"
+                )
+                return _BatchResult(job, None, {"message": message})
         try:
             parsed = _parse_native_abba_payload(job, schedule, shape_ids)
             self._validate_batch(parsed, shape_ids)
         except InfrastructureError as error:
-            return _BatchResult(job, None, {"message": str(error)})
+            return _BatchResult(job, None, {"message": infrastructure_detail(error)})
         return _BatchResult(job, parsed)
 
     @staticmethod
