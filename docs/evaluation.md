@@ -291,6 +291,8 @@ contract.
   response, including correctness-only and ABBA calls. It does not return an intermediate duplicate
   error, consume another call allowance, or submit another Agate job. The request lease is released
   automatically when its executor exits, allowing the reconnect to recover unfinished work.
+  Core uses a 72-hour HTTP read timeout for Gateway commands; the owning Session and outer process
+  deadlines still apply. Runtime-local queries and Journal/Wiki calls retain their shorter timeout.
 
 This rule prevents an Agent from spending evaluator capacity or choosing among repeated samples by
 resubmitting unchanged code. Changing the Kernel, Baseline, input domain, or measurement parameters
