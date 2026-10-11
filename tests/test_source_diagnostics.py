@@ -11,6 +11,7 @@ import sys
 from dataclasses import replace
 from types import SimpleNamespace
 
+import anyio
 import pytest
 from test_kernel_sources import builder, evaluation_contract
 from test_kernel_sources import source_seed as source_seed
@@ -356,6 +357,39 @@ def test_raw_csv_handles_units_headers_and_unavailable_metrics():
     assert "memory_sol_pct" not in kernels[1]
     assert "compute_sol_pct" not in kernels[1]
     assert _kernels("\n".join(METRICS.splitlines()[:2])) == []
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("operation", ["profile", "check", "disassemble"])
+async def test_source_diagnostic_waits_on_same_dev_job(diagnostic, monkeypatch, operation):
+    get_job = diagnostic.sdk.get_job
+    fetched = []
+
+    def pending_then_terminal(job_id, **kwargs):
+        fetched.append((job_id, kwargs))
+        if len(fetched) <= 2:
+            return {"job_id": job_id, "status": ["queued", "running"][len(fetched) - 1]}
+        return get_job(job_id, **kwargs)
+
+    monkeypatch.setattr(diagnostic.sdk, "get_job", pending_then_terminal)
+    request = GatewayAdapterRequest(
+        attempt_id=new_attempt_id(),
+        operation=GatewayOperation(operation),
+        idempotency_key="wait-for-source-diagnostic",
+        candidate_path=diagnostic.seed.working,
+        candidate_digest=diagnostic.context.kernel_source.seed_digest,
+        kernel_regex=None,
+        job_id=None,
+        profile_level="sol" if operation == "profile" else None,
+    )
+    with anyio.fail_after(10):
+        result = await diagnostic.adapter.execute(request)
+    assert result.status == "completed"
+    assert result.worker_result["result"]["operation"] == operation
+    assert result.worker_result["result"]["passed"] is True
+    assert fetched == [("dv_0", {"wait": True, "timeout": 40})] * 3
+    assert len(diagnostic.sdk.requests) == 1
+    assert len(diagnostic.store.list_owned(request.attempt_id)) == 1
 
 
 @pytest.mark.anyio

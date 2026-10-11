@@ -105,12 +105,15 @@ async def execute_bound_job(
     else:
         job_id = existing.job_id
     job = await call(lambda: client.get_job(job_id, wait=True, timeout=wait_timeout_s))
-    # A long-poll deadline can return a still-running Profile. Keep ownership of
+    # A long-poll deadline can return a still-running diagnostic/Dev Job. Keep ownership of
     # that same physical Job until it finishes; an unfinished Result Artifact is
     # immutable and cannot be used by the Agent to poll for its eventual result.
-    while binding.operation is GatewayOperation.PROFILE and job.get("status") in {
-        "queued", "running",
-    }:
+    while binding.operation in {
+        GatewayOperation.PROFILE,
+        GatewayOperation.CHECK,
+        GatewayOperation.DISASSEMBLE,
+        GatewayOperation.DEV,
+    } and job.get("status") in {"queued", "running"}:
         # Some backends return immediately even with wait=True. Yield to both
         # cancellation and other requests instead of spinning on their status API.
         await anyio.sleep(1.0)

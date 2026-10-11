@@ -6,6 +6,8 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Agent 的 Check、Disassemble 和 Dev 调用也会在收到 `queued`/`running` 后继续等待同一个 Job
+  直至终态，覆盖通过 Dev 执行的多文件诊断。未完成结果不会封存或重放，终态错误和 Dev 输出保留。
 - Agent 显式调用 Profile 时，若长轮询返回 `queued` 或 `running`，Runtime 会继续等待同一个
   Agate Job；只有终态结果才返回给 Agent 并封存为 Result Artifact。调用中断后保留 Job 绑定，
   重试可继续等待原任务，无需重新提交。

@@ -6,6 +6,9 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Agent Check, Disassemble, and Dev calls now also wait through `queued`/`running` replies on the
+  same Job until it reaches a terminal state, including source-tree diagnostics executed via Dev.
+  Unfinished results are never sealed or replayed; terminal diagnostics and Dev output are preserved.
 - Explicit Agent Profile calls keep waiting on the same Agate Job when a long poll returns
   `queued` or `running`. Only terminal results are published to the Agent and sealed as Result
   Artifacts; interrupted calls retain the Job binding for resumption without resubmission.
