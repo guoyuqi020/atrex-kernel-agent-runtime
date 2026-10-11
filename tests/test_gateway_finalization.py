@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import threading
+from collections import Counter
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -588,8 +589,9 @@ async def test_finalizer_defers_authority_to_abba_without_an_extra_eval(tmp_path
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("long_poll_expiry", [False, True])
 async def test_finalizer_runs_ordered_atrex_bootstrap_stages_and_uses_second_latency(
-    tmp_path: Path,
+    tmp_path: Path, long_poll_expiry: bool,
 ) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     control = SqliteGatewayControl(
@@ -623,7 +625,20 @@ async def test_finalizer_runs_ordered_atrex_bootstrap_stages_and_uses_second_lat
         latency_us=8.0,
         agate_job_id="ev_agent",
     )
-    client = RepeatedFinalClient()
+    polls = Counter()
+
+    class Client(RepeatedFinalClient):
+        def get_job(self, job_id, **kwargs):
+            assert control.get_committed_outcome(attempt_id) is None
+            polls[job_id] += 1
+            if long_poll_expiry and polls[job_id] <= 2:
+                return {
+                    "job_id": job_id,
+                    "status": "queued" if polls[job_id] == 1 else "running",
+                }
+            return super().get_job(job_id, **kwargs)
+
+    client = Client()
     finalizer = AgateAuthoritativeCandidateEvaluator(
         client,  # type: ignore[arg-type]
         _builder,
@@ -641,6 +656,7 @@ async def test_finalizer_runs_ordered_atrex_bootstrap_stages_and_uses_second_lat
     assert outcome.correct is True
     assert outcome.latency_us == pytest.approx(9.0)
     assert len(client.submitted) == 2
+    assert polls == {job_id: 3 if long_poll_expiry else 1 for job_id in client.latency_by_job}
     assert len({request["idempotency_key"] for request in client.submitted}) == 2
     raw = json.loads(
         (artifacts.verify(outcome.gateway_result_digest).payload_path / "value.json").read_text()

@@ -6,6 +6,11 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Evaluate and ABBA now renew expired long polls on the same Agate Job until success, failure,
+  or cancellation. This covers full/custom/correctness-only Agent evaluations, authoritative
+  Bootstrap/final evaluation, repeated measurements, Lineage seeds and their optional Profiles.
+  Pending ABBA batches no longer consume retry budgets or trigger replacement submissions, and
+  unfinished results are never published to Agents or sealed as Result Artifacts.
 - Agent Check, Disassemble, and Dev calls now also wait through `queued`/`running` replies on the
   same Job until it reaches a terminal state, including source-tree diagnostics executed via Dev.
   Unfinished results are never sealed or replayed; terminal diagnostics and Dev output are preserved.

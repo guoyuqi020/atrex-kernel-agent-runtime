@@ -40,6 +40,7 @@ from .eval_sources import prepare_eval_sources
 from .evaluation_failures import embedded_device_failure
 from .execution import call_agate_json
 from .job_recovery import JobExecution, run_with_job_recovery
+from .job_wait import wait_for_terminal_job
 from .stability import (
     MEASUREMENT_REPETITIONS,
     measurement_aggregation_summary,
@@ -922,8 +923,8 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     "operator": context_name,
                 },
             )
-            job = await self._call(
-                lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
+            job = await wait_for_terminal_job(
+                self._client, job_id, call=self._call, wait_timeout_s=self._wait_timeout_s,
             )
             return job_id, job
 

@@ -43,6 +43,7 @@ from .contract import (
 from .control_models import GatewayOperation
 from .correctness import correctness_summary
 from .job_recovery import JobExecution, run_with_job_recovery
+from .job_wait import wait_for_terminal_job
 from .oss_client import OssAgateClient
 from .private_results import (
     project_candidate_rejection,
@@ -884,12 +885,8 @@ class AgateGatewayAdapter:
                 kind="profile",
                 operation=GatewayOperation.PROFILE,
             )
-            job = await self._call(
-                lambda: self._client.get_job(
-                    job_id,
-                    wait=True,
-                    timeout=self._wait_timeout_s,
-                )
+            job = await wait_for_terminal_job(
+                self._client, job_id, call=self._call, wait_timeout_s=self._wait_timeout_s,
             )
             return job_id, job
 

@@ -10,12 +10,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
+import anyio
 import pytest
 from atrex_gateway_client import build_eval_request_from_content
 from pydantic import ValidationError
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
-from atrex_runtime.domain.errors import InfrastructureError
 from atrex_runtime.domain.ids import new_attempt_id
 from atrex_runtime.domain.models import Dsl
 from atrex_runtime.gateway.agent_abba import AgentAbbaGatewayAdapter
@@ -649,5 +649,8 @@ async def test_agent_abba_infra_recovery_retains_exact_schedule_and_source(
 @pytest.mark.anyio
 async def test_agent_abba_does_not_cache_incomplete_jobs(case: Case) -> None:
     case.client.failure = "queued"
-    with pytest.raises(InfrastructureError, match="did not reach a terminal state"):
+    with anyio.move_on_after(0.2) as scope:
         await case.adapter.execute(case.request)
+        pytest.fail("ABBA returned before its jobs reached a terminal state")
+    assert scope.cancel_called
+    assert len(case.client.requests) == 2

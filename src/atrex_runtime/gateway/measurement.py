@@ -31,6 +31,7 @@ from .candidate import resolve_kernel_candidate
 from .contract import RegistryKernelEvaluationContextResolver
 from .execution import build_evaluation_request, call_agate_json
 from .job_recovery import JobExecution, run_with_job_recovery
+from .job_wait import wait_for_terminal_job
 from .protocol import EvaluationV2
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
@@ -137,12 +138,8 @@ class AgateKernelMeasurementRunner(KernelMeasurementRunner):
                         "shape_ids": list(batch.shape_ids),
                     },
                 )
-                job = await self._call(
-                    lambda: self._client.get_job(
-                        job_id,
-                        wait=True,
-                        timeout=self._wait_timeout_s,
-                    )
+                job = await wait_for_terminal_job(
+                    self._client, job_id, call=self._call, wait_timeout_s=self._wait_timeout_s,
                 )
                 return job_id, job
 

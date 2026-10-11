@@ -6,7 +6,6 @@ import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from functools import partial
 from typing import Literal
 
 import anyio
@@ -40,6 +39,7 @@ from .execution import (
     submit_agate_job,
 )
 from .job_recovery import JobExecution, run_with_job_recovery
+from .job_wait import wait_for_terminal_job
 from .production_policy import ProductionKernelPolicy
 from .protocol import EvaluationV2
 from .repeated_evaluate import aggregate_evaluations, repeated_evaluate_result
@@ -711,12 +711,7 @@ class AgateAuthoritativeCandidateEvaluator:
         )
 
     async def _wait_for_job(self, job_id: str) -> dict[str, JsonValue]:
-        """Long-poll once; the shared Agate client owns persistent transport retries."""
-        return await self._call(
-            partial(
-                self._client.get_job,
-                job_id,
-                wait=True,
-                timeout=self._wait_timeout_s,
-            )
+        """Wait through long-poll expiry; the shared client owns transport retries."""
+        return await wait_for_terminal_job(
+            self._client, job_id, call=self._call, wait_timeout_s=self._wait_timeout_s,
         )

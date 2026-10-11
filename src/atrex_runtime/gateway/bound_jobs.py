@@ -4,21 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from typing import TYPE_CHECKING
 
-import anyio
-
-from ..artifacts.local import JsonValue
 from ..domain.errors import InfrastructureError
-from .control_models import GatewayOperation
+from .job_wait import AgateCall, wait_for_terminal_job
 
 if TYPE_CHECKING:
     from .agate import AgateClient, AgateJobBinding, SqliteAgateJobStore
     from .job_recovery import JobExecution
 
-AgateCall = Callable[[Callable[[], dict[str, object]]], Awaitable[dict[str, JsonValue]]]
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -104,18 +99,7 @@ async def execute_bound_job(
                 jobs.bind(replace(binding, job_id=job_id))
     else:
         job_id = existing.job_id
-    job = await call(lambda: client.get_job(job_id, wait=True, timeout=wait_timeout_s))
-    # A long-poll deadline can return a still-running diagnostic/Dev Job. Keep ownership of
-    # that same physical Job until it finishes; an unfinished Result Artifact is
-    # immutable and cannot be used by the Agent to poll for its eventual result.
-    while binding.operation in {
-        GatewayOperation.PROFILE,
-        GatewayOperation.CHECK,
-        GatewayOperation.DISASSEMBLE,
-        GatewayOperation.DEV,
-    } and job.get("status") in {"queued", "running"}:
-        # Some backends return immediately even with wait=True. Yield to both
-        # cancellation and other requests instead of spinning on their status API.
-        await anyio.sleep(1.0)
-        job = await call(lambda: client.get_job(job_id, wait=True, timeout=wait_timeout_s))
+    job = await wait_for_terminal_job(
+        client, job_id, call=call, wait_timeout_s=wait_timeout_s,
+    )
     return job_id, job

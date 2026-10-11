@@ -66,9 +66,11 @@ class CapturingBuilder:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("holdout", [False, True])
+@pytest.mark.parametrize("long_poll_expiry", [False, True])
 async def test_repeated_evaluate_runner_uses_sealed_kernel_and_campaign_contract(
     tmp_path: Path,
     holdout: bool,
+    long_poll_expiry: bool,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     contract = AgateEvaluationContractV1(
@@ -103,7 +105,15 @@ async def test_repeated_evaluate_runner_uses_sealed_kernel_and_campaign_contract
             kernel_artifact_digest=kernel_digest,
         )
         revision = seeded.baseline
-        client = FakeAgateClient()
+        class Client(FakeAgateClient):
+            pending = ["queued", "running"] if long_poll_expiry else []
+
+            def get_job(self, job_id, **kwargs):
+                if self.pending:
+                    return {"job_id": job_id, "status": self.pending.pop(0)}
+                return super().get_job(job_id, **kwargs)
+
+        client = Client()
         builder = CapturingBuilder()
         runner = AgateKernelMeasurementRunner(
             client,
@@ -131,6 +141,7 @@ async def test_repeated_evaluate_runner_uses_sealed_kernel_and_campaign_contract
         )
 
         assert first.repeat == 0
+        assert not client.pending
         assert first.correct is True
         assert first.latency_us == 17.5
         assert first.gateway_result_digest is not None

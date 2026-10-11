@@ -6,6 +6,10 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Evaluate 与 ABBA 在单次长轮询到期后继续等待同一个 Agate Job，直到成功、失败或取消。
+  覆盖 Agent 的 full、自定义输入与 correctness-only 评测、Bootstrap／最终权威评测、
+  重复测量、Lineage 种子评测及其可选 Profile。未完成的 ABBA 批次不再消耗重试预算或触发
+  重新提交；未完成结果不会返回给 Agent，也不会封存为 Result Artifact。
 - Agent 的 Check、Disassemble 和 Dev 调用也会在收到 `queued`/`running` 后继续等待同一个 Job
   直至终态，覆盖通过 Dev 执行的多文件诊断。未完成结果不会封存或重放，终态错误和 Dev 输出保留。
 - Agent 显式调用 Profile 时，若长轮询返回 `queued` 或 `running`，Runtime 会继续等待同一个

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from pathlib import Path
 
 import pytest
@@ -64,9 +65,11 @@ class CapturingBuilder:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("holdout", [False, True])
+@pytest.mark.parametrize("long_poll_expiry", [False, True])
 async def test_lineage_seed_evaluation_uses_campaign_contract_and_profiles_sol(
     tmp_path: Path,
     holdout: bool,
+    long_poll_expiry: bool,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     contract = AgateEvaluationContractV1(
@@ -96,7 +99,19 @@ async def test_lineage_seed_evaluation_uses_campaign_contract_and_profiles_sol(
     with SqliteRegistry(tmp_path / "registry.sqlite") as registry:
         seeded = seed_lineage(registry, evaluation_contract_digest=contract_digest)
         campaign_id = registry.get_lineage(seeded.lineage_id).campaign_id
-        client = FakeAgateClient()
+        polls = Counter()
+
+        class Client(FakeAgateClient):
+            def get_job(self, job_id, **kwargs):
+                polls[job_id] += 1
+                if long_poll_expiry and polls[job_id] <= 2:
+                    return {
+                        "job_id": job_id,
+                        "status": "queued" if polls[job_id] == 1 else "running",
+                    }
+                return super().get_job(job_id, **kwargs)
+
+        client = Client()
         builder = CapturingBuilder()
         evaluator = AgateLineageSeedEvaluator(
             client,
@@ -117,6 +132,10 @@ async def test_lineage_seed_evaluation_uses_campaign_contract_and_profiles_sol(
         assert result.correct is True
         assert result.latency_us == 17.5
         shape_ids = set(contract.for_agent().shapes)
+        assert polls == {
+            "job-eval": len(shape_ids) + (2 if long_poll_expiry else 0),
+            "job-profile": 3 if long_poll_expiry else 1,
+        }
         assert [kind for kind, _ in client.submissions] == ["eval"] * len(shape_ids) + ["profile"]
         references = [
             payload["reference"] for kind, payload in client.submissions if kind == "eval"

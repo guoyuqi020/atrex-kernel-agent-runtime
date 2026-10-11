@@ -912,30 +912,27 @@ async def test_correctness_only_log_recovery_preserves_custom_request_and_bindin
 
 
 @pytest.mark.anyio
-async def test_correctness_only_queued_job_can_complete_on_same_request_retry(
+async def test_correctness_only_custom_job_waits_until_complete_without_agent_retry(
     tmp_path: Path,
 ) -> None:
-    class IdempotentClient(FakeAgateClient):
-        def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
-            if self.submitted:
-                assert self.submitted == [(kind, request)]
-                return {"job_id": self.acceptance_job_id, "status": "queued"}
-            return super().submit_job(kind, request)
+    class Client(FakeAgateClient):
+        def get_job(self, job_id, **kwargs):
+            result = super().get_job(job_id, **kwargs)
+            if len(self.fetched) == 1:
+                return {"job_id": job_id, "status": "running"}
+            return result
 
-    client = IdempotentClient({"job_id": "ev_test", "status": "running"})
+    client = Client(_job_for_shapes("7", correctness_only=True))
     adapter, _builder, jobs = _adapter(tmp_path, client)
     request = _exploratory_request(
         tmp_path, {"mode": "correctness_only", "shapes": {"7": {}}},
     )
     try:
-        with pytest.raises(InfrastructureError, match="correctness evaluation did not complete"):
-            await adapter.execute(request)
+        mapped = await adapter.execute(request)
         binding = jobs.require_owned(request.attempt_id, "ev_test")
         assert binding.evaluation_mode == "correctness_only"
         assert binding.expected_shape_ids == ("7",)
         assert binding.input_scope == "custom"
-        client.job = _job_for_shapes("7", correctness_only=True)
-        mapped = await adapter.execute(request)
         assert mapped.status == "completed" and mapped.evaluation is None
         assert mapped.worker_result["correct"] is True
         assert len(client.submitted) == 1

@@ -27,6 +27,7 @@ from .execution import (
     submit_agate_job,
 )
 from .job_recovery import JobExecution, run_with_job_recovery
+from .job_wait import wait_for_terminal_job
 from .production_policy import ProductionKernelPolicy
 from .protocol import EvaluationV2
 
@@ -136,8 +137,8 @@ class AgateLineageSeedEvaluator:
                         "shape_ids": list(batch.shape_ids),
                     },
                 )
-                job = await self._call(
-                    lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
+                job = await wait_for_terminal_job(
+                    self._client, job_id, call=self._call, wait_timeout_s=self._wait_timeout_s,
                 )
                 return job_id, job
 
@@ -212,8 +213,8 @@ class AgateLineageSeedEvaluator:
                 lineage_id,
                 {"kernel_artifact_digest": kernel_digest, "agate_job_id": job_id},
             )
-            job = await self._call(
-                lambda: self._client.get_job(job_id, wait=True, timeout=self._wait_timeout_s)
+            job = await wait_for_terminal_job(
+                self._client, job_id, call=self._call, wait_timeout_s=self._wait_timeout_s,
             )
             return job_id, job
 

@@ -8,6 +8,7 @@ import subprocess
 import threading
 from pathlib import Path
 
+import anyio
 import pytest
 from atrex_gateway_client import build_eval_request_from_content
 from conftest import NOW, digest
@@ -956,7 +957,7 @@ async def test_abba_terminal_infra_resubmits_beyond_general_retry_ceiling(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "failure", ("submit_error", "missing_job_id", "nonterminal", "malformed_payload")
+    "failure", ("submit_error", "missing_job_id", "malformed_payload")
 )
 async def test_abba_batch_infrastructure_errors_are_retried(
     tmp_path: Path,
@@ -982,12 +983,9 @@ async def test_abba_batch_infrastructure_errors_are_retried(
             job_id = str(accepted["job_id"])
             if failure == "missing_job_id":
                 return {"status": "queued"}
-            if failure == "nonterminal":
-                self.jobs[job_id] = {"job_id": job_id, "status": "running"}
-            else:
-                self.jobs[job_id]["result"] = {
-                    "abba": {"sdk_results": []},
-                }
+            self.jobs[job_id]["result"] = {
+                "abba": {"sdk_results": []},
+            }
             return accepted
 
     client = OneFailureClient()
@@ -1000,6 +998,32 @@ async def test_abba_batch_infrastructure_errors_are_retried(
     assert len(retries) == 1
     assert retries[0]["failure_type"] == "InfrastructureError"
     assert retries[0]["retryable"] is True
+    assert result.gateway_result_digest is not None
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("source_tree", [False, True])
+async def test_authoritative_abba_waits_on_same_jobs_without_spending_retry_budget(
+    tmp_path: Path, source_tree: bool,
+) -> None:
+    class Client(FakeAgateClient):
+        def __init__(self):
+            super().__init__()
+            self.polls = {}
+
+        def get_job(self, job_id, **kwargs):
+            job = super().get_job(job_id, **kwargs)
+            count = self.polls[job_id] = self.polls.get(job_id, 0) + 1
+            if count <= 2:
+                return {"job_id": job_id, "status": "queued" if count == 1 else "running"}
+            return job
+
+    client = Client()
+    with anyio.fail_after(10):
+        result, journal = await _run_pair(client, tmp_path, source_tree=source_tree)
+    assert len(client.requests) == 2
+    assert client.polls == {job_id: 3 for job_id in client.jobs}
+    assert not any(kind == "comparison.abba_batch_retried" for kind, _, _ in journal.events)
     assert result.gateway_result_digest is not None
 
 
