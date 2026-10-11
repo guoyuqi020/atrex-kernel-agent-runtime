@@ -6,6 +6,9 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Agent 显式调用 Profile 时，若长轮询返回 `queued` 或 `running`，Runtime 会继续等待同一个
+  Agate Job；只有终态结果才返回给 Agent 并封存为 Result Artifact。调用中断后保留 Job 绑定，
+  重试可继续等待原任务，无需重新提交。
 - Agent 的 `correctness_only` Evaluate 现在与完整 Evaluate 一样按单 Shape 分批，最多 16 批
   并发。Runtime 将所有批次合并为一个正确性结论，仍不生成延迟测量，也不自动执行 Profile。
 - 新 Campaign 将 100% 原始 Shape 放入 Valid，Test 为空且不设 Shape 数量上限。Agent 与 Runtime

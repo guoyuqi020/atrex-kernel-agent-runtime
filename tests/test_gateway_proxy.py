@@ -812,7 +812,7 @@ async def test_proxy_authorizes_profile_poll_and_cancel_worker_paths(tmp_path: P
                 "level": "deep",
                 "kernel_regex": "kernel",
             },
-            GatewayAdapterResult("queued", {"status": "running"}, job_id="job-1"),
+            GatewayAdapterResult("completed", {"status": "succeeded"}, job_id="job-1"),
         ),
         (
             {
@@ -820,9 +820,9 @@ async def test_proxy_authorizes_profile_poll_and_cancel_worker_paths(tmp_path: P
                 "attempt_id": attempt.id,
                 "idempotency_key": "poll-1",
                 "operation": "poll",
-                "job_id": "job-1",
+                "job_id": "job-2",
             },
-            GatewayAdapterResult("completed", {"status": "succeeded"}, job_id="job-1"),
+            GatewayAdapterResult("queued", {"status": "running"}, job_id="job-2"),
         ),
         (
             {
@@ -830,9 +830,9 @@ async def test_proxy_authorizes_profile_poll_and_cancel_worker_paths(tmp_path: P
                 "attempt_id": attempt.id,
                 "idempotency_key": "cancel-1",
                 "operation": "cancel",
-                "job_id": "job-1",
+                "job_id": "job-2",
             },
-            GatewayAdapterResult("cancelled", {"status": "cancelled"}, job_id="job-1"),
+            GatewayAdapterResult("cancelled", {"status": "cancelled"}, job_id="job-2"),
         ),
     ]
 
@@ -851,10 +851,10 @@ async def test_proxy_authorizes_profile_poll_and_cancel_worker_paths(tmp_path: P
     assert profile.kernel_regex == "kernel"
     assert profile.candidate_path is not None
     assert poll.operation is GatewayOperation.POLL
-    assert poll.job_id == "job-1"
+    assert poll.job_id == "job-2"
     assert poll.candidate_path is None
     assert cancel.operation is GatewayOperation.CANCEL
-    assert cancel.job_id == "job-1"
+    assert cancel.job_id == "job-2"
     trials = control.list_kernel_trials((attempt.id,))
     assert len(trials) == 1
     assert trials[0].observations[0].operation is GatewayOperation.PROFILE

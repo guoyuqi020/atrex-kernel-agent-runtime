@@ -1106,6 +1106,10 @@ class GatewayProxyService:
             )
             # Validate before binding an immutable result, so an incomplete or malformed
             # upstream reply cannot prevent the same idempotent request from recovering.
+            if isinstance(request, ProfileRequestV2) and result.status not in {
+                "completed", "failed", "cancelled",
+            }:
+                raise InfrastructureError("Agate Profile did not reach a terminal state")
             if isinstance(request, EvaluateRequestV2):
                 if request.comparison is not None:
                     if (

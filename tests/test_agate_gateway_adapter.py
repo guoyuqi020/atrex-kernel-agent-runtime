@@ -1316,8 +1316,8 @@ async def test_submission_validation_rejection_is_a_candidate_outcome(tmp_path: 
 
 
 @pytest.mark.anyio
-async def test_profile_can_return_queued_job_for_later_poll(tmp_path: Path) -> None:
-    client = FakeAgateClient({"job_id": "ev_test", "status": "running"})
+async def test_profile_maps_parameters_and_waits_for_terminal_result(tmp_path: Path) -> None:
+    client = FakeAgateClient({"job_id": "ev_test", "status": "succeeded", "result": {}})
     adapter, builder, jobs = _adapter(tmp_path, client)
     candidate = tmp_path / "candidate"
     candidate.mkdir()
@@ -1345,8 +1345,9 @@ async def test_profile_can_return_queued_job_for_later_poll(tmp_path: Path) -> N
         )
     )
 
-    assert mapped.status == "queued"
+    assert mapped.status == "completed"
     assert mapped.job_id == "ev_test"
+    assert client.fetched == [("ev_test", True, 1200)]
     assert client.submitted[0][0] == "profile"
     assert builder.calls[0]["level"] == "deep"
     assert builder.calls[0]["kernel_regex"] == "kernel_name"
@@ -1405,21 +1406,10 @@ async def test_profile_result_hides_the_privately_selected_case(tmp_path: Path) 
 async def test_attempt_can_poll_and_cancel_its_profile_job(tmp_path: Path) -> None:
     client = FakeAgateClient({"job_id": "ev_test", "status": "running"})
     adapter, _builder, jobs = _adapter(tmp_path, client)
-    candidate = tmp_path / "candidate"
-    candidate.mkdir()
-    (candidate / "kernel.py").write_text("class Model: pass\n")
     attempt_id = new_attempt_id()
-    await adapter.execute(
-        GatewayAdapterRequest(
-            attempt_id,
-            GatewayOperation.PROFILE,
-            "profile-1",
-            digest("candidate"),
-            candidate,
-            "sol",
-            None,
-            None,
-        )
+    # Inspect a Job left by an interrupted caller; Profile itself now blocks.
+    jobs.bind(
+        AgateJobBinding("ev_test", attempt_id, "profile-1", "profile", GatewayOperation.PROFILE)
     )
 
     polled = await adapter.execute(

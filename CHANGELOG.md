@@ -6,6 +6,9 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Explicit Agent Profile calls keep waiting on the same Agate Job when a long poll returns
+  `queued` or `running`. Only terminal results are published to the Agent and sealed as Result
+  Artifacts; interrupted calls retain the Job binding for resumption without resubmission.
 - Agent `correctness_only` Evaluate now uses the same one-Shape batches and sixteen-batch
   concurrency limit as full Evaluate. Runtime merges every batch into one correctness verdict while
   continuing to omit latency measurements and automatic profiling.
