@@ -287,20 +287,20 @@ helpers are supported for a shared custom input generator and Shapes.
 | `kernel-artifact-read` | Copies exact visible Kernel source by Artifact Digest into a required `scratch/` destination; stdout contains only the write result. |
 | `result-artifact-read` | Reads a normalized Agent-visible Result Artifact by digest; request JSON omits `operation`. |
 | `kernel-pareto-frontier` | With `{}`, returns each visible Shape ID's lowest latency and winning Kernel Artifact digest from correct full contract Evaluations in the current Agent's visible history, plus the winner Kernel list. Independent of Direction and Experiment modules. |
-| `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` plus analysis. Closures explicitly select supporting Experiments and declare hypothesis_status; returns the stable Direction ID. `suggest` is rejected in every session, including Bootstrap. |
+| `update-direction` | Creates an immutable Direction definition with `propose`, or updates an existing Direction with `start`, `complete`, `abandon`, `block`, or `defer` with optional analysis. Closures explicitly select supporting Experiments and declare hypothesis_status; returns the stable Direction ID. `suggest` is rejected in every session, including Bootstrap. |
 | `list-directions` | Requires a safe `file` under `scratch/`; atomically writes Direction ID, name, lifecycle status, hypothesis_status, and any declared ancestry to that file and returns only status, file, and count. |
 | `load-direction` | With exactly one `direction_id`, returns the complete normalized Direction, including hypothesis_status, all associated_experiment_ids and the latest explicitly selected supporting_experiment_ids. |
 | `find-kernel-directions` | With exactly one `kernel_artifact_digest`, returns distinct `direction_ids` linked through visible Experiments; it does not return Experiment IDs. |
-| `record-experiment` | Records its `direction_id`, before/after Result Artifact digests, factual `evidence`, interpretive `analysis`, action, and optional `knowledge_used`. Runtime freezes the Trials' Kernel and Result Artifact identities. Every Experiment needs at least one Kernel-bound Gateway Result. `abandon_direction` may be one-sided; Bootstrap `baseline` requires only `after`. Returns the stable Experiment ID. |
-| `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, hypothesis, change, evidence, analysis, action, and `knowledge_used` from frozen history plus the current live Journal, then returns only status, file, and count. |
+| `record-experiment` | Records the change, decision, before/after Result references and enabled Direction association. Runtime freezes Kernel/Result identities and returns the Experiment ID plus measurement_summary. Evidence prose and analysis are optional. `discard` may be one-sided; Bootstrap `baseline` requires only `after`. |
+| `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, Direction ID, change, compact measurement_summary, action, and `knowledge_used` from frozen history plus the current live Journal, then returns only status, file, and count. |
 | `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
 | `find-kernel-experiments` | With exactly one `kernel_artifact_digest`, returns visible `experiment_ids` citing that Kernel Artifact as before or after; it does not return Direction IDs. |
 | `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
 
 The Direction and Experiment command families are independently enabled by
 `campaign.optimizer.tool_modules`. Disabled commands are absent from the live Session contract
-and rejected if called directly. With Directions alone, closures require `analysis` and
-`hypothesis_status` but no `supporting_experiment_ids`. With Experiments alone,
+and rejected if called directly. With Directions alone, closures require
+`hypothesis_status` with optional analysis but no `supporting_experiment_ids`. With Experiments alone,
 `record-experiment` omits `direction_id`; Findings still cite their Experiments. With Experiments
 disabled, Findings omit `supporting_experiment_ids`. The terminal Report records the enabled
 modules and attaches empty Journals for disabled families.
@@ -332,7 +332,7 @@ A Claude invocation that terminates with a classified output-limit failure can s
 provider conversation in the same Attempt and workspace. A single truncated response that the
 provider subsequently recovers from is not a failed invocation. Recovery uses saved source,
 plans and Runtime evidence to continue a concrete implementation or verification step; it does
-not replay the entire failed conversation or reset the Attempt's wall-time or token/credit budget.
+not replay the entire failed conversation or reset the Attempt's active-time or token/credit budget.
 After the optimization-recovery allowance is exhausted, only report-only continuations may run,
 within the separate `report_completion_retries` allowance. If report-only retries are also
 exhausted without a Runtime-accepted Report, the Session preserves `output_limit` and exit status `1`, even
@@ -363,7 +363,10 @@ When missing, the harness starts at most that many report-only provider invocati
 Attempt and workspace, pointing to the existing Journal, draft and Trace. This is a fresh provider
 conversation, not native resume, a new optimization Attempt, or permission to invent measurements.
 An unaccepted local terminal file is moved to a unique scratch backup so it cannot block resubmission.
-All invocations share the original wall-time deadline and token/credit allowance. Except for the
+All invocations share the original active-time budget and token/credit allowance. Runtime service
+waiting is excluded through the read-only `ATREX_SESSION_CLOCK_PATH` binding; overlapping waits
+count once. `limits.json` declares `session_timeout_basis: active_time_excluding_runtime_waits`.
+Except for the
 classified output-limit recovery path above, nonzero model exits, timeouts, exhausted quotas,
 incomplete provider capture, or unavailable usage do not trigger completion. A known Claude usage-reconciliation gap with captured, nonzero provider counters
 is an accounting warning, not a failed optimization: report completion and normal candidate
@@ -397,7 +400,7 @@ Calls remain active through result persistence; success, failure, and cancellati
 Local Journal/history reads and report-status queries do not block handoff. A process crash leaves
 a fail-closed reservation scoped to its recovery generation; normal Attempt recovery fences it off.
 
-`candidate_ready` requires nomination journals for enabled modules and at least one Finding.
+`candidate_ready` requires nomination journals for enabled modules; Findings may be empty.
 `blocked` and `pivot` may have empty journals and Findings; give the genuine reason instead of
 fabricating evidence. Close this Attempt's in-progress Directions before handoff; an unmeasured
 Direction can close unresolved with no Experiment or Gateway call.
@@ -423,13 +426,13 @@ eligibility and uncertainty rules are the same as Findings below; insufficient s
 unresolved judgment with `assessment_notes`, while invalid/invisible bindings are rejected.
 Stopping work does not refute its hypothesis; Runtime does not certify scientific truth.
 
-Every new Experiment must bind at least one real Kernel-bound Gateway Result. `abandon_direction`
+Every new Experiment must bind at least one real Kernel-bound Gateway Result. `discard`
 permits before-only or after-only evidence, never both-null. `keep_after`, `restore_before`, and
 `adopt` require both sides; Bootstrap `baseline` requires null before and non-null after.
 Check/Profile and failed diagnostic Results may document a blocker without a performance claim.
 Health/Env and unbound Dev results do not qualify. A transport error without a Result Artifact is
 not citable: use an unresolved closure with empty support; never fabricate an Experiment to finish. Blocked Bootstrap reports may omit baseline
-when all Experiments are diagnostic `abandon_direction` records; candidate_ready still needs baseline.
+when all Experiments are diagnostic `discard` records; candidate_ready still needs baseline.
 Historical records without a hypothesis judgment remain unresolved.
 One Attempt may start and advance at
 most three distinct Directions, including inherited and newly proposed Directions. Proposals do not
@@ -447,6 +450,27 @@ the live Runtime Journal merged with authorized frozen history; only their reque
 files are written under `scratch/`. A Bootstrap Session starts without prior journal history; after it succeeds, its
 terminal journals, Kernel Trials, and Result Artifacts become the root history of ordinary Attempts
 in that Lineage.
+
+Experiment `evidence` and `analysis` are optional nonblank strings when supplied. With Directions
+on, `hypothesis` may be omitted to reference the associated Direction; in Experiment-only mode a
+local hypothesis is required. Direction `start` and closure `analysis` are optional; closure status,
+evidence qualification and ownership remain enforced. Use closure analysis only for new route-level
+judgments. `discard` is a local diagnostic decision and never closes a Direction; legacy
+`abandon_direction` remains accepted/readable. Reports still embed authoritative Journal snapshots,
+but no status requires a new Finding; use an empty array when no new reusable conclusion exists.
+
+Runtime generates and persists `measurement_summary` with each new Experiment. Its receipt and
+`load-experiment` include exact selected Results, status, hardware/DSL, correctness, returned timing
+coverage, and available errors. Ordinary full-Evaluate comparisons require both sides to pass, matching
+measurement scopes and identical returned Shape sets; otherwise the summary gives an unavailable reason.
+ABBA uses its own sealed A/B identities, regardless of the Experiment's before reference. Speedup is
+A/B; latency reduction is (1-B/A)*100; classifications use >1% faster, inclusive +/-1%, >1% slower.
+The summary neither certifies causality nor excludes noise. Correctness-only and diagnostic results
+never get performance conclusions. Counts do not invent per-Shape correctness from an aggregate verdict.
+Only public Result data is projected; private Test results and input-only predictions stay hidden.
+Clients cannot submit summaries. Old records remain readable without backfilling fabricated summaries.
+`list-experiments` now returns compact identity/change/decision/comparison rows; load selected records
+for hypothesis, interpretation, and exact evidence. This avoids replaying all prose with every list.
 
 An Experiment may declare Wiki knowledge it applied in `knowledge_used`:
 
@@ -525,7 +549,7 @@ For example, after recording a diagnostic Experiment, close without falsely refu
 A one-sided diagnostic Experiment (replace placeholders with real IDs):
 
 ```json
-{"direction_id":"direction_<id>","name":"Compilation check","hypothesis":"The proposed implementation compiles","change":"Attempted implementation","before":null,"after":{"result_artifact_digest":"sha256:<check-result>"},"evidence":"The check returned a compiler diagnostic","analysis":"Compilation is blocked; no performance conclusion","action":"abandon_direction"}
+{"direction_id":"direction_<id>","name":"Compilation check","change":"Attempted implementation","before":null,"after":{"result_artifact_digest":"sha256:<check-result>"},"action":"discard"}
 ```
 
 Tool validation errors include `issues` (field, code, message), `request_schema`, and `recovery`.

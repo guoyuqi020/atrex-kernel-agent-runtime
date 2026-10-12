@@ -15,6 +15,7 @@ from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..domain.errors import InfrastructureError
 from ..domain.ids import ArtifactDigest
 from ..kernel_agents import KERNEL_AGENT_BUNDLE_MANIFEST, KernelAgentBundleManifestV1
+from ..session_clock import CLOCK_ENVIRONMENT_KEY, CLOCK_RELATIVE_PATH, SessionClock
 from .launcher import WorkerLauncher, validate_worker_environment
 from .process import BoundedProcessConfig, BoundedProcessResult, BoundedProcessRunner
 from .session_trace import enforce_session_trace_retention
@@ -173,6 +174,10 @@ class CorePhaseRunner:
                     *PurePosixPath(self._policy.session_trace_relative_path).parts
                 )
             )
+        if phase in {"framework_baseline", "optimization_attempt"}:
+            if not (prepared.root / CLOCK_RELATIVE_PATH).exists():
+                SessionClock(prepared.root / CLOCK_RELATIVE_PATH).start()
+            environment[CLOCK_ENVIRONMENT_KEY] = str(prepared.root / CLOCK_RELATIVE_PATH)
         environment.update(
             (key, str(prepared.agent_home)) for key in self._policy.isolated_home_environment_keys
         )
@@ -284,24 +289,32 @@ class CorePhaseRunner:
         label: str,
     ) -> CorePhaseResult:
         validate_worker_environment(environment)
+        clock = None
+        if CLOCK_ENVIRONMENT_KEY in environment:
+            clock = SessionClock(prepared.root / CLOCK_RELATIVE_PATH)
+            clock.start()
+        budget = "wall-time" if clock is None else "active-time"
         argv = self._launcher.wrap(
             (*self._policy.command_prefix, str(prepared.command)),
             workspace=prepared.root,
             environment=environment,
         )
         try:
-            process = self._processes.run(argv, cwd=prepared.root, stdin=None)
+            if clock is None:
+                process = self._processes.run(argv, cwd=prepared.root, stdin=None)
+            else:
+                process = self._processes.run(argv, cwd=prepared.root, stdin=None, clock=clock.now)
         except OSError as error:
             raise InfrastructureError(f"{label} process could not start: {error}") from error
         except TimeoutError as error:
-            raise InfrastructureError(f"{label} exceeded its wall-time limit") from error
-        # The Bundle owns the inner Agent process and translates its wall-time
+            raise InfrastructureError(f"{label} exceeded its {budget} limit") from error
+        # The Bundle owns the inner Agent process and translates its execution-budget
         # expiration into the conventional timeout exit status. Check that
         # terminal condition before validating usage: a killed Provider cannot
         # emit its final authoritative usage event, so the resulting partial
         # report is evidence of the timeout rather than its root cause.
         if process.returncode == CORE_TIMEOUT_EXIT_STATUS:
-            raise InfrastructureError(f"{label} timed out")
+            raise InfrastructureError(f"{label} timed out (exceeded its {budget} limit)")
         try:
             usage_unit: UsageUnit = (
                 "credits" if self._policy.agent_backend == "qodercli" else "provider_tokens"

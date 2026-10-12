@@ -6,10 +6,18 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Runtime 根据 Agent 可见 Result 自动生成并保存 Experiment 测量摘要，区分普通 Evaluate 与
+  ABBA，拒绝不相容的性能比较。精简 Journal 必填分析和历史索引，所有报告状态允许空 Findings；
+  Core/KDA 工具契约和提示词同步调整，兼容旧记录和诊断 Action。
+
 - Dev、Profile、Check、Disassemble 与 Evaluate 一样串行处理同一请求的重连，使用稳定的
   上游提交键恢复已接收但响应丢失的 Job；旧恢复代次在 RPC 边界停止，不能回写结果。
   诊断请求恢复时复用已保存的终态结果，继续等待旧版非终态快照对应的 Job，保留原始证据。
 
+- Bootstrap 和 Optimizer 的执行预算改为扣除 Runtime 工具（含 Wiki）等待时间的活跃时间。
+  同一 Session 内并发等待按时间并集计算。Runtime 管理只读时钟，外层进程和新版 Core/KDA
+  的模型调用、续跑共同使用；Claude Runtime CLI 命令独立使用 72 小时等待额度。部署时需
+  刷新已冻结的 Agent Bundle，token／credit 上限不变。
 - Evaluate 与 ABBA 在单次长轮询到期后继续等待同一个 Agate Job，直到成功、失败或取消。
   覆盖 Agent 的 full、自定义输入与 correctness-only 评测、Bootstrap／最终权威评测、
   重复测量、Lineage 种子评测及其可选 Profile。未完成的 ABBA 批次不再消耗重试预算或触发

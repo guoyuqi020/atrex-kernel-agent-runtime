@@ -139,8 +139,8 @@ recording is disabled; use the Direction index for hypotheses that have no such 
 ### Experiment history
 
 Call `list-experiments` with `{"file":"scratch/experiments-index.json"}`. It writes IDs, names,
-hypotheses, changes, evidence, analyses, actions, and `knowledge_used` to that file; the response contains only status,
-file, and count. This index already contains useful recorded conclusions. Call `load-experiment`
+Direction IDs, changes, actions, compact Runtime measurement comparisons, and `knowledge_used` to that file; the response contains only status,
+file, and count. This index contains measured comparisons; it does not repeat full Agent interpretations. Call `load-experiment`
 with `{"experiment_id":"experiment_<id>"}` when you need the complete selected record, especially
 its exact `before`/`after` Kernel and Result Artifact digests. If the index answers the question,
 do not load a record merely to repeat the same prose. Recorded interpretations remain fallible.
@@ -269,6 +269,22 @@ For example, observing `autovec_copy` in source does not establish that output c
 A failed implementation does not refute every implementation of its proposed mechanism.
 
 `blocked` or `pivot` may contain empty experiments and findings; give the genuine stopping reason.
-`candidate_ready` still requires the enabled modules' nomination evidence and at least one Finding.
+`candidate_ready` still requires the enabled modules' nomination evidence; Findings may be empty.
 Private evaluator inputs remain hidden; opaque Shape identifiers and measurements must not be used
 to reconstruct them.
+
+## Non-redundant Journal writing
+
+An Experiment records a concrete change and local candidate decision. Runtime deterministically
+produces measurement_summary from its exact before/after Results; never supply that field or copy
+its metrics into evidence. With Directions enabled, inherit the Direction hypothesis by omitting
+Experiment hypothesis unless adding a new local hypothesis. With Directions disabled, supply it.
+Experiment evidence and analysis are optional; omit analysis when causes remain unknown. Use discard
+for a measured diagnostic with one null side, never two; it does not change Direction lifecycle.
+Direction start needs no analysis. At closure, cite selected Experiments or direct Results and add
+optional analysis only for a new route-level judgment, untested alternatives, or next steps. A failed
+implementation does not refute an entire mechanism. Lifecycle, ownership and evidence gates still apply.
+The report tool embeds authoritative Journals automatically. Reference those records in a concise
+handoff instead of rewriting them. Findings may be empty, even when a candidate is ready; do not
+manufacture a lesson to satisfy reporting. Measurement summaries distinguish ordinary Evaluate from
+ABBA, expose only Agent-visible measurements, and decline incompatible or unfinished comparisons.

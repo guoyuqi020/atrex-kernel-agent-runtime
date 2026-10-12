@@ -67,6 +67,7 @@ _RUNTIME_KEYS = {
     "ATREX_ATTEMPT_REPORT_PATH",
     "ATREX_OPTIMIZER_REPOSITORY",
     "ATREX_SESSION_TIMEOUT_SECONDS",
+    "ATREX_SESSION_CLOCK_PATH",
     "ATREX_SESSION_TRACE_PATH",
     "ATREX_USAGE_BUDGET",
     "ATREX_USAGE_UNIT",
@@ -400,7 +401,7 @@ class CoreLineageBootstrapSessionDriver:
                 has_identity_bearing_experiment = any(
                     subject is not None
                     for experiment in report.experiments
-                    if experiment.action != "abandon_direction"
+                    if experiment.action not in {"abandon_direction", "discard"}
                     for subject in (experiment.before, experiment.after)
                 )
                 if (

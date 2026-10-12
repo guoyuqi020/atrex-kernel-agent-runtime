@@ -1412,18 +1412,18 @@ async def test_runtime_journal_mutations_are_immediately_durable_and_queryable(
     assert cast(dict[str, Any], loaded_direction.result)["supporting_experiment_ids"] == [
         experiment_id
     ]
-    assert cast(dict[str, Any], experiments.result)["experiments"] == [
-        {
-            "experiment_id": experiment_id,
-            "name": "vectorize load",
-            "hypothesis": "one transaction replaces two",
-            "change": "use a vector load",
-            "evidence": "the authoritative Evaluate result",
-            "analysis": "the candidate remained correct",
-            "action": "keep_after",
-            "knowledge_used": [],
-        }
-    ]
+    rows = cast(dict[str, Any], experiments.result)["experiments"]
+    assert len(rows) == 1
+    assert rows[0]["experiment_id"] == experiment_id
+    assert rows[0]["direction_id"] == direction_id
+    assert rows[0]["change"] == "use a vector load"
+    assert rows[0]["action"] == "keep_after"
+    assert "analysis" not in rows[0] and "evidence" not in rows[0]
+    assert rows[0]["measurement_summary"]["comparison"]["classification"] == "retained"
+    assert (
+        cast(dict[str, Any], loaded_experiment.result)["analysis"]
+        == "the candidate remained correct"
+    )
     assert "sequence" not in cast(dict[str, Any], loaded_experiment.result)
     assert cast(dict[str, Any], loaded_experiment.result)["after"] == resolved_subject
     assert kernel_experiments.result == {

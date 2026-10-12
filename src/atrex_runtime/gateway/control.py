@@ -35,7 +35,14 @@ from ..domain.ids import (
     parse_kernel_agent_revision_id,
     parse_lineage_id,
 )
-from ..domain.models import AttemptStatus, Dsl, EpochStatus, TokenUsage
+from ..domain.models import (
+    AttemptStatus,
+    Dsl,
+    EpochStatus,
+    TokenUsage,
+    WorkerSessionRole,
+    WorkerSessionStatus,
+)
 from ..ports import (
     AttemptCandidateResult,
     AttemptOutcomeSource,
@@ -43,6 +50,7 @@ from ..ports import (
     WorkerGatewayAuthority,
 )
 from ..registry.base import Registry
+from ..session_clock import CLOCK_RELATIVE_PATH, SessionClock
 from ..sqlite_support import configure_durable_sqlite, immediate_transaction
 from .artifact_subjects import artifact_experiment_view, resolve_artifact_subject
 from .control_models import (
@@ -730,6 +738,28 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             request_digest,
             generation,
         )
+
+    @contextmanager
+    def session_wait(self, authorization: GatewayAuthorization) -> Iterator[None]:
+        """Exclude authenticated tool service time from the current Agent's budget."""
+        sessions = self._registry.list_worker_sessions(
+            attempt_id=authorization.attempt_id, status=WorkerSessionStatus.RUNNING,
+        )
+        for session in reversed(sessions):
+            if session.role not in {
+                WorkerSessionRole.OPTIMIZER, WorkerSessionRole.FRAMEWORK_BASELINE,
+            }:
+                continue
+            if session.recovery_generation not in (None, authorization.recovery_generation):
+                continue
+            path = Path(session.workspace_path) / CLOCK_RELATIVE_PATH
+            if path.exists():
+                with SessionClock(path).waiting():
+                    yield
+                return
+            break
+        # Older or injected workers without the active-clock protocol keep their own policy.
+        yield
 
     @contextmanager
     def evaluate_request_execution(self, authorization: GatewayAuthorization) -> Iterator[bool]:
@@ -1514,6 +1544,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     "keep_after": "continue",
                     "restore_before": "revert",
                     "abandon_direction": "pivot",
+                    "discard": "pivot",
                 }
                 if allow_baseline:
                     # Baseline establishes the first measured candidate and is
@@ -1524,7 +1555,9 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 if action != "adopt" and action not in disposition_by_action:
                     raise ValueError("Kernel Trial annotation action is invalid")
                 if after is None:
-                    if action != "abandon_direction" or not isinstance(before, Mapping):
+                    if action not in {"abandon_direction", "discard"} or not isinstance(
+                        before, Mapping
+                    ):
                         raise ValueError("Kernel Trial annotation requires Gateway Result evidence")
                     # A before-only investigation records no candidate disposition.
                     resolve_artifact_subject(visible_trials.values(), before, attempt_id=attempt_id)
@@ -1534,7 +1567,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 if action == "baseline":
                     if before is not None:
                         raise ValueError("Kernel Trial baseline annotation requires before=null")
-                elif before is not None or action != "abandon_direction":
+                elif before is not None or action not in {"abandon_direction", "discard"}:
                     if not isinstance(before, Mapping):
                         raise ValueError("Kernel Trial annotation before evidence is invalid")
                     before_digest_value = before.get("kernel_artifact_digest")

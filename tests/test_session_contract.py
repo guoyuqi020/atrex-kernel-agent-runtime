@@ -54,6 +54,8 @@ def test_session_contract_materializes_live_schema_environment_and_limits(
         "budget": 20_000_000,
         "unit": "provider_tokens",
     }
+    assert limits["session_timeout_basis"] == "active_time_excluding_runtime_waits"
+    assert limits["runtime_wait_accounting"] == "union_of_concurrent_authenticated_requests"
     assert stat.S_IMODE(path.stat().st_mode) & stat.S_IWUSR == 0
     assert stat.S_IMODE((path / "tools.json").stat().st_mode) & stat.S_IWUSR == 0
 

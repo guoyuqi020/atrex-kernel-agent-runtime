@@ -6,11 +6,21 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Runtime generates immutable Experiment measurement summaries from public Results, distinguishing
+  ordinary Evaluate and ABBA and declining incompatible comparisons. Journal interpretations are
+  optional, indexes are compact, and every report status permits empty Findings. Core/KDA contracts
+  and prompts use the same minimal writing rules; legacy records and diagnostic actions remain readable.
+
 - Serialize identical Gateway reconnects for Dev, Profile, Check and Disassemble as well as
   Evaluate. Stable upstream submission keys cover acceptance-response loss; expired recovery
   generations stop at the RPC boundary and cannot publish late results. Diagnostic recovery reuses
   terminal result checkpoints and resumes legacy nonterminal snapshots without deleting evidence.
 
+- Bootstrap and Optimizer timeouts now count active time, excluding authenticated Runtime tool
+  waits (including Wiki). Concurrent waits are unioned per Session. Runtime owns the read-only
+  clock consumed by the outer watchdog and updated Core/KDA provider and continuation budgets;
+  Claude Runtime CLI calls receive a separate 72-hour allowance. Refresh frozen Agent bundles
+  when deploying; token/credit limits remain unchanged.
 - Evaluate and ABBA now renew expired long polls on the same Agate Job until success, failure,
   or cancellation. This covers full/custom/correctness-only Agent evaluations, authoritative
   Bootstrap/final evaluation, repeated measurements, Lineage seeds and their optional Profiles.

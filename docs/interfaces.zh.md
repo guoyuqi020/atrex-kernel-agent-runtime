@@ -255,19 +255,19 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `kernel-artifact-read` | 按 Artifact Digest 把准确可见 Kernel 源码复制到必填的 `scratch/` 目标；stdout 只返回写入结果。 |
 | `result-artifact-read` | 按 Result Artifact Digest 读取规范化的 Agent 可见结果；请求 JSON 不写 `operation`。 |
 | `kernel-pareto-frontier` | 请求为 `{}`；从当前 Agent 可见历史的正确标准 full Evaluate 中，返回每个可见 Shape ID 的最低延迟、对应 Kernel Artifact digest，以及获胜 Kernel 列表。不依赖 Direction 或 Experiment 模块。 |
-| `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与分析更新现有 Direction；关闭时显式选择支持 Experiment 并声明 hypothesis_status，返回稳定 Direction ID。所有阶段（包括 Bootstrap）均拒绝 `suggest`。 |
+| `update-direction` | 以 `propose` 创建不可变 Direction 定义，或用 `start`、`complete`、`abandon`、`block`、`defer` 与可选分析更新现有 Direction；关闭时显式选择支持 Experiment 并声明 hypothesis_status，返回稳定 Direction ID。所有阶段（包括 Bootstrap）均拒绝 `suggest`。 |
 | `list-directions` | 请求必须指定 `scratch/` 下的安全 `file`；工具把 Direction ID、名称、生命周期状态、hypothesis_status 和已声明的谱系关系原子写入该文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-direction` | 请求只包含 `direction_id`，返回完整规范化 Direction，包括 hypothesis_status、全部 associated_experiment_ids 以及最近一次关闭时显式选中的 supporting_experiment_ids。 |
 | `find-kernel-directions` | 请求只包含 `kernel_artifact_digest`，返回可见 Experiment 关联的、去重后的 `direction_ids`；不返回 Experiment ID。 |
-| `record-experiment` | 记录 `direction_id`、前后 Result Artifact Digest、`evidence`、`analysis`、Action 与可选的 `knowledge_used`；Runtime 冻结所选 Result 与对应 Kernel 的身份。每条 Experiment 至少绑定一个 Kernel 对应的 Gateway Result；abandon_direction 可单边，Bootstrap baseline 只需 after。返回稳定 Experiment ID。 |
-| `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Hypothesis、Change、Evidence、Analysis、Action 和 `knowledge_used` 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
+| `record-experiment` | 记录具体改动、决策、前后 Result 引用和启用的 Direction 关联；Runtime 冻结 Kernel/Result 身份，返回 Experiment ID 和自动生成的 measurement_summary。evidence 与 analysis 可省略；discard 可单边，Bootstrap baseline 只需 after。 |
+| `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Direction ID、Change、精简测量摘要、Action 和 `knowledge_used` 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `find-kernel-experiments` | 请求只包含 `kernel_artifact_digest`，返回把该 Kernel Artifact 记录为 before 或 after 的可见 `experiment_ids`；不返回 Direction ID。 |
 | `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
 
 Direction 与 Experiment 两组命令由 `campaign.optimizer.tool_modules` 独立启用。关闭的命令
 不会出现在 Session 实时契约中，直接调用也会被拒绝。仅启用 Directions 时，关闭 Direction
-需要 `analysis` 和 `hypothesis_status`，但不需要 `supporting_experiment_ids`；仅启用
+需要 `hypothesis_status`，`analysis` 可选，不需要 `supporting_experiment_ids`；仅启用
 Experiments 时，`record-experiment` 不填写 `direction_id`，Finding 仍引用其 Experiment；
 关闭 Experiments 时，Finding 不填写 `supporting_experiment_ids`。终态 Report 记录启用
 的模块，并为关闭的模块附上空 Journal。
@@ -345,7 +345,7 @@ Framework Baseline，不用于 Problem Generalization 或 Evolver；Runtime 的�
 落账才解除阻塞，成功、失败和取消均会清理运行标记；Journal/历史读取及报告状态查询不阻塞交接。
 Runtime 进程崩溃时保守保留当前代的标记，由正常 Attempt recovery 切换代次后隔离。
 
-`candidate_ready` 要求启用模块对应的候选提名 Journal，以及至少一个 Finding。
+`candidate_ready` 要求启用模块对应的候选提名 Journal；Finding 可以为空。
 `blocked` 和 `pivot` 允许 Journal 与 Findings 为空；应如实说明原因，不应虚构证据。
 本 Attempt 的 in_progress Direction 必须先关闭；未测量时可用 unresolved 和空证据关闭，
 无需先创建 Experiment 或调用 Gateway。Broadcast 的其他 Trajectory 可以同时推进自己的 Direction。
@@ -365,13 +365,29 @@ hypothesis 为具体结论，需要 `scope`、可选的 `claim_kind`（默认 ca
 证据规则与下述 Finding 相同：证据不足降级为 unresolved，并返回 `assessment_notes`；无效或不可见的
 引用仍拒绝。停止投入不等于证伪，Runtime 不认证科学结论。
 
+Experiment 的 `evidence` 和 `analysis` 可省略，填写时须非空；启用 Direction 时可省略
+`hypothesis`，通过 Direction ID 引用路线假设，只有新增局部假设才补充；仅启用 Experiment 时
+仍须提供局部假设。Direction 的 start 和关闭均不强制 analysis，关闭时只补充新增的路线判断、
+未验证的替代方案或下一步。生命周期、ownership、证据资格和适用范围校验保持不变。
+Report 自动附加权威 Journal，所有报告状态均允许空 Findings，不要求凭空生成经验。
+
+Runtime 根据所引用的 Agent 可见 Result 确定性生成并保存 `measurement_summary`，返回状态、
+正确性、实际返回的计时覆盖范围、错误信息及可比较的性能指标。普通 full Evaluate 比较要求
+双方完成且正确、评测范围相容、shape 集合完全相同；否则返回不可比较的原因。ABBA 使用该次
+Result 自己的 A/B 身份，与普通 Evaluate 明确区分。几何平均延迟下降为 (1-B/A)*100%，加速比为
+A/B；±1% 边界归为 retained。Correctness-only、失败或未完成的结果不生成性能结论。
+不根据总正确性推测逐 shape 通过数量，不读取隐藏 Test 性能，不回显只用于人类审计的预测。
+Agent 不得自行填写或修改摘要；摘要只证明测量事实，不证明因果，也不排除噪声。
+list-experiments 返回精简摘要；完整分析和证据引用按需 load。旧记录可继续读取，不虚构补填摘要。
+`discard` 仅记录一次试验的局部放弃，不关闭 Direction；旧 `abandon_direction` 拼写保留兼容。
+
 每条新 Experiment 至少绑定一个真实、与 Kernel 绑定的 Gateway Result。
-`abandon_direction` 允许 before 或 after 单边非空，禁止两边均 null；
+`discard` 允许 before 或 after 单边非空，禁止两边均 null；
 `keep_after`、`restore_before`、`adopt` 要求两边都有；Bootstrap baseline 要求 before=null、after 非空。
 Check/Profile 或失败的诊断 Result 可以证明调查或阻塞，但不代表性能结论；Health/Env、没有 Kernel
 绑定的 Dev 不算证据。只有传输报错、没有 Result Artifact 时不能引用：此时以 unresolved 和空证据
 关闭 Direction，禁止为结束而伪造 Experiment。
-仅含 abandon_direction 诊断的 blocked Bootstrap Report 可不含 baseline；candidate_ready 仍须 baseline。
+仅含 discard 诊断的 blocked Bootstrap Report 可不含 baseline；candidate_ready 仍须 baseline。
 历史记录未声明假设判断时保持 unresolved。
 每个 Attempt 最多可以启动并推进三个不同 Direction，包括继承和本 Attempt 新增的 Direction。仅 propose
 不占推进名额，Report 也不限制保持 proposed/deferred 的 Direction 数量。同一时间只能有一个 Direction
@@ -442,7 +458,7 @@ Branch、Epoch、Attempt、选中状态或当前/历史来源。
 单边诊断 Experiment 示例（占位符须替换为真实 ID）：
 
 ```json
-{"direction_id":"direction_<id>","name":"编译检查","hypothesis":"候选实现能够编译","change":"实现候选方案","before":null,"after":{"result_artifact_digest":"sha256:<check-result>"},"evidence":"Check 返回编译诊断","analysis":"编译阻塞，无法得出性能结论","action":"abandon_direction"}
+{"direction_id":"direction_<id>","name":"编译检查","change":"实现候选方案","before":null,"after":{"result_artifact_digest":"sha256:<check-result>"},"action":"discard"}
 ```
 
 工具校验错误返回 `issues`（字段、错误码、原因）、`request_schema` 与 `recovery`。

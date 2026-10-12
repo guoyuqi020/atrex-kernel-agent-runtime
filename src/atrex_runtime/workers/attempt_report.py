@@ -84,13 +84,17 @@ class AttemptExperimentV8(BaseModel):
     sequence: int = Field(gt=0)
     recorded_at: str = Field(min_length=1)
     name: str = Field(min_length=1)
-    hypothesis: str = Field(min_length=1)
+    hypothesis: str | None = Field(default=None, min_length=1)
     change: str = Field(min_length=1)
     before: AttemptExperimentSubjectV1 | None
     after: AttemptExperimentSubjectV1 | None
-    evidence: str = Field(min_length=1)
-    analysis: str = Field(min_length=1)
-    action: Literal["keep_after", "restore_before", "abandon_direction", "baseline", "adopt"]
+    evidence: str | None = Field(default=None, min_length=1)
+    analysis: str | None = Field(default=None, min_length=1)
+    action: Literal[
+        "keep_after", "restore_before", "discard", "abandon_direction", "baseline", "adopt"
+    ]
+    # Runtime-owned projection of the exact cited Results, never Agent-authored prose.
+    measurement_summary: dict[str, object] | None = None
     # Historical Journals and clients predate per-Experiment knowledge attribution.
     knowledge_used: tuple[AttemptKnowledgeUseV1, ...] = ()
 
@@ -104,15 +108,19 @@ class AttemptExperimentV8(BaseModel):
     @field_validator(
         "recorded_at",
         "name",
-        "hypothesis",
         "change",
-        "evidence",
-        "analysis",
     )
     @classmethod
     def _validate_text(cls, value: str) -> str:
         if not value.strip():
             raise ValueError("Attempt experiment text cannot be blank")
+        return value
+
+    @field_validator("hypothesis", "evidence", "analysis")
+    @classmethod
+    def _validate_optional_text(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Optional experiment text cannot be blank")
         return value
 
     @field_validator("recorded_at")
@@ -126,6 +134,8 @@ class AttemptExperimentV8(BaseModel):
 
     @model_validator(mode="after")
     def _validate_comparison(self, info: ValidationInfo) -> AttemptExperimentV8:
+        if self.direction_id is None and self.hypothesis is None:
+            raise ValueError("Standalone Experiment requires a local hypothesis")
         if self.action == "baseline":
             if self.before is not None or self.after is None:
                 raise ValueError(
@@ -364,7 +374,7 @@ class AttemptDirectionEventV1(BaseModel):
     plan: tuple[str, ...]
     success_criteria: str | None
     stop_conditions: str | None
-    analysis: str | None
+    analysis: str | None = None
     supporting_experiment_ids: tuple[str, ...] = Field(max_length=32)
     # None identifies legacy events whose support IDs were automatically aggregated.
     hypothesis_status: Literal["unresolved", "supported", "refuted"] | None = None
@@ -447,8 +457,8 @@ class AttemptDirectionEventV1(BaseModel):
         else:
             if any(value is not None for value in definition) or self.plan:
                 raise ValueError("Direction update cannot redefine its proposal")
-            if self.analysis is None or not self.analysis.strip():
-                raise ValueError("Direction update requires analysis")
+            if self.analysis is not None and not self.analysis.strip():
+                raise ValueError("Direction analysis cannot be blank")
             if (
                 self.action in {"complete", "abandon", "block", "defer"}
                 and not self.supporting_experiment_ids
@@ -575,17 +585,14 @@ class AttemptReportV12(BaseModel):
                 raise ValueError("candidate_ready requires final_candidate")
             if self.blocker is not None:
                 raise ValueError("candidate_ready cannot declare a blocker")
-            if (
-                not self.findings
-                or (experiments_enabled and not self.experiments)
-                or (directions_enabled and not self.direction_events)
+            if (experiments_enabled and not self.experiments) or (
+                directions_enabled and not self.direction_events
             ):
                 if directions_enabled and experiments_enabled:
                     raise ValueError(
-                        "candidate_ready requires non-empty experiments, findings, "
-                        "and direction_events"
+                        "candidate_ready requires non-empty experiments and direction_events"
                     )
-                raise ValueError("candidate_ready requires findings and each enabled Journal")
+                raise ValueError("candidate_ready requires each enabled Journal")
         elif self.status == "pivot":
             if self.final_candidate is not None:
                 raise ValueError("pivot cannot nominate final_candidate")

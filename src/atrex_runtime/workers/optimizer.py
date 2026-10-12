@@ -48,6 +48,7 @@ _RUNTIME_ENVIRONMENT_KEYS = {
     "ATREX_GATEWAY_PROXY_URL",
     "ATREX_OPTIMIZER_REPOSITORY",
     "ATREX_SESSION_TIMEOUT_SECONDS",
+    "ATREX_SESSION_CLOCK_PATH",
     "ATREX_SESSION_TRACE_PATH",
     "ATREX_USAGE_BUDGET",
     "ATREX_USAGE_UNIT",
@@ -219,7 +220,8 @@ class SessionOptimizerRunner(OptimizerRunner):
                 ),
             )
         except InfrastructureError as error:
-            exit_kind = "timeout" if "wall-time limit" in str(error) else "infrastructure_failed"
+            timed_out = any(kind in str(error) for kind in ("wall-time limit", "active-time limit"))
+            exit_kind = "timeout" if timed_out else "infrastructure_failed"
             if self._worker_sessions is not None:
                 self._worker_sessions.finish_worker_session(
                     worker_session_id,

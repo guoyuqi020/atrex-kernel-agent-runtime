@@ -522,8 +522,9 @@ class TimeoutThenCommittingFinalizer:
         )
 
 
+@pytest.mark.parametrize("timeout_budget", [None, "wall-time", "active-time"])
 def test_core_lineage_baseline_uses_pre_lineage_gateway_subject_and_recovers(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, timeout_budget: str | None,
 ) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     control = SqliteGatewayControl(
@@ -563,6 +564,21 @@ def test_core_lineage_baseline_uses_pre_lineage_gateway_subject_and_recovers(
         "hardware_target": "nvidia-h100",
     }
 
+    if timeout_budget is not None:
+        def fail_session(*_args: object, **_kwargs: object) -> None:
+            raise InfrastructureError(f"Core lineage bootstrap exceeded its {timeout_budget} limit")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(sessions, "run", fail_session)
+            with pytest.raises(InfrastructureError, match=f"{timeout_budget} limit"):
+                generator.generate(**values)  # type: ignore[arg-type]
+        timed_out = registry.list_worker_sessions(
+            attempt_id=values["bootstrap_attempt_id"]  # type: ignore[arg-type]
+        )
+        assert len(timed_out) == 1
+        assert timed_out[0].status is WorkerSessionStatus.TIMED_OUT
+        assert timed_out[0].finish_reason == "timeout"
+
     first = generator.generate(**values)  # type: ignore[arg-type]
     second = generator.generate(**values)  # type: ignore[arg-type]
 
@@ -576,19 +592,27 @@ def test_core_lineage_baseline_uses_pre_lineage_gateway_subject_and_recovers(
     assert subject.input_kernel_digest == digest("seed-kernel")
     assert subject.evaluation_contract_digest == digest("contract")
     runs = control.list_bootstrap_runs(values["bootstrap_attempt_id"])  # type: ignore[arg-type]
+    if timeout_budget is not None:
+        assert runs[0].status.value == "failed"
+        runs = runs[1:]
     assert len(runs) == 1
     assert runs[0].status.value == "completed"
-    assert runs[0].run_id == "run-test-1"
+    assert runs[0].run_id == ("run-test-1" if timeout_budget is None else "run-test-2")
     assert runs[0].total_tokens == 15
     worker_sessions = registry.list_worker_sessions(
         attempt_id=values["bootstrap_attempt_id"]  # type: ignore[arg-type]
     )
+    if timeout_budget is not None:
+        worker_sessions = worker_sessions[1:]
     assert len(worker_sessions) == 1
     assert worker_sessions[0].role.value == "framework_baseline"
     assert worker_sessions[0].status.value == "completed"
     assert worker_sessions[0].trace_digest == digest("baseline-trace")
     events = registry.list_runtime_events(after_sequence=0, limit=10)
-    assert [event.kind for event in events] == ["bootstrap.lineage_baseline_completed"]
+    assert [event.kind for event in events] == (
+        ([] if timeout_budget is None else ["bootstrap.lineage_baseline_failed"])
+        + ["bootstrap.lineage_baseline_completed"]
+    )
     control.close()
     registry.close()
 

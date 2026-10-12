@@ -6,6 +6,8 @@ import os
 import signal
 import subprocess
 import tempfile
+import time
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,7 +16,7 @@ from typing import BinaryIO
 
 @dataclass(frozen=True, slots=True)
 class BoundedProcessConfig:
-    """Wall-time, shutdown, and output acquisition limits."""
+    """Execution-time, shutdown, and output acquisition limits."""
 
     timeout_seconds: float
     terminate_grace_seconds: float
@@ -48,8 +50,9 @@ class BoundedProcessRunner:
         *,
         cwd: Path,
         stdin: bytes | None,
+        clock: Callable[[], float] | None = None,
     ) -> BoundedProcessResult:
-        """Execute one argv without a shell and acquire bounded output."""
+        """Execute with a wall clock, or a Runtime-owned clock excluding tool waits."""
         if not argv:
             raise ValueError("Worker process argv cannot be empty")
         with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
@@ -62,11 +65,27 @@ class BoundedProcessRunner:
                 start_new_session=True,
             )
             try:
-                process.communicate(stdin, timeout=self._config.timeout_seconds)
+                now = clock or time.monotonic
+                deadline = now() + self._config.timeout_seconds
+                first = True
+                while True:
+                    remaining = deadline - now()
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(argv, self._config.timeout_seconds)
+                    try:
+                        process.communicate(
+                            stdin if first else None,
+                            timeout=remaining if clock is None else min(0.1, remaining),
+                        )
+                    except subprocess.TimeoutExpired:
+                        first = False
+                    else:
+                        break
             except subprocess.TimeoutExpired as error:
+                label = "wall-time" if clock is None else "active-time"
+                raise TimeoutError(f"worker process exceeded its {label} limit") from error
+            finally:
                 self._terminate_process_group(process)
-                raise TimeoutError("worker process exceeded its wall-time limit") from error
-            self._terminate_process_group(process)
             if process.returncode is None:
                 raise AssertionError("reaped worker process has no return code")
             return BoundedProcessResult(

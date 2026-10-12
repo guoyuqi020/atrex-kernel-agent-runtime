@@ -91,12 +91,18 @@ class WikiProxyService:
         if len(request.query.encode()) > self._limits.max_query_bytes:
             raise ValueError("Wiki query exceeds byte limit")
         request_digest = canonical_json_digest(request.model_dump(mode="json"))
-        self._control.authorize(
+        authorization = self._control.authorize(
             GatewayCapability(token, request.attempt_id),
             GatewayOperation.WIKI_QUERY,
             idempotency_key=request.idempotency_key,
             request_digest=str(request_digest),
         )
+        with self._control.session_wait(authorization):
+            return await self._query_authorized(request, request_digest)
+
+    async def _query_authorized(
+        self, request: WikiProxyRequestV1, request_digest: str,
+    ) -> WikiProxyResponseV1:
         existing = self._interactions.get_operation_artifact(
             request.attempt_id,
             request.idempotency_key,

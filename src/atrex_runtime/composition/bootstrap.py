@@ -584,7 +584,9 @@ class CoreLineageBaselineGenerator:
             self._validated_outcome(outcome, bootstrap_attempt_id)
         except BaseException as error:
             if worker_session_id is not None and not worker_session_terminal:
-                timed_out = "wall-time limit" in str(error)
+                timed_out = any(
+                    kind in str(error) for kind in ("wall-time limit", "active-time limit")
+                )
                 self._registry.finish_worker_session(
                     worker_session_id,
                     status=(

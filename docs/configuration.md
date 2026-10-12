@@ -145,12 +145,20 @@ and per-Session usage quota.
 
 QoderCLI uses provider credits; other supported Backends use provider token buckets. Core must emit
 the provider-native terminal usage report. Bootstrap uses `bootstrap_timeout_seconds`; ordinary
-Attempts use `timeout_seconds`.
+Attempts use `timeout_seconds`. Both are active-time budgets: Runtime excludes time spent
+servicing authenticated Gateway, Journal, history and Wiki requests for that Session. Concurrent
+requests contribute the union of their waiting intervals, not their summed durations; another
+Session's calls cannot pause this Session. Token/credit quotas are unchanged.
 
-Claude Optimizer Sessions use a `PreToolUse` hook to give Runtime CLI Bash calls the Agent Session
-allowance and keep them in the foreground. Other Bash calls retain their usual default timeout,
+Runtime owns `.runtime/session-clock.json`, mounted read-only inside production Agent sandboxes.
+The outer process watchdog and current Core/KDA provider/continuation watchdogs read the same clock.
+Dead Runtime request processes release OS leases so an abandoned request cannot permanently
+pause the budget. Existing frozen Core/KDA bundles must be refreshed to gain the inner-clock support.
+
+Claude Optimizer Sessions use a `PreToolUse` hook to give Runtime CLI Bash calls at least the
+72-hour Gateway HTTP allowance and keep them in the foreground. Other Bash calls retain their usual timeout,
 and Claude background subagents remain available. HTTP read timeouts reattach with the same
-request identity; the Agent and Core Session wall-time limits still apply.
+request identity; active-time limits still apply across provider continuations and tool failures.
 
 `campaign.optimizer.tool_modules` independently enables the `directions` and `experiments`
 Runtime tool families. It defaults to `["directions", "experiments"]`; use either one-element

@@ -214,6 +214,8 @@ def materialize_session_contract(
             {
                 "schema_version": RUNTIME_CONTRACT_VERSION,
                 "session_timeout_seconds": session_timeout_seconds,
+                "session_timeout_basis": "active_time_excluding_runtime_waits",
+                "runtime_wait_accounting": "union_of_concurrent_authenticated_requests",
                 "provider_usage": {
                     "unit": usage_unit,
                     "budget": usage_budget,

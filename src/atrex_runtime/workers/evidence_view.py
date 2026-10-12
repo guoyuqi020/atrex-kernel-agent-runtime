@@ -218,6 +218,20 @@ def optimizer_evidence_prompt(
         + reuse
         + "\n\n"
         + report_safety.strip()
+        + "\n\nFindings may be empty for any report status; do not manufacture lessons. "
+        + (
+            "Experiment evidence and analysis are optional; Runtime generates measurement_summary "
+            "from cited Results. Supply a local hypothesis with Directions disabled; load selected "
+            "Experiments for interpretations instead of expecting them in the compact index. "
+            if "experiments" in modules
+            else ""
+        )
+        + (
+            "Direction start needs no analysis; closure analysis is optional and adds only new "
+            "route-level judgments. Cite direct Results with Experiments disabled. "
+            if "directions" in modules
+            else ""
+        )
         + "\n\nPrivate evaluator inputs remain hidden; opaque Shape identifiers and "
         "measurements must not be used to reconstruct them.\n"
     )

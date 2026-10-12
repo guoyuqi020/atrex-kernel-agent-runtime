@@ -918,6 +918,17 @@ class GatewayProxyService:
             idempotency_key=request.idempotency_key,
             request_digest=str(request_digest),
         )
+        with self._control.session_wait(authorization):
+            return await self._execute_waiting(token, request, request_digest, authorization)
+
+    async def _execute_waiting(
+        self,
+        token: str,
+        request: GatewayProxyRequestV2,
+        request_digest: ArtifactDigest,
+        authorization: GatewayAuthorization,
+    ) -> GatewayProxyResponseV2:
+        operation = authorization.operation
         while True:
             # A timed-out HTTP connection does not end the original Gateway job.
             # Serialize its identical reconnects before the semantic task guard,

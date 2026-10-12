@@ -67,12 +67,15 @@ class FakeSessionDriver:
 
 
 class TimeoutSessionDriver:
+    def __init__(self, budget: str = "wall-time") -> None:
+        self.budget = budget
+
     async def run(
         self,
         _prepared: PreparedAttempt,
         _config: OptimizerSessionConfig,
     ) -> OptimizerSessionResult:
-        raise InfrastructureError("Core Optimizer process exceeded its wall-time limit")
+        raise InfrastructureError(f"Core Optimizer process exceeded its {self.budget} limit")
 
 
 @dataclass
@@ -662,7 +665,10 @@ async def test_optimizer_persists_successful_worker_session_and_raw_trace(
 
 
 @pytest.mark.anyio
-async def test_optimizer_persists_timeout_without_waiting_for_trace(tmp_path: Path) -> None:
+@pytest.mark.parametrize("budget", ["wall-time", "active-time"])
+async def test_optimizer_persists_timeout_without_waiting_for_trace(
+    tmp_path: Path, budget: str
+) -> None:
     prepared = PreparedAttempt(
         tmp_path / "run-timeout",
         tmp_path / ".runtime/attempt.json",
@@ -673,7 +679,7 @@ async def test_optimizer_persists_timeout_without_waiting_for_trace(tmp_path: Pa
     with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
         runner = SessionOptimizerRunner(
             FakeWorkspaceAssembler(prepared),
-            TimeoutSessionDriver(),
+            TimeoutSessionDriver(budget),
             SequencedOutcomes([None]),
             FakeFinalizer(
                 AttemptCandidateResult(digest("unused"), digest("unused-result"), True, 1.0),
@@ -686,7 +692,7 @@ async def test_optimizer_persists_timeout_without_waiting_for_trace(tmp_path: Pa
             worker_sessions=registry,
         )
 
-        with pytest.raises(InfrastructureError, match="wall-time limit"):
+        with pytest.raises(InfrastructureError, match=f"{budget} limit"):
             await runner.run_attempt(request)
         sessions = registry.list_worker_sessions(attempt_id=request.attempt_id)
 

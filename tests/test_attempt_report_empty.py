@@ -40,7 +40,7 @@ def test_terminal_report_accepts_empty_journals_and_findings(status: str) -> Non
     assert report.direction_events == ()
 
 
-@pytest.mark.parametrize("field", ["experiments", "findings", "direction_events"])
+@pytest.mark.parametrize("field", ["experiments", "direction_events"])
 def test_candidate_ready_still_requires_each_journal_collection(field: str) -> None:
     value = _value(new_attempt_id())
     value[field] = []

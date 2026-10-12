@@ -106,6 +106,11 @@ def test_visible_core_config_matches_runtime_binding(
     )
     prepared = runner.prepare(root, root / "sessions")
     env = runner.runtime_environment(prepared, phase=phase, model=model)
+    if phase in {"framework_baseline", "optimization_attempt"}:
+        assert Path(env["ATREX_SESSION_CLOCK_PATH"]).is_file()
+        assert json.loads(Path(env["ATREX_SESSION_CLOCK_PATH"]).read_text())["wait_seconds"] == 0
+    else:
+        assert "ATREX_SESSION_CLOCK_PATH" not in env
     assert env["ATREX_REPORT_COMPLETION_RETRIES"] == "3"
     assert env["ATREX_OUTPUT_LIMIT_RECOVERY_RETRIES"] == "4"
     assert env["ATREX_ATTEMPT_REPORT_MAX_BYTES"] == "65536"

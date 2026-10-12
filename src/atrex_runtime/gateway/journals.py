@@ -28,6 +28,7 @@ from .artifact_subjects import resolve_artifact_subject
 from .claim_evidence import ClaimAssessment, assess_claim
 from .control import SqliteGatewayControl
 from .control_models import GatewayAuthorization, GatewayKernelTrialRecord, GatewayOperation
+from .measurement_summary import compact_measurement_summary, experiment_measurement_summary
 from .protocol import (
     DirectionLoadRequestV2,
     DirectionUpdateRequestV2,
@@ -47,7 +48,7 @@ _DIRECTION_PROPOSAL_FIELDS = {
     "success_criteria",
     "stop_conditions",
 }
-_DIRECTION_UPDATE_FIELDS = {"action", "direction_id", "analysis"}
+_DIRECTION_UPDATE_FIELDS = {"action", "direction_id"}
 _DIRECTION_CLOSURE_FIELDS = _DIRECTION_UPDATE_FIELDS | {
     "hypothesis_status",
     "supporting_experiment_ids",
@@ -61,14 +62,12 @@ _DIRECTION_CLOSURES = {"complete", "abandon", "block", "defer"}
 _EXPERIMENT_FIELDS = {
     "direction_id",
     "name",
-    "hypothesis",
     "change",
     "before",
     "after",
-    "evidence",
-    "analysis",
     "action",
 }
+_EXPERIMENT_OPTIONAL_FIELDS = {"hypothesis", "evidence", "analysis", "knowledge_used"}
 _DIRECTION_STATUSES = {
     "propose": "proposed",
     "suggest": "suggested",
@@ -151,6 +150,8 @@ class RuntimeJournalService:
                     f"{sorted(missing_direction_ids)}"
                 )
         if not events and not experiments:
+            if any(item.measurement_summary is not None for item in report.experiments):
+                raise ValueError("Measurement summaries must originate in the Runtime Journal")
             if any(event.relationship for event in report.direction_events):
                 raise ValueError(
                     "Record derived Directions with update-direction before submitting the report; "
@@ -275,10 +276,11 @@ class RuntimeJournalService:
                         {
                             "experiment_id": experiment["experiment_id"],
                             "name": experiment["name"],
-                            "hypothesis": experiment["hypothesis"],
+                            "direction_id": experiment["direction_id"],
                             "change": experiment["change"],
-                            "evidence": experiment["evidence"],
-                            "analysis": experiment["analysis"],
+                            "measurement_summary": compact_measurement_summary(
+                                experiment.get("measurement_summary")
+                            ),
                             "action": experiment["action"],
                             "knowledge_used": experiment["knowledge_used"],
                         }
@@ -814,7 +816,7 @@ class RuntimeJournalService:
                 if action in _DIRECTION_CLOSURES
                 else _DIRECTION_UPDATE_FIELDS
             )
-            optional_fields = (
+            optional_fields = {"analysis"} | (
                 _DIRECTION_CLOSURE_OPTIONAL_FIELDS if action in _DIRECTION_CLOSURES else set()
             )
             if set(value) - optional_fields != expected_fields:
@@ -833,7 +835,8 @@ class RuntimeJournalService:
                 raise SuggestedDirectionTransitionError(
                     direction_id, action, status=str(direction["status"])
                 )
-            _text(value.get("analysis"), "Direction analysis")
+            if value.get("analysis") is not None:
+                _text(value["analysis"], "Direction analysis")
             if action == "start":
                 started = {
                     str(event["direction_id"])
@@ -883,7 +886,7 @@ class RuntimeJournalService:
                 "plan": [],
                 "success_criteria": None,
                 "stop_conditions": None,
-                "analysis": value["analysis"],
+                "analysis": value.get("analysis"),
                 "supporting_experiment_ids": supporting,
                 "hypothesis_status": effective_status,
                 "claim_kind": value.get("claim_kind", "causal_hypothesis"),
@@ -920,13 +923,18 @@ class RuntimeJournalService:
             if "directions" in self.tool_modules
             else _EXPERIMENT_FIELDS - {"direction_id"}
         )
-        if set(value) - {"knowledge_used"} != expected_fields:
+        if set(value) - _EXPERIMENT_OPTIONAL_FIELDS != expected_fields:
             raise ValueError(
                 f"Experiment fields must be exactly {sorted(expected_fields)} "
-                "with optional knowledge_used"
+                f"with optional {sorted(_EXPERIMENT_OPTIONAL_FIELDS)}"
             )
         for field in expected_fields - {"action", "before", "after"}:
             _text(value.get(field), f"Experiment {field}")
+        for field in ("hypothesis", "evidence", "analysis"):
+            if value.get(field) is not None:
+                _text(value[field], f"Experiment {field}")
+        if "directions" not in self.tool_modules:
+            _text(value.get("hypothesis"), "Standalone Experiment hypothesis")
         if "directions" in self.tool_modules:
             direction_id = str(value["direction_id"])
             direction = self._require_direction(
@@ -948,7 +956,7 @@ class RuntimeJournalService:
         # Late evidence appends to the Journal without reopening research or
         # rewriting the Direction's lifecycle events.
         allow_baseline = self._is_bootstrap(request.attempt_id)
-        actions = {"keep_after", "restore_before", "abandon_direction", "adopt"}
+        actions = {"keep_after", "restore_before", "discard", "abandon_direction", "adopt"}
         if allow_baseline:
             actions.add("baseline")
         if value.get("action") not in actions:
@@ -982,6 +990,9 @@ class RuntimeJournalService:
             }
         ).model_dump(mode="json")
         self._validate_experiment_trials(request.attempt_id, experiment)
+        experiment["measurement_summary"] = experiment_measurement_summary(
+            experiment, trials=trials, control=self.control, artifacts=self.artifacts
+        )
         recorded = self.control.append_experiment(
             request.attempt_id,
             request.idempotency_key,
@@ -995,7 +1006,11 @@ class RuntimeJournalService:
             recovery_generation=authorization.recovery_generation,
             allow_baseline=allow_baseline,
         )
-        return {"status": "recorded", "experiment_id": str(recorded["experiment_id"])}
+        return {
+            "status": "recorded",
+            "experiment_id": str(recorded["experiment_id"]),
+            "measurement_summary": cast(JsonValue, recorded["measurement_summary"]),
+        }
 
     @staticmethod
     def _materialize_experiment_subject(
