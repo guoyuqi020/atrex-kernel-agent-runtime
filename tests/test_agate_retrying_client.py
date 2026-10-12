@@ -9,6 +9,23 @@ import pytest
 from atrex_runtime.gateway.retrying_client import RetryingAgateClient
 
 
+def test_submission_without_key_reuses_one_key_across_outer_transport_retries() -> None:
+    keys = []
+
+    class Client:
+        def submit_job(self, kind, request):
+            keys.append(request["idempotency_key"])
+            if len(keys) == 1:
+                raise ConnectionError("acceptance response lost")
+            return {"job_id": "same-job"}
+
+    payload = {"command": "true"}
+    retrying = RetryingAgateClient(Client(), sleeper=lambda _: None)
+    assert retrying.submit_job("dev", payload) == {"job_id": "same-job"}
+    assert len(keys) == 2 and len(set(keys)) == 1
+    assert "idempotency_key" not in payload
+
+
 @dataclass
 class FlakyHealthClient:
     failures_before_success: int

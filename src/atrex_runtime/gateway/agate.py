@@ -58,6 +58,7 @@ from .repeated_evaluate import (
     repeated_evaluate_result,
     repeated_evaluate_worker_result,
 )
+from .request_scope import GatewayExecutionSupersededError, check_execution
 from .retrying_client import RETRYABLE_CLIENT_STATUSES, RetryingAgateClient
 
 AGATE_JOB_SCHEMA_VERSION = 3
@@ -578,6 +579,17 @@ class AgateGatewayAdapter:
                     idempotency_key=request.idempotency_key,
                 )
         else:
+            # Dev/Compile/Disassemble used to omit the wire key, so an SDK retry
+            # after acceptance (or a process restart before bind) created a new Job.
+            # The upstream namespace spans Attempts; local keys do not.
+            scope = json.dumps(
+                [str(request.attempt_id), kind, request.idempotency_key],
+                separators=(",", ":"),
+            )
+            payload = {
+                **payload,
+                "idempotency_key": "gateway-job:" + hashlib.sha256(scope.encode()).hexdigest(),
+            }
             mapped = await self._submit_once(
                 request,
                 context,
@@ -1399,8 +1411,11 @@ class AgateGatewayAdapter:
         *,
         validation_is_candidate: bool = False,
     ) -> JsonValue:
+        check_execution()
         try:
             value = await anyio.to_thread.run_sync(operation)
+        except GatewayExecutionSupersededError:
+            raise
         except Exception as error:
             error_fields = vars(error)
             if (
@@ -1423,6 +1438,7 @@ class AgateGatewayAdapter:
             raise InfrastructureError(
                 f"Agate SDK request failed: {type(error).__name__}: {error}"
             ) from error
+        check_execution()
         try:
             normalized = _JSON_VALUE_ADAPTER.validate_python(value)
         except ValueError as error:

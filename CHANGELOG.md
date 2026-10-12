@@ -6,6 +6,11 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Serialize identical Gateway reconnects for Dev, Profile, Check and Disassemble as well as
+  Evaluate. Stable upstream submission keys cover acceptance-response loss; expired recovery
+  generations stop at the RPC boundary and cannot publish late results. Diagnostic recovery reuses
+  terminal result checkpoints and resumes legacy nonterminal snapshots without deleting evidence.
+
 - Evaluate and ABBA now renew expired long polls on the same Agate Job until success, failure,
   or cancellation. This covers full/custom/correctness-only Agent evaluations, authoritative
   Bootstrap/final evaluation, repeated measurements, Lineage seeds and their optional Profiles.

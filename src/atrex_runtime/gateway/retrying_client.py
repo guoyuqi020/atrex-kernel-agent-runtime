@@ -6,6 +6,9 @@ import logging
 import time
 from collections.abc import Callable
 from typing import TypeVar, cast
+from uuid import uuid4
+
+from .request_scope import check_execution
 
 _T = TypeVar("_T")
 _EXPONENTIAL_BACKOFF_ERROR_LIMIT = 5
@@ -50,6 +53,10 @@ class RetryingAgateClient:
         return self._client
 
     def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+        # The SDK creates a fresh key for each invocation if absent. Keep one
+        # across outer transport retries too (durable callers supply their key).
+        if not request.get("idempotency_key"):
+            request = {**request, "idempotency_key": uuid4().hex}
         return self._call("submit_job", lambda: self._client.submit_job(kind, request))  # type: ignore[attr-defined]
 
     def prepare_uploads(
@@ -104,6 +111,7 @@ class RetryingAgateClient:
     def _call(self, operation: str, request: Callable[[], _T]) -> _T:
         error_count = 0
         while True:
+            check_execution()
             try:
                 return request()
             except Exception as error:

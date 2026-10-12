@@ -733,6 +733,12 @@ class SqliteGatewayControl(AttemptOutcomeSource):
 
     @contextmanager
     def evaluate_request_execution(self, authorization: GatewayAuthorization) -> Iterator[bool]:
+        """Backward-compatible name for the Evaluate request execution lease."""
+        with self.request_execution(authorization) as acquired:
+            yield acquired
+
+    @contextmanager
+    def request_execution(self, authorization: GatewayAuthorization) -> Iterator[bool]:
         """Lease one HTTP request so reconnects wait rather than resubmit its task.
 
         Authorization has already verified that this key names identical content.
@@ -741,7 +747,8 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         """
         key = json.dumps(
             [
-                "evaluate-request",
+                "evaluate-request" if authorization.operation is GatewayOperation.EVALUATE
+                else "gateway-request",
                 str(authorization.attempt_id),
                 authorization.recovery_generation,
                 authorization.idempotency_key,
@@ -749,7 +756,39 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             separators=(",", ":"),
         )
         with execution_lock(self._execution_lock_directory, key) as acquired:
+            if acquired:
+                # Holding the process-safe lease proves previous handlers for this
+                # exact request exited. Retire only their abandoned report barriers.
+                with self._transaction() as connection:
+                    connection.execute(
+                        """DELETE FROM gateway_active_calls WHERE attempt_id = ?
+                           AND recovery_generation = ? AND idempotency_key = ?""",
+                        (authorization.attempt_id, authorization.recovery_generation,
+                         authorization.idempotency_key),
+                    )
             yield acquired
+
+    def check_execution_authority(self, authorization: GatewayAuthorization) -> None:
+        """Fence an already-authorized request before another RPC or result commit."""
+        from .request_scope import GatewayExecutionSupersededError
+
+        try:
+            generation = self._subject_generation(authorization.attempt_id)
+        except PermissionError as error:
+            raise GatewayExecutionSupersededError(str(error)) from error
+        with self._lock:
+            row = self._connection.execute(
+                "SELECT revoked, recovery_generation FROM gateway_capabilities WHERE attempt_id=?",
+                (authorization.attempt_id,),
+            ).fetchone()
+        if (
+            generation != authorization.recovery_generation
+            or row is None or row["revoked"]
+            or row["recovery_generation"] != authorization.recovery_generation
+        ):
+            raise GatewayExecutionSupersededError(
+                "Gateway execution authority ended; use the current Attempt session"
+            )
 
     @contextmanager
     def operation_execution(self, authorization: GatewayAuthorization) -> Iterator[str | None]:
@@ -822,6 +861,42 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         if not isinstance(value, str):
             raise TypeError("persisted operation result Artifact Digest must be text")
         return parse_artifact_digest(value)
+
+    def get_operation_gateway_result(
+        self, authorization: GatewayAuthorization,
+    ) -> ArtifactDigest | None:
+        """Read a request's private result checkpoint before replaying its response."""
+        self.check_execution_authority(authorization)
+        with self._lock:
+            row = self._connection.execute(
+                """SELECT gateway_result_digest FROM gateway_operations WHERE attempt_id=?
+                   AND recovery_generation=? AND idempotency_key=? AND operation=?""",
+                (authorization.attempt_id, authorization.recovery_generation,
+                 authorization.idempotency_key, authorization.operation.value),
+            ).fetchone()
+        if row is None or row["gateway_result_digest"] is None:
+            return None
+        return parse_artifact_digest(str(row["gateway_result_digest"]))
+
+    def retire_nonterminal_checkpoint(
+        self, authorization: GatewayAuthorization, expected: ArtifactDigest,
+    ) -> None:
+        """Retire a verified legacy queued snapshot under its request lease.
+
+        The caller verifies the private Artifact is nonterminal. Immutable files,
+        job ownership and quota remain intact; only replay pointers are cleared.
+        """
+        self.check_execution_authority(authorization)
+        with self._transaction() as connection:
+            changed = connection.execute(
+                """UPDATE gateway_operations SET gateway_result_digest=NULL,
+                   result_artifact_digest=NULL WHERE attempt_id=? AND recovery_generation=?
+                   AND idempotency_key=? AND operation=? AND gateway_result_digest=?""",
+                (authorization.attempt_id, authorization.recovery_generation,
+                 authorization.idempotency_key, authorization.operation.value, expected),
+            ).rowcount
+            if changed != 1:
+                raise InvalidTransitionError("Gateway checkpoint changed during recovery")
 
     @contextmanager
     def evaluate_task_execution(

@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping
 from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from typing import Literal, Protocol, cast
 
@@ -81,6 +82,7 @@ from .protocol import (
     ResultArtifactReadRequestV2,
     gateway_agent_request_schema,
 )
+from .request_scope import execution_scope
 from .result_metrics import gateway_result_projection
 from .stability import (
     MEASUREMENT_REPETITIONS,
@@ -91,6 +93,7 @@ from .stability import (
 )
 
 _REQUEST_ADAPTER: TypeAdapter[GatewayProxyRequestV2] = TypeAdapter(GatewayProxyRequestV2)
+_JSON_VALUE_ADAPTER: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 _LOGGER = logging.getLogger(__name__)
 _CANDIDATE_REQUEST_TYPES = (
     AttemptReportRequestV2,
@@ -916,14 +919,22 @@ class GatewayProxyService:
             request_digest=str(request_digest),
         )
         while True:
-            # A timed-out HTTP connection does not end the original evaluation.
+            # A timed-out HTTP connection does not end the original Gateway job.
             # Serialize its identical reconnects before the semantic task guard,
             # then replay the committed response or recover an exited executor.
             with ExitStack() as executions:
-                acquired = not isinstance(request, EvaluateRequestV2) or executions.enter_context(
-                    self._control.evaluate_request_execution(authorization)
+                lease = (
+                    self._control.evaluate_request_execution
+                    if isinstance(request, EvaluateRequestV2)
+                    else self._control.request_execution
+                )
+                acquired = operation in _OBSERVATIONAL_OPERATIONS or executions.enter_context(
+                    lease(authorization)
                 )
                 if acquired:
+                    executions.enter_context(execution_scope(
+                        partial(self._control.check_execution_authority, authorization)
+                    ))
                     with self._control.operation_execution(authorization) as call_id:
                         return await self._execute_authorized(
                             request, request_digest, authorization, executions, call_id
@@ -947,6 +958,7 @@ class GatewayProxyService:
     ) -> GatewayProxyResponseV2:
         operation = authorization.operation
         replayable = operation not in _OBSERVATIONAL_OPERATIONS
+        checkpoint = self._diagnostic_checkpoint(authorization)
         existing_response = (
             self._control.get_operation_artifact(
                 request.attempt_id,
@@ -1089,8 +1101,11 @@ class GatewayProxyService:
                         ),
                     ),
                 )
+            elif checkpoint is not None:
+                result = checkpoint
             else:
                 result = await self._execute_measurement(adapter_request)
+            self._control.check_execution_authority(authorization)
             agent_payload = result.result if result.worker_result is None else result.worker_result
             if production_violations:
                 agent_payload = _with_production_gate_advisory(agent_payload, production_violations)
@@ -1812,6 +1827,42 @@ class GatewayProxyService:
             return self._artifacts.put_directory(temporary, ArtifactKind.RESULT_ARTIFACT)
         finally:
             shutil.rmtree(temporary, ignore_errors=True)
+
+    def _diagnostic_checkpoint(
+        self, authorization: GatewayAuthorization,
+    ) -> GatewayAdapterResult | None:
+        """Resume legacy diagnostic snapshots without mutating immutable evidence."""
+        if authorization.operation not in {
+            GatewayOperation.PROFILE, GatewayOperation.CHECK,
+            GatewayOperation.DISASSEMBLE, GatewayOperation.DEV,
+        }:
+            return None
+        digest = self._control.get_operation_gateway_result(authorization)
+        if digest is None:
+            return None
+        stored = self._artifacts.verify(digest)
+        raw = _JSON_VALUE_ADAPTER.validate_python(
+            json.loads((stored.payload_path / "value.json").read_bytes())
+        )
+        if not isinstance(raw, dict):
+            raise InfrastructureError("cached Gateway job is not an object")
+        if raw.get("status") in {"queued", "running"}:
+            self._control.retire_nonterminal_checkpoint(authorization, digest)
+            self._events.record_runtime_event(
+                "gateway.nonterminal_checkpoint_retired", authorization.attempt_id,
+                {"operation": authorization.operation,
+                 "idempotency_key": authorization.idempotency_key,
+                 "gateway_result_digest": str(digest), "job_id": raw.get("job_id")},
+            )
+            return None
+        # A crash can occur after binding the terminal private result but before
+        # committing the public response. Reuse that exact snapshot, not a new
+        # poll whose timestamps/diagnostic fields may have changed.
+        if raw.get("status") in {"succeeded", "failed", "cancelled"}:
+            from .agate import AgateGatewayAdapter
+
+            return AgateGatewayAdapter._map_job(raw, authorization.operation)
+        return None
 
     def _load_response(self, digest: ArtifactDigest) -> GatewayProxyResponseV2:
         stored = self._artifacts.verify(digest)

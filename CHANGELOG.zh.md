@@ -6,6 +6,10 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Dev、Profile、Check、Disassemble 与 Evaluate 一样串行处理同一请求的重连，使用稳定的
+  上游提交键恢复已接收但响应丢失的 Job；旧恢复代次在 RPC 边界停止，不能回写结果。
+  诊断请求恢复时复用已保存的终态结果，继续等待旧版非终态快照对应的 Job，保留原始证据。
+
 - Evaluate 与 ABBA 在单次长轮询到期后继续等待同一个 Agate Job，直到成功、失败或取消。
   覆盖 Agent 的 full、自定义输入与 correctness-only 评测、Bootstrap／最终权威评测、
   重复测量、Lineage 种子评测及其可选 Profile。未完成的 ABBA 批次不再消耗重试预算或触发

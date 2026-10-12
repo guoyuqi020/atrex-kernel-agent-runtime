@@ -476,6 +476,14 @@ A different candidate needs its own qualifying evidence; a current failed full E
 overridden by adopting an earlier success. Request idempotency is scoped to Attempt and recovery
 generation, not a global prohibition on evaluating an Artifact in another Attempt.
 
+Identical HTTP reconnects for Evaluate, Dev, Profile, Check and Disassemble wait behind the
+original request, then replay its committed terminal response. They do not submit another job or
+consume another call. A process exit releases the execution lease, allowing the next caller to
+resume the durably bound job. Stable upstream submission keys also cover acceptance-response loss.
+Recovered or revoked Sessions cannot issue further RPCs or publish late results. Legacy queued
+diagnostic snapshots are retired from replay under the same lease and the original job is awaited;
+their immutable Artifact files remain available as historical snapshots.
+
 With Experiments disabled, restore the exact visible historical Kernel into `work/kernel` and
 submit `candidate_ready`. Runtime automatically resolves qualifying historical evidence using
 the same compatibility and visibility checks above; no adoption Experiment or duplicate Evaluate
