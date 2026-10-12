@@ -1,0 +1,107 @@
+{
+  "schema_version": "atrex.agent_problem.v1",
+  "objective": "Implement and optimize paged compressed sparse grouped-query BF16 attention with interleaved KV-cache append from scratch in self-authored CUDA C++ on Alibaba PPU ZW-M890P. Triton, CuteDSL, and prebuilt compute kernels are not permitted.",
+  "evaluation": {
+    "exact_cases": "private",
+    "correctness_requirement": "Preserve output and the full declared mutable state (kv_cache and output), including untouched cache slots. Elementwise abs(candidate-reference) <= 0.01 + 0.05 * abs(reference), plus relative L2 <= 0.001. Return the supplied output tensor with its alias preserved.",
+    "performance_requirement": "Minimize equal-weight geometric mean latency across all 25 Valid cases; no Test holdout.",
+    "development_cases_are_evaluation_cases": false
+  },
+  "operator_contract": {
+    "entrypoint": "torch.nn.Module Model(scale, kv_cache_dtype=\"auto\", layer_k_scale=1.0, layer_v_scale=1.0).forward(query, key, value, kv_cache, output, topk_indices_buffer, metadata_present, num_actual_tokens, skip_write_kvcache, slot_mapping, block_table, req_id_per_token, seq_lens, num_reqs, output_scale=None, output_block_scale=None)",
+    "inputs": {
+      "query": "BF16 [T,12,256]",
+      "key": "BF16 [T,1,256]",
+      "value": "BF16 [T,1,256], noncontiguous stride (6656,256,1), storage offset 6400",
+      "kv_cache": "BF16 [2,1282,1792,1,256], interleaved K/V storage; respect actual tensor strides",
+      "output": "BF16 [T,12,256], supplied mutable output buffer",
+      "topk_indices_buffer": "int32 [8192,2051]; use first num_actual_tokens rows; -1 means absent; indices are request-relative logical token positions",
+      "slot_mapping": "int64 [T], physical flattened destination slots for newly appended K/V; negative slots skipped",
+      "block_table": "int32 [num_reqs,586], request-relative block to physical block map",
+      "req_id_per_token": "int32 [T], request for each query",
+      "seq_lens": "int32 [num_reqs], valid sequence lengths"
+    },
+    "semantics": [
+      "Zero the supplied output first. If metadata_present is false, return it without modifying kv_cache.",
+      "Unless skip_write_kvcache, append key/value for the first num_actual_tokens to kv_cache at nonnegative slot_mapping entries. Physical block = slot // 1792, offset = slot % 1792. Finish all writes before attention reads.",
+      "For query row t, use req_id_per_token[t]. Keep each supplied logical index with 0 <= index < seq_lens[request]; translate through block_table[request,index//1792] and index%1792. Negative indices or physical blocks are invalid and excluded.",
+      "Each of the 12 query heads attends to the single KV head over the selected positions. Compute FP32 dot products times scale, stable softmax over selected positions, and FP32 weighted sum of V; cast result to BF16. Empty selections produce zeros. Preserve multiplicity of any repeated valid indices.",
+      "The supplied logical indices encode the selected causal context; do not invent a further mask. Write only the first num_actual_tokens output rows, leaving other rows zero. Return the original output buffer."
+    ],
+    "mutable_state": "Only kv_cache and output may change. All non-addressed cache elements and all other inputs must remain unchanged; full mutable-state correctness is evaluated.",
+    "supported_scope": "Collection uses scale=0.0625, kv_cache_dtype=\"auto\", layer_k_scale=layer_v_scale=1.0, metadata_present=true, skip_write_kvcache=false, and output quantization parameters None. The interface must retain these parameters.",
+    "hardware": "PPU ZW-M890P exposes CUDA-compatible PyTorch. Query Runtime env/dev for the actual compiler/toolchain; do not assume NVIDIA-specific instructions. Clock locking is disabled."
+  },
+  "workload_profile": {
+    "profiles": [
+      "draft_decode",
+      "main_decode",
+      "main_prefill"
+    ],
+    "query_heads": 12,
+    "kv_heads": 1,
+    "head_dim": 256,
+    "cache_blocks": 1282,
+    "block_size": 1792,
+    "index_buffer_width": 2051
+  },
+  "distribution_profile": {},
+  "shape_domain": {
+    "init_kwargs": {
+      "scale": 0.0625,
+      "kv_cache_dtype": "auto",
+      "layer_k_scale": 1.0,
+      "layer_v_scale": 1.0
+    },
+    "input_kwargs": {
+      "query_tokens": {
+        "type": "integer",
+        "min": 1,
+        "max": 8192
+      },
+      "requests": {
+        "type": "integer",
+        "min": 1,
+        "max": 16
+      },
+      "profile": {
+        "type": "string",
+        "values": [
+          "draft_decode",
+          "main_decode",
+          "main_prefill"
+        ]
+      }
+    },
+    "cross_field_invariants": [
+      "draft_decode: requests <= query_tokens <= 4*requests",
+      "main_decode: query_tokens == 4*requests",
+      "main_prefill: requests == 1, or query_tokens == 8192 and 11 <= requests <= 16"
+    ]
+  },
+  "invariants": [
+    "BF16 Q/K/V, output and KV cache; FP32 attention accumulation",
+    "12 query heads, one KV head, head dimension 256",
+    "Preserve actual noncontiguous strides and storage offsets",
+    "Preserve all input tensors except declared kv_cache and output mutations",
+    "Selected indices are logical positions and require the request block-table translation"
+  ],
+  "coverage_regimes": [
+    {
+      "name": "draft_decode"
+    },
+    {
+      "name": "main_decode"
+    },
+    {
+      "name": "main_prefill"
+    },
+    {
+      "name": "noncontiguous_value"
+    },
+    {
+      "name": "interleaved_cache_append"
+    }
+  ],
+  "development_cases": []
+}

@@ -75,6 +75,17 @@ def prepare(args):
         "roofline.json",
     ):
         shutil.copyfile(op / name, task / name)
+    if adaptation := definition.get("input_adaptation"):
+        adapted = (root / adaptation["path"]).resolve()
+        if not adapted.is_relative_to(root / "data" / "ppubench"):
+            raise ValueError("Input adaptation must be under data/ppubench")
+        source = adapted.read_bytes()
+        if hashlib.sha256(source).hexdigest() != adaptation["sha256"]:
+            raise ValueError("Input adaptation SHA-256 differs from the task definition")
+        if len(source) > 8192:
+            raise ValueError("Input adaptation exceeds the Agate 8 KiB limit")
+        (task / "input.py").write_bytes(source)
+        shutil.copyfile(adapted.with_name("adaptation.json"), task / "input-adaptation.json")
     shutil.copyfile(data / "operators" / operator / "reference.py", task / "reference.py")
     # Deliberately do not import the curated solution.py as an optimization seed.
     shutil.copytree(frozen / "inputs", workspace / "inputs")

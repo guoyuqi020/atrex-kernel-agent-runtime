@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "collection": "qwen38flash_next_ppu_tp2_c16_0_64k_20260928",
+  "operator": "compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append",
+  "curated_root": "data/ppubench/curated",
+  "dsl": "cuda",
+  "expected_valid_shapes": 25,
+  "expected_test_shapes": 0,
+  "fresh_bootstrap": true,
+  "seed_kind": "NotImplementedError placeholder",
+  "roofline_mode": "no validated SOL_time_ms; latency only",
+  "runtime": {
+    "backend": "claude",
+    "worker_user": "root",
+    "host_home": "/root",
+    "launcher_mode": "container",
+    "gpu_wiki": {
+      "enabled": true,
+      "timeout_seconds": 600
+    },
+    "roofline_builder": null,
+    "agate": {
+      "base_url": "https://atrex-gateway.alibaba-inc.com",
+      "auth_mode": "ak_sk",
+      "access_key_env": "AGATE_AK",
+      "secret_key_env": "AGATE_SK",
+      "http_timeout_s": 1800.0,
+      "wait_timeout_s": 3900.0
+    }
+  },
+  "outer_timeout_seconds": 259200,
+  "input_adaptation": {
+    "path": "data/ppubench/agate-inputs/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/input.py",
+    "sha256": "bdc3c748c07c2c9fd2733ebf8f27b8bcec1e424865e5a80923c58237202012ab"
+  }
+}

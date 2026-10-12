@@ -1,0 +1,17 @@
+{
+  "aka_head": "602bc381aec89a0238d18dbc903717ce848294ed",
+  "main_files": {
+    "orchestrator/optimize.py": "7c4dd8c0cadfc9a020b2a90688897afe83a5d971dca35b8edaffbc73dd6fb0b2",
+    "orchestrator/campaign.py": "1de69623d63e3e24e9e4fb8d78a4a82d213bec6584b4a54de5b5c249939899d5",
+    "orchestrator/agent_runtime/adapter.py": "74d15715f4cf4d0d65cd7eeed98e08b684679774e0cb44fc1e611f6c6b29e4e4",
+    "orchestrator/constants.py": "e405d73eeac505a9f0df69a3d57809f7697fcd8463b6fd6428f4dfe2e3811598"
+  },
+  "wiki_adapter": {
+    "internal_wiki_adapter.py": "090433d82cec1a5f34a70613cbd560fc79d02ec69f94a4be579c0d4bba5bbac6",
+    "configure_wiki.py": "fdbc565ed1588394c96249a3e3cbdc42faf638562d2de1915f1bed586a7d5edb",
+    "launch.py": "ea42a2c1d04ecf8560fb4cd0166731d63134c57501a08cd1cd83c9844682b867",
+    "smoke.py": "3fea04a0080e822f90fc886949781e1d0b9fd850c85af229fcebe18410053531"
+  },
+  "bundle_sha256": "237f01d6405194759afb121c8002f0a89fd729fe735b10d06dea0232733ccd98",
+  "git_metadata_bundle_sha256": "dd5261c63a3bbacbf92fa21c08b8ff6c5548566072a9bd92850d87fd6c536e69"
+}

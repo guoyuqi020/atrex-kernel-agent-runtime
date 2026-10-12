@@ -1,0 +1,56 @@
+{
+  "aka_commit": "602bc381aec89a0238d18dbc903717ce848294ed",
+  "aka_repository": "https://github.com/alibaba/atrex-kernel-agent",
+  "bench_commit": "54925ff9223aa54b901219f02fffd51d9af82e3c",
+  "internal_wiki": {
+    "repository": "https://code.alibaba-inc.com/tre-infra-open/atrex-kernel-agent",
+    "branch": "codex/ppu15-agent-wiki",
+    "commit": "2076c865cc6618d810cfe2bf09b4fc395536693e",
+    "subtree": "internal_source/gpu-wiki",
+    "tree": "5d17eedd45eb0e1d9f419e9b55e80b70503654f8",
+    "copy_boundary": "complete Git subtree; unchanged upstream files",
+    "imported_at": "2026-10-09"
+  },
+  "framework": "Cuda",
+  "max_iters": 15,
+  "replicas": 3,
+  "platform": "ZW-M890P",
+  "sandbox_profile": "prod",
+  "other_settings": "upstream defaults",
+  "operators": [
+    {
+      "operator": "gated_residual_combine_bf16",
+      "shapes": 24,
+      "files": {
+        "roofline.json": "5c68dc1aa41a30649571bf655ac4d9349901b34cb6c119799b1e0bed41312968",
+        "metadata.json": "41f3dc2210f73ed80b3ff69e0d89a8a776f7727111171dd1245ec46433c0d43d",
+        "shapes.json": "300820ae0a4502b15379af908b333a221442e538d210e62511d5744ed16b8c4b",
+        "input.py": "115ea5b7c137996ee098234aa7a58bb85a4240922fa51c347beeb9e5d3358063",
+        "reference.py": "173b53da08889ab42b3b2786fc14ebb921a9a88b112b48df3c644aaf84d71d37"
+      }
+    },
+    {
+      "operator": "compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append",
+      "shapes": 25,
+      "files": {
+        "roofline.json": "78d1ec53eb9aaae45984a5222cce8d9fa26e4f2162c9feabd58649338c51d0eb",
+        "metadata.json": "80961137fc7b6bf1b59c721fc4d9af12386646633de9871c52056278279b8915",
+        "shapes.json": "d31dfeeec7fb9e2858b7f461ac05fa858bd8bc9637f98549eb6d8cbf72157b2b",
+        "input.py": "bdc3c748c07c2c9fd2733ebf8f27b8bcec1e424865e5a80923c58237202012ab",
+        "reference.py": "5b7258f521a8262be3e9061eec14f106e0a4839152e7d281d7aaae8a18b867e5"
+      }
+    }
+  ],
+  "wiki_integration": {
+    "tool": "gpu-wiki.query",
+    "adapter": "internal_wiki_adapter.py",
+    "source_api": "internal indexed tools/query_nl.py",
+    "scope": "knowledge plugin only; upstream optimizer code unchanged"
+  },
+  "coordinator_dependencies": {
+    "python": "3.11.13",
+    "torch": "2.6.0+cpu",
+    "agate": "0.14.3",
+    "claude": "2.1.296"
+  }
+}

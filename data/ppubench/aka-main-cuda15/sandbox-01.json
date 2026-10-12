@@ -1,0 +1,26 @@
+{
+  "apiVersion": "sandbox.atrex.ai/v1alpha1",
+  "kind": "Sandbox",
+  "metadata": {
+    "name": "guoyuqi-aka-ppu-20261011-r1"
+  },
+  "spec": {
+    "image": "hub.docker.alibaba-inc.com/tre-ai-infra/atrex-kernel-agent-ci:agate-0.10.2-20260828",
+    "resources": {
+      "cpu": 16,
+      "memory": "32Gi",
+      "ephemeral-storage": "200Gi"
+    },
+    "workspace": {
+      "root": "/workspace",
+      "policy": "shared"
+    },
+    "commandPolicy": {
+      "maxConcurrentJobs": 16
+    },
+    "leaseDurationSeconds": 86400,
+    "environment": {
+      "WORKSPACE_MODE": "persistent"
+    }
+  }
+}

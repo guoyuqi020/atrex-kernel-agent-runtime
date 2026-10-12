@@ -1,0 +1,179 @@
+{
+  "shapes": {
+    "0": {
+      "semantic_Q_read_bytes": 21155960,
+      "semantic_Q_write_bytes": 71680,
+      "semantic_W_flops": {
+        "float32": 252026880
+      }
+    },
+    "1": {
+      "semantic_Q_read_bytes": 33849536,
+      "semantic_Q_write_bytes": 114688,
+      "semantic_W_flops": {
+        "float32": 403243008
+      }
+    },
+    "2": {
+      "semantic_Q_read_bytes": 126935760,
+      "semantic_Q_write_bytes": 430080,
+      "semantic_W_flops": {
+        "float32": 1512161280
+      }
+    },
+    "3": {
+      "semantic_Q_read_bytes": 33849536,
+      "semantic_Q_write_bytes": 114688,
+      "semantic_W_flops": {
+        "float32": 403243008
+      }
+    },
+    "4": {
+      "semantic_Q_read_bytes": 29618344,
+      "semantic_Q_write_bytes": 100352,
+      "semantic_W_flops": {
+        "float32": 352837632
+      }
+    },
+    "5": {
+      "semantic_Q_read_bytes": 21155960,
+      "semantic_Q_write_bytes": 71680,
+      "semantic_W_flops": {
+        "float32": 252026880
+      }
+    },
+    "6": {
+      "semantic_Q_read_bytes": 135398144,
+      "semantic_Q_write_bytes": 458752,
+      "semantic_W_flops": {
+        "float32": 1612972032
+      }
+    },
+    "7": {
+      "semantic_Q_read_bytes": 25387152,
+      "semantic_Q_write_bytes": 86016,
+      "semantic_W_flops": {
+        "float32": 302432256
+      }
+    },
+    "8": {
+      "semantic_Q_read_bytes": 84623840,
+      "semantic_Q_write_bytes": 286720,
+      "semantic_W_flops": {
+        "float32": 1008107520
+      }
+    },
+    "9": {
+      "semantic_Q_read_bytes": 50774304,
+      "semantic_Q_write_bytes": 172032,
+      "semantic_W_flops": {
+        "float32": 604864512
+      }
+    },
+    "10": {
+      "semantic_Q_read_bytes": 17330962432,
+      "semantic_Q_write_bytes": 58720256,
+      "semantic_W_flops": {
+        "float32": 206460420096
+      }
+    },
+    "11": {
+      "semantic_Q_read_bytes": 17330962432,
+      "semantic_Q_write_bytes": 58720256,
+      "semantic_W_flops": {
+        "float32": 206460420096
+      }
+    },
+    "12": {
+      "semantic_Q_read_bytes": 101548608,
+      "semantic_Q_write_bytes": 344064,
+      "semantic_W_flops": {
+        "float32": 1209729024
+      }
+    },
+    "13": {
+      "semantic_Q_read_bytes": 76161456,
+      "semantic_Q_write_bytes": 258048,
+      "semantic_W_flops": {
+        "float32": 907296768
+      }
+    },
+    "14": {
+      "semantic_Q_read_bytes": 67699072,
+      "semantic_Q_write_bytes": 229376,
+      "semantic_W_flops": {
+        "float32": 806486016
+      }
+    },
+    "15": {
+      "semantic_Q_read_bytes": 126935760,
+      "semantic_Q_write_bytes": 430080,
+      "semantic_W_flops": {
+        "float32": 1512161280
+      }
+    },
+    "16": {
+      "semantic_Q_read_bytes": 25387152,
+      "semantic_Q_write_bytes": 86016,
+      "semantic_W_flops": {
+        "float32": 302432256
+      }
+    },
+    "17": {
+      "semantic_Q_read_bytes": 17330962432,
+      "semantic_Q_write_bytes": 58720256,
+      "semantic_W_flops": {
+        "float32": 206460420096
+      }
+    },
+    "18": {
+      "semantic_Q_read_bytes": 17330962432,
+      "semantic_Q_write_bytes": 58720256,
+      "semantic_W_flops": {
+        "float32": 206460420096
+      }
+    },
+    "19": {
+      "semantic_Q_read_bytes": 93086224,
+      "semantic_Q_write_bytes": 315392,
+      "semantic_W_flops": {
+        "float32": 1108918272
+      }
+    },
+    "20": {
+      "semantic_Q_read_bytes": 17330962432,
+      "semantic_Q_write_bytes": 58720256,
+      "semantic_W_flops": {
+        "float32": 206460420096
+      }
+    },
+    "21": {
+      "semantic_Q_read_bytes": 33849536,
+      "semantic_Q_write_bytes": 114688,
+      "semantic_W_flops": {
+        "float32": 403243008
+      }
+    },
+    "22": {
+      "semantic_Q_read_bytes": 135398144,
+      "semantic_Q_write_bytes": 458752,
+      "semantic_W_flops": {
+        "float32": 1612972032
+      }
+    },
+    "23": {
+      "semantic_Q_read_bytes": 16924768,
+      "semantic_Q_write_bytes": 57344,
+      "semantic_W_flops": {
+        "float32": 201621504
+      }
+    },
+    "24": {
+      "semantic_Q_read_bytes": 15972749800,
+      "semantic_Q_write_bytes": 54118400,
+      "semantic_W_flops": {
+        "float32": 190280294400
+      }
+    }
+  }
+}

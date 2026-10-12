@@ -10,6 +10,7 @@ Qwen3.8 Flash Next PPU TP2 C16 题库，目标卡为 `ZW-M890P`，包含 **18 �
 
 ```text
 ppubench/
+├── agate-inputs/<operator_id>/   # 适配网关大小限制的输入，独立于上游原件
 ├── gated-residual-combine-cuda/   # CUDA 从零实现任务的配置、要求与空 seed
 ├── curated/
 │   ├── operators/<operator_id>/reference.py
@@ -30,7 +31,8 @@ ppubench/
 
 实验题目配置与模型要求维护在 `data/ppubench` 下，启动脚本放在 `scripts/ppubench`。
 `~/atrex-runs` 只保存运行数据、配置快照和备份，不作为题目配置来源。
-当前可准备的任务为 [Gated residual combine：PPU CUDA 从零实现](gated-residual-combine-cuda/README.md)。
+当前可准备的任务为 [Gated residual combine：PPU CUDA 从零实现](gated-residual-combine-cuda/README.md)
+和 [CSA paged causal：PPU CUDA 从零实现](csa-paged-cuda/README.md)。
 
 通过 `scripts/ppubench/campaign.py prepare` 准备的 PPU 题目默认开启 GPU Wiki，
 与 Direction/Experiment 模块开关独立。服务地址来自题目 `policy.json` 的
@@ -46,3 +48,6 @@ ppubench/
 上游配套转换器位于 [CR 30003525](https://code.alibaba-inc.com/tre-infra/atrex-bench/codereview/30003525)，本次核验版本为 `b01dae5d1132e6720bf8be2e6b10675bb0493b9b`；固定公共 harness 提交为 `22d6a57b98ebb45c8db76e98815158d820c1dca3`。
 
 接入时保留 metadata 中的状态与输出契约，并显式采用题目记录的正确性配置。PPU 评测关闭锁频；三个 TP collective 题目需要双 rank。部分输入生成器的大小、原始适配器的导入及私有运行依赖仍需与目标网关适配。
+
+已提供 [CSA paged causal 输入精简版](agate-inputs/compressed_sparse_attention_paged_causal_bf16_interleaved_kv_append/README.md)，
+供组装 Eval bundle 时替换该算子的 `input.py`；不自动修改原始题库或已启动的实验。
