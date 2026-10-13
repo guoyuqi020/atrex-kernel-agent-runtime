@@ -9,10 +9,8 @@ from typing import Any, cast
 from ..domain.errors import InfrastructureError
 from ..kernel_sources import KernelSourceBundle, KernelSourceContract
 from .abba import CommitPinnedAtrexBenchEvaluator
-from .abba_remote import RESULT_PREFIX
 from .contract import AgateEvaluationContractV1
 from .eval_sources import prepare_eval_sources
-from .private_results import project_source_tree_failure
 from .protocol import AGATE_MAX_JOB_TIMEOUT_S
 from .source_diagnostics import DIAGNOSTIC_PREFIX
 
@@ -74,7 +72,11 @@ class SourceTreeAgateClient:
 
     def get_job(self, job_id: str, **kwargs: Any) -> dict[str, object]:
         job = self._client.get_job(job_id, **kwargs)  # type: ignore[attr-defined]
-        if not isinstance(job, dict) or job.get("status") != "succeeded":
+        if (
+            not isinstance(job, dict)
+            or job.get("status") != "succeeded"
+            or job.get("kind") != "dev"
+        ):
             return job  # type: ignore[no-any-return]
         result = job.get("result")
         stdout = result.get("stdout") if isinstance(result, dict) else None
@@ -86,32 +88,7 @@ class SourceTreeAgateClient:
                 if diagnostic.get("operation") not in {"profile", "check", "disassemble"}:
                     raise InfrastructureError("invalid source-tree diagnostic result")
                 return {**job, "result": diagnostic, "source_tree_execution": result}
-            if not line.startswith(RESULT_PREFIX):
-                continue
-            raw = json.loads(line[len(RESULT_PREFIX) :])
-            if not raw.get("raw_result"):
-                return job
-            runs = raw.get("runs", [])
-            if raw.get("error") or len(runs) != 1:
-                raise InfrastructureError(
-                    f"source-tree evaluator failed: {raw.get('error')}",
-                    public_detail=f"Source-tree evaluator failed in Agate job {job_id}: "
-                    + json.dumps(project_source_tree_failure(raw), ensure_ascii=False),
-                )
-            output = runs[0].get("result")
-            if (
-                runs[0].get("exit_code") not in (None, 0)
-                or not isinstance(output, dict)
-                or not isinstance(output.get("raw_result"), dict)
-            ):
-                raise InfrastructureError(
-                    f"source-tree evaluator produced no result: {runs[0]}",
-                    public_detail=f"Source-tree evaluator has no result in Agate job {job_id}: "
-                    + json.dumps(project_source_tree_failure(raw), ensure_ascii=False),
-                )
-            # Logical operation ownership remains in the durable Agate job binding;
-            # a Dev tool result never becomes trusted Evaluate evidence by normalization.
-            return {**job, "result": output["raw_result"], "source_tree_execution": result}
+
         return job
 
 

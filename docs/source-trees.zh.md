@@ -76,8 +76,8 @@ Agent 工具或给 Agent 提供 OSS 凭据。
 浮点数均不合法。Runtime 将其换算为 `repeats / 2` 个原生 Block。非法值直接向 Agent 返回
 参数校验错误，不回退 Dev。每个 Shape Batch 的完整排程仍在同一 Allocation 内执行，沿用
 Runtime 锁频策略。缺少原生 Request Builder 时返回明确的配置错误，不提交 GPU 作业；单文件
-同样不会回退 Dev。已提交的旧 Dev 评测作业和已保存结果保留只读恢复能力，不因此创建新的
-Dev 评测作业。
+同样不会回退 Dev。旧 Dev 评测驱动与结果解码器已移除。已封存的 Result Artifact 仍可读取；
+Evaluate 和 ABBA 只提交并解码原生 Eval 作业。
 
 源码树 Bootstrap 使用配置的 Optimizer backend 启动完整 framework-baseline Session
 （GDN 输入包使用 Claude）。Runtime 将源码范围追加到本次 Session 的 Bootstrap Prompt
@@ -152,7 +152,7 @@ Runtime 仍按原逻辑操作记录归属、源码与结果，不把这些操作
 - `gateway/source_tree.py`：原生源码树 Eval 路由、诊断 Dev 路由和历史结果恢复。
 - `gateway/source_diagnostics.py`：固定源码树 NCU、编译/运行、sanitizer 驱动。
 - `gateway/abba.py`、`agent_abba.py`：原生 ABBA 提交及权威/探索结果账本。
-- `gateway/abba_remote.py`：旧 Dev 结果协议，用于只读恢复。
+- `gateway/abba_remote.py`：原生 ABBA 结果摘要，以及诊断共享的锁频、依赖检查辅助函数。
 - `gateway/proxy.py`、`workers/core.py`：评测提交与最终提名的统一封存。
 - `workers/lineage_bootstrap.py`、`composition/bootstrap.py`、`gateway/finalization.py`：Agent Bootstrap、整树提名与权威终评。
 - `tests/test_kernel_sources.py`：commit 锚定、越界修改、源码身份、Prompt 哈希、真实子进程导入、

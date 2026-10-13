@@ -28,7 +28,6 @@ from test_gateway_proxy import _request, _service
 from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.domain.models import Dsl
 from atrex_runtime.gateway import GatewayOperation, GatewayProxyAsgiApp, GatewayProxyLimits
-from atrex_runtime.gateway.abba_remote import RESULT_PREFIX
 from atrex_runtime.gateway.agent_abba import AgentAbbaGatewayAdapter
 from atrex_runtime.gateway.contract import AgateEvaluationContext
 from atrex_runtime.gateway.source_tree import SourceTreeAgateClient
@@ -70,6 +69,66 @@ def _assert_diagnostic(text: str, *, include_error_class: bool = True) -> None:
         "151904033", "manual_seed", "atrex_bench/eval", "site-packages", "/tmp/agate-",
     ):
         assert hidden not in text
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("mode", ["full", "correctness_only"])
+@pytest.mark.parametrize("failure", ["failed", "cancelled", "oss_unavailable"])
+async def test_source_tree_native_eval_failure_reaches_agent_without_dev_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source_seed, mode: str, failure: str,
+) -> None:
+    registry, control, attempt, capability, service, _ = _service(tmp_path)
+    error = None
+    if failure == "oss_unavailable":
+        error = FakeGatewayError(400, "validation", {
+            "reason": "oss_unavailable", "error_class": "validation",
+            "message": "no OSS-capable cluster matches the requested hardware",
+        })
+    client = FakeAgateClient(_failed_job(failure), submit_error=error)
+    adapter, _, jobs = _adapter(tmp_path, client)
+    adapter._client = SourceTreeAgateClient(client, None)
+    adapter._contexts.context = replace(
+        adapter._contexts.context,
+        contract=_contract().model_copy(
+            update={"kernel_sources": {Dsl.TRITON: source_seed.contract}},
+        ),
+    )
+    monkeypatch.setattr(service, "_adapter", adapter)
+    request = json.loads(_request(attempt))
+    request["candidate"]["files"] = [
+        {"path": path, "content_base64": base64.b64encode(text.encode()).decode()}
+        for path, text in source_seed.contract.validate_tree(source_seed.working).items()
+    ]
+    if mode == "correctness_only":
+        request["mode"] = mode
+        request.pop("latency_prediction")
+    app = GatewayProxyAsgiApp(service, GatewayProxyLimits(65536, 8, 16384))
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://runtime") as http:
+            response = await http.post(
+                "/v1/operations", json=request,
+                headers={"Authorization": f"Bearer {capability.token}"},
+            )
+        assert response.status_code == 200, response.text
+        assert response.json()["result"]["latency_us_geomean"] is None
+        evaluations = control.list_evaluations(attempt.id)
+        assert all(not item.correct and item.latency_us is None for item in evaluations)
+        if failure != "oss_unavailable":
+            assert not evaluations
+        assert client.submitted and {kind for kind, _ in client.submitted} == {"eval"}
+        assert all("command" not in payload and "files" not in payload
+                   for _, payload in client.submitted)
+        if failure == "oss_unavailable":
+            assert "oss_unavailable" in response.text
+            assert "no OSS-capable cluster" in response.text
+            assert response.json()["job_id"] is None
+        else:
+            assert response.json()["status"] == failure
+            _assert_diagnostic(response.text)
+    finally:
+        jobs.close()
+        control.close()
+        registry.close()
 
 
 @pytest.mark.anyio
@@ -246,95 +305,6 @@ async def test_adapter_repetitions_preserve_failure_diagnostics(
                 assert "private-input" not in rendered
     finally:
         jobs.close()
-
-
-@pytest.mark.anyio
-@pytest.mark.parametrize("mode", ["full", "correctness_only"])
-@pytest.mark.parametrize("failure", ["driver", "child", "stderr", "exit", "secret", "compiler"])
-async def test_source_tree_inner_failure_reaches_http_agent(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source_seed, mode: str, failure: str,
-) -> None:
-    registry, control, attempt, capability, service, _ = _service(tmp_path)
-    raw = {"raw_result": True, "error": None, "runs": []}
-    expected = {
-        "driver": "required GPU tool is not installed: ncu",
-        "child": "No module named 'cutlass'",
-        "stderr": "baseline kernel supports page_size == 32",
-        "exit": '"exit_code": 7',
-        "secret": "No module named 'cutlass'",
-        "compiler": 'kernel.cu(12): error: identifier "bad_symbol" is undefined',
-    }
-    monkeypatch.setenv("AGATE_SK", "fixture-source-secret")
-    if failure in {"driver", "secret"}:
-        raw["error"] = (
-            "RuntimeError: required GPU tool is not installed: ncu" if failure == "driver"
-            else "ModuleNotFoundError: No module named 'cutlass'; key=fixture-source-secret; "
-            "Authorization: Bearer fixture-source-token"
-        )
-    else:
-        raw["runs"] = [{
-            "exit_code": 7 if failure == "exit" else 0,
-            "result": (
-                {"raw_result": _successful_job()["result"]} if failure == "exit"
-                else {"error": "ModuleNotFoundError: No module named 'cutlass'"}
-                if failure == "child" else None
-            ),
-            "stderr_tail": (
-                _nested_log_tail() if failure == "stderr"
-                else '/tmp/agate-private/candidate/kernel.cu(12): error: '
-                'identifier "bad_symbol" is undefined\nprivate-input: 151904033'
-                if failure == "compiler" else ""
-            ),
-            "stdout_tail": "private-stdout",
-            "input_kwargs": {"private-input": 151904033},
-        }]
-    job = {
-        "status": "succeeded", "command_ok": True,
-        "result": {"stdout": RESULT_PREFIX + json.dumps(raw), "stderr": "private-stderr"},
-    }
-    client = FakeAgateClient(job)
-    adapter, _, jobs = _adapter(tmp_path, client)
-    adapter._client = SourceTreeAgateClient(client, None)
-    adapter._contexts.context = replace(
-        adapter._contexts.context,
-        contract=_contract().model_copy(
-            update={"kernel_sources": {Dsl.TRITON: source_seed.contract}},
-        ),
-    )
-    monkeypatch.setattr(service, "_adapter", adapter)
-    request = json.loads(_request(attempt))
-    request["candidate"]["files"] = [
-        {"path": path, "content_base64": base64.b64encode(text.encode()).decode()}
-        for path, text in source_seed.contract.validate_tree(source_seed.working).items()
-    ]
-    if mode == "correctness_only":
-        request["mode"] = mode
-        request.pop("latency_prediction")
-    app = GatewayProxyAsgiApp(service, GatewayProxyLimits(65536, 8, 16384))
-    try:
-        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://runtime") as http:
-            response = await http.post(
-                "/v1/operations", json=request,
-                headers={"Authorization": f"Bearer {capability.token}"},
-            )
-        assert response.status_code == 503, response.text
-        detail = response.json()["detail"]
-        if failure == "compiler":
-            diagnostic = json.loads(detail[detail.index("{"):])
-            assert diagnostic["runs"][0]["compiler_errors"] == [expected[failure]]
-        else:
-            assert expected[failure] in detail
-        assert "ev_test" in detail
-        assert not control.list_evaluations(attempt.id)
-        assert {kind for kind, _ in client.submitted} == {"eval"}
-        for hidden in ("private-input", "private-stdout", "private-stderr", "151904033",
-                       "manual_seed", "atrex_bench/eval", "site-packages", "/tmp/agate-",
-                       "fixture-source-secret", "fixture-source-token"):
-            assert hidden not in detail
-    finally:
-        jobs.close()
-        control.close()
-        registry.close()
 
 
 @pytest.mark.anyio

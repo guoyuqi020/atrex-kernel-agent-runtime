@@ -14,7 +14,7 @@
 
 Runtime 直接使用 `build_eval_request_from_content` 和适用的 `Client` 方法，并在 AnyIO Worker Thread 中执行同步 SDK 调用。Runtime 不启动 `agate` CLI，也不复制 Agate 的 HTTP 或 AK/SK 实现。面向 Agent 的协议 v2 仅暴露 evaluate/profile/dev/check/disassemble/env；Runtime 内部保留 Job 查询、轮询、取消、健康检查和连接信息，用于恢复与管理。包升级不是 Gateway 请求且会修改可信 Python 安装，因此仍由部署管理。
 
-所有新提交的单文件、多文件普通 Evaluate 和 ABBA 均使用原生 Eval。多文件请求携带完整 OSS 源码归档和显式入口；ABBA 两侧使用独立的 Candidate/Baseline 归档。不支持的请求或旧 SDK 明确报错，不回退 Dev。源码树诊断和 Agent Dev 仍使用 Dev；已提交的旧 Dev 评测仅保留只读恢复能力，不创建新的 Dev 评测作业。归档与排程限制详见[源码树](../source-trees.zh.md)。
+所有新提交的单文件、多文件普通 Evaluate 和 ABBA 均使用原生 Eval。多文件请求携带完整 OSS 源码归档和显式入口；ABBA 两侧使用独立的 Candidate/Baseline 归档。不支持的请求或旧 SDK 明确报错，不回退 Dev。源码树诊断和 Agent Dev 仍使用 Dev。旧 Dev 评测的请求构造、执行及结果解码已移除；已封存的 Result Artifact 仍可读取。归档与排程限制详见[源码树](../source-trees.zh.md)。
 
 单文件和多文件 ABBA 的 `repeats` 都必须是 `{2, 4, 6, 8, 10, 12, 14, 16}` 中的严格整数，Runtime 发送 `repeats / 2` 个原生 ABBA Block。非法值返回参数校验错误，不回退 Dev。无论源码形式如何，缺少原生 Request Builder 都返回明确配置错误，不提交 GPU 作业。
 

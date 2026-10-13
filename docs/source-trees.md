@@ -98,8 +98,8 @@ maps this to `repeats / 2` native blocks. Invalid values return an Agent-visible
 without a Dev fallback. The complete schedule stays in one allocation per Shape batch and
 retains Runtime's clock-lock policy. A missing native request builder is an explicit configuration
 error: Runtime submits no GPU job and never falls back to Dev, including for single-file Kernels.
-Previously submitted Dev evaluation jobs and stored results retain read-only recovery support;
-this compatibility never creates a new Dev evaluation job.
+The legacy Dev evaluation driver and result decoder have been removed. Previously sealed
+Result Artifacts remain readable; Evaluate and ABBA only submit and decode native Eval jobs.
 
 Source-tree Bootstrap launches the configured Optimizer backend for a complete framework-baseline
 Session (Claude in the GDN kit). Runtime adds the source scope to a session-local copy of the
@@ -187,7 +187,7 @@ must be validated on the selected deployment; local tests use a CPU evaluator do
 - `gateway/source_tree.py`: native source-tree Eval routing, diagnostic Dev routing and legacy result recovery.
 - `gateway/source_diagnostics.py`: fixed source-tree NCU, compile/launch and sanitizer drivers.
 - `gateway/abba.py`, `agent_abba.py`: native ABBA submission and authoritative/exploratory result ledgers.
-- `gateway/abba_remote.py`: legacy Dev result protocol for read-only recovery.
+- `gateway/abba_remote.py`: native ABBA result summaries and shared diagnostic clock/dependency helpers.
 - `gateway/proxy.py`, `workers/core.py`: identical submission/nomination sealing.
 - `workers/lineage_bootstrap.py`, `composition/bootstrap.py`, `gateway/finalization.py`: Agent Bootstrap, source nomination and authoritative finalization.
 - `tests/test_kernel_sources.py`: exact commit, scope attacks, directory identity, prompt digest,

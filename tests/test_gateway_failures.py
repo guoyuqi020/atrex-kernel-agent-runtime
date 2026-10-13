@@ -11,10 +11,7 @@ from test_gateway_proxy import _request, _service
 
 from atrex_runtime.domain.errors import InfrastructureError, UpstreamGatewayError
 from atrex_runtime.gateway import GatewayProxyAsgiApp, GatewayProxyLimits
-from atrex_runtime.gateway.abba import _parse_remote_payload
-from atrex_runtime.gateway.abba_remote import RESULT_PREFIX
 from atrex_runtime.gateway.failures import infrastructure_detail
-from atrex_runtime.gateway.source_tree import SourceTreeAgateClient
 
 
 @pytest.mark.anyio
@@ -104,43 +101,3 @@ async def test_http_boundary_logs_failures_before_operation_dispatch(path, upstr
     assert json.loads(sent[1]["body"])["detail"] == detail
     assert detail in caplog.text
     assert "test-capability" not in caplog.text
-
-
-@pytest.mark.parametrize("raw", [
-    {"raw_result": True, "error": "hidden input n=987654321", "runs": []},
-    {"raw_result": True, "runs": [{"result": {"private_inputs": [987654321]}}]},
-])
-def test_source_tree_private_failure_has_an_actionable_public_detail(raw):
-    class Client:
-        def get_job(self, job_id, **kwargs):
-            return {"job_id": job_id, "status": "succeeded",
-                    "result": {"stdout": RESULT_PREFIX + json.dumps(raw)}}
-
-    try:
-        SourceTreeAgateClient(Client(), None).get_job("dv_failed")
-    except InfrastructureError as cause:
-        error = InfrastructureError(f"Agate SDK request failed: {cause}")
-        error.__cause__ = cause
-    else:
-        pytest.fail("Malformed source-tree result should fail")
-    assert "987654321" in str(error)  # Full diagnostic remains available to trusted logs.
-    detail = infrastructure_detail(error)
-    assert "987654321" not in detail
-    assert "dv_failed" in detail
-    assert "private details withheld" in detail or "no structured evaluation result" in detail
-
-
-def test_abba_private_driver_error_stays_in_trusted_logs():
-    job = {
-        "job_id": "dv_abba_failed",
-        "result": {"stdout": RESULT_PREFIX + json.dumps({
-            "schema_version": 1, "error": "hidden input n=987654321",
-        })},
-    }
-    with pytest.raises(InfrastructureError) as raised:
-        _parse_remote_payload(job, [])
-    assert "987654321" in str(raised.value)
-    detail = infrastructure_detail(raised.value)
-    assert "987654321" not in detail
-    assert "dv_abba_failed" in detail
-    assert "Runtime logs" in detail

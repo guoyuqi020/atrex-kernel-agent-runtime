@@ -84,30 +84,6 @@ class AbbaBatchFailure(InfrastructureError):
 
 
 _RUNTIME_PATHS = ("scripts/run_eval.py", "src/atrex_bench")
-_PROTECTED_RUNNER_KEYS = frozenset(
-    {
-        "schema_version",
-        "eval_mode",
-        "input",
-        "reference_dir",
-        "output",
-        "checkpoint_dir",
-        "clock_locked",
-        "require_clock_locked",
-        "clock_lock_mode",
-        "clock_lock_device",
-        "gpu_clock_mhz",
-        "memory_clock_mhz",
-        "clock_lock_tolerance_mhz",
-        "clock_lock_settle_seconds",
-        "clock_lock_command_timeout_s",
-        "clock_lock_require_idle",
-        "clock_lock_monitor",
-        "clock_lock_sample_interval_ms",
-        "clock_lock_runtime_tolerance_mhz",
-        "clock_lock_fail_on_deviation",
-    }
-)
 
 
 def _utc_now() -> str:
@@ -217,99 +193,6 @@ def _validate_native_inputs(
         for source in sources
     ):
         raise ValueError("native ABBA requires Shapes and two non-empty Kernel sources")
-
-
-def build_abba_source_request(
-    *,
-    hardware_target: str,
-    contract: AgateEvaluationContractV1,
-    shape_ids: list[str],
-    schedule: list[dict[str, int | str]],
-    incumbent_source: str | KernelSourceBundle,
-    candidate_source: str | KernelSourceBundle,
-    evaluator_files: dict[str, str],
-    per_run_timeout_seconds: float,
-    allocation_timeout_seconds: float,
-) -> dict[str, object]:
-    """Build a source-only dev allocation shared by Agent experiments and trusted gates."""
-    files = dict(evaluator_files)
-    files.update(
-        {
-            "__atrex_abba.py": Path(abba_remote.__file__).read_text(encoding="utf-8"),
-            "reference/reference.py": contract.reference_py,
-            "reference/input.py": contract.input_py,
-            "reference/shapes.json": _json_text(
-                {shape_id: contract.shapes[shape_id] for shape_id in shape_ids}
-            ),
-        }
-    )
-    sources: dict[str, JsonValue] = {}
-    source_settings: dict[str, JsonValue] = {}
-    for label, source in (("incumbent", incumbent_source), ("candidate", candidate_source)):
-        if isinstance(source, KernelSourceBundle):
-            prefix = f"snapshots/{label}"
-            files.update({f"{prefix}/{path}": text for path, text in source.files.items()})
-            sources[label] = prefix
-            source_settings[label] = {
-                "entrypoint": source.entrypoint,
-                "package_root": source.contract.package_root,
-                "runtime_requirements": cast(JsonValue, list(source.contract.runtime_requirements)),
-            }
-        else:
-            sources[label] = f"snapshots/{label}.py"
-            files[f"snapshots/{label}.py"] = source
-    metadata = subset_shape_document(contract.metadata, shape_ids, metadata=True)
-    roofline = subset_shape_document(contract.roofline, shape_ids, metadata=False)
-    if metadata is not None:
-        files["reference/metadata.json"] = _json_text(metadata)
-    if roofline is not None:
-        files["reference/roofline.json"] = _json_text(strip_roofline_hardware_suffix(roofline))
-    evaluator = dict(contract.runner_overrides)
-    if _PROTECTED_RUNNER_KEYS.intersection(evaluator):
-        raise ValueError("evaluation runner_overrides cannot replace ABBA-owned paths")
-    evaluator.update(
-        {
-            "schema_version": "v1",
-            "atol": contract.options.atol,
-            "rtol": contract.options.rtol,
-            "num_correctness_cases": contract.options.num_correctness_cases,
-            "warmup_iters": _positive_runner_number(evaluator, "warmup_iters", 10),
-            "bench_iters": contract.options.bench_iters,
-            "candidate_timeout_s": _positive_runner_number(
-                evaluator,
-                "candidate_timeout_s",
-                min(float(contract.options.timeout_s), per_run_timeout_seconds),
-            ),
-            "perf_timeout_s": per_run_timeout_seconds,
-            "validation_mode": contract.mode,
-        }
-    )
-    # The outer Runtime driver owns one lock across the complete A/B
-    # schedule. Each canonical evaluator subprocess either verifies the
-    # inherited marker or explicitly stays off with the Contract policy.
-    evaluator["clock_lock_mode"] = "external" if contract.lock_clocks else "off"
-    request: dict[str, JsonValue] = {
-        "schema_version": 1,
-        "schedule": cast(list[JsonValue], schedule),
-        "shape_ids": list(shape_ids),
-        "sources": sources,
-        "source_settings": source_settings,
-        "evaluator": evaluator,
-        "per_run_timeout_seconds": per_run_timeout_seconds,
-        "lock_clocks": contract.lock_clocks,
-    }
-    files["request.json"] = _json_text(request)
-    dev_request: dict[str, object] = {
-        "spec": {"target_hardware": [hardware_target]},
-        "command": "python3 __atrex_abba.py request.json",
-        "timeout_s": math.ceil(allocation_timeout_seconds),
-        "env_vars": contract.env_vars,
-        "files": files,
-        "recycle": True,
-        "dev_intent": "custom_harness",
-        "dev_note": "trusted same-allocation ABBA performance gate",
-    }
-    return dev_request
 
 
 class CommitPinnedAtrexBenchEvaluator:
@@ -1297,65 +1180,6 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             invalid_response="Agate ABBA returned invalid JSON",
             non_object_response="Agate ABBA returned a non-object",
         )
-
-
-def _json_text(value: object) -> str:
-    return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True)
-
-
-def _positive_runner_number(
-    evaluator: dict[str, JsonValue],
-    key: str,
-    default: float | int,
-) -> float | int:
-    value = evaluator.get(key, default)
-    if (
-        not isinstance(value, (int, float))
-        or isinstance(value, bool)
-        or value <= 0
-        or not math.isfinite(float(value))
-    ):
-        raise ValueError(f"evaluation runner override {key} must be positive")
-    return value
-
-
-def _parse_remote_payload(
-    job: dict[str, JsonValue],
-    schedule: list[dict[str, int | str]],
-) -> dict[str, JsonValue]:
-    result = job.get("result")
-    if not isinstance(result, dict):
-        raise InfrastructureError("Agate ABBA job has no result object")
-    stdout = result.get("stdout")
-    if not isinstance(stdout, str):
-        raise InfrastructureError("Agate ABBA job has no command stdout")
-    raw: object | None = None
-    for line in reversed(stdout.splitlines()):
-        if line.startswith(abba_remote.RESULT_PREFIX):
-            try:
-                raw = json.loads(line[len(abba_remote.RESULT_PREFIX) :])
-            except json.JSONDecodeError as error:
-                raise InfrastructureError("Agate ABBA result sentinel is invalid") from error
-            break
-    if not isinstance(raw, dict) or raw.get("schema_version") != 1:
-        raise InfrastructureError("Agate ABBA result sentinel is missing")
-    if raw.get("error"):
-        raise InfrastructureError(
-            f"Agate ABBA remote driver failed: {raw['error']}",
-            public_detail=f"Agate ABBA remote driver failed in job {job.get('job_id', 'unknown')}; "
-            "inspect Runtime logs for the driver error (private case details withheld).",
-        )
-    rows = raw.get("runs")
-    if not isinstance(rows, list) or len(rows) != len(schedule):
-        raise InfrastructureError("Agate ABBA remote schedule is incomplete")
-    actual = [
-        {"revision": row.get("revision"), "repeat": row.get("repeat")}
-        for row in rows
-        if isinstance(row, dict)
-    ]
-    if actual != schedule:
-        raise InfrastructureError("Agate ABBA remote schedule differs from the request")
-    return cast(dict[str, JsonValue], raw)
 
 
 def _parse_native_abba_payload(

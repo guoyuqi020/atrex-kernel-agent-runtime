@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import ast
+import io
 import json
 import math
 import shutil
 import subprocess
+import tarfile
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -21,11 +23,11 @@ from atrex_runtime.artifacts.local import LocalArtifactStore
 from atrex_runtime.bootstrap import CampaignSpecV3
 from atrex_runtime.config import RuntimeSettings
 from atrex_runtime.domain.models import Dsl
-from atrex_runtime.gateway.abba import CommitPinnedAtrexBenchEvaluator, build_abba_source_request
+from atrex_runtime.gateway.abba import CommitPinnedAtrexBenchEvaluator, build_native_abba_request
 from atrex_runtime.gateway.contract import AgateEvaluationContractV1
 from atrex_runtime.gateway.eval_sources import EVAL_ARCHIVES_KEY
 from atrex_runtime.gateway.execution import build_evaluation_request
-from atrex_runtime.gateway.oss_client import AGATE_MAX_INLINE_DEV_BYTES, OssAgateClient
+from atrex_runtime.gateway.oss_client import OssAgateClient
 from atrex_runtime.gateway.source_tree import SourceTreeAgateClient
 from atrex_runtime.kernel_sources import KernelSourceBundle, SourceManifest, import_source_tree
 from atrex_runtime.workers.problem_generalization import validate_public_operator_contract
@@ -157,17 +159,11 @@ def test_fa4_sm120_preparation_is_self_contained(tmp_path: Path, runner) -> None
         malformed.agent_correctness_policy()
 
 
-def test_real_fa4_abba_uses_oss_and_restores_both_complete_snapshots(
-    tmp_path: Path, runner, monkeypatch: pytest.MonkeyPatch
+def test_real_fa4_abba_uploads_both_complete_snapshots_through_native_eval(
+    tmp_path: Path, runner,
 ) -> None:
-    from atrex_runtime.gateway import oss_remote
-
     workspace = tmp_path / "FA4"
     runner.prepare(INPUTS, workspace, None, None)
-    settings = RuntimeSettings.from_file(workspace / "runtime.json")
-    evaluator = CommitPinnedAtrexBenchEvaluator(
-        **settings.campaign.gate_policy.evaluator.model_dump(exclude={"agate_package_version"})
-    )
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     imported = import_source_tree(
         workspace / "task/source_manifest.json", workspace / "source", artifacts
@@ -186,63 +182,51 @@ def test_real_fa4_abba_uses_oss_and_restores_both_complete_snapshots(
     contract = AgateEvaluationContractV1.model_validate_json(
         (workspace / "evaluation-contract.json").read_bytes()
     )
-    payload = build_abba_source_request(
-        hardware_target="L20D",
-        contract=contract,
-        shape_ids=["0"],
-        schedule=[
-            {"revision": side, "repeat": i // 2}
-            for i, side in enumerate(["incumbent", "candidate", "candidate", "incumbent"])
-        ],
-        incumbent_source=source,
-        candidate_source=candidate,
-        evaluator_files=evaluator.files(),
-        per_run_timeout_seconds=120,
-        allocation_timeout_seconds=600,
+    payload = build_native_abba_request(
+        build_eval_request_from_content,
+        hardware_target="L20D", operator="fa4", dsl="cutedsl", contract=contract,
+        shape_ids=["0"], repeats=2, incumbent_source=source, candidate_source=candidate,
+        allocation_timeout_seconds=600, name="fa4-native-abba",
     )
-    assert (
-        sum(len(text.encode()) for text in payload["files"].values()) > AGATE_MAX_INLINE_DEV_BYTES
-    )
-    remote = tmp_path / "remote"
-    remote.mkdir()
-    uploaded = []
+    uploaded = {}
+    submitted = []
 
     def prepare(gpu, files, *, kind):
-        assert gpu == "L20D" and kind == "dev" and len(files) == 1
+        assert gpu == "L20D" and kind == "eval" and len(files) == 2
         return {
-            "job_id": "dv_reserved",
+            "job_id": "ev_reserved",
             "uploads": [
-                {
-                    "path": files[0]["path"],
-                    "put_url": "https://oss.example.test/upload",
-                    "upload_ref": "opaque-reference",
-                }
+                {"path": item["path"], "put_url": f"https://oss.example.test/{item['path']}",
+                 "upload_ref": item["path"]}
+                for item in files
             ],
         }
 
     def upload(url, path):
-        uploaded.append(Path(path).read_bytes())
+        uploaded[url.removeprefix("https://oss.example.test/")] = Path(path).read_bytes()
+
+    def submit(kind, request):
+        assert kind == "eval"
+        submitted.append(request)
+        return request
 
     wire = OssAgateClient(
-        SimpleNamespace(
-            prepare_uploads=prepare,
-            upload_file=upload,
-            submit_job=lambda kind, request: request,
-        )
-    ).submit_job("dev", payload)
-    assert len(uploaded) == 1
-    assert sum(len(text.encode()) for text in wire["files"].values()) < AGATE_MAX_INLINE_DEV_BYTES
-    assert wire["command"].endswith(f"&& (\n{payload['command']}\n)")
-    attachment = wire["oss_files"][0]
-    archive = remote / attachment["path"]
-    archive.write_bytes(uploaded[0])
-    monkeypatch.chdir(remote)
-    oss_remote.unpack(archive, wire["command"].split()[3])
-    for path, text in payload["files"].items():
-        assert (remote / path).read_bytes() == text.encode("utf-8")
-    assert (remote / "snapshots/incumbent" / hot).read_bytes() != (
-        remote / "snapshots/candidate" / hot
-    ).read_bytes()
+        SimpleNamespace(prepare_uploads=prepare, upload_file=upload, submit_job=submit)
+    ).submit_job("eval", payload)
+    assert submitted == [wire]
+    assert wire["candidate"] == {"archive": "archives/candidate.tar.gz", "entry_point": "kernel.py"}
+    assert wire["abba"] == {
+        "baseline": {"archive": "archives/baseline.tar.gz", "entry_point": "kernel.py"},
+        "repeats": 1,
+    }
+    assert "command" not in wire and "files" not in wire
+    for label, expected in (("baseline", source.files), ("candidate", candidate.files)):
+        with tarfile.open(fileobj=io.BytesIO(uploaded[f"archives/{label}.tar.gz"])) as archive:
+            restored = {member.name: archive.extractfile(member).read().decode()
+                        for member in archive.getmembers()}
+        assert restored == expected
+    assert source.files[hot] != candidate.files[hot]
+
 
 
 @pytest.fixture
@@ -418,23 +402,20 @@ def test_evaluator_uses_metadata_tolerances_for_eval_and_abba(tmp_path: Path, ru
     contract = AgateEvaluationContractV1.model_validate_json(
         (workspace / "evaluation-contract.json").read_bytes()
     )
-    payload = build_abba_source_request(
-        hardware_target="L20D",
-        contract=contract,
-        shape_ids=["0"],
-        schedule=[{"revision": "incumbent", "repeat": 0}, {"revision": "candidate", "repeat": 0}],
-        incumbent_source=source,
-        candidate_source=source,
-        evaluator_files=files,
-        per_run_timeout_seconds=120,
-        allocation_timeout_seconds=600,
+    payload = build_native_abba_request(
+        build_eval_request_from_content,
+        hardware_target="L20D", operator="fa4", dsl="cutedsl", contract=contract,
+        shape_ids=["0"], repeats=2, incumbent_source=source, candidate_source=source,
+        allocation_timeout_seconds=600, name="fa4-native-tolerances",
     )
-    metadata = json.loads(payload["files"]["reference/metadata.json"])
+    metadata = payload["reference"]["metadata"]
     assert metadata["benchmark_contract"]["correctness_tolerances"] == {
         "output": {"atol": 0.06, "rtol": 0.04},
         "mutated_inputs.out": {"atol": 0.06, "rtol": 0.04},
     }
-    assert "atrex-bench/src/atrex_bench/eval/correctness.py" in payload["files"]
+    assert payload["options"]["atol"] == 0.06
+    assert payload["options"]["rtol"] == 0.04
+    assert "command" not in payload and "files" not in payload
 
 
 def test_packaged_commits_are_explicit_and_stable(tmp_path: Path, runner) -> None:

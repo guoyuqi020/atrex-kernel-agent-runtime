@@ -1,26 +1,20 @@
 #!/usr/bin/env python3
-"""Self-contained remote driver for one same-allocation ABBA Shape batch.
+"""Standard-library helpers for native ABBA summaries and source-tree diagnostics.
 
-This module is uploaded as source and executed inside an Agate dev allocation. It
-must therefore use only the Python standard library plus the bundled Atrex Bench.
+Clock and dependency helpers are uploaded with the diagnostic driver; this module
+contains no evaluation runner or Dev ABBA entrypoint.
 """
 
 from __future__ import annotations
 
-import json
 import math
 import os
 import shutil
 import statistics
 import subprocess
-import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
-from pathlib import Path
-from typing import Any
 
-RESULT_PREFIX = "__ATREX_RUNTIME_ABBA_RESULT__="
-RUN_TIMEOUT_GRACE_SECONDS = 60
 _CLOCK_MARKERS = (
     "ATREX_BENCH_CLOCKS_LOCKED",
     "SOL_EXECBENCH_CLOCKS_LOCKED",
@@ -280,164 +274,6 @@ def _summarize(payload: object, shape_ids: list[str]) -> dict[str, object]:
     }
 
 
-def _single(config_path: Path, result_path: Path) -> int:
-    try:
-        root = config_path.resolve().parent
-        runtime_src = str(root / "atrex-bench" / "src")
-        sys.path.insert(0, runtime_src)
-        os.environ["PYTHONPATH"] = (
-            runtime_src
-            if not os.environ.get("PYTHONPATH")
-            else runtime_src + os.pathsep + os.environ["PYTHONPATH"]
-        )
-        from atrex_bench import evaluate  # type: ignore[import-not-found]
-
-        request = json.loads(config_path.read_text(encoding="utf-8"))
-        shape_ids = request.pop("shape_ids")
-        raw_result = request.pop("raw_result", False)
-        payload = evaluate(request)
-        result = {"raw_result": payload} if raw_result else _summarize(payload, shape_ids)
-    except Exception as error:
-        result = {
-            "all_pass": False,
-            "latency_us_geomean": None,
-            "latency_us_by_shape": {},
-            "sol_pct_by_shape": {},
-            "error": f"{type(error).__name__}: {error}"[:2000],
-        }
-    result_path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
-    return 0
-
-
-def _driver(request_path: Path) -> int:
-    runs: list[dict[str, object]] = []
-    request: dict[str, Any] = {}
-    try:
-        request = json.loads(request_path.read_text(encoding="utf-8"))
-        if request.get("schema_version") != 1:
-            raise ValueError("unsupported ABBA request schema")
-        schedule = request["schedule"]
-        shape_ids = request["shape_ids"]
-        sources = request["sources"]
-        evaluator = request["evaluator"]
-        timeout = float(request["per_run_timeout_seconds"]) + RUN_TIMEOUT_GRACE_SECONDS
-        lock_clocks = request.get("lock_clocks", True)
-        if not isinstance(schedule, list) or not schedule:
-            raise ValueError("ABBA schedule must be non-empty")
-        if not isinstance(shape_ids, list) or not all(isinstance(item, str) for item in shape_ids):
-            raise ValueError("ABBA shape_ids must be strings")
-        if not isinstance(sources, dict) or set(sources) != {"incumbent", "candidate"}:
-            raise ValueError("ABBA sources are incomplete")
-        if not isinstance(evaluator, dict):
-            raise ValueError("ABBA evaluator config is invalid")
-        if not isinstance(lock_clocks, bool):
-            raise ValueError("ABBA lock_clocks must be a boolean")
-
-        root = Path.cwd()
-        kernel = root / "kernel.py"
-        with _clock_lock(lock_clocks) as clock_report:
-            for index, step in enumerate(schedule):
-                if not isinstance(step, dict):
-                    raise ValueError("ABBA schedule entry must be an object")
-                revision = step.get("revision")
-                repeat = step.get("repeat")
-                if revision not in {"incumbent", "candidate"} or not isinstance(repeat, int):
-                    raise ValueError("invalid ABBA schedule entry")
-                source_path = root / str(sources[revision])
-                environment = os.environ.copy()
-                run_root = root
-                if source_path.is_dir():
-                    settings = request["source_settings"][revision]
-                    run_root = root / ".runs" / f"run-{index:04d}"
-                    shutil.copytree(source_path, run_root)
-                    kernel = run_root / settings["entrypoint"]
-                    package = str(run_root / settings["package_root"])
-                    environment["PYTHONPATH"] = os.pathsep.join(
-                        (str(run_root), package, environment.get("PYTHONPATH", ""))
-                    )
-                    for name in (
-                        "CUTE_DSL_CACHE_DIR",
-                        "TRITON_CACHE_DIR",
-                        "TORCH_EXTENSIONS_DIR",
-                        "TMPDIR",
-                    ):
-                        cache = root / ".caches" / f"run-{index:04d}" / name
-                        cache.mkdir(parents=True)
-                        environment[name] = str(cache)
-                    _check_requirements(settings.get("runtime_requirements", []))
-                else:
-                    shutil.copyfile(source_path, kernel)
-                config = dict(evaluator)
-                config.update(
-                    {
-                        "input": str(kernel),
-                        "reference_dir": str(root / "reference"),
-                        "output": str(root / "outputs" / f"run-{index:04d}"),
-                        "shape_ids": shape_ids,
-                        "raw_result": request.get("raw_result", False),
-                    }
-                )
-                config_path = root / f"single-{index:04d}.json"
-                result_path = root / f"single-{index:04d}-result.json"
-                config_path.write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
-                try:
-                    process = subprocess.run(
-                        [
-                            sys.executable,
-                            str(Path(__file__).resolve()),
-                            "--single",
-                            str(config_path),
-                            str(result_path),
-                        ],
-                        capture_output=True,
-                        text=True,
-                        timeout=timeout,
-                        env=environment,
-                        cwd=run_root,
-                    )
-                    result = (
-                        json.loads(result_path.read_text(encoding="utf-8"))
-                        if result_path.is_file()
-                        else None
-                    )
-                    exit_code = process.returncode
-                    stdout_tail = process.stdout[-3000:]
-                    stderr_tail = process.stderr[-3000:]
-                except subprocess.TimeoutExpired as error:
-                    result = None
-                    exit_code = -1
-                    stdout_tail = str(error.stdout or "")[-3000:]
-                    stderr_tail = "evaluation timed out"
-                runs.append(
-                    {
-                        "revision": revision,
-                        "repeat": repeat,
-                        "exit_code": exit_code,
-                        "result": result,
-                        "stdout_tail": stdout_tail,
-                        "stderr_tail": stderr_tail,
-                    }
-                )
-        payload = {
-            "schema_version": 1,
-            "runs": runs,
-            "clock_lock": clock_report,
-            "error": None,
-            "raw_result": request.get("raw_result", False),
-        }
-    except Exception as error:
-        payload = {
-            "schema_version": 1,
-            "runs": runs,
-            "error": f"{type(error).__name__}: {error}"[:2000],
-            "raw_result": request.get("raw_result", False),
-        }
-    print(
-        RESULT_PREFIX + json.dumps(payload, ensure_ascii=False, separators=(",", ":")), flush=True
-    )
-    return 0
-
-
 def _check_requirements(requirements: list[dict[str, str]]) -> None:
     """Check the provisioned GPU environment; never install Agent-selected code."""
     from importlib.metadata import version
@@ -450,17 +286,3 @@ def _check_requirements(requirements: list[dict[str, str]]) -> None:
             raise RuntimeError(
                 f"source requirement unavailable: {requirement}, installed={installed}"
             )
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = list(sys.argv[1:] if argv is None else argv)
-    if len(args) == 3 and args[0] == "--single":
-        return _single(Path(args[1]), Path(args[2]))
-    if len(args) == 1:
-        return _driver(Path(args[0]))
-    print("usage: abba_remote.py REQUEST | --single CONFIG RESULT", file=sys.stderr)
-    return 2
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

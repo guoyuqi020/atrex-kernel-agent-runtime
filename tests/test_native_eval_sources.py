@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from threading import Thread
 
 import pytest
+from atrex_gateway_client.errors import GatewayError
 from test_agate_oss_client import UploadClient
 
 from atrex_runtime.gateway.agate import AgateConnectionConfig, load_agate_sdk
@@ -97,6 +98,29 @@ def test_upload_and_submission_retries_preserve_both_sides_and_idempotency():
     assert len(raw.submitted) == 3
     assert all(wire is raw.submitted[0][1] for _, wire in raw.submitted)
     assert all(not path.exists() for path in raw.upload_paths)
+
+
+@pytest.mark.parametrize("abba", [False, True])
+@pytest.mark.parametrize("stage", ["prepare", "upload", "submit"])
+def test_native_eval_failure_never_reserves_or_submits_dev(abba, stage):
+    class RejectingClient(NativeUploadClient):
+        def _fail(self, current):
+            if current == stage:
+                raise GatewayError(400 if stage == "prepare" else 503, {
+                    "reason": "oss_unavailable" if stage == "prepare" else "gateway_unavailable",
+                    "error_class": "validation" if stage == "prepare" else "infra",
+                    "message": "native Eval unavailable",
+                })
+
+    raw = RejectingClient()
+    with pytest.raises(GatewayError, match="native Eval unavailable"):
+        OssAgateClient(raw).submit_job("eval", _request(abba=abba))
+    assert raw.prepared and all(kind == "eval" for _, _, kind in raw.prepared)
+    assert all(kind == "eval" for kind, _ in raw.submitted)
+    assert all(not {"files", "command", "dev_intent"}.intersection(wire)
+               for _, wire in raw.submitted)
+    if stage == "prepare":
+        assert not raw.uploads and not raw.submitted
 
 
 @pytest.mark.parametrize("fault", ["path", "entry", "reservation"])

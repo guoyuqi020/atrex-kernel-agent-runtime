@@ -6,6 +6,10 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Remove legacy Dev ABBA request construction, remote evaluation execution, result decoding and
+  dedicated tests. Evaluate and ABBA remain native Eval only, including when OSS uploads fail.
+  Keep diagnostic clock/dependency helpers and add native source-tree failure regressions.
+
 - Non-infrastructure Evaluate execution failures and cancellations now return terminal HTTP 200
   Results with actionable diagnostics and no fabricated correctness or latency verdict. Failed
   Results remain readable while fresh requests may retry the same source. Source-tree driver

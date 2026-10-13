@@ -76,17 +76,17 @@ def _request() -> dict[str, object]:
     return {
         "spec": {"target_hardware": ["L20D"]},
         "files": {
-            "snapshots/incumbent/kernel.py": "print('A')\n",
-            "snapshots/candidate/kernel.py": "print('B')\n# 中文\n",
+            "candidate/helper.py": "print('A')\n",
+            "candidate/kernel.py": "print('B')\n# 中文\n",
             "reference/input.py": "def _make_inputs(): return []\n",
             "request.json": '{"lock_clocks":true}',
         },
-        "command": "python3 snapshots/candidate/kernel.py",
+        "command": "python3 candidate/kernel.py",
         "timeout_s": 600,
         "env_vars": {"EXAMPLE": "unchanged"},
-        "idempotency_key": "runtime-abba:logical-files-digest",
-        "dev_intent": "custom_harness",
-        "dev_note": "trusted same-allocation ABBA performance gate",
+        "idempotency_key": "runtime-profile:logical-files-digest",
+        "dev_intent": "profile_adhoc",
+        "dev_note": "source-tree diagnostic",
         "recycle": True,
     }
 

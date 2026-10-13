@@ -153,6 +153,7 @@ class DiagnosticDevClient:
         job_id = f"dv_{index}"
         self.jobs[job_id] = {
             "job_id": job_id,
+            "kind": "dev",
             "status": "succeeded",
             "result": {"stdout": result.stdout, "stderr": result.stderr},
         }

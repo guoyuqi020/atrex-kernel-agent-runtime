@@ -311,8 +311,8 @@ Candidate 校验、编译和正确性失败、未分类错误及已取消的 Job
 原生 ABBA 支持 1–8 个完整 Block。Runtime 的 `repeats` 按每侧次数计数，发送
 `repeats / 2` 个 Block。单文件和多文件比较都只接受 `{2, 4, 6, 8, 10, 12, 14, 16}` 中的严格
 整数，非法值明确报错，绝不据此选择 Dev。单文件和多文件都在缺少或不兼容原生 Request
-Builder 时返回明确配置错误，不提交 GPU 作业。已提交的旧 Dev 作业和已保存结果保留只读
-恢复能力，不因此提交新的 Dev 评测。Agent 探索 ABBA 也遵循这些传输规则，但仍没有晋升权限。
+Builder 时返回明确配置错误，不提交 GPU 作业。旧 Dev 评测的请求构造、执行及解码已移除；
+已封存的 Result Artifact 仍可读取。Agent 探索 ABBA 也遵循这些传输规则，但仍没有晋升权限。
 
 权威 ABBA 将每个已完成的物理 Shape Batch 按精确 Revision Pair、封存 Contract、执行传输、
 适用时的 Evaluator、用途、Schedule 和测量轮次登记。恢复相同的比较时，Runtime 从 Registry 和 Artifact Store 读取

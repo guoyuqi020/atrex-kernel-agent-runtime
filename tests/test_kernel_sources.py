@@ -1,4 +1,4 @@
-"""Multi-file source identity, native Eval, and legacy driver isolation."""
+"""Multi-file source identity and native Eval isolation."""
 
 from __future__ import annotations
 
@@ -19,8 +19,6 @@ from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
 from atrex_runtime.bootstrap import CampaignLineageSpecV2
 from atrex_runtime.domain.ids import new_attempt_id
 from atrex_runtime.domain.models import Dsl, TokenUsage
-from atrex_runtime.gateway import abba_remote
-from atrex_runtime.gateway.abba import build_abba_source_request
 from atrex_runtime.gateway.contract import AgateEvaluationContext, AgateEvaluationContractV1
 from atrex_runtime.gateway.control import (
     GatewayCapabilityPolicy,
@@ -198,64 +196,6 @@ def test_lineage_source_declaration_replaces_baseline(source_seed):
 
 # Small CPU evaluator double: imports the actual packaged module in a fresh process.
 # It is deliberately not a GPU correctness claim.
-EVALUATOR = """
-import json, os
-from pathlib import Path
-def evaluate(config):
-    from example_kernel.impl.value import VALUE
-    cache = Path(os.environ["TRITON_CACHE_DIR"])
-    assert not (cache / "used").exists()
-    (cache / "used").write_text("yes")
-    ids = json.loads((Path(config["reference_dir"]) / "shapes.json").read_text())
-    return {
-        "passed": {"compile": {"status": "passed"},
-                   "correctness": {s: {"status": "passed"} for s in ids}},
-        "correctness": {"shapes": {s: {"cases": [{"outputs": []}]} for s in ids}},
-        "performance": {"shapes": {
-            s: {"error": None, "samples": [{"end_to_end_time_ms": VALUE / 1000}]}
-            for s in ids}},
-        "mode": config.get("validation_mode"),
-    }
-"""
-
-
-class EvaluatorFiles:
-    def files(self):
-        return {"atrex-bench/src/atrex_bench/__init__.py": EVALUATOR}
-
-
-class LocalDevClient:
-    def __init__(self, root):
-        self.root, self.requests, self.jobs = root, [], {}
-
-    def submit_job(self, kind, request):
-        assert kind == "dev"
-        job_id = f"dev_{len(self.requests)}"
-        self.requests.append(request)
-        root = self.root / job_id
-        root.mkdir(parents=True)
-        for name, content in request["files"].items():
-            path = root / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content)
-        completed = subprocess.run(
-            [sys.executable, "__atrex_abba.py", "request.json"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=True,
-        )
-        self.jobs[job_id] = {
-            "job_id": job_id,
-            "status": "succeeded",
-            "command_ok": True,
-            "result": {"stdout": completed.stdout, "stderr": completed.stderr},
-        }
-        return {"job_id": job_id}
-
-    def get_job(self, job_id, **kwargs):
-        return self.jobs[job_id]
 
 
 class LocalEvalClient:
@@ -358,37 +298,7 @@ def test_source_evaluate_native_and_recovered_poll(source_seed, tmp_path, mode):
     assert sdk.requests[0]["idempotency_key"] == "source-test"
     assert "measurement" not in (sdk.requests[0].get("runner_overrides") or {})
     with pytest.raises(ValueError, match="unsupported source-tree operation"):
-        SourceTreeAgateClient(sdk, EvaluatorFiles()).submit_job("unknown", payload)
-
-
-def test_abba_uses_independent_whole_trees_and_jit_caches(source_seed, tmp_path):
-    seed = source_seed
-    a = read_kernel_source(seed.working, "kernel.py", seed.contract)
-    (seed.working / "example_kernel/impl/value.py").write_text("VALUE = 1\n")
-    b = read_kernel_source(seed.working, "kernel.py", seed.contract)
-    schedule = [
-        {"revision": revision, "repeat": index // 2}
-        for index, revision in enumerate(("incumbent", "candidate", "candidate", "incumbent"))
-    ]
-    request = build_abba_source_request(
-        hardware_target="cpu-test",
-        contract=evaluation_contract(seed.contract),
-        shape_ids=["s0"],
-        schedule=schedule,
-        incumbent_source=a,
-        candidate_source=b,
-        evaluator_files=EvaluatorFiles().files(),
-        per_run_timeout_seconds=10,
-        allocation_timeout_seconds=60,
-    )
-    sdk = LocalDevClient(tmp_path / "jobs")
-    accepted = sdk.submit_job("dev", request)
-    output = sdk.get_job(accepted["job_id"])["result"]["stdout"]
-    result = json.loads(output.split(abba_remote.RESULT_PREFIX)[-1])
-    assert result["error"] is None
-    assert [run["result"]["latency_us_geomean"] for run in result["runs"]] == pytest.approx(
-        [2, 1, 1, 2]
-    )
+        SourceTreeAgateClient(sdk, None).submit_job("unknown", payload)
 
 
 def test_source_production_gate_allows_local_import_but_not_prebuilt_escape(source_seed):
@@ -403,6 +313,17 @@ def test_source_production_gate_allows_local_import_but_not_prebuilt_escape(sour
     (root / "example_kernel/impl/value.py").write_text(code + "import ctypes\n")
     with pytest.raises(ValueError, match="dynamic external-code"):
         policy.validate(root, "kernel.py", Dsl.CUTEDSL, source_seed.contract)
+
+
+@pytest.mark.parametrize("stdout", [
+    '__ATREX_RUNTIME_ABBA_RESULT__={"raw_result":true,"runs":[]}\n',
+    '__ATREX_RUNTIME_SOURCE_DIAGNOSTIC__={"operation":"profile","passed":true}\n',
+])
+def test_native_eval_stdout_never_activates_dev_result_decoding(stdout):
+    job = {"job_id": "ev_native", "kind": "eval", "status": "succeeded",
+           "result": {"stdout": stdout}}
+    client = SimpleNamespace(get_job=lambda *_args, **_kwargs: job)
+    assert SourceTreeAgateClient(client, None).get_job("ev_native") is job
 
 
 def test_source_bootstrap_runs_agent_journal_then_trusted_stages(

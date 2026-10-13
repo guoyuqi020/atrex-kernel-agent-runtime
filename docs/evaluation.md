@@ -357,8 +357,8 @@ Native ABBA supports 1–8 complete blocks. Runtime counts `repeats` per side an
 blocks. Both single-file and multi-file comparisons require strict integer values
 `{2, 4, 6, 8, 10, 12, 14, 16}`; an invalid value fails explicitly and never selects Dev. Missing or
 incompatible native request builders cause an explicit configuration error for both Kernel forms,
-without submitting a GPU job. Previously submitted Dev jobs and their stored results retain
-read-only recovery support, which never submits a new Dev evaluation. These transport rules also
+without submitting a GPU job. Legacy Dev evaluation construction, execution and decoding have
+been removed; previously sealed Result Artifacts remain readable. These transport rules also
 apply to Agent exploratory ABBA; it still has no promotion authority.
 
 For authoritative ABBA, Runtime records each completed physical Shape batch under an identity

@@ -6,6 +6,10 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- 移除旧 Dev ABBA 请求构造、远端评测执行、结果解码和专用测试。Evaluate 与 ABBA 只走
+  原生 Eval，OSS 上传失败也不回退 Dev。保留诊断依赖的锁频与依赖检查辅助函数，补充原生
+  源码树失败路径回归测试。
+
 - 非基础设施 Evaluate 执行失败及取消现在返回 HTTP 200 终态 Result 和具体诊断，不生成虚假的
   正确性或延迟结论。失败结果可重读，新请求可重试同一源码。源码树 Driver 错误、子进程退出码
   和 Candidate Traceback 经私有输入过滤后可穿过 SDK 及并发批次异常处理返回给 Agent。
