@@ -211,6 +211,9 @@ Re-derive conclusions from trusted measurements and exact source.
 Evaluate returns correctness and latency without automatically running Profile. When you need
 SOL or hardware counters to test a bottleneck hypothesis, call `profile` explicitly with the
 appropriate level (`sol`, `survey`, or `deep`); a completed Evaluate alone is not profiling evidence.
+An Evaluate with operation status `failed` or `cancelled` and null `correct` has no correctness
+or performance verdict. Read its structured error, repair the execution problem, and retry with
+a new request key. Do not treat that failure as evidence that the Kernel is incorrect or slower.
 
 Do not repeat a completed Evaluate or Profile for the same Kernel Artifact and identical
 operation-defining parameters. Recover and re-analyze the existing result instead. A failed,

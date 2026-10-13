@@ -12,6 +12,7 @@ from .abba import CommitPinnedAtrexBenchEvaluator
 from .abba_remote import RESULT_PREFIX
 from .contract import AgateEvaluationContractV1
 from .eval_sources import prepare_eval_sources
+from .private_results import project_source_tree_failure
 from .protocol import AGATE_MAX_JOB_TIMEOUT_S
 from .source_diagnostics import DIAGNOSTIC_PREFIX
 
@@ -94,15 +95,19 @@ class SourceTreeAgateClient:
             if raw.get("error") or len(runs) != 1:
                 raise InfrastructureError(
                     f"source-tree evaluator failed: {raw.get('error')}",
-                    public_detail=f"Source-tree evaluator failed in Agate job {job_id}; "
-                    "inspect Runtime logs for the driver error (private case details withheld).",
+                    public_detail=f"Source-tree evaluator failed in Agate job {job_id}: "
+                    + json.dumps(project_source_tree_failure(raw), ensure_ascii=False),
                 )
             output = runs[0].get("result")
-            if not isinstance(output, dict) or not isinstance(output.get("raw_result"), dict):
+            if (
+                runs[0].get("exit_code") not in (None, 0)
+                or not isinstance(output, dict)
+                or not isinstance(output.get("raw_result"), dict)
+            ):
                 raise InfrastructureError(
                     f"source-tree evaluator produced no result: {runs[0]}",
-                    public_detail=f"Source-tree evaluator has no result in Agate job {job_id}; "
-                    "inspect Runtime logs (private case details withheld).",
+                    public_detail=f"Source-tree evaluator has no result in Agate job {job_id}: "
+                    + json.dumps(project_source_tree_failure(raw), ensure_ascii=False),
                 )
             # Logical operation ownership remains in the durable Agate job binding;
             # a Dev tool result never becomes trusted Evaluate evidence by normalization.

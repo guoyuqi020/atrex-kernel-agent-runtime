@@ -67,6 +67,90 @@ _CANDIDATE_TRACEBACK = re.compile(
 _CANDIDATE_FRAME_PREFIX = re.compile(r'^File "[^"]*/candidate/', re.MULTILINE)
 
 
+def project_source_tree_failure(raw: object) -> dict[str, JsonValue]:
+    """Expose driver/child failures without forwarding private evaluator output."""
+    diagnostic: dict[str, JsonValue] = {}
+    if not isinstance(raw, dict):
+        return {"reason": "source-tree evaluator returned an invalid payload"}
+    if raw.get("error") is not None:
+        diagnostic["driver_error"] = _source_failure_message(raw["error"])
+    runs = raw.get("runs")
+    if not isinstance(runs, list):
+        diagnostic["reason"] = "source-tree evaluator returned no run records"
+        return diagnostic
+    diagnostic["run_count"] = len(runs)
+    children: list[JsonValue] = []
+    for index, run in enumerate(runs[:16]):
+        if not isinstance(run, dict):
+            continue
+        child: dict[str, JsonValue] = {"run_index": index}
+        code = run.get("exit_code")
+        if isinstance(code, int) and not isinstance(code, bool):
+            child["exit_code"] = code
+        result = run.get("result")
+        if isinstance(result, dict) and result.get("error") is not None:
+            child["error"] = _source_failure_message(result["error"])
+        if not isinstance(result, dict) or not isinstance(result.get("raw_result"), dict):
+            child["reason"] = "evaluator child produced no structured evaluation result"
+        # Only stage verdicts and candidate frames may escape the child's logs.
+        projected = _project_job_failure({"details": {"logs_tail": run.get("stderr_tail")}})
+        if isinstance(projected, dict):
+            child.update(projected)
+        stderr = _unescape(run.get("stderr_tail"))
+        exception = re.search(r"^([\w.]+(?:Error|Exception):[^\n]*)$", stderr, re.MULTILINE)
+        if exception is not None:
+            child["exception"] = _source_failure_message(exception.group(1))
+        elif stderr.strip() == "evaluation timed out":
+            child["exception"] = "evaluation timed out"
+        compiler_errors: list[JsonValue] = []
+        for line in stderr.splitlines():
+            if re.search(
+                r"(?:\.(?:cu|cuh|cc|cpp)(?:\(|:\d)|\b(?:nvcc|ptxas)\b).*?\b(?:error|fatal)\b",
+                line,
+            ):
+                line = re.sub(r"/(?:[^/\s:()]+/)+([^/\s:()]+)", r"\1", line)
+                compiler_errors.append(_source_failure_message(line.strip()))
+                if len(compiler_errors) == 8:
+                    break
+        if compiler_errors:
+            child["compiler_errors"] = compiler_errors
+        children.append(child)
+    if children:
+        diagnostic["runs"] = children
+    return diagnostic
+
+
+def _source_failure_message(value: object) -> JsonValue:
+    if isinstance(value, dict):
+        projected = _project_job_failure(value)
+        message = value.get("message")
+        if isinstance(message, str):
+            if not isinstance(projected, dict):
+                projected = {}
+            projected["message"] = _source_failure_message(message)
+        return projected
+    if not isinstance(value, str):
+        return "evaluator execution failed; private details withheld"
+    # Exception messages may embed a private input dump rather than a code error.
+    # Preserve the exception type in that case, never that input dump.
+    if re.search(
+        r"(?i)(?:hidden|private)[ _-]*(?:input|case|shape|reference|payload)|"
+        r"""manual_seed|["'](?:input_py|reference_py|inputs|kwargs|shapes)["']\s*:""",
+        value,
+    ):
+        exception = re.match(r"([\w.]+(?:Error|Exception)):", value)
+        prefix = f"{exception.group(1)}: " if exception else ""
+        return prefix + "evaluator execution failed; private details withheld"
+    # Named input/seed values can also appear in an otherwise useful error sentence.
+    message = re.sub(
+        r"\b[A-Za-z_]\w*\s*=\s*(?:-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?|"
+        r"\[[^\n]*\]|\{[^\n]*\}|\([^\n]*\))",
+        lambda match: match.group(0).split("=", 1)[0] + "=[withheld]",
+        value,
+    )
+    return message[:_MAX_FAILURE_TEXT]
+
+
 def project_private_evaluation(
     raw: JsonValue,
     evaluation: EvaluationV2,

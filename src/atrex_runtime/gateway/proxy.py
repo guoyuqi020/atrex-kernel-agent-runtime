@@ -396,7 +396,10 @@ def _canonical_agent_result(
         normalized.update(
             {
                 "correct": correct,
-                "correctness": correctness_summary(payload, passed=correct is True),
+                "correctness": (
+                    None if adapter_result.status in {"failed", "cancelled"}
+                    else correctness_summary(payload, passed=correct is True)
+                ),
                 "latency_us_geomean": latency,
                 "latency_us_arith_mean": (
                     statistics.fmean(shape_latencies) if shape_latencies else None
@@ -810,6 +813,13 @@ class GatewayProxyService:
         )
         selected = repetitions[-1]
         summary = measurement_aggregation_summary()
+        execution_failures = tuple(
+            item for item in repetitions if item.status in {"failed", "cancelled"}
+        )
+        if execution_failures:
+            return _patch_unaggregated_result(
+                execution_failures[0], summary, repetitions=repetitions,
+            )
         explicit_failures = tuple(
             item
             for item in repetitions
@@ -1153,7 +1163,10 @@ class GatewayProxyService:
                             "ABBA did not return a terminal exploratory comparison"
                         )
                 elif request.is_contract_evaluation:
-                    if result.status != "completed" or result.evaluation is None:
+                    if not (
+                        (result.status == "completed" and result.evaluation is not None)
+                        or (result.status in {"failed", "cancelled"} and result.evaluation is None)
+                    ):
                         raise InfrastructureError("evaluate did not return a completed evaluation")
                 elif result.status == "queued":
                     raise InfrastructureError("exploratory evaluate did not complete")
@@ -1174,8 +1187,10 @@ class GatewayProxyService:
                     recovery_generation=authorization.recovery_generation,
                 )
 
-            if isinstance(request, EvaluateRequestV2) and request.is_contract_evaluation:
-                assert result.evaluation is not None
+            if (
+                isinstance(request, EvaluateRequestV2) and request.is_contract_evaluation
+                and result.evaluation is not None
+            ):
                 if candidate_digest is None:
                     raise AssertionError("evaluate candidate was not sealed")
                 evaluation_record = self._control.record_evaluation(
@@ -1299,6 +1314,15 @@ class GatewayProxyService:
             ),
             result=agent_payload,
         )
+        if evaluate_task_owned and evaluate_task_digest is not None and result.status in {
+            "failed", "cancelled",
+        }:
+            # Keep the diagnostic replayable for this request, but allow a fresh
+            # request to evaluate the same source after execution failed. Release
+            # before committing its response so a crash cannot turn it into a verdict.
+            self._control.abandon_evaluate_task(
+                request.attempt_id, request.idempotency_key, evaluate_task_digest,
+            )
         if replayable:
             self._control.commit_operation_artifact(
                 request.attempt_id,
@@ -1306,7 +1330,10 @@ class GatewayProxyService:
                 operation,
                 result_artifact_digest,
             )
-        if evaluate_task_owned and evaluate_task_digest is not None:
+        if (
+            evaluate_task_owned and evaluate_task_digest is not None
+            and result.status == "completed"
+        ):
             self._control.complete_evaluate_task(
                 request.attempt_id,
                 request.idempotency_key,

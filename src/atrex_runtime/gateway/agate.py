@@ -764,6 +764,14 @@ class AgateGatewayAdapter:
                 expected_shape_ids=batch.shape_ids,
             )
             if mapped.status != "completed":
+                error = mapped.result.get("error") if isinstance(mapped.result, dict) else None
+                if mapped.status in {"failed", "cancelled"} and not (
+                    isinstance(error, dict) and error.get("error_class") == "infra"
+                ):
+                    return ShapeBatchOutcome(
+                        mapped.result, None, mapped.job_id, mapped.worker_result,
+                        status="failed" if mapped.status == "failed" else "cancelled",
+                    )
                 message = (
                     "Agate correctness evaluation did not complete"
                     if context.contract.mode == "correctness_only"
@@ -813,7 +821,7 @@ class AgateGatewayAdapter:
                 raise infrastructure from errors
             raise
         return GatewayAdapterResult(
-            status="completed",
+            status=result.status,
             result=result.job,
             job_id=result.job_id,
             evaluation=result.evaluation,
@@ -853,6 +861,20 @@ class AgateGatewayAdapter:
         completed = tuple(result for result in results if result is not None)
         if len(completed) != self._optimizer_evaluate_repeats:
             raise AssertionError("ordinary Evaluate repetition did not produce a result")
+        failures = tuple(result for result in completed if result.status in {"failed", "cancelled"})
+        if failures:
+            return GatewayAdapterResult(
+                status="failed" if any(r.status == "failed" for r in failures) else "cancelled",
+                result={"repetitions": [result.result for result in completed]},
+                worker_result={
+                    "correct": None,
+                    "error": {
+                        "category": "evaluation_execution_failed",
+                        "message": "Agate evaluation repetition ended without a verdict",
+                        "details": [result.worker_result for result in failures],
+                    },
+                },
+            )
         if any(result.status != "completed" or result.evaluation is None for result in completed):
             raise InfrastructureError("ordinary Agate Eval repetition did not complete")
         evaluations = tuple(
@@ -1414,7 +1436,7 @@ class AgateGatewayAdapter:
         check_execution()
         try:
             value = await anyio.to_thread.run_sync(operation)
-        except GatewayExecutionSupersededError:
+        except (GatewayExecutionSupersededError, InfrastructureError):
             raise
         except Exception as error:
             error_fields = vars(error)

@@ -59,10 +59,17 @@ tables and progress messages are operator presentation.
 - Every `/v1/admin/*` route requires `Authorization: Bearer <admin-token>`.
 - Gateway/Wiki: `400` invalid request, `403` invalid/expired/revoked authority, `409` idempotency or
   state conflict, `503` dependency unavailable.
+- Ordinary Evaluate Jobs ending in `failed`/`cancelled` without an `infra` classification return
+  HTTP `200` with that terminal operation status and a structured `evaluation_execution_failed`
+  diagnostic. `correct`, `correctness`, and latency are null: execution did not establish a Kernel
+  verdict. The failure Result is replayable for its request; a new request key may retry the same
+  source, and no evaluation or performance evidence is recorded for the failed execution.
 - Gateway `503` responses include `error="gateway_unavailable"` and an actionable `detail`
   (at most 8 KiB). Runtime logs retain the chained exception and Attempt/operation/request-digest
   correlation; `gateway.operation_failed` also records the exception type and message. Public
-  details omit credentials and use a summary for source-tree errors containing private cases.
+  details omit credentials and private cases. Source-tree driver errors, child exit codes,
+  stage verdicts, and candidate tracebacks survive SDK and concurrent-batch exception handling;
+  raw stdout/stderr, reference/input source, and private case values remain hidden.
   A Runtime `503` does not by itself mean Agate returned HTTP 503, or that the failure is retryable.
 - A Gateway `400` with a recognized `operation` includes `request_schema`: the Agent-facing JSON
   Schema generated from the same Pydantic model that rejected the request. Runtime-owned fields

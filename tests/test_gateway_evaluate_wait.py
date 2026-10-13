@@ -58,18 +58,21 @@ async def test_evaluate_waits_for_terminal_jobs_before_http_reply_and_artifact(
         assert not scenario.client.cancellations
         assert finished
         assert not scenario.rows("gateway_active_calls")
-        if terminal_status != "succeeded" and mode != "abba":
-            assert response.status_code == 503, response.text
-            _assert_diagnostic(response.json()["detail"])
-            assert terminal_status in response.json()["detail"]
-            assert scenario.control.get_operation_artifact(
-                scenario.attempt.id, scenario.request["idempotency_key"], GatewayOperation.EVALUATE,
-            ) is None
-            return
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["status"] == ("completed" if terminal_status == "succeeded" else "failed")
-        assert body["result"]["correct"] is (terminal_status == "succeeded")
+        expected_status = (
+            "completed" if terminal_status == "succeeded"
+            else "failed" if mode == "abba" else terminal_status
+        )
+        assert body["status"] == expected_status
+        if terminal_status == "succeeded":
+            assert body["result"]["correct"] is True
+        elif mode == "abba":
+            assert body["result"]["correct"] is False
+        else:
+            assert body["result"]["correct"] is None
+            assert body["result"]["correctness"] is None
+            assert not scenario.control.list_evaluations(scenario.attempt.id)
         assert polls == {row[2]: 3 for row in scenario.client.submissions}
         if terminal_status != "succeeded":
             _assert_diagnostic(response.text)

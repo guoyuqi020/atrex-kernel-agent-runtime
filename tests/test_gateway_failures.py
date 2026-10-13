@@ -127,7 +127,7 @@ def test_source_tree_private_failure_has_an_actionable_public_detail(raw):
     detail = infrastructure_detail(error)
     assert "987654321" not in detail
     assert "dv_failed" in detail
-    assert "Runtime logs" in detail
+    assert "private details withheld" in detail or "no structured evaluation result" in detail
 
 
 def test_abba_private_driver_error_stays_in_trusted_logs():

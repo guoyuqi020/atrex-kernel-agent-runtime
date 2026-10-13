@@ -6,6 +6,12 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Non-infrastructure Evaluate execution failures and cancellations now return terminal HTTP 200
+  Results with actionable diagnostics and no fabricated correctness or latency verdict. Failed
+  Results remain readable while fresh requests may retry the same source. Source-tree driver
+  errors, child exit codes and candidate tracebacks reach Agents after private-case filtering,
+  including through SDK and concurrent-batch exception handling.
+
 - Runtime generates immutable Experiment measurement summaries from public Results, distinguishing
   ordinary Evaluate and ABBA and declining incompatible comparisons. Journal interpretations are
   optional, indexes are compact, and every report status permits empty Findings. Core/KDA contracts

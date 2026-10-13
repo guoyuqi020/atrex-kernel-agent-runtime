@@ -6,7 +6,7 @@ import hashlib
 import math
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import cast
+from typing import Literal, cast
 
 import anyio
 
@@ -40,6 +40,7 @@ class ShapeBatchOutcome:
     job_id: str | None = None
     worker_result: JsonValue | None = None
     correctness: bool | None = None
+    status: Literal["completed", "failed", "cancelled"] = "completed"
 
     @property
     def correct(self) -> bool:
@@ -59,6 +60,7 @@ class BatchedEvaluateOutcome:
     job_id: str | None
     worker_result: JsonValue
     batches: tuple[ShapeBatchOutcome, ...]
+    status: Literal["completed", "failed", "cancelled"] = "completed"
 
 
 class ShapeBatchedEvaluateExecutor:
@@ -142,6 +144,40 @@ class ShapeBatchedEvaluateExecutor:
         batches: tuple[ShapeBatch, ...],
         outcomes: tuple[ShapeBatchOutcome, ...],
     ) -> BatchedEvaluateOutcome:
+        failures = tuple(
+            (batch, outcome)
+            for batch, outcome in zip(batches, outcomes, strict=True)
+            if outcome.status != "completed"
+        )
+        if failures:
+            status: Literal["failed", "cancelled"] = (
+                "failed" if any(o.status == "failed" for _, o in failures) else "cancelled"
+            )
+            diagnostic = cast(JsonValue, {
+                "category": "evaluation_execution_failed",
+                "message": "Agate evaluation ended without a correctness or performance verdict",
+                "details": [
+                    {
+                        "batch_index": batch.index,
+                        "job_id": outcome.job_id,
+                        "status": outcome.status,
+                        "diagnostic": outcome.worker_result,
+                    }
+                    for batch, outcome in failures
+                ],
+            })
+            return BatchedEvaluateOutcome(
+                cast(JsonValue, {
+                    "operation": "shape_batched_evaluate",
+                    "status": status,
+                    "batches": [outcome.job for outcome in outcomes],
+                }),
+                None,
+                outcomes[0].job_id if len(outcomes) == 1 else None,
+                {"correct": None, "error": diagnostic},
+                outcomes,
+                status=status,
+            )
         if len(outcomes) == 1:
             outcome = outcomes[0]
             worker = outcome.worker_result

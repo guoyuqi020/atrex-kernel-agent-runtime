@@ -1064,19 +1064,23 @@ async def test_unclassified_failed_eval_job_is_not_resubmitted(tmp_path: Path) -
     candidate.mkdir()
     (candidate / "kernel.py").write_text("class Model: pass\n")
 
-    with pytest.raises(InfrastructureError, match="Eval batch did not complete"):
-        await adapter.execute(
-            GatewayAdapterRequest(
-                new_attempt_id(),
-                GatewayOperation.EVALUATE,
-                "candidate-infrastructure-failure",
-                digest("candidate"),
-                candidate,
-                None,
-                None,
-                None,
-            )
+    result = await adapter.execute(
+        GatewayAdapterRequest(
+            new_attempt_id(),
+            GatewayOperation.EVALUATE,
+            "candidate-infrastructure-failure",
+            digest("candidate"),
+            candidate,
+            None,
+            None,
+            None,
         )
+    )
+    assert result.status == "failed" and result.evaluation is None
+    assert result.worker_result["correct"] is None
+    assert "unknown" in json.dumps(result.worker_result)
+    assert "must not reach the Agent" not in json.dumps(result.worker_result)
+    assert len(client.submitted) == 2  # One execution per Shape; no replacement.
     jobs.close()
 
 
