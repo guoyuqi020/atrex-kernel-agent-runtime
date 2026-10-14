@@ -5,6 +5,7 @@ from __future__ import annotations
 import gzip
 import hashlib
 import io
+import json
 import logging
 import shlex
 import tarfile
@@ -20,6 +21,19 @@ from .eval_sources import EVAL_ARCHIVES_KEY
 
 AGATE_MAX_INLINE_DEV_BYTES = 4 * 1024 * 1024
 _LOGGER = logging.getLogger(__name__)
+
+
+def _bind_wire_idempotency(kind: str, wire: dict[str, object]) -> None:
+    """Bind a logical request key to the exact uploaded request sent to Agate.
+
+    A new reservation changes upload_ref, even for byte-identical archives.
+    Reusing the logical key then conflicts with Agate's request fingerprint.
+    Transport retries retain this wire object/key; reuploads get a new key.
+    The caller's logical identity and completed-result cache stay unchanged.
+    """
+    if wire.get("idempotency_key"):
+        payload = json.dumps([kind, wire], sort_keys=True, ensure_ascii=False, allow_nan=False)
+        wire["idempotency_key"] = "oss:" + hashlib.sha256(payload.encode()).hexdigest()
 
 
 class _UploadClient(Protocol):
@@ -175,6 +189,7 @@ class OssAgateClient:
                 decoded_bytes,
                 archive.stat().st_size,
             )
+            _bind_wire_idempotency(kind, wire)
             return cast(dict[str, object], (yield sdk_call(self._client, "submit_job", kind, wire)))
 
     def _submit_eval(
@@ -266,6 +281,7 @@ class OssAgateClient:
                 attachments.append({"path": upload["path"], "upload_ref": upload["upload_ref"]})
             wire = {key: value for key, value in request.items() if key != EVAL_ARCHIVES_KEY}
             wire["oss_files"] = attachments
+            _bind_wire_idempotency("eval", wire)
             return cast(
                 dict[str, object], (yield sdk_call(self._client, "submit_job", "eval", wire))
             )

@@ -3103,6 +3103,30 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 raise KeyError(attempt_id) from None
             return int(row["recovery_generation"])
 
+    def register_raw_evaluation_subject(self, attempt_id: AttemptId) -> None:
+        """Create the private evaluation FK parent without granting Agent authority.
+
+        Raw Workers never receive a Proxy capability, but authoritative evaluations
+        and outcomes still share the Gateway subject table. Keep its row revoked,
+        unmetered and tokenless, including after a recovery generation changes.
+        """
+        if not self.raw_for_attempt(attempt_id):
+            raise ValueError("Private Raw evaluation subject requires a raw Lineage")
+        generation = self._subject_generation(attempt_id)
+        attempt = self._registry.get_attempt(attempt_id)
+        with self._transaction() as connection:
+            connection.execute(
+                """INSERT INTO gateway_capabilities(
+                       attempt_id, recovery_generation, token_hash, operations_json,
+                       max_calls, used_calls, expires_at, revoked
+                   ) VALUES (?, ?, '', '[]', 1, 0, ?, 1)
+                   ON CONFLICT(attempt_id) DO UPDATE SET
+                       recovery_generation=excluded.recovery_generation,
+                       token_hash='', operations_json='[]', max_calls=1,
+                       used_calls=0, expires_at=excluded.expires_at, revoked=1""",
+                (attempt_id, generation, attempt.authority_started_at),
+            )
+
     def revoke(self, attempt_id: AttemptId) -> None:
         """Permanently disable a capability after Attempt completion or quarantine."""
         with self._transaction() as connection:

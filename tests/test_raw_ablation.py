@@ -414,6 +414,11 @@ async def test_raw_nomination_without_gateway_calls_always_runs_private_eval(tmp
 
     registry, control, attempt, _capability, service, adapter = _service(tmp_path)
     enable_raw(registry, registry.get_epoch(attempt.epoch_id).lineage_id)
+    # Production Raw never issues a Proxy capability. The general service fixture
+    # used to hide that absence, so its finalizer test missed the FK failure.
+    control._connection.execute(
+        "DELETE FROM gateway_capabilities WHERE attempt_id=?", (attempt.id,)
+    )
     source = tmp_path / "candidate"
     source.mkdir()
     (source / "kernel.py").write_text("def kernel(): pass\n")
@@ -443,6 +448,13 @@ async def test_raw_nomination_without_gateway_calls_always_runs_private_eval(tmp
         assert len(client.submitted) == 1 and not adapter.requests
         again = await finalizer.finalize(attempt.id, candidate, independent_evaluate=False)
         assert again == result and len(client.submitted) == 1
+        subject = control._connection.execute(
+            "SELECT operations_json, revoked FROM gateway_capabilities WHERE attempt_id=?",
+            (attempt.id,),
+        ).fetchone()
+        assert subject is not None and subject["revoked"] == 1
+        assert json.loads(subject["operations_json"]) == []
+        assert not control._connection.execute("PRAGMA foreign_key_check").fetchall()
     finally:
         control.close()
         registry.close()

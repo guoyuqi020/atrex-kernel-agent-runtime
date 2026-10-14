@@ -270,8 +270,11 @@ async def test_upload_and_worker_download_retries_stay_inside_native_eval_http_c
         assert "oss_input_download_failed" not in response.text
         assert sleeps == [5] and recovery_delays == [5]
         sent = raw.jobs.requests if mode == "abba" else [r for _, r in raw.jobs.submitted]
-        replacements = [r for r in sent if r["idempotency_key"].startswith("infra-retry:")]
-        assert len(replacements) == 1
+        # One failed job plus its replacement (and any successful shape siblings).
+        # OSS transports bind wire keys to reservations, not the logical retry prefix.
+        assert len(sent) == len(raw.prepared)
+        assert len({r["idempotency_key"] for r in sent}) == len(sent)
+        assert all(r["idempotency_key"].startswith("oss:") for r in sent)
         references = [tuple(f["upload_ref"] for f in r["oss_files"]) for r in sent]
         assert len(set(references)) == len(sent)  # Replacement re-reserves, not stale URL reuse.
         assert all(descriptors == raw.prepared[0][1] for _, descriptors, _ in raw.prepared)

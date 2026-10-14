@@ -54,6 +54,9 @@ end the logical tool call. Evaluate, ABBA, Profile, Check, Disassemble, Dev, Boo
 authoritative measurements still wait for a terminal result before publishing evidence.
 Transport retries retain the 5/10/20/40/60-second policy, respect `Retry-After`, and sleep
 asynchronously. Retries keep the submission key, Job ID and successful OSS upload stages.
+When a later evaluation invocation must reserve and upload sources again, its wire idempotency
+key incorporates the new OSS references. This avoids conflicting with an earlier upload's
+request while preserving the logical evaluation identity and completed-result cache.
 
 SDK requests use separate per-event-loop capacity limits: ordinary requests 32, OSS operations 8,
 environment metadata 4, cancellation/health 4, and local archive preparation 4. These are independent
@@ -251,7 +254,9 @@ kernel still follows the selected Workflow's kernel-routing policy; sharing mode
 turn on experience sharing for Raw. On normal exit, the controller seals `work/kernel`
 and privately evaluates it with the same acceptance policy. It creates only an internal
 handoff receipt, with no invented Agent findings; audit traces/tokens and scores remain
-available to human analysis but are never mounted as Raw Agent history. Bootstrap itself
+available to human analysis but are never mounted as Raw Agent history. Private evaluation
+creates a revoked, tokenless Gateway subject for database references; it grants no Runtime
+tool authority to the Raw Agent. Bootstrap itself
 keeps its existing rules. Deployment credentials are injected into the process environment,
 not written into the contract, prompts or reusable files.
 

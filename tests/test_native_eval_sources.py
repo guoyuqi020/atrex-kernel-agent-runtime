@@ -15,6 +15,7 @@ from atrex_gateway_client.errors import GatewayError
 from test_agate_oss_client import UploadClient
 
 from atrex_runtime.gateway.agate import AgateConnectionConfig, load_agate_sdk
+from atrex_runtime.gateway.async_sdk import call_method
 from atrex_runtime.gateway.eval_sources import EVAL_ARCHIVES_KEY, prepare_eval_sources
 from atrex_runtime.gateway.oss_client import OssAgateClient
 from atrex_runtime.gateway.retrying_client import RetryingAgateClient
@@ -80,7 +81,7 @@ def test_archives_preserve_exact_files_and_one_eval_reservation(abba):
     assert kind == "eval" and EVAL_ARCHIVES_KEY not in wire
     assert not {"files", "command", "dev_intent"}.intersection(wire)
     assert wire["candidate"] == request["candidate"]
-    assert wire["idempotency_key"] == request["idempotency_key"]
+    assert wire["idempotency_key"].startswith("oss:")
     assert all(not path.exists() for path in raw.upload_paths)
     client.submit_job("eval", request)
     count = len(descriptors)
@@ -158,9 +159,12 @@ def test_existing_oss_references_cannot_be_mixed_with_new_reservation():
     assert not raw.prepared and not raw.uploads and not raw.submitted
 
 
+@pytest.mark.anyio
 @pytest.mark.parametrize("abba", [False, True])
-def test_published_sdk_posts_multi_file_requests_only_to_eval(abba):
+@pytest.mark.parametrize("asynchronous", [False, True])
+async def test_published_sdk_posts_multi_file_requests_only_to_eval(abba, asynchronous):
     posts, uploads = [], []
+    reservations, submitted_keys = [], {}
 
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, *args):
@@ -169,22 +173,29 @@ def test_published_sdk_posts_multi_file_requests_only_to_eval(abba):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
             posts.append((self.path, body))
+            status = 200
             if self.path == "/v1/uploads":
+                reservations.append(body)
+                reservation = len(reservations)
                 reply = {
-                    "job_id": "ev_reserved",
+                    "job_id": f"ev_reserved_{reservation}",
                     "uploads": [
                         {
                             "path": descriptor["path"],
                             "put_url": f"http://127.0.0.1:{self.server.server_port}/put/{i}",
-                            "upload_ref": f"opaque-{i}",
+                            "upload_ref": f"opaque-{reservation}-{i}",
                         }
                         for i, descriptor in enumerate(body["files"])
                     ],
                 }
             else:
                 reply = {"job_id": "ev_reserved", "status": "queued"}
+                old = submitted_keys.setdefault(body["idempotency_key"], body)
+                if old != body:
+                    status = 409
+                    reply = {"message": "idempotency key was already used for another job request"}
             data = json.dumps(reply).encode()
-            self.send_response(200)
+            self.send_response(status)
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -216,14 +227,22 @@ def test_published_sdk_posts_multi_file_requests_only_to_eval(abba):
             abba={"baseline": baseline, "repeats": 1} if abba else None,
             idempotency_key="native-test",
         )
-        client.submit_job("eval", {**payload, **attachments})
+        request = {**payload, **attachments}
+        # Simulate a second controller invocation/restart: logical ABBA is identical,
+        # but prepare_uploads issues fresh OSS references. Exercise the real SDK.
+        for _ in range(2):
+            if asynchronous:
+                await call_method(client, "submit_job", "eval", request)
+            else:
+                client.submit_job("eval", request)
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
-    assert [path for path, _ in posts] == ["/v1/uploads", "/v1/jobs/eval"]
+    assert [path for path, _ in posts] == ["/v1/uploads", "/v1/jobs/eval"] * 2
     assert posts[0][1]["kind"] == "eval"
     wire = posts[1][1]
-    assert len(wire["oss_files"]) == len(uploads) == (2 if abba else 1)
-    assert wire["idempotency_key"] == "native-test"
+    assert len(wire["oss_files"]) == len(uploads) // 2 == (2 if abba else 1)
+    assert len(submitted_keys) == 2
+    assert request["idempotency_key"] == "native-test"
     assert EVAL_ARCHIVES_KEY not in wire and "files" not in wire

@@ -137,7 +137,7 @@ def test_oversized_request_uses_one_archive_and_restores_exact_files(tmp_path: P
     assert all(not path.exists() for path in raw.upload_paths)
     wire = _materialize(raw, tmp_path)
     for key, value in before.items():
-        if key not in {"files", "command"}:
+        if key not in {"files", "command", "idempotency_key"}:
             assert wire[key] == value
     completed = subprocess.run(
         ["/bin/sh", "-c", wire["command"]], cwd=tmp_path, capture_output=True, text=True, check=True
@@ -184,8 +184,10 @@ def test_replacement_reserves_new_reference_but_preserves_deterministic_source_a
     client.submit_job("dev", {**request, "idempotency_key": "infra-retry:new-job"})
     assert len(raw.prepared) == 2 and raw.uploads[0] == raw.uploads[1]
     first, second = [wire for _, wire in raw.submitted]
-    assert first["idempotency_key"] == request["idempotency_key"]
-    assert second["idempotency_key"] == "infra-retry:new-job"
+    assert first["idempotency_key"].startswith("oss:")
+    assert second["idempotency_key"].startswith("oss:")
+    assert first["idempotency_key"] != second["idempotency_key"]
+    assert request["idempotency_key"] == "runtime-profile:logical-files-digest"
     assert first["oss_files"][0] == second["oss_files"][0] == request["oss_files"][0]
     assert first["oss_files"][1] != second["oss_files"][1]
 

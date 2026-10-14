@@ -131,6 +131,8 @@ class AgateAuthoritativeCandidateEvaluator:
         independent_evaluate: bool = True,
     ) -> AttemptCandidateResult:
         """Validate the nomination and optionally run an independent final Evaluate."""
+        if self._control.raw_for_attempt(attempt_id):
+            self._control.register_raw_evaluation_subject(attempt_id)
         candidate_digest = ArtifactDigest(str(kernel_artifact_digest))
         agent_evaluation = self._control.find_candidate_evaluation(
             attempt_id,
