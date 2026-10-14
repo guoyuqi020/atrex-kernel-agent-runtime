@@ -7,17 +7,10 @@ P64, ragged-length, and PackGQA capability gaps visible to the optimizer.
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-ROOT = Path(__file__).resolve().parent
-for _path in (ROOT / "vendor_support", ROOT / "vendor/flash_attention"):
-    sys.path.insert(0, str(_path))
-
 import torch
 import torch.nn as nn
 
-from flash_attn.cute.interface import _flash_attn_fwd
+from vendor.flash_attention.flash_attn.cute.interface import _flash_attn_fwd
 
 
 class Model(nn.Module):

@@ -15,12 +15,13 @@ from atrex_runtime.workers.session_contract import (
 )
 
 
+@pytest.mark.parametrize("phase", ("framework_baseline", "optimization_attempt"))
 def test_session_contract_materializes_live_schema_environment_and_limits(
-    tmp_path: Path,
+    tmp_path: Path, phase: str,
 ) -> None:
     path = materialize_session_contract(
         tmp_path,
-        phase="optimization_attempt",
+        phase=phase,
         dsl="triton",
         hardware_target="sm_120",
         agent_backend="claude",
@@ -48,7 +49,11 @@ def test_session_contract_materializes_live_schema_environment_and_limits(
     evaluate = tools["gateway"]["operations"]["evaluate"]
     assert evaluate["additionalProperties"] is False
     assert "candidate" not in evaluate["properties"]
-    assert environment["phase"] == "optimization_attempt"
+    env = tools["gateway"]["operations"]["env"]
+    assert env["additionalProperties"] is False
+    assert set(env["properties"]) == {"operation"}
+    assert env["required"] == ["operation"]
+    assert environment["phase"] == phase
     assert environment["paths"]["writable"] == ["scratch/", "tools/", "work/"]
     assert limits["provider_usage"] == {
         "budget": 20_000_000,

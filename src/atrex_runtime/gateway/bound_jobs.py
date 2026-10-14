@@ -8,6 +8,7 @@ from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from ..domain.errors import InfrastructureError
+from .async_sdk import sdk_call
 from .job_wait import AgateCall, wait_for_terminal_job
 
 if TYPE_CHECKING:
@@ -55,7 +56,9 @@ async def execute_bound_job(
         jobs.bind(replace(binding, job_id=existing.job_id))
         if recover:
             try:
-                old = await call(lambda: client.get_job(existing.job_id, wait=False))
+                old = await call(
+                    sdk_call(client, "get_job", existing.job_id, wait=False, timeout=30.0)
+                )
             except Exception as error:
                 if not _missing_job(error):
                     raise InfrastructureError(
@@ -68,12 +71,17 @@ async def execute_bound_job(
                     _LOGGER.info("Recovered Agate result for job %s", existing.job_id)
                     return existing.job_id, old
                 if status not in {
-                    "queued", "running", "pending", "cancelled", "failed", "succeeded",
+                    "queued",
+                    "running",
+                    "pending",
+                    "cancelled",
+                    "failed",
+                    "succeeded",
                 }:
                     raise InfrastructureError("Agate recovery returned an unknown job status")
                 if status in {"queued", "running", "pending"}:
                     try:
-                        await call(lambda: client.cancel_job(existing.job_id))
+                        await call(sdk_call(client, "cancel_job", existing.job_id))
                     except Exception as error:
                         if not _missing_job(error):
                             raise InfrastructureError(
@@ -86,7 +94,7 @@ async def execute_bound_job(
                 + hashlib.sha256(existing.job_id.encode()).hexdigest(),
             }
     if existing is None or replacement:
-        accepted = await submit_call(lambda: client.submit_job(binding.kind, submission))
+        accepted = await submit_call(sdk_call(client, "submit_job", binding.kind, submission))
         job_id = accepted.get("job_id")
         if not isinstance(job_id, str) or not job_id:
             raise InfrastructureError("Agate acceptance did not contain a valid job_id")
@@ -100,6 +108,9 @@ async def execute_bound_job(
     else:
         job_id = existing.job_id
     job = await wait_for_terminal_job(
-        client, job_id, call=call, wait_timeout_s=wait_timeout_s,
+        client,
+        job_id,
+        call=call,
+        wait_timeout_s=wait_timeout_s,
     )
     return job_id, job

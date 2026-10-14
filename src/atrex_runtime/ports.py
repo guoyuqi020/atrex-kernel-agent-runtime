@@ -49,8 +49,7 @@ class EvolutionReference:
             or not self.name[0].islower()
             or not self.name[0].isalpha()
             or any(
-                character not in "abcdefghijklmnopqrstuvwxyz0123456789-"
-                for character in self.name
+                character not in "abcdefghijklmnopqrstuvwxyz0123456789-" for character in self.name
             )
         ):
             raise ValueError("Evolution reference name must be lowercase kebab-case")
@@ -224,6 +223,9 @@ class RunAttemptRequest:
     dsl: Dsl
     model: str | None = None
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
+    result_artifact_read_enabled: bool = True
+    dev_only: bool = False
+    raw: bool = False
 
 
 @dataclass(frozen=True, slots=True)

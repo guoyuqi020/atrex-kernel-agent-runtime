@@ -160,7 +160,11 @@ class SuggestedDirectionTransitionError(ValueError):
 class DuplicateGatewayTaskError(ValueError):
     """An exact full-Evaluate task already completed or is currently running."""
 
-    def __init__(self, previous_result_artifact_digest: str | None) -> None:
+    def __init__(
+        self, previous_result_artifact_digest: str | None, *,
+        result_artifact_read_enabled: bool = True,
+    ) -> None:
+        self.result_artifact_read_enabled = result_artifact_read_enabled
         self.previous_result_artifact_digest = previous_result_artifact_digest
         if previous_result_artifact_digest is None:
             detail = "the identical Gateway task is already running"

@@ -167,9 +167,20 @@ allocating another Dev job. Historical job ownership and results remain intact.
 `passed=false` / `status=error` means the diagnostic failed even if transport
 completed. Missing structured output cannot be accepted as success. Results contain parsed Kernel
 metrics and `exports` (CSV/SASS/PTX text with byte count, SHA-256 and explicit truncation at 512 KiB
-per export); these are recorded in Result Artifacts. Binary `.ncu-rep` files are not transferred
-back by this driver. Tool stdout/stderr are retained in trusted raw evidence, not the Agent's
-hidden-case result view. Diagnostic evidence never substitutes for Evaluate or promotion evidence.
+per export); these are recorded in Result Artifacts. The complete serialized diagnostic record,
+including its prefix and newline, is additionally capped at 768 KiB, below Agate Dev's 1 MiB
+stdout tail limit. Successful command stdout is represented in private logs by size and SHA-256
+only, avoiding duplicate CSV/SASS text. Failure stdout and stderr retain at most 4 KiB tails.
+If needed, Runtime further trims exports/previews, then optional counter detail and kernel lists;
+the diagnostic verdict, failure stage, error and scope remain intact. Agent-visible
+`output_summary` gives the reason and affected fields; retained text exports keep the original
+size/hash and `truncated` flag. Cropped evidence is not a Kernel failure or a complete export.
+For an older job whose summary was already lost to Agate truncation, Runtime reports
+`diagnostic_output_truncated` with original/retained byte counts and explains that rereading the
+same job cannot recover discarded bytes. It never infers a diagnostic verdict from process exit.
+Binary `.ncu-rep` files are not transferred back by this driver. Private log previews do not enter
+the Agent's hidden-case result view. Diagnostic evidence never substitutes for Evaluate or
+promotion evidence.
 
 The NCU export flags follow the [NVIDIA CLI documentation](https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html);
 sanitizer error handling follows [Compute Sanitizer](https://docs.nvidia.com/compute-sanitizer/ComputeSanitizer/index.html).

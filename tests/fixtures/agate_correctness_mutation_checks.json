@@ -1,0 +1,288 @@
+{
+  "kind": "eval",
+  "mode": "correctness_only",
+  "status": "succeeded",
+  "error": null,
+  "job_id": "ev_mutation_checks_fixture",
+  "result": {
+    "error": null,
+    "eval_mode": "candidate",
+    "passed": {
+      "compile": {
+        "0": {
+          "reason": null,
+          "status": "passed"
+        }
+      },
+      "correctness": {
+        "0": {
+          "reason": null,
+          "status": "passed"
+        }
+      },
+      "performance": {
+        "0": {
+          "reason": "Skipped in correctness_only mode.",
+          "status": "skipped"
+        }
+      }
+    },
+    "correctness": {
+      "shapes": {
+        "0": {
+          "cases": [
+            {
+              "error": null,
+              "mutated_inputs": [
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": 0.00426483154296875,
+                  "max_elementwise_rel_diff": 0.07108052571614584,
+                  "name": "input.out",
+                  "passed": true,
+                  "relative_l2": 0.026518251993013338
+                }
+              ],
+              "outputs": [
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": 0.00426483154296875,
+                  "max_elementwise_rel_diff": 0.07108052571614584,
+                  "name": "out",
+                  "passed": true,
+                  "relative_l2": 0.026518251993013338
+                }
+              ],
+              "unexpected_mutations": [
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.query",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.query",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.kv_cache",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.kv_cache",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.block_tables",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.block_tables",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.seq_lens",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.seq_lens",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.max_q_len",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.max_q_len",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.max_kv_len",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.max_kv_len",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.bmm1_scale",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.bmm1_scale",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.bmm2_scale",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.bmm2_scale",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.batch_size",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.batch_size",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.cum_seq_lens_q",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.cum_seq_lens_q",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.cum_seq_lens_kv",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.cum_seq_lens_kv",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.window_left",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.window_left",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.sinks",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.sinks",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "reference.input.o_sf_scale",
+                  "passed": true,
+                  "relative_l2": null
+                },
+                {
+                  "error": null,
+                  "max_elementwise_abs_diff": null,
+                  "max_elementwise_rel_diff": null,
+                  "name": "candidate.input.o_sf_scale",
+                  "passed": true,
+                  "relative_l2": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  }
+}

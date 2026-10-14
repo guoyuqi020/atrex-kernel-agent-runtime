@@ -9,6 +9,7 @@ import anyio
 
 from ..artifacts.local import JsonValue
 from ..domain.errors import InfrastructureError
+from .async_sdk import sdk_call
 
 if TYPE_CHECKING:
     from .agate import AgateClient
@@ -22,19 +23,28 @@ async def wait_for_terminal_job(
     *,
     call: AgateCall,
     wait_timeout_s: float,
+    include_spec: bool = False,
 ) -> dict[str, JsonValue]:
-    """Renew expired long polls on the same Job, preserving transport retry policy.
+    """Query the same Job with bounded SDK calls and thread-free polling gaps.
 
-    The SDK timeout bounds one long poll, not the lifetime of a Runtime operation.
-    A queued/running reply must neither trigger resubmission nor become an immutable
-    Result Artifact. Cancellation propagates to the caller without replacing the Job.
+    wait_timeout_s bounds a single request (capped at 30 seconds), never the
+    lifetime of the tool. Only a terminal result may be published to the Agent.
     """
+    delay = 1.0
+    previous_status = None
     while True:
-        job = await call(lambda: client.get_job(job_id, wait=True, timeout=wait_timeout_s))
+        kwargs: dict[str, object] = {"wait": False, "timeout": min(wait_timeout_s, 30.0)}
+        if include_spec:
+            kwargs["include_spec"] = True
+        job = await call(sdk_call(client, "get_job", job_id, **kwargs))
         status = job.get("status")
         if status in ("succeeded", "failed", "cancelled"):
             return job
         if status not in ("queued", "running"):
             raise InfrastructureError("Agate returned an unknown job status")
-        # Some backends return immediately despite wait=True; yield and avoid a hot loop.
-        await anyio.sleep(1.0)
+        # Gradually reduce traffic for unchanged jobs; status changes reset the pace.
+        if status != previous_status:
+            delay = 1.0
+        await anyio.sleep(delay)
+        previous_status = status
+        delay = min(10.0, delay * 2.0)

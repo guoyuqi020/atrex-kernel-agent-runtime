@@ -83,7 +83,7 @@ from .protocol import (
     gateway_agent_request_schema,
 )
 from .request_scope import execution_scope
-from .result_metrics import gateway_result_projection
+from .result_metrics import gateway_result_projection, input_result_payload
 from .stability import (
     MEASUREMENT_REPETITIONS,
     latency_by_shape,
@@ -300,7 +300,9 @@ def _canonical_profile_result(
         dict[str, JsonValue],
         {key: value for key, value in raw.items() if key not in {"kernels", "shape_id"}},
     )
-    shape_id = request.parameters.get("shape_id", raw.get("shape_id"))
+    shape_id: object = request.parameters.get("shape_id")
+    if shape_id is None:
+        shape_id = raw.get("shape_id")
     if isinstance(shape_id, int) and not isinstance(shape_id, bool) and shape_id >= 0:
         normalized["shape_id"] = str(shape_id)
     elif isinstance(shape_id, str) and shape_id.isdecimal():
@@ -397,7 +399,8 @@ def _canonical_agent_result(
             {
                 "correct": correct,
                 "correctness": (
-                    None if adapter_result.status in {"failed", "cancelled"}
+                    None
+                    if adapter_result.status in {"failed", "cancelled"}
                     else correctness_summary(payload, passed=correct is True)
                 ),
                 "latency_us_geomean": latency,
@@ -818,7 +821,9 @@ class GatewayProxyService:
         )
         if execution_failures:
             return _patch_unaggregated_result(
-                execution_failures[0], summary, repetitions=repetitions,
+                execution_failures[0],
+                summary,
+                repetitions=repetitions,
             )
         explicit_failures = tuple(
             item
@@ -888,6 +893,14 @@ class GatewayProxyService:
             raise ValueError("Direction tools are disabled for this Runtime")
         if operation in _EXPERIMENT_MODULE_OPERATIONS and "experiments" not in tool_modules:
             raise ValueError("Experiment tools are disabled for this Runtime")
+        if (
+            operation is GatewayOperation.RESULT_ARTIFACT_READ
+            and not self._control.result_artifact_read_enabled_for_attempt(request.attempt_id)
+        ):
+            raise ValueError(
+                "Result Artifact reads are disabled for this Lineage; "
+                "use the original tool response"
+            )
         is_runtime_query = operation in _RUNTIME_LOCAL_OPERATIONS
         is_runtime_journal = operation in _RUNTIME_JOURNAL_OPERATIONS
         if operation_scope == "gateway" and is_runtime_query:
@@ -953,13 +966,22 @@ class GatewayProxyService:
                     lease(authorization)
                 )
                 if acquired:
-                    executions.enter_context(execution_scope(
-                        partial(self._control.check_execution_authority, authorization)
-                    ))
-                    with self._control.operation_execution(authorization) as call_id:
-                        return await self._execute_authorized(
-                            request, request_digest, authorization, executions, call_id
+                    executions.enter_context(
+                        execution_scope(
+                            partial(self._control.check_execution_authority, authorization)
                         )
+                    )
+                    with self._control.operation_execution(authorization) as call_id:
+                        try:
+                            return await self._execute_authorized(
+                                request, request_digest, authorization, executions, call_id
+                            )
+                        except DuplicateGatewayTaskError as error:
+                            if error.previous_result_artifact_digest is not None:
+                                raise
+                            # The semantic task is still held by another live request.
+                            # Release our leases, wait, then recheck authority and its result.
+
             await anyio.sleep(0.25)
             # Waiting must not bypass revocation, expiry or generation fencing.
             authorization = self._control.authorize(
@@ -1077,9 +1099,42 @@ class GatewayProxyService:
                     active_call_id,
                 )
             )
+            if (
+                not evaluate_task_owned
+                and previous_result is not None
+                and not self._control.result_artifact_read_enabled_for_attempt(request.attempt_id)
+            ):
+                cached = self._reuse_visible_evaluation(request, authorization, previous_result)
+                if cached is not None:
+                    return cached
+                # An isolated sibling's result must not leak through the dedup cache.
+                # Give this Trajectory its own task; its later Attempts reuse it normally.
+                evaluate_task_digest = canonical_json_digest(
+                    {
+                        "task_digest": str(evaluate_task_digest),
+                        "trajectory_scope": self._control.evaluation_trajectory_scope(
+                            request.attempt_id
+                        ),
+                    }
+                )
+                evaluate_task_owned, previous_result, recovery = executions.enter_context(
+                    self._control.evaluate_task_execution(
+                        request.attempt_id,
+                        request.idempotency_key,
+                        evaluate_task_digest,
+                        active_call_id,
+                    )
+                )
+                if not evaluate_task_owned and previous_result is not None:
+                    cached = self._reuse_visible_evaluation(request, authorization, previous_result)
+                    if cached is not None:
+                        return cached
             if not evaluate_task_owned:
                 raise DuplicateGatewayTaskError(
-                    None if previous_result is None else str(previous_result)
+                    None if previous_result is None else str(previous_result),
+                    result_artifact_read_enabled=(
+                        self._control.result_artifact_read_enabled_for_attempt(request.attempt_id)
+                    ),
                 )
             if recovery is not None:
                 original_attempt, original_generation, original_key = recovery
@@ -1142,10 +1197,18 @@ class GatewayProxyService:
             )
             # Validate before binding an immutable result, so an incomplete or malformed
             # upstream reply cannot prevent the same idempotent request from recovering.
-            if isinstance(request, (
-                ProfileRequestV2, CheckRequestV2, DisassembleRequestV2, DevRequestV2,
-            )) and result.status not in {
-                "completed", "failed", "cancelled",
+            if isinstance(
+                request,
+                (
+                    ProfileRequestV2,
+                    CheckRequestV2,
+                    DisassembleRequestV2,
+                    DevRequestV2,
+                ),
+            ) and result.status not in {
+                "completed",
+                "failed",
+                "cancelled",
             }:
                 raise InfrastructureError(
                     f"Agate {request.operation} did not reach a terminal state"
@@ -1188,7 +1251,8 @@ class GatewayProxyService:
                 )
 
             if (
-                isinstance(request, EvaluateRequestV2) and request.is_contract_evaluation
+                isinstance(request, EvaluateRequestV2)
+                and request.is_contract_evaluation
                 and result.evaluation is not None
             ):
                 if candidate_digest is None:
@@ -1302,9 +1366,7 @@ class GatewayProxyService:
         result_artifact_digest = self._store_result_artifact(
             operation=request.operation,
             status=result.status,
-            kernel_artifact_digest=(
-                None if candidate_digest is None else str(candidate_digest)
-            ),
+            kernel_artifact_digest=(None if candidate_digest is None else str(candidate_digest)),
             authorization=authorization,
             job_id=result.job_id,
             evaluation=(
@@ -1314,14 +1376,22 @@ class GatewayProxyService:
             ),
             result=agent_payload,
         )
-        if evaluate_task_owned and evaluate_task_digest is not None and result.status in {
-            "failed", "cancelled",
-        }:
+        if (
+            evaluate_task_owned
+            and evaluate_task_digest is not None
+            and result.status
+            in {
+                "failed",
+                "cancelled",
+            }
+        ):
             # Keep the diagnostic replayable for this request, but allow a fresh
             # request to evaluate the same source after execution failed. Release
             # before committing its response so a crash cannot turn it into a verdict.
             self._control.abandon_evaluate_task(
-                request.attempt_id, request.idempotency_key, evaluate_task_digest,
+                request.attempt_id,
+                request.idempotency_key,
+                evaluate_task_digest,
             )
         if replayable:
             self._control.commit_operation_artifact(
@@ -1331,7 +1401,8 @@ class GatewayProxyService:
                 result_artifact_digest,
             )
         if (
-            evaluate_task_owned and evaluate_task_digest is not None
+            evaluate_task_owned
+            and evaluate_task_digest is not None
             and result.status == "completed"
         ):
             self._control.complete_evaluate_task(
@@ -1354,6 +1425,41 @@ class GatewayProxyService:
             )
         return response
 
+    def _reuse_visible_evaluation(
+        self,
+        request: EvaluateRequestV2,
+        authorization: GatewayAuthorization,
+        digest: ArtifactDigest,
+    ) -> GatewayProxyResponseV2 | None:
+        _, visible = self._control.visible_kernel_trial_attempt_ids(request.attempt_id)
+        if not any(
+            observation.result_artifact_digest == digest
+            for trial in self._control.list_kernel_trials(visible, limit=5_000)
+            for observation in trial.observations
+        ):
+            return None
+        response = self._load_response(digest)
+        self._control.check_execution_authority(authorization)
+        # Preserve the original measurement and Artifact identity. This is a replay,
+        # not a new Evaluation, correctness verdict, or per-Shape measurement.
+        self._control.commit_operation_artifact(
+            request.attempt_id,
+            request.idempotency_key,
+            GatewayOperation.EVALUATE,
+            digest,
+        )
+        self._events.record_runtime_event(
+            "gateway.operation_reused",
+            request.attempt_id,
+            {
+                "operation": "evaluate",
+                "idempotency_key": request.idempotency_key,
+                "result_artifact_digest": str(digest),
+                "kernel_artifact_digest": response.kernel_artifact_digest,
+            },
+        )
+        return response
+
     def _register_attempt_report(
         self,
         request: AttemptReportRequestV2,
@@ -1361,6 +1467,22 @@ class GatewayProxyService:
     ) -> GatewayAdapterResult:
         if candidate_digest is None:
             raise InfrastructureError("Attempt report sealed no candidate")
+        # operation_execution holds this generation's terminal-report reservation,
+        # so a second key cannot replace the first accepted handoff. Identical HTTP
+        # reconnects already replay their committed response before reaching here.
+        accepted = self._attempt_report_status(
+            AttemptReportStatusRequestV2(
+                attempt_id=request.attempt_id,
+                operation="attempt_report_status",
+                idempotency_key=request.idempotency_key,
+            ),
+            self._control.current_generation(request.attempt_id),
+        )
+        if isinstance(accepted.result, dict) and accepted.result.get("status") == "accepted":
+            raise ValueError(
+                "Attempt report is already accepted in this recovery generation; "
+                "stop submitting replacements; the session harness restores the accepted report"
+            )
         modules = self._control.tool_modules_for_attempt(request.attempt_id, self._tool_modules)
         if set(request.report.tool_modules) != set(modules):
             raise ValueError("Attempt report tool modules disagree with Runtime configuration")
@@ -1372,7 +1494,10 @@ class GatewayProxyService:
                 f"actual_bytes={report_bytes}, max_bytes={self._max_attempt_report_bytes}. "
                 "Shorten the final report before submitting again."
             )
-        if request.report.status == "candidate_ready":
+        if (
+            request.report.status == "candidate_ready"
+            and not self._control.dev_only_for_attempt(request.attempt_id)
+        ):
             evaluation = self._control.find_candidate_evaluation(
                 request.attempt_id,
                 candidate_digest,
@@ -1534,7 +1659,12 @@ class GatewayProxyService:
             if trial.kernel_artifact_digest == digest
             or self._trial_has_abba_baseline(trial, digest)
         )
-        if not matching:
+        baselines = tuple(
+            kernel
+            for kernel in self._control.visible_input_kernel_revisions(request.attempt_id)
+            if kernel.artifact_digest == digest
+        )
+        if not matching and not baselines:
             raise ValueError("Kernel Artifact is outside the visible Lineage history")
         response = self._kernel_artifact_payload(digest, request.file)
         response.update(
@@ -1543,6 +1673,15 @@ class GatewayProxyService:
                 "through_attempt_id": request.attempt_id,
                 "result_artifacts": [
                     item for trial in matching for item in self._trial_result_artifacts(trial)
+                ]
+                + [
+                    {
+                        "result_artifact_digest": str(kernel.evaluation.gateway_result_digest),
+                        "kernel_artifact_digest": str(digest),
+                        "operation": "evaluate",
+                        "status": "completed",
+                    }
+                    for kernel in baselines
                 ],
             }
         )
@@ -1582,7 +1721,21 @@ class GatewayProxyService:
             if observation.result_artifact_digest == digest
         )
         if not matching:
-            raise ValueError("Result Artifact is outside the visible Lineage history")
+            baselines = tuple(
+                kernel
+                for kernel in self._control.visible_input_kernel_revisions(request.attempt_id)
+                if kernel.evaluation.gateway_result_digest == digest
+            )
+            if not baselines:
+                raise ValueError("Result Artifact is outside the visible Lineage history")
+            if len({kernel.artifact_digest for kernel in baselines}) != 1:
+                raise InfrastructureError("Result Artifact has ambiguous Kernel ownership")
+            kernel = baselines[0]
+            # Bootstrap finalization stores an authoritative Gateway Result, not a
+            # proxy response. Project measurements; never expose raw jobs or Test data.
+            return GatewayAdapterResult(
+                "completed", input_result_payload(self._artifacts, kernel),
+            )
         response = self._result_artifact_payload(digest)
         kernels = {str(trial.kernel_artifact_digest) for trial, _ in matching}
         if len(kernels) != 1:
@@ -1867,12 +2020,15 @@ class GatewayProxyService:
             shutil.rmtree(temporary, ignore_errors=True)
 
     def _diagnostic_checkpoint(
-        self, authorization: GatewayAuthorization,
+        self,
+        authorization: GatewayAuthorization,
     ) -> GatewayAdapterResult | None:
         """Resume legacy diagnostic snapshots without mutating immutable evidence."""
         if authorization.operation not in {
-            GatewayOperation.PROFILE, GatewayOperation.CHECK,
-            GatewayOperation.DISASSEMBLE, GatewayOperation.DEV,
+            GatewayOperation.PROFILE,
+            GatewayOperation.CHECK,
+            GatewayOperation.DISASSEMBLE,
+            GatewayOperation.DEV,
         }:
             return None
         digest = self._control.get_operation_gateway_result(authorization)
@@ -1887,10 +2043,14 @@ class GatewayProxyService:
         if raw.get("status") in {"queued", "running"}:
             self._control.retire_nonterminal_checkpoint(authorization, digest)
             self._events.record_runtime_event(
-                "gateway.nonterminal_checkpoint_retired", authorization.attempt_id,
-                {"operation": authorization.operation,
-                 "idempotency_key": authorization.idempotency_key,
-                 "gateway_result_digest": str(digest), "job_id": raw.get("job_id")},
+                "gateway.nonterminal_checkpoint_retired",
+                authorization.attempt_id,
+                {
+                    "operation": authorization.operation,
+                    "idempotency_key": authorization.idempotency_key,
+                    "gateway_result_digest": str(digest),
+                    "job_id": raw.get("job_id"),
+                },
             )
             return None
         # A crash can occur after binding the terminal private result but before
@@ -2193,6 +2353,16 @@ def _invalid_request_response(
                     }
                 ],
             )
+        if not error.result_artifact_read_enabled:
+            duplicate_response["recovery"] = [
+                {
+                    "instruction": (
+                        "Reuse the result returned by the original tool call or your own notes. "
+                        "Result Artifact reads are disabled for this Lineage. Do not submit this "
+                        "exact completed Kernel task again."
+                    )
+                }
+            ]
         return duplicate_response
     response: dict[str, JsonValue] = {
         "error": "invalid_request",

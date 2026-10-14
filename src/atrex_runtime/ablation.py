@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from .domain.ids import (
     ArtifactDigest,
@@ -54,6 +54,24 @@ class AblationArmSpecV1(BaseModel):
     evolver_observer_lineage_id: LineageId | None = None
     trajectory_visibility: Literal["isolated", "broadcast"] = "isolated"
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
+    result_artifact_read_enabled: bool = Field(default=True, strict=True)
+    dev_only: bool = Field(default=False, strict=True)
+    raw: bool = Field(default=False, strict=True)
+
+    @model_validator(mode="after")
+    def _validate_dev_only(self) -> Self:
+        if self.raw and (
+            self.dev_only or self.tool_modules != () or self.result_artifact_read_enabled
+        ):
+            raise ValueError(
+                "raw requires dev_only=false, tool_modules=[] "
+                "and result_artifact_read_enabled=false"
+            )
+        if self.dev_only and (self.tool_modules != () or self.result_artifact_read_enabled):
+            raise ValueError(
+                "dev_only requires tool_modules=[] and result_artifact_read_enabled=false"
+            )
+        return self
 
     @field_validator("creation_key")
     @classmethod
@@ -163,7 +181,10 @@ class AblationArmSeeder:
     async def seed_arm(self, spec: AblationArmSpecV1) -> AblationArmResult:
         """Create or idempotently recover one control arm."""
         source_lineage = self._registry.get_lineage(spec.source_lineage_id)
-        if source_lineage.bootstrap_source_lineage_id is not None:
+        if (
+            source_lineage.bootstrap_source_lineage_id is not None
+            and not self._seeder.baseline_was_independently_seeded(source_lineage.id)
+        ):
             raise ValueError("an ablation arm cannot be cloned from another ablation arm")
         source_campaign = self._registry.get_campaign(source_lineage.campaign_id)
         campaign_id = parse_campaign_id(
@@ -204,6 +225,9 @@ class AblationArmSeeder:
                 evolver_observer_lineage_id=spec.evolver_observer_lineage_id,
                 trajectory_visibility=spec.trajectory_visibility,
                 tool_modules=spec.tool_modules,
+                result_artifact_read_enabled=spec.result_artifact_read_enabled,
+                dev_only=spec.dev_only,
+                raw=spec.raw,
             ),
         )
         return AblationArmResult(

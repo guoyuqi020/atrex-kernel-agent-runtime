@@ -44,6 +44,19 @@ Attempt Capability 签名 Key 环境变量名、请求/Candidate 上限、逐 DS
 Agate URL、认证模式（`none`、`token` 或 `ak_sk`）、凭据环境变量名、请求/等待超时与健康
 检查间隔。Runtime JSON 只保存 Secret 名称，不保存值。
 
+Runtime 使用有界的 `get_job(wait=False)` 查询与异步间隔等待 Agate Job。状态不变时按
+1/2/4/8/10 秒逐步放缓，状态变化后重新从 1 秒开始。`wait_timeout_s` 限制单次状态查询，
+最多 30 秒，不会结束整个工具调用。Evaluate、ABBA、Profile、Check、Disassemble、Dev、
+Bootstrap 与权威终评仍等到终态才发布结果。网络重试保留 5/10/20/40/60 秒策略、尊重
+`Retry-After`，退避使用异步等待；保留提交幂等键、Job ID 和已经成功的 OSS 上传阶段。
+
+SDK 调用按事件循环使用独立并发额度：普通请求 32、OSS 操作 8、环境信息 4、取消／健康
+检查 4、本地打包 4，不占用 AnyIO 默认的 40 个工作槽位。轮询间隔与 Runtime 重试退避
+不占线程。Agate 安装包保持不变；Runtime 本地客户端子类关闭 SDK 内部的提交过载睡眠，
+同时通过公开参数 `transport_retries=0` 关闭网络重试睡眠。单次有界 SDK 调用仍在线程中
+执行；取消时等待在途调用返回再清理文件，之后不再查询／重试。同步部署兼容入口仍保留，
+服务和评测路径使用异步边界。
+
 ### `kernel_agent`
 
 Agent Bundle 与公开 Contract 大小上限。可选 `base_source` 指定已初始化的本地 Optimizer
@@ -134,9 +147,15 @@ QoderCLI 使用 Provider Credit；其他受支持 Backend 使用 Provider Token 
 Provider 原生终态 Usage Report。Bootstrap 使用 `bootstrap_timeout_seconds`，普通 Attempt 使用
 `timeout_seconds`。
 
-Claude Optimizer Session 通过 `PreToolUse` hook，只为 Runtime CLI 的 Bash 调用设置 Agent
-Session 时限并保持前台等待。其他 Bash 调用仍使用常规默认超时，Claude 后台 subagent 也可继续
-使用。HTTP 读取超时会以相同请求身份重新连接；Agent 与 Core 的 Session 硬超时仍然生效。
+Runtime 绑定的 Core/KDA Bootstrap 和 Optimizer Session 将 Runtime CLI 的 HTTP 请求交给
+独立执行器：发送请求前暂停 Provider 所属进程组（包括 subagent），所有请求及 Runtime 记录的
+在途请求结束后才恢复。Shell `timeout`、后台执行或 CLI 被杀都不能解除等待。Runtime 和 HTTP
+worker 保持运行；显式取消 Session 或触发策略终止时，仍会停止 Agent 并清理 HTTP worker。
+
+Claude 的 `PreToolUse` hook 同时保持 Runtime CLI Bash 调用前台运行，等待额度至少为 72 小时。
+没有 Runtime 请求时，其他 Bash 调用保持原行为。HTTP 读取超时使用同一请求身份重连；主动杀掉
+CLI 可能丢失其输出，请求结束后用相同内容重试仍遵循原有恢复／去重契约。
+部署时必须刷新冻结的 Core/KDA Bundle，仅更新服务无法启用这个等待屏障。
 
 `campaign.optimizer.tool_modules` 可独立启用 `directions` 和 `experiments` 两组 Runtime
 工具。默认是 `["directions", "experiments"]`；也可以只填其中一项，或填 `[]` 全部关闭。
@@ -150,6 +169,47 @@ Session 提示词也随此配置调整：保留通用的工作区和评测说明
 内容必须一致；自定义输入、仅正确性检查、Profile 和探索性 ABBA 不符合条件。无需记录 Experiment
 或重复 Evaluate，原始测量身份保持不变。本 Attempt 新的完整 Evaluate 已失败时，不能用历史成功
 覆盖。启用 Experiments 时，历史复用仍需显式调用 `record-experiment` 并设置 `action="adopt"`。
+
+`LineageSeedSpecV1`／`AblationArmSpecV1` 可设置 `result_artifact_read_enabled: false`
+（默认 `true`），并在 Lineage 创建时冻结。它从 Optimizer 契约和提示词移除
+`result-artifact-read`，服务端也拒绝直接 HTTP 读取。配合 `tool_modules: []` 即为
+`no-result-read` 消融配置；旧 Kernel Trial 查询工具原本已不可用。测量仍随原工具调用返回，
+并在 Runtime 中保留供人类分析。历史报告、会话、源码读取、帕累托边界、其他已启用查询及
+Agent 自己的笔记仍可用。同一幂等键的传输重放不变；新请求重复提交已完成任务时直接返回可见的缓存结果，不新增 GPU 调用或测量记录。
+不可见同伴仍隔离并独立测量。开启结果读取的臂保留原来的重复错误；运行中的重复请求继续等待。Bootstrap 与旧 Lineage 保持默认行为。
+
+`LineageSeedSpecV1`／`AblationArmSpecV1` 可设置冻结的 `dev_only: true`，同时必须设置
+`tool_modules: []` 和 `result_artifact_read_enabled: false`。Agent 的 Gateway 操作仅允许
+`dev`；源码回读遵守原有历史可见性规则，结果回读、Pareto、Journal 和 Wiki 查询关闭，
+直接 HTTP 请求同样受限。可见 CLI 保留 `gateway-execute`（Dev）、`kernel-artifact-read`、
+`attempt-report`、本地 `runtime-contract`；
+内部报告回执恢复仍保留。Agent 可通过自写 Dev 脚本编译、检查正确性、计时和诊断环境，
+但脚本输出不会直接成为权威评测结果。
+
+该臂允许未调用 Agent Evaluate 就提交 `candidate_ready`。Runtime 在报告提交后始终先运行
+独立的私有正式验证，再走原有采纳流程；不能把任意 Dev stdout 作为通过或加速的依据。
+Bootstrap、报告结构、源码限制、预算和文件历史可见性保持原有规则；历史报告／会话及自身
+笔记仍可用，因此不是“无记忆”消融。`dev-only` 是第六种配置：默认共享方案每种共享模式
+七臂，共十四臂；FA4/L20D、GDN/L20D、Qwen3.5 FA/L20N 的独立方案为七种配置各三次重复，
+共二十一条 Lineage。
+
+
+`raw: true` 是第七种配置，要求 `dev_only: false`、`tool_modules: []` 和
+`result_artifact_read_enabled: false`。不开放任何 Runtime 命令，包括源码回读、契约查询、
+报告提交；服务端也拒绝 Raw Attempt 的所有 Runtime 操作。仅 Raw 会话获得部署配置对应的
+Agate 地址和认证环境变量（`AGATE_URL`，及 `AGATE_TOKEN` 或 `AGATE_AK`／`AGATE_SK`）。
+使用 `"$ATREX_AGATE_PYTHON" -m atrex_gateway_client.cli --help` 或 SDK 直接操作；执行环境
+必须安装 Agate client。上传、轮询、重试、正确性验证和计时都由 Agent 自己管理；Runtime
+调用次数限制、去重、工具等待扣时不适用于这些直连调用，会话 token 和经过时间预算仍生效。
+不使用 Runtime 的补报告、输出上限恢复提示或自动历史总结。
+
+不提供 Bootstrap 报告、历史对话、Epoch 摘要、Journal／Kernel Trail、同伴笔记或源码／结果
+查询接口。Agent 可自行把笔记、源码副本、脚本和响应保存在 `tools/`，格式不限；只有本轨迹
+自己写下的这些文件延续至后续会话，不继承胜出轨迹的笔记。scratch 为临时目录。下一次
+`work/kernel` 仍遵守原 Workflow 的 kernel 选择规则；共享模式不会给 Raw 开启经验共享。
+正常退出后，控制器封存最终源码并按原有规则私下评测，只生成内部交接收据，不伪造 Agent
+结论。内部审计会话、token、评分仍供人类分析，但不再挂载为 Raw Agent 历史。
+Bootstrap 本身的行为不变。凭据只注入进程环境，不写入契约、Prompt 或复用文件。
 
 ### Evolver
 

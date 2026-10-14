@@ -438,10 +438,7 @@ class RuntimeJournalService:
     def _visible_trials(self, attempt_id: AttemptId) -> dict[str, GatewayKernelTrialRecord]:
         return {
             trial.id: trial
-            for trial in self.control.list_kernel_trials(
-                self._visible_attempt_ids(attempt_id),
-                limit=5_000,
-            )
+            for trial in self.control.visible_kernel_evidence(attempt_id, journal_history=True)
         }
 
     @staticmethod
@@ -966,12 +963,9 @@ class RuntimeJournalService:
             experiment.get("action") == "baseline" for experiment in current
         ):
             raise ValueError("Bootstrap Experiment journal may contain only one baseline action")
-        _lineage_id, visible_attempt_ids = self.control.visible_kernel_trial_attempt_ids(
-            request.attempt_id
-        )
         trials = {
             trial.id: trial
-            for trial in self.control.list_kernel_trials(visible_attempt_ids, limit=5_000)
+            for trial in self.control.visible_kernel_evidence(request.attempt_id)
         }
         for side_name in ("before", "after"):
             value[side_name] = self._materialize_experiment_subject(
@@ -1058,10 +1052,9 @@ class RuntimeJournalService:
         attempt_id: AttemptId,
         experiment: Mapping[str, object],
     ) -> None:
-        _lineage_id, visible_attempt_ids = self.control.visible_kernel_trial_attempt_ids(attempt_id)
         trials = {
             trial.id: trial
-            for trial in self.control.list_kernel_trials(visible_attempt_ids, limit=5_000)
+            for trial in self.control.visible_kernel_evidence(attempt_id)
         }
         for side_name in ("before", "after"):
             side = experiment.get(side_name)

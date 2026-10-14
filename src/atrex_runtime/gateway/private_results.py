@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import statistics
@@ -57,6 +58,10 @@ _EVALUATION_STAGES = ("compile", "correctness", "performance")
 _MAX_FAILURE_TEXT = 400
 _MAX_TRACEBACK_TEXT = 4_000
 _MAX_UNESCAPE_ROUNDS = 4
+_MAX_SOURCE_VALIDATION_TEXT = 16_000
+_SHIM_ERROR = re.compile(
+    r"===ATREX_SHIM_ERROR_BEGIN===\s*(.*?)\s*===ATREX_SHIM_ERROR_END===", re.DOTALL
+)
 _STAGE_VERDICT = re.compile(
     r'([A-Za-z_]+)":\s*\{"0":\s*\{"status":\s*"(\w+)",\s*"reason":\s*"([^"]*)"'
 )
@@ -148,7 +153,58 @@ def _project_job_failure(error: JsonValue) -> JsonValue:
     traceback = _candidate_traceback(logs)
     if traceback is not None:
         projected["candidate_traceback"] = traceback
+    shim_error = _source_validation_error(details.get("logs_tail"))
+    if shim_error is not None:
+        projected["shim_error"] = shim_error
     return projected or _HIDDEN_JOB_FAILURE
+
+
+def _source_validation_error(value: JsonValue) -> dict[str, JsonValue] | None:
+    """Expose source-gate diagnostics, never arbitrary shim logs or evaluator errors.
+
+    Parse JSON before unescaping: valid JSON can itself contain escaped quotes and
+    Unicode paths. Only unwrap an outer log-encoding layer when parsing failed.
+    The candidate/baseline prefix identifies agent-owned source, not private inputs.
+    """
+    if not isinstance(value, str):
+        return None
+    for match in _SHIM_ERROR.finditer(value):
+        text = match.group(1)
+        for _ in range(_MAX_UNESCAPE_ROUNDS + 1):
+            try:
+                payload = json.loads(text)
+            except ValueError:
+                # Decode only the marker body: surrounding logs may mix literal
+                # newlines with escaped JSON, so the whole tail is not JSON.
+                try:
+                    payload = json.loads('"' + text + '"')
+                except ValueError:
+                    break
+            if isinstance(payload, str) and payload != text:
+                text = payload
+                continue
+            if not isinstance(payload, dict):
+                break
+            message = payload.get("message")
+            if (
+                payload.get("error_class") != "source_archive_invalid"
+                or not isinstance(message, str)
+                or not message.startswith((
+                    "candidate: source validation failed: ",
+                    "baseline: source validation failed: ",
+                ))
+            ):
+                break
+            result: dict[str, JsonValue] = {
+                "error_class": "source_archive_invalid",
+                "message": message[:_MAX_SOURCE_VALIDATION_TEXT],
+                "retryable": False,
+                "resolution": "Modify the rejected source files before resubmitting this archive.",
+            }
+            if len(message) > _MAX_SOURCE_VALIDATION_TEXT:
+                result["message_truncated"] = True
+            return result
+    return None
 
 
 def _unescape(value: JsonValue) -> str:

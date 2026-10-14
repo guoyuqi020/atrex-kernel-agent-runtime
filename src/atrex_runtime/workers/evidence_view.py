@@ -59,6 +59,8 @@ def optimizer_evidence_prompt(
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None,
     *,
     trajectory_visibility: Literal["isolated", "broadcast"] = "isolated",
+    result_artifact_read_enabled: bool = True,
+    dev_only: bool = False,
 ) -> str:
     """Materialize the instructions for the same Journal modules as the live tool contract.
 
@@ -72,7 +74,37 @@ def optimizer_evidence_prompt(
         "experiments",
     }:
         raise ValueError("Optimizer Evidence tool modules are invalid")
+    if dev_only:
+        if modules or result_artifact_read_enabled:
+            raise ValueError("dev_only requires disabled Journals and Result reads")
+        visibility = (
+            "This workflow shares recorded history across trajectories; completed earlier-round "
+            "peer reports and conversations appear in each new Session's frozen filesystem view. "
+            "Working files and live conversations remain private. There are no live query tools."
+            if trajectory_visibility == "broadcast"
+            else "Current-Epoch history is restricted to earlier Attempts in your own trajectory. "
+            "Completed-Epoch history follows this workflow's sharing policy."
+        )
+        return _evidence_template("optimizer_dev_only.md").replace("{{VISIBILITY}}", visibility)
     prompt = OPTIMIZER_EVIDENCE_PROMPT_TEXT
+    if not result_artifact_read_enabled:
+        prompt = _replace_prompt_once(
+            prompt,
+            "Use `result-artifact-read` with a real `result_artifact_digest` to inspect "
+            "a specific Evaluate,\n"
+            "Profile, or other recorded observation. Use `kernel-artifact-read` with a real\n",
+            "Result Artifact reads are disabled in this Session. Use measurements returned by "
+            "the original tool call and retain any needed details in your own notes. Reports, "
+            "conversations, source reads, and other enabled queries remain available. "
+            "Use `kernel-artifact-read` with a real\n",
+        )
+        prompt = _replace_prompt_once(
+            prompt,
+            "operation-defining parameters. Recover and re-analyze the existing result instead.",
+            "operation-defining parameters. Re-analyze the original tool response or your own "
+            "notes instead. An exact duplicate with visible completed evidence returns the cached "
+            "result without another GPU run; do not use duplicate submissions to browse history.",
+        )
     if trajectory_visibility == "broadcast":
         prompt = _replace_prompt_once(
             prompt,
@@ -879,11 +911,16 @@ def assemble_optimizer_evidence_view(
     artifacts: LocalArtifactStore,
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None,
     trajectory_visibility: Literal["isolated", "broadcast"] = "isolated",
+    result_artifact_read_enabled: bool = True,
+    dev_only: bool = False,
 ) -> EvidenceViewManifestV1:
     """Expose completed history plus earlier same-branch Attempts in one tree."""
     through_epoch = _lineage_through_epoch(lineage_payload)
     prompt_text = optimizer_evidence_prompt(
-        tool_modules, trajectory_visibility=trajectory_visibility
+        tool_modules,
+        trajectory_visibility=trajectory_visibility,
+        result_artifact_read_enabled=result_artifact_read_enabled,
+        dev_only=dev_only,
     )
     manifest = EvidenceViewManifestV1(
         role="optimizer",

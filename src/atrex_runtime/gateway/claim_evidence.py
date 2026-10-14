@@ -15,6 +15,7 @@ from ..workers.attempt_report import AttemptExperimentSubjectV1, AttemptReportV1
 from .artifact_subjects import resolve_artifact_subject
 from .control import SqliteGatewayControl
 from .control_models import GatewayKernelTrialObservation, GatewayKernelTrialRecord
+from .result_metrics import input_result_payload
 
 type Assessment = Literal["unresolved", "supported", "refuted"]
 
@@ -32,6 +33,8 @@ def _result_payload(
 ) -> dict[str, object]:
     digest = observation.result_artifact_digest
     assert digest is not None
+    if trial.input_revision is not None:
+        return dict(input_result_payload(artifacts, trial.input_revision))
     artifact = artifacts.verify(digest)
     if artifact.kind not in {ArtifactKind.RESULT_ARTIFACT, ArtifactKind.GATEWAY_RESULT}:
         raise InfrastructureError("Claim evidence has an invalid Result Artifact kind")
@@ -118,14 +121,32 @@ def assess_claim(
         )
     visible = tuple(trials)
     eligible = False
-    for raw in supporting_results:
+    for subject_index, raw in enumerate(supporting_results):
         subject = AttemptExperimentSubjectV1.model_validate(raw)
-        trial = resolve_artifact_subject(
-            visible, subject.model_dump(mode="json"), attempt_id=attempt_id
-        )
-        selected = set(subject.result_artifact_digests)
-        for observation in trial.observations:
-            if observation.result_artifact_digest in selected:
+        # A claim can combine a sealed input, earlier measurements and a current probe
+        # of the same Kernel. Resolve each exact edge separately; selecting one Trial
+        # for the entire list wrongly rejects evidence spanning Attempts/generations.
+        # Do not merge Trials: Experiment/adoption/current-evaluation rules stay strict.
+        for result_index, digest in enumerate(subject.result_artifact_digests):
+            try:
+                trial = resolve_artifact_subject(
+                    visible,
+                    {
+                        "kernel_artifact_digest": subject.kernel_artifact_digest,
+                        "result_artifact_digests": [digest],
+                    },
+                    attempt_id=attempt_id,
+                )
+            except ValueError as error:
+                raise ValueError(
+                    f"supporting_results[{subject_index}].result_artifact_digests[{result_index}]: "
+                    f"{error}; requested Kernel {subject.kernel_artifact_digest}, Result {digest}. "
+                    "Use the exact Kernel/Result pair returned by the tool; do not reassign "
+                    "a Result to another Kernel"
+                ) from error
+            for observation in trial.observations:
+                if observation.result_artifact_digest != digest:
+                    continue
                 value = _result_payload(artifacts, observation, trial)
                 eligible = _eligible_result(value, claim_kind) or eligible
     if assessment == "unresolved":
@@ -157,8 +178,7 @@ def normalize_report_findings(
     """Apply the same evidence boundary with either, both, or neither Journal module."""
     if not report.findings:
         return report, ()
-    _, visible_ids = control.visible_kernel_trial_attempt_ids(report.attempt_id)
-    trials = control.list_kernel_trials(visible_ids, limit=5_000)
+    trials = control.visible_kernel_evidence(report.attempt_id)
     experiments = {item.experiment_id: item for item in report.experiments}
     findings = []
     notes: list[str] = []
@@ -172,16 +192,19 @@ def normalize_report_findings(
                 # A claim about that baseline must explicitly select its Result instead.
                 if experiment.after is not None:
                     subjects.append(experiment.after.model_dump(mode="json"))
-        result = assess_claim(
-            attempt_id=report.attempt_id,
-            assessment=finding.assessment,
-            claim_kind=finding.claim_kind,
-            claim=finding.claim,
-            scope=finding.scope,
-            supporting_results=subjects,
-            trials=trials,
-            artifacts=artifacts,
-        )
+        try:
+            result = assess_claim(
+                attempt_id=report.attempt_id,
+                assessment=finding.assessment,
+                claim_kind=finding.claim_kind,
+                claim=finding.claim,
+                scope=finding.scope,
+                supporting_results=subjects,
+                trials=trials,
+                artifacts=artifacts,
+            )
+        except ValueError as error:
+            raise ValueError(f"findings[{index}]: {error}") from error
         findings.append(finding.model_copy(update={"assessment": result.assessment}))
         notes.extend(f"findings[{index}]: {note}" for note in result.notes)
     return report.model_copy(update={"findings": tuple(findings)}), tuple(notes)

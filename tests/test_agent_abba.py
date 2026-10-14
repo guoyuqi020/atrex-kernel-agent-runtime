@@ -194,7 +194,7 @@ class NativeFakeAgate:
         self, job_id: str, wait: bool = False, timeout: float = 30.0,
         include_spec: bool = False,
     ) -> dict[str, Any]:
-        assert wait and timeout == 90 and not include_spec
+        assert not wait and timeout == 30 and not include_spec
         with self._lock:
             self.active += 1
             self.peak_active = max(self.active, self.peak_active)

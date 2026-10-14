@@ -6,6 +6,49 @@ Atrex Kernel Agent Runtime 的重要变化记录在这里。
 
 ## 未发布
 
+- Agate Job 轮询与持续网络重试改为 Runtime 异步等待，SDK 请求使用独立并发额度，避免
+  长期占用共享线程池。保留终态返回、幂等键、OSS 分阶段重试及取消清理，不修改 Agate
+  安装包；覆盖超过 40 个并发 HTTP 等待、过载恢复及控制请求可用性的回归测试。
+
+- 将新 attempt-report 精简为状态、候选说明、历史结果引用和阻塞原因（v13），分析留在 Experiment/Direction；历史报告展示使用 Journal ID 引用。保留 v12 兼容及全部收尾校验，同步 Core/KDA、Bootstrap 和恢复提示词。
+
+- Runtime HTTP 请求由 Provider 进程树外的独立执行器接管，请求及 Runtime 在途状态全部结束
+  前暂停 Agent 所属进程组（含 subagent），防止 Shell 超时、后台执行或 CLI 提前退出绕过等待。
+  保留终态错误，取消时清理进程，并覆盖真实进程、HTTP、并发请求和大响应回归测试。
+
+- 新增 Raw 臂：直连 Agate，关闭 Runtime 工具和历史挂载，保留本轨迹自写文件及控制器私下终评。
+
+- 新增 Dev-only 消融臂：关闭 Journal、结果回读、Pareto 和 Wiki，开放 Dev、可见源码回读、
+  报告提交和本地契约查询；服务端按冻结的 Lineage 配置鉴权。允许无 Agent Evaluate 的候选
+  提交，但必须经过 Runtime 私有正式验证；同步正常与恢复 Prompt，加入独立和共享配置。
+
+- 修复 `correctness_only` 将 Agate 非空、但全部通过的 `unexpected_mutations` 检查记录误判
+  为失败：按每项判定与错误处理，保留真实失败。基于 FA4 原始返回补充回归测试，覆盖 30 Shape
+  分批聚合，以及启用／关闭结果回读时的 Agent HTTP 响应。
+
+- 源码树诊断完整响应限制为 768 KiB，移除成功命令日志中的重复大文本，保留诊断结论并向 Agent
+  明确说明裁剪原因。识别旧任务的 Agate 输出截断且不泄露私有日志；补充 Disassemble、Profile、
+  Check 的真实驱动／HTTP 端到端测试，覆盖结果持久化后的回读。
+
+- Experiment、Direction 与报告 Findings 可一致引用封存输入的权威结果，覆盖没有 Agent Trial
+  记录的恢复 Bootstrap 基线；结果读取和测量摘要复用安全投影，不将输入证据计为本次 Attempt
+  的新测量。补充模块组合、隔离边界及 OSS 上传／下载恢复的 HTTP 回归测试。
+
+- 修复恢复 Bootstrap 后的结果可见性：允许读取封存输入 Kernel 及祖先的权威评测，沿来源链
+  继承 Bootstrap 历史；安全投影原生 Eval 测量，保持同伴隔离与禁用结果读取策略，并覆盖恢复
+  与 HTTP 读取回归测试。
+
+- 新增按 Lineage 冻结的 `result_artifact_read_enabled` 开关，并在默认两种共享模式和 FA4 独立重复中加入无 Journal、无结果读取的新配置。保留原调用结果、历史报告、源码查询与传输恢复，同步服务端校验和 Agent 实时契约。
+
+- Evaluate／ABBA 透传 `ATREX_SHIM_ERROR` 中 Candidate／Baseline 源码校验拒绝的文件及用法，
+  明确要求修改后重试；保留私有评测信息隔离，并覆盖多层日志转义及 HTTP／Result 回放。
+- 修补 FA4 R0 的整树原生 Eval 兼容性：静态 vendor 导入、进程内缓存、显式元数据协议与 AST 等价
+  格式压缩；保留原始算法及完整目标契约，补充可复现补丁、来源锁和源码校验回归。
+
+- 即使 Agate 返回 HTTP 400/validation，`oss_unavailable` 也按可重试基础设施故障处理。
+  Evaluate、correctness-only 与 ABBA 在 Runtime 内等待 OSS 恢复，不写入虚假正确性结论或
+  完成去重；权威评测提交采用同一分类。保留真实源码校验行为，并补充重试回归测试。
+
 - 移除旧 Dev ABBA 请求构造、远端评测执行、结果解码和专用测试。Evaluate 与 ABBA 只走
   原生 Eval，OSS 上传失败也不回退 Dev。保留诊断依赖的锁频与依赖检查辅助函数，补充原生
   源码树失败路径回归测试。

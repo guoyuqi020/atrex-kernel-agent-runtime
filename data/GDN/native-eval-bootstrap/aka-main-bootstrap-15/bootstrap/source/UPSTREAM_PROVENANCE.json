@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "repository": "https://github.com/flashinfer-ai/flashinfer.git",
+  "revision": "2ab910c58fdd2392914ea05e2a8714946ac0eef6",
+  "revision_date": "2026-08-10",
+  "extraction_policy": "Only the official non-CP SM100/SM103 GDN fallback and its direct FlashInfer helper are included.",
+  "upstream_files": {
+    "flashinfer/cute_dsl/utils.py": "sha256:ad075e28ee3ee6025b6561180318e316a01f8aee526cffc6a0b5ee307cf33abc",
+    "flashinfer/gdn_kernels/blackwell/gdn_prefill.py": "sha256:dba25861bb34245a344fc4d4fb443419ecf3f425feb9053823bcd7d7165efe01",
+    "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py": "sha256:faaf28508f419a255cc030678ef86e73f47153631cc9403176d058b6a0bd715b",
+    "flashinfer/gdn_kernels/blackwell/gated_delta_net_tile_scheduler.py": "sha256:96654e5e496907907f211b0768a993144b1793c094d2dd9919a5bc78502ed4a9"
+  },
+  "local_scaffolding": [
+    "flashinfer/__init__.py",
+    "flashinfer/cute_dsl/__init__.py",
+    "flashinfer/gdn_kernels/__init__.py",
+    "flashinfer/gdn_kernels/blackwell/__init__.py"
+  ],
+  "excluded": [
+    "all context-parallel GDN implementations",
+    "all Atrex implementation sources",
+    "all FlashInfer commits after the pinned revision"
+  ]
+}

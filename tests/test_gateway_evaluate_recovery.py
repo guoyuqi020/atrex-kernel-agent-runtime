@@ -428,7 +428,7 @@ async def test_only_unfinished_or_missing_batch_is_replaced(tmp_path, monkeypatc
         assert (stale, False) in scenario.client.fetches
         _, new_request, replacement = scenario.client.submissions[-1]
         assert new_request['idempotency_key'].startswith('orphan-retry:')
-        assert (replacement, True) in scenario.client.fetches
+        assert (replacement, False) in scenario.client.fetches
         assert scenario.client.cancellations == ([stale] if state in {'running', 'queued'} else [])
         assert {binding.job_id for binding in scenario.jobs.list_owned(scenario.attempt.id)} == {
             completed, replacement,
@@ -533,11 +533,19 @@ async def test_live_executor_blocks_concurrent_retry_from_another_control_instan
                 group.start_soon(first)
                 await started.wait()
                 retry = {**scenario.request, 'idempotency_key': 'concurrent-retry'}
-                response = await scenario.post(retry, service=service)
-                assert response.json()['error'] == 'duplicate_gateway_task'
+                retry_responses = []
+
+                async def reconnect():
+                    retry_responses.append(await scenario.post(retry, service=service))
+
+                group.start_soon(reconnect)
+                await anyio.sleep(0.1)
+                # A live duplicate waits; only completed duplicates may be rejected.
+                assert not retry_responses
                 assert len(scenario.rows('gateway_active_calls')) == 1
                 assert not scenario.client.cancellations
                 release.set()
+        assert retry_responses[0].json()['error'] == 'duplicate_gateway_task'
         assert completed[0].status_code == 200, completed[0].text
         assert len(scenario.client.submissions) == 2
         scenario.assert_completed()

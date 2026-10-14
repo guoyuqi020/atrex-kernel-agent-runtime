@@ -2,6 +2,11 @@
 
 [English](ALIGNMENT.md) | 中文
 
+下文逐字一致的核对记录对应 2026-10-13 原生 Eval 兼容补丁之前的原始包。当前 Source Bundle、适配器
+导入和来源记录已加入兼容修改；Reference、输入生成器、30 个 Shape、Metadata、Roofline 和 Evaluator
+仍保持原样。当前补丁范围见 [源码兼容说明](README.zh.md#原生-eval-源码兼容补丁)，正式验证见
+`native-eval-validation.json`；当前哈希以 `asset-integrity.json` 为准。
+
 核对来源：`atrex-bench-new-qwen38-fa4-gdn` 与 `fa4-prefill-aka-r0-startpoint-20260915`。文件与正式算子评测定义保持一致；Runtime 的调度/测量策略不等同于原始冒烟检查。
 
 本页是资产核对及旧 Runtime Dev 传输的快照；下文的评测器上传、超时行为描述的是当时接受

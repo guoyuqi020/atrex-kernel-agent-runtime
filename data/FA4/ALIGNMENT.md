@@ -2,6 +2,12 @@
 
 English | [中文](ALIGNMENT.zh.md)
 
+The exact-byte audit below records the original package before the 2026-10-13 native Eval
+compatibility patch. The current Source bundle and adapter imports have changed; source provenance
+now records that patch. The Reference, input generator, 30 Shapes, Metadata, Roofline and Evaluator
+remain unchanged. See [current packaging](README.md#native-eval-source-compatibility) and
+`native-eval-validation.json` for the updated source hashes and production checks.
+
 Sources: `atrex-bench-new-qwen38-fa4-gdn` and `fa4-prefill-aka-r0-startpoint-20260915`.
 Assets and the formal operator evaluation definition match the supplied packages. Runtime
 scheduling and measurement policy are not identical to the original smoke checks.

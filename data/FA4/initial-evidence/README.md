@@ -23,3 +23,11 @@ The source package's earlier P128 smoke test establishes only compilation/execut
 original capability. Its relative-L2 smoke threshold is not the target correctness policy.
 Use Runtime tools for target evaluation and profiling; do not infer acceptance from a smoke
 test. No prior optimization history or optimized C05/Increment source is included.
+
+The starting source includes a native Eval compatibility patch, not a prior optimization.
+Keep imports rooted at `vendor.flash_attention.flash_attn` / `vendor_support.quack`; do not
+add `sys.path` or dynamic imports. Every submitted Python file is source-validated, including
+unused modules. A `source_archive_invalid` diagnostic requires source changes, not a retry of
+identical files. Retain the explicit metadata protocols: if adding ParamsBase fields, update
+`__quack_field_items__` in complete dataclass order; register new NamedTuple arguments with
+`register_namedtuple_type` / `mlir_namedtuple`. Optional dispatch flags live in `fa4_config`.

@@ -238,6 +238,9 @@ def main() -> None:
                 evolver_observer_lineage_id=observer_lineage_id,
                 trajectory_visibility=arm.get("trajectory_visibility", "isolated"),
                 tool_modules=arm.get("tool_modules"),
+                result_artifact_read_enabled=arm.get("result_artifact_read_enabled", True),
+                dev_only=arm.get("dev_only", False),
+                raw=arm.get("raw", False),
                 **{
                     key: arm[key]
                     for key in (

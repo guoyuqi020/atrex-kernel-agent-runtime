@@ -139,7 +139,10 @@ class AgateAuthoritativeCandidateEvaluator:
             recovery_generation=nominated_recovery_generation,
             default_tool_modules=self._tool_modules,
         )
-        if agent_evaluation is None:
+        private_validation_required = self._control.dev_only_for_attempt(
+            attempt_id
+        ) or self._control.raw_for_attempt(attempt_id)
+        if agent_evaluation is None and not private_validation_required:
             raise ValueError(
                 "nominated candidate has no matching Agent evaluation, recorded adoption "
                 "or eligible visible historical evaluation"
@@ -192,7 +195,9 @@ class AgateAuthoritativeCandidateEvaluator:
                 context.dsl,
                 context.kernel_source,
             )
-        if not independent_evaluate:
+        # Dev output is never authoritative; this arm must run a private full gate
+        # even when the normal workflow can hand Agent Evaluate evidence to ABBA.
+        if not independent_evaluate and not private_validation_required:
             if agent_evaluation is None:
                 raise AssertionError("ABBA handoff requires an Agent evaluation")
             self._events.record_runtime_event(
@@ -534,8 +539,12 @@ class AgateAuthoritativeCandidateEvaluator:
             return job_id, job
 
         try:
+
             def record_device_failure(
-                job_id: str, job: dict[str, JsonValue], diagnostic: str, failure: int,
+                job_id: str,
+                job: dict[str, JsonValue],
+                diagnostic: str,
+                failure: int,
             ) -> None:
                 digest = self._store_result(job, None)
                 self._events.record_runtime_event(
@@ -553,7 +562,8 @@ class AgateAuthoritativeCandidateEvaluator:
                 )
 
             job_id, job = await run_with_job_recovery(
-                payload, execute,
+                payload,
+                execute,
                 max_evaluation_retries=2,
                 on_evaluation_failure=record_device_failure,
             )
@@ -713,5 +723,8 @@ class AgateAuthoritativeCandidateEvaluator:
     async def _wait_for_job(self, job_id: str) -> dict[str, JsonValue]:
         """Wait through long-poll expiry; the shared client owns transport retries."""
         return await wait_for_terminal_job(
-            self._client, job_id, call=self._call, wait_timeout_s=self._wait_timeout_s,
+            self._client,
+            job_id,
+            call=self._call,
+            wait_timeout_s=self._wait_timeout_s,
         )

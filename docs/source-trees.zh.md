@@ -133,8 +133,16 @@ Runtime 仍按原逻辑操作记录归属、源码与结果，不把这些操作
 同一代次中，重复请求会继续读取已登记的作业，不再额外创建 Dev 作业；历史归属和结果保留。
 即使 transport completed，`passed=false/status=error` 仍代表诊断失败；缺少结构化输出
 不能算成功。Result Artifact 保存结构化 Kernel 指标和 `exports` 文本（CSV/SASS/PTX）；
-每份 export 带字节数、SHA-256，以及超过 512 KiB 时的显式截断标记。二进制 `.ncu-rep`
-不由此驱动回传。工具 stdout/stderr 保存在可信原始证据内，不进入 Agent 的隐藏 case 视图。
+每份 export 带原始字节数、SHA-256，以及超过 512 KiB 时的显式截断标记。
+完整序列化诊断记录（包含前缀和换行）另有 768 KiB 总上限，低于 Agate Dev 的 1 MiB stdout
+尾部保留上限。成功命令的 stdout 日志只保留长度和哈希，避免重复保存 CSV/SASS；失败 stdout
+与 stderr 最多保留末尾 4 KiB。总量仍超限时先缩减 export/日志预览，再缩减可选计数器详情和
+Kernel 列表，诊断状态、失败阶段、错误和检查范围保持完整。Agent 可见的 `output_summary`
+说明裁剪原因和受影响字段；保留的 export 仍带原始大小、哈希与 `truncated` 标志。
+裁剪不代表 Kernel 失败，裁剪后的文本也不能当作完整导出。
+旧任务若已被 Agate 截掉摘要，Runtime 明确返回 `diagnostic_output_truncated`、原始/剩余字节数，
+并说明重复读取同一任务无法恢复丢失字节，不根据进程退出码推断诊断结论。
+二进制 `.ncu-rep` 不由此驱动回传。私有日志预览不进入 Agent 的隐藏 case 视图。
 诊断不能替代 Evaluate 正确性或晋升证据。
 
 参数依据：[NVIDIA NCU CLI](https://docs.nvidia.com/nsight-compute/NsightComputeCli/index.html)、

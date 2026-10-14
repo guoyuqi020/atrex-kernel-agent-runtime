@@ -151,7 +151,7 @@ class FakeAgateClient:
         timeout: float = 30.0,
         include_spec: bool = False,
     ) -> dict[str, object]:
-        assert wait and timeout == 90 and not include_spec
+        assert not wait and timeout == 30 and not include_spec
         return self.jobs[job_id]
 
 

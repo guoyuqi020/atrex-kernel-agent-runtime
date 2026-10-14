@@ -47,6 +47,23 @@ Agate base URL, authentication mode (`none`, `token`, or `ak_sk`), credential en
 names, request/wait timeouts, and health interval. Runtime config names secrets but never contains
 their values.
 
+Runtime waits for Agate Jobs with bounded `get_job(wait=False)` requests and asynchronous
+polling gaps (1/2/4/8/10 seconds while status is unchanged; reset on a status change).
+`wait_timeout_s` bounds an individual status request, capped at 30 seconds; it does not
+end the logical tool call. Evaluate, ABBA, Profile, Check, Disassemble, Dev, Bootstrap and
+authoritative measurements still wait for a terminal result before publishing evidence.
+Transport retries retain the 5/10/20/40/60-second policy, respect `Retry-After`, and sleep
+asynchronously. Retries keep the submission key, Job ID and successful OSS upload stages.
+
+SDK requests use separate per-event-loop capacity limits: ordinary requests 32, OSS operations 8,
+environment metadata 4, cancellation/health 4, and local archive preparation 4. These are independent
+of AnyIO's default 40 worker slots; no slot is held between polls or during Runtime backoff.
+The installed synchronous SDK is unchanged. A Runtime-local subclass disables its nested
+submission-overload sleep, while public `transport_retries=0` disables its transport sleep.
+Only bounded individual SDK calls still run in threads; cancellation waits for an in-flight call
+to return before cleaning its files, and stops subsequent polls/retries. Legacy synchronous
+provisioning entry points remain available; the service/evaluation paths use the async boundary.
+
 ### `kernel_agent`
 
 Agent Bundle and public-contract size limits. Optional `base_source` identifies an initialized local
@@ -155,10 +172,18 @@ The outer process watchdog and current Core/KDA provider/continuation watchdogs 
 Dead Runtime request processes release OS leases so an abandoned request cannot permanently
 pause the budget. Existing frozen Core/KDA bundles must be refreshed to gain the inner-clock support.
 
-Claude Optimizer Sessions use a `PreToolUse` hook to give Runtime CLI Bash calls at least the
-72-hour Gateway HTTP allowance and keep them in the foreground. Other Bash calls retain their usual timeout,
-and Claude background subagents remain available. HTTP read timeouts reattach with the same
-request identity; active-time limits still apply across provider continuations and tool failures.
+Runtime-bound Core/KDA Bootstrap and Optimizer Sessions hand Runtime CLI HTTP requests to an
+independent supervisor. It stops the Provider's owned process groups (including subagents) before
+sending the request, and resumes them only after all pending calls and Runtime's trusted in-flight
+state have cleared. Shell `timeout`, background execution, and a killed CLI cannot release this
+barrier. Runtime and its HTTP worker continue running. Explicit Session cancellation and policy
+termination still stop the Agent and clean up its HTTP workers.
+
+Claude also uses a `PreToolUse` hook to keep Runtime CLI Bash calls in the foreground with at least
+the 72-hour Gateway HTTP allowance. Other Bash calls retain their normal behavior outside Runtime
+waits. HTTP read timeouts reconnect with the same request identity. A killed CLI may lose its output;
+after the request ends, an identical retry uses the existing recovery/deduplication contract.
+Refresh frozen Core/KDA bundles to enable the barrier; updating only the service is insufficient.
 
 `campaign.optimizer.tool_modules` independently enables the `directions` and `experiments`
 Runtime tool families. It defaults to `["directions", "experiments"]`; use either one-element
@@ -175,6 +200,60 @@ match; custom inputs, correctness-only checks, Profile, and exploratory ABBA do 
 No Experiment or duplicate Evaluate is required, and the original measurement identity is preserved.
 A failed current full Evaluate cannot be overridden by historical success. With Experiments enabled,
 historical reuse continues to require an explicit `record-experiment` with `action="adopt"`.
+
+A `LineageSeedSpecV1` or `AblationArmSpecV1` may set `result_artifact_read_enabled: false`
+(default `true`). This frozen per-Lineage setting removes `result-artifact-read` from the live
+Optimizer contract and Prompt and rejects direct HTTP reads. Use `tool_modules: []` alongside it
+for the `no-result-read` ablation. Legacy Kernel Trial query tools are already unavailable.
+Measurements still return in the originating tool response and remain stored for human analysis.
+Reports, conversations, source reads, the Pareto frontier, other enabled queries, and the Agent’s
+own notes remain available. Transport replay with the same idempotency key is unchanged; a new
+request for an identical completed task returns its visible cached response without a GPU call or
+new measurement record. Invisible peers remain isolated and get separate measurements. Arms with
+result reads enabled retain the ordinary completed-duplicate error. Running duplicates wait.
+Bootstrap and existing Lineages retain their defaults.
+
+A frozen `dev_only: true` Lineage/ablation setting additionally requires `tool_modules: []`
+and `result_artifact_read_enabled: false`. Agent Gateway access is restricted to `dev`. Kernel source reads
+remain available within the existing history visibility rules; Result Artifact, Pareto, Journal
+and Wiki queries are disabled, including direct HTTP calls. The live contract exposes
+`gateway-execute` (Dev), `kernel-artifact-read`, `attempt-report`, and local `runtime-contract`
+discovery. Internal report-receipt recovery remains available. Agent-owned scripts may implement
+custom checks, benchmarks, profiling and environment inspection through Dev. Their output is
+exploratory evidence, never an authoritative Eval verdict.
+
+This arm accepts `candidate_ready` without a preceding Agent Evaluate. Runtime always performs
+its independent private validation before the normal retention gate, including when other arms
+hand off Agent measurements directly to ABBA. Existing report schema, source restrictions,
+filesystem history visibility, budgets, and Bootstrap behavior are unchanged. This is not a
+no-memory arm: selected historical reports/conversations and the Agent's notes remain available.
+`dev-only` is the sixth setting: shared plans now have fourteen arms (seven per sharing mode), and the
+FA4/L20D, GDN/L20D and Qwen3.5 FA/L20N independent plans have twenty-one Lineages (seven × three repeats).
+
+
+`raw: true` is the seventh ablation setting. It requires `dev_only: false`,
+`tool_modules: []`, and `result_artifact_read_enabled: false`. It exposes **no Runtime
+commands**, including source reads, local contract discovery and report handoff; the server
+also rejects all operations from Raw Attempts. Only Raw Sessions receive the deployment's
+configured Agate endpoint/auth as `AGATE_URL` and `AGATE_TOKEN` or `AGATE_AK`/`AGATE_SK`.
+Use `"$ATREX_AGATE_PYTHON" -m atrex_gateway_client.cli --help` or the SDK directly. The
+launch environment must have the Agate client installed. Uploads, polling, retries,
+correctness checks and timing methodology are Agent-owned; Runtime call quotas, duplicate
+handling and tool-wait budget exclusion do not apply to direct calls. Session token and
+elapsed-time budgets still apply. Raw Sessions do not use Runtime report/output-limit
+recovery prompts or automatic historical summaries.
+
+No Bootstrap reports, previous conversations, Epoch summaries, Journal/Kernel Trail,
+peer notes or source/result query APIs are supplied. Only self-authored files under `tools/`
+(including notes, source copies and saved responses in any format) carry along the same
+trajectory, regardless of which trajectory wins. Scratch is temporary. The next working
+kernel still follows the selected Workflow's kernel-routing policy; sharing modes do not
+turn on experience sharing for Raw. On normal exit, the controller seals `work/kernel`
+and privately evaluates it with the same acceptance policy. It creates only an internal
+handoff receipt, with no invented Agent findings; audit traces/tokens and scores remain
+available to human analysis but are never mounted as Raw Agent history. Bootstrap itself
+keeps its existing rules. Deployment credentials are injected into the process environment,
+not written into the contract, prompts or reusable files.
 
 ### Evolver
 

@@ -178,9 +178,7 @@ async def test_ablation_arm_replaces_only_agent_while_reusing_bootstrap_measurem
         (replacement_root / "agent/src/main.py").write_text(
             "def optimize(): return 'new agent'\n", encoding="utf-8"
         )
-        replacement = artifacts.put_directory(
-            replacement_root / "agent", ArtifactKind.KERNEL_AGENT
-        )
+        replacement = artifacts.put_directory(replacement_root / "agent", ArtifactKind.KERNEL_AGENT)
         arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
         spec = AblationArmSpecV1(
             creation_key="new-agent-old-bootstrap",
@@ -196,23 +194,19 @@ async def test_ablation_arm_replaces_only_agent_while_reusing_bootstrap_measurem
         source_agent = registry.list_lineage_agent_revisions(source_id)[0].revision
         assert result.lineage.kernel_artifact_digest == source_kernel.artifact_digest
         assert (
-            result.lineage.gateway_result_digest
-            == source_kernel.evaluation.gateway_result_digest
+            result.lineage.gateway_result_digest == source_kernel.evaluation.gateway_result_digest
         )
         assert result.lineage.latency_us == source_kernel.evaluation.latency_us
         assert result.lineage.agent_artifact_digest != source_agent.optimizer_digest
         assert result.lineage.source_agent_revision_id is None
         assert result.lineage.source_kernel_revision_id == source_kernel.id
         assert (
-            registry.get_lineage(result.lineage.lineage_id).bootstrap_source_lineage_id
-            == source_id
+            registry.get_lineage(result.lineage.lineage_id).bootstrap_source_lineage_id == source_id
         )
         assert len(evaluator.calls) == 1
         with pytest.raises(ValueError, match="different content"):
             await arms.seed_arm(
-                spec.model_copy(
-                    update={"agent_artifact_digest": source_agent.optimizer_digest}
-                )
+                spec.model_copy(update={"agent_artifact_digest": source_agent.optimizer_digest})
             )
 
 
@@ -265,9 +259,7 @@ async def test_evolving_arm_preserves_baseline_and_models_with_independent_sched
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("kind", ["isolated", "retained"])
-async def test_two_ablation_arms_are_mutually_independent(
-    tmp_path: Path, kind: str
-) -> None:
+async def test_two_ablation_arms_are_mutually_independent(tmp_path: Path, kind: str) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     evaluator = FakeEvaluator(artifacts, [])
     with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
@@ -357,10 +349,7 @@ async def test_evolve_arm_observes_matching_isolated_arm_across_campaigns(
         stored_active = registry.get_lineage(active.lineage.lineage_id)
         stored_challenger = registry.get_lineage(challenger.lineage.lineage_id)
         assert stored_active.evolver_observer_lineage_id is None
-        assert (
-            stored_challenger.evolver_observer_lineage_id
-            == active.lineage.lineage_id
-        )
+        assert stored_challenger.evolver_observer_lineage_id == active.lineage.lineage_id
         assert stored_active.max_challengers == 0
         assert stored_challenger.max_challengers == 1
         assert (
@@ -438,6 +427,9 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
             "pool-retained": ("workflow/pool_retained_3.py", 9),
             "broadcast": ("workflow/broadcast_3.py", 9),
             "retained-no-modules": ("workflow/retained.py", 3),
+            "retained-no-result-read": ("workflow/retained.py", 3),
+            "retained-dev-only": ("workflow/retained.py", 3),
+            "retained-raw": ("workflow/retained.py", 3),
         }
         seeded = {
             kind: await arms.seed_arm(
@@ -450,7 +442,21 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
                         "trajectory_visibility": (
                             "broadcast" if kind == "broadcast" else "isolated"
                         ),
-                        "tool_modules": () if kind == "retained-no-modules" else None,
+                        "tool_modules": (
+                            ()
+                            if kind
+                            in {
+                                "retained-no-modules",
+                                "retained-no-result-read",
+                                "retained-dev-only",
+                                "retained-raw",
+                            }
+                            else None
+                        ),
+                        "result_artifact_read_enabled": kind
+                        not in {"retained-no-result-read", "retained-dev-only", "retained-raw"},
+                        "dev_only": kind == "retained-dev-only",
+                        "raw": kind == "retained-raw",
                     }
                 )
             )
@@ -463,17 +469,32 @@ async def test_control_arms_cross_pooling_and_agent_state_retention(
             assert lineage.trajectory_visibility == (
                 "broadcast" if kind == "broadcast" else "isolated"
             )
-            assert lineage.tool_modules == (() if kind == "retained-no-modules" else None)
+            assert lineage.tool_modules == (
+                ()
+                if kind
+                in {
+                    "retained-no-modules",
+                    "retained-no-result-read",
+                    "retained-dev-only",
+                    "retained-raw",
+                }
+                else None
+            )
+            assert lineage.result_artifact_read_enabled == (
+                kind not in {"retained-no-result-read", "retained-dev-only", "retained-raw"}
+            )
+            assert lineage.dev_only == (kind == "retained-dev-only")
+            assert lineage.raw == (kind == "retained-raw")
             assert seeded[kind].workflow_command == shape[0]
             # No arm ever evolves; its Workflow alone owns organization.
             assert lineage.max_challengers == 0
             assert lineage.bootstrap_source_lineage_id == evolution_lineage_id
 
-        assert len({arm.campaign_id for arm in seeded.values()}) == 6
+        assert len({arm.campaign_id for arm in seeded.values()}) == 9
         # Every arm starts from the identical frozen baseline, measured exactly once.
         assert len({arm.lineage.kernel_artifact_digest for arm in seeded.values()}) == 1
         assert len({arm.lineage.latency_us for arm in seeded.values()}) == 1
-        assert len({arm.lineage.kernel_revision_id for arm in seeded.values()}) == 6
+        assert len({arm.lineage.kernel_revision_id for arm in seeded.values()}) == 9
         assert len(evaluator.calls) == 1
 
 
@@ -508,6 +529,48 @@ async def test_an_ablation_arm_cannot_be_cloned_from_another_ablation_arm(
                         "creation_key": "ablation-of-ablation",
                         "source_lineage_id": str(arm.lineage.lineage_id),
                         "optimizer_attempt_budget": 2,
+                    }
+                )
+            )
+
+
+@pytest.mark.anyio
+async def test_restored_root_history_link_is_not_an_ablation_clone(tmp_path: Path) -> None:
+    """Independent revalidation can preserve old Bootstrap history without becoming an arm."""
+    artifacts = LocalArtifactStore(tmp_path / "artifacts")
+    evaluator = FakeEvaluator(artifacts, [])
+    with SqliteRegistry(tmp_path / "registry.sqlite", clock=lambda: NOW) as registry:
+        seeder, _campaign_id, source_id = await _evolution_arm(
+            registry, artifacts, tmp_path, evaluator
+        )
+        prior = seed_lineage(registry, dsl=Dsl.CUDA)
+        registry._connection.execute(
+            "UPDATE lineages SET bootstrap_source_lineage_id=? WHERE id=?",
+            (prior.lineage_id, source_id),
+        )
+        assert seeder.baseline_was_independently_seeded(source_id)
+        arms = AblationArmSeeder(registry, seeder, clock=lambda: NOW)
+        spec = AblationArmSpecV1.model_validate(
+            {
+                "creation_key": "restored-control",
+                "source_lineage_id": str(source_id),
+                "optimizer_attempt_budget": 2,
+            }
+        )
+        arm = await arms.seed_arm(spec)
+        assert await arms.seed_arm(spec) == arm
+        assert registry.get_lineage(arm.lineage.lineage_id).bootstrap_source_lineage_id == source_id
+        baseline = registry.list_lineage_kernels(source_id)[0].revision
+        assert arm.lineage.kernel_artifact_digest == baseline.artifact_digest
+        assert arm.lineage.gateway_result_digest == baseline.evaluation.gateway_result_digest
+        assert len(evaluator.calls) == 1
+        assert not seeder.baseline_was_independently_seeded(arm.lineage.lineage_id)
+        with pytest.raises(ValueError, match="cannot be cloned from another ablation arm"):
+            await arms.seed_arm(
+                spec.model_copy(
+                    update={
+                        "creation_key": "nested-control",
+                        "source_lineage_id": arm.lineage.lineage_id,
                     }
                 )
             )

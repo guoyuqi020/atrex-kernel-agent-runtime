@@ -129,7 +129,7 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert secrets.stat().st_mode & 0o777 == 0o600
 
     plan = json.loads((workspace / "ablation.json").read_text(encoding="utf-8"))
-    assert plan["schema_version"] == 11
+    assert plan["schema_version"] == 14
     assert plan["enabled"] is True
     assert plan["main_evolve_enabled"] is False
     assert plan["optimizer_attempt_budget_per_trajectory"] == 15
@@ -157,7 +157,15 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
             ("epoch-shared", "workflow/epoch_shared_3.py"),
             ("broadcast", "workflow/broadcast_3.py"),
         )
-        for suffix in ("", "no-modules-", "experiments-", "directions-")
+        for suffix in (
+            "",
+            "no-modules-",
+            "experiments-",
+            "directions-",
+            "no-result-read-",
+            "dev-only-",
+            "raw-",
+        )
     ]
     assert all("observer_label" not in arm for arm in plan["arms"])
 
@@ -205,14 +213,14 @@ def test_prepare_materializes_pinned_single_dsl_campaign_workspaces(
     assert json.loads(plan_path.read_text(encoding="utf-8")) == plan
 
 
-def test_ablation_plan_enables_two_communication_modes_with_four_module_settings() -> None:
+def test_ablation_plan_enables_two_communication_modes_with_seven_tool_settings() -> None:
     """Disabled topologies remain available as templates but absent from new plans."""
     schedule = {"max_challengers": 7, "optimizer_attempt_budget": 99}
     enabled = _ablation_plan({"schedule": {**schedule, "event_only": True}})
     disabled = _ablation_plan({"schedule": {**schedule, "event_only": False}})
     omitted = _ablation_plan({"schedule": schedule})
 
-    assert enabled["schema_version"] == 11
+    assert enabled["schema_version"] == 14
     assert enabled["main_evolve_enabled"] is False
     assert enabled["optimizer_attempt_budget_per_trajectory"] == 15
     by_kind: dict[str, list[dict[str, Any]]] = {}
@@ -222,9 +230,15 @@ def test_ablation_plan_enables_two_communication_modes_with_four_module_settings
         assert arm["optimizer_attempt_budget_total"] == 45
 
     for kind, visibility in (("epoch-shared", "isolated"), ("broadcast", "broadcast")):
-        assert len(by_kind[kind]) == 4
+        assert len(by_kind[kind]) == 7
         assert [arm["tool_modules"] for arm in by_kind[kind]] == [
-            ["directions", "experiments"], [], ["experiments"], ["directions"]
+            ["directions", "experiments"],
+            [],
+            ["experiments"],
+            ["directions"],
+            [],
+            [],
+            [],
         ]
         assert all(arm["optimizer_attempt_budget"] == 9 for arm in by_kind[kind])
         assert all(arm["max_challengers"] == 0 for arm in by_kind[kind])
@@ -248,12 +262,20 @@ def test_default_ablation_plan_preserves_per_trajectory_budget_in_both_modes() -
     assert [arm["label"] for arm in plan["arms"]] == [
         f"ablation-{kind}-{suffix}3"
         for kind in ("epoch-shared", "broadcast")
-        for suffix in ("", "no-modules-", "experiments-", "directions-")
+        for suffix in (
+            "",
+            "no-modules-",
+            "experiments-",
+            "directions-",
+            "no-result-read-",
+            "dev-only-",
+            "raw-",
+        )
     ]
-    assert [arm["optimizer_attempt_budget"] for arm in plan["arms"]] == [9] * 8
+    assert [arm["optimizer_attempt_budget"] for arm in plan["arms"]] == [9] * 14
     assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
-    assert [arm["evolution_count"] for arm in plan["arms"]] == [0] * 8
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 360
+    assert [arm["evolution_count"] for arm in plan["arms"]] == [0] * 14
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 630
 
 
 def test_prepare_seeds_each_dsl_campaign_from_its_own_kernel(tmp_path: Path) -> None:
@@ -857,7 +879,15 @@ def test_production_runner_prints_schedule_through_actual_shell(tmp_path: Path) 
     assert "ablation-isolated-evolve" not in result.stdout
     assert "ablation-isolated-pool-evolve" not in result.stdout
     for kind in ("epoch-shared", "broadcast"):
-        for suffix in ("", "no-modules-", "experiments-", "directions-"):
+        for suffix in (
+            "",
+            "no-modules-",
+            "experiments-",
+            "directions-",
+            "no-result-read-",
+            "dev-only-",
+            "raw-",
+        ):
             assert f"ablation-{kind}-{suffix}3=9 Attempts/Epoch x 5 Epochs" in result.stdout
     for kind in ("pool", "pool-retained", "evolve"):
         for attempts in (1, 5):
@@ -892,7 +922,18 @@ def test_production_runner_rejects_invalid_ablation_plan_before_bootstrap(
     )
     assert valid.stdout.splitlines() == [arm["label"] for arm in plan["arms"]]
 
-    plan["schema_version"] -= 1
+    # Existing schema-11 plans remain readable; only unknown versions are rejected.
+    plan["schema_version"] = 11
+    plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    legacy = subprocess.run(
+        ("bash", "-euc", labels_function + "\nablation_arm_labels"),
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    assert legacy.stdout == valid.stdout
+    plan["schema_version"] = 0
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
     marker = tmp_path / "bootstrap-called"
     shell = (
@@ -913,8 +954,10 @@ def test_production_runner_rejects_invalid_ablation_plan_before_bootstrap(
     assert not marker.exists()
 
 
+@pytest.mark.parametrize("read_enabled", [True, False])
 def test_production_runner_seeds_new_agent_without_changing_bootstrap_identity(
     tmp_path: Path,
+    read_enabled: bool,
 ) -> None:
     runner = (PRODUCTION / "run.sh").read_text(encoding="utf-8")
     start = runner.index('if ! "${atrex_prod_python}" -c \'\n', runner.index("seed_arm() ("))
@@ -927,10 +970,11 @@ def test_production_runner_seeds_new_agent_without_changing_bootstrap_identity(
     )
     plan = _ablation_plan(json.loads((PRODUCTION / "policy.json").read_text()))
     plan["run_generation"] = "fresh-agent"
-    digest = "sha256:" + "b" * 64
+    digest = "sha256:" + "b" * 74
     plan["agent_artifact_digests"] = {"cuda": digest}
     plan_path = tmp_path / "ablation.json"
     plan_path.write_text(json.dumps(plan), encoding="utf-8")
+    label = "ablation-broadcast-3" if read_enabled else "ablation-broadcast-no-result-read-3"
     spec = tmp_path / "arm.json"
     subprocess.run(
         (
@@ -940,7 +984,7 @@ def test_production_runner_seeds_new_agent_without_changing_bootstrap_identity(
             str(bootstrap),
             str(plan_path),
             str(spec),
-            "ablation-broadcast-3",
+            label,
             "cuda",
             str(tmp_path),
         ),
@@ -948,9 +992,10 @@ def test_production_runner_seeds_new_agent_without_changing_bootstrap_identity(
     )
     value = json.loads(spec.read_text(encoding="utf-8"))
     assert value["source_lineage_id"] == "lineage_" + "a" * 32
-    assert value["creation_key"] == "ablation-broadcast-3-cuda-fresh-agent"
+    assert value["creation_key"] == f"{label}-cuda-fresh-agent"
     assert value["agent_artifact_digest"] == digest
-    assert value["tool_modules"] == ["directions", "experiments"]
+    assert value["tool_modules"] == (["directions", "experiments"] if read_enabled else [])
+    assert value["result_artifact_read_enabled"] is read_enabled
     assert value["trajectory_visibility"] == "broadcast"
 
 
@@ -965,8 +1010,7 @@ def test_production_runner_can_finish_one_dsl_before_starting_next(tmp_path: Pat
         "job_pids=()\njob_dsls=()\n"
         "dsl_schedule=sequential\n"
         'run_dsl_pipeline() { echo "start:$1" >>"$EVENTS"; sleep 0.05; '
-        'echo "end:$1" >>"$EVENTS"; }\n'
-        + runner[start:end]
+        'echo "end:$1" >>"$EVENTS"; }\n' + runner[start:end]
     )
     subprocess.run(
         ("bash", "-euc", shell),
@@ -994,7 +1038,7 @@ def test_production_runner_reuses_completed_bootstrap(tmp_path: Path) -> None:
     shell = (
         bootstrap_function
         + '\natrex_prod_dsl_paths() { atrex_prod_bootstrap_result="$RESULT_PATH"; }\n'
-        + 'atrex_prod_cli=false\nbootstrap_one cuda\n'
+        + "atrex_prod_cli=false\nbootstrap_one cuda\n"
     )
     result = subprocess.run(
         ("bash", "-euc", shell),

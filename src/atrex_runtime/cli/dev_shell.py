@@ -52,6 +52,7 @@ from ..workers.core import CoreOptimizerSessionDriver
 from ..workers.evolution import EvolutionWorkspaceAssembler, SubprocessEvolutionSessionDriver
 from ..workers.optimizer import OptimizerSessionConfig
 from ..workers.problem_generalization import validate_public_operator_contract
+from ..workers.raw import raw_agate_environment
 from ..workers.workspace import LocalAttemptWorkspaceAssembler
 
 
@@ -96,6 +97,16 @@ def open_optimizer_dev_shell(
             ),
             redaction_patterns=evidence_settings.redaction_patterns,
         )
+        selected_lineage_id = lineage_id
+        if attempt_id is not None:
+            selected_lineage_id = registry.get_epoch(
+                registry.get_attempt(attempt_id).epoch_id
+            ).lineage_id
+        direct_environment = (
+            raw_agate_environment(settings.agate, os.environ)
+            if selected_lineage_id is not None and registry.get_lineage(selected_lineage_id).raw
+            else ()
+        )
         operations = build_worker_gateway_operations(settings)
         service = OptimizerDevShell(
             registry,
@@ -127,6 +138,7 @@ def open_optimizer_dev_shell(
             OptimizerSessionConfig(
                 environment=campaign.optimizer.environment.resolve(os.environ),
                 tool_modules=campaign.optimizer.tool_modules,
+                raw_agate_environment=direct_environment,
             ),
             wiki_enabled=settings.gpu_wiki_enabled,
         )

@@ -8,7 +8,6 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import cast
 
-import anyio
 from pydantic import TypeAdapter
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
@@ -18,7 +17,9 @@ from ..domain.models import Dsl
 from ..kernel_sources import KernelSourceBundle
 from ..roofline import strip_roofline_hardware_suffix
 from .agate import AgateCandidateRejection, AgateClient, AgateRequestBuilder
+from .async_sdk import run_sdk_call, sdk_call
 from .contract import AgateEvaluationContractV1
+from .request_errors import infrastructure_request_error, is_infrastructure_request_error
 
 _JSON_ADAPTER: TypeAdapter[JsonValue] = TypeAdapter(JsonValue)
 
@@ -82,8 +83,10 @@ async def call_agate_json(
 ) -> dict[str, JsonValue]:
     """Run one blocking SDK call and validate a JSON-object response."""
     try:
-        value = await anyio.to_thread.run_sync(operation)
+        value = await run_sdk_call(operation)
     except Exception as error:
+        if is_infrastructure_request_error(error):
+            raise infrastructure_request_error(error) from error
         raise InfrastructureError(f"{request_error}: {type(error).__name__}: {error}") from error
     return require_json_object(
         value,
@@ -103,8 +106,10 @@ async def submit_agate_job(
 ) -> dict[str, JsonValue]:
     """Submit one job while preserving structured candidate-validation rejection."""
     try:
-        value = await anyio.to_thread.run_sync(lambda: client.submit_job(kind, payload))
+        value = await run_sdk_call(sdk_call(client, "submit_job", kind, payload))
     except Exception as error:
+        if is_infrastructure_request_error(error):
+            raise infrastructure_request_error(error) from error
         fields = vars(error)
         if (
             kind == "eval"

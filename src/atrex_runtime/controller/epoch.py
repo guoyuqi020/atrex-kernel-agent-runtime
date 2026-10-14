@@ -728,17 +728,13 @@ class EpochController:
             return request
         epoch = self._registry.get_epoch(epoch_id)
         if epoch.status is not EpochStatus.COMPLETED:
-            raise InvalidTransitionError(
-                "Successor Evolution cannot run before Epoch completion"
-            )
+            raise InvalidTransitionError("Successor Evolution cannot run before Epoch completion")
         lineage = self._registry.get_lineage(epoch.lineage_id)
         if lineage.status is not LineageStatus.READY:
             raise InvalidTransitionError(
                 "Successor Evolution cannot run before Epoch Evidence is published"
             )
-        parent = self._registry.get_kernel_agent_revision(
-            lineage.active_kernel_agent_revision_id
-        )
+        parent = self._registry.get_kernel_agent_revision(lineage.active_kernel_agent_revision_id)
         built = await self._build_agent_proposal(
             epoch,
             parent=parent,
@@ -1149,8 +1145,7 @@ class EpochController:
             raise ValueError("Workflow must register at least one Branch")
         attached = len(self._registry.list_epoch_challengers(epoch.id))
         if any(
-            branch is BranchRole.CHALLENGER and ordinal > attached
-            for branch, ordinal in identities
+            branch is BranchRole.CHALLENGER and ordinal > attached for branch, ordinal in identities
         ):
             raise ValueError("Workflow registered a Challenger Branch without an attached Agent")
         if any(item.program_sha256 != program_sha256 for item in workflows):
@@ -1371,6 +1366,11 @@ class EpochController:
                         ).dsl,
                         model=self._registry.get_lineage(epoch.lineage_id).optimizer_model,
                         tool_modules=self._registry.get_lineage(epoch.lineage_id).tool_modules,
+                        result_artifact_read_enabled=self._registry.get_lineage(
+                            epoch.lineage_id
+                        ).result_artifact_read_enabled,
+                        dev_only=self._registry.get_lineage(epoch.lineage_id).dev_only,
+                        raw=self._registry.get_lineage(epoch.lineage_id).raw,
                     )
                 )
             except InfrastructureError as error:
@@ -1536,10 +1536,8 @@ class EpochController:
                 if output.evaluation.latency_us < best_latency:
                     best_latency = output.evaluation.latency_us
                     first_best = (
-                        (attempt.trajectory_ordinal - 1)
-                        * workflow.attempts_per_trajectory
-                        + attempt.ordinal
-                    )
+                        attempt.trajectory_ordinal - 1
+                    ) * workflow.attempts_per_trajectory + attempt.ordinal
                 strict_improvements += 1
         return BranchScore(
             branch=branch,

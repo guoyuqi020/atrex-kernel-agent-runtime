@@ -32,6 +32,7 @@ from ..roofline import strip_roofline_hardware_suffix
 from ..serialization import canonical_json_digest
 from . import abba_remote
 from .agate import AgateClient, AgateRequestBuilder
+from .async_sdk import sdk_call
 from .batched_evaluate import sorted_shape_ids, subset_shape_document
 from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContextResolver
@@ -785,7 +786,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         submission["idempotency_key"] = f"runtime-abba:{task_digest}:retry-{retry}"
 
         async def execute(submission: dict[str, object]) -> JobExecution:
-            accepted = await self._call(lambda: self._client.submit_job("eval", submission))
+            accepted = await self._call(sdk_call(self._client, "submit_job", "eval", submission))
             job_id = accepted.get("job_id")
             if not isinstance(job_id, str) or not job_id:
                 raise InfrastructureError("Agate ABBA acceptance has no job_id")

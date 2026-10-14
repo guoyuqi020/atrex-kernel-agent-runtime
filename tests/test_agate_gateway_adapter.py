@@ -450,7 +450,7 @@ async def test_eval_uses_sealed_context_and_maps_raw_atrex_result(tmp_path: Path
         "hidden_case_details": "shape inputs and failure details withheld",
     }
     assert client.submitted[0][0] == "eval"
-    assert sorted(client.fetched) == [("ev_test", True, 1200), ("ev_test_1", True, 1200)]
+    assert sorted(client.fetched) == [("ev_test", False, 30.0), ("ev_test_1", False, 30.0)]
     assert builder.calls[0]["gpu"] == "H20"
     sent_keys = [payload["idempotency_key"] for _, payload in client.submitted]
     assert len(set(sent_keys)) == 2
@@ -1024,8 +1024,8 @@ async def test_infrastructure_failure_resubmits_only_failed_shape_jobs(
         assert result.evaluation.latency_us == pytest.approx(math.sqrt(2000 * 4000))
         assert len(raw.submitted) == 3  # Only the failed Shape needs a replacement.
         assert sorted(raw.fetched) == [
-            ("ev_test", True, 1200), ("ev_test_1", True, 1200),
-            ("ev_test_2", True, 1200),
+            ("ev_test", False, 30.0), ("ev_test_1", False, 30.0),
+            ("ev_test_2", False, 30.0),
         ]
         assert delays == [5]
         assert len({p["idempotency_key"] for _, p in raw.submitted}) == 3
@@ -1348,7 +1348,7 @@ async def test_profile_maps_parameters_and_waits_for_terminal_result(tmp_path: P
 
     assert mapped.status == "completed"
     assert mapped.job_id == "ev_test"
-    assert client.fetched == [("ev_test", True, 1200)]
+    assert client.fetched == [("ev_test", False, 30.0)]
     assert client.submitted[0][0] == "profile"
     assert builder.calls[0]["level"] == "deep"
     assert builder.calls[0]["kernel_regex"] == "kernel_name"
@@ -1854,7 +1854,7 @@ async def test_agate_query_commands_are_scoped_and_config_is_redacted(tmp_path: 
             None,
             None,
             None,
-            {"gpu": "H20", "capabilities": True, "force": True},
+            {},
         )
     )
     health = await adapter.execute(
@@ -1884,7 +1884,11 @@ async def test_agate_query_commands_are_scoped_and_config_is_redacted(tmp_path: 
 
     assert listed.result == {"jobs": [client.job]}
     assert environments.result["gpu"] == "H20"
-    assert client.environment_calls == [("capabilities", "H20", True)]
+    assert environments.result["env"] == {"gpu": "H20", "arch": "sm_90"}
+    assert environments.result["capabilities"] == {
+        "gpu": "H20", "frameworks": {"triton": {"available": True}},
+    }
+    assert client.environment_calls == [("detail", "H20", False), ("capabilities", "H20", False)]
     assert health.result == {"ok": True}
     assert config.result == {"url": "https://gateway.example", "auth": "ak_sk"}
     jobs.close()
@@ -1969,7 +1973,8 @@ def test_published_agate_sdk_loads_through_production_factory() -> None:
     )
 
     assert type(client).__module__ == "atrex_runtime.gateway.oss_client"
-    assert type(client.wrapped_client).__module__ == "atrex_gateway_client.client"  # type: ignore[attr-defined]
+    assert type(client.wrapped_client).__module__ == "atrex_runtime.gateway.sdk_transport"  # type: ignore[attr-defined]
+    assert client.wrapped_client.transport_retries == 0  # type: ignore[attr-defined]
     assert builder.__module__ == "atrex_gateway_client.payload"
 
 

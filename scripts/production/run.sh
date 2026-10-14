@@ -257,9 +257,9 @@ ablation_arm_labels() {
   fi
   "${atrex_prod_python}" -c '
 import json, re, sys
-from atrex_runtime.ablation_plan import ABLATION_PLAN_SCHEMA_VERSION
+from atrex_runtime.ablation_plan import SUPPORTED_ABLATION_PLAN_SCHEMA_VERSIONS
 value = json.load(open(sys.argv[1], encoding="utf-8"))
-if value.get("schema_version") != ABLATION_PLAN_SCHEMA_VERSION:
+if value.get("schema_version") not in SUPPORTED_ABLATION_PLAN_SCHEMA_VERSIONS:
     raise SystemExit(f"unsupported ablation plan schema: {sys.argv[1]}")
 if not value.get("enabled"):
     raise SystemExit(0)
@@ -318,6 +318,9 @@ json.dump(
         "workflow_command": arm["workflow_command"],
         "trajectory_visibility": arm.get("trajectory_visibility", "isolated"),
         "tool_modules": arm.get("tool_modules"),
+        "result_artifact_read_enabled": arm.get("result_artifact_read_enabled", True),
+        "dev_only": arm.get("dev_only", False),
+        "raw": arm.get("raw", False),
         "evolver_observer_lineage_id": observer_id,
     },
     open(sys.argv[3], "w", encoding="utf-8"),

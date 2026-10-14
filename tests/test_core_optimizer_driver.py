@@ -398,6 +398,7 @@ print("core-owned optimizer finished")
         ),
         OptimizerSessionConfig(
             environment=(),
+            result_artifact_read_enabled=False,
             gateway_endpoint="http://gateway-proxy",
             gateway_capability="attempt-capability",
         ),
@@ -417,6 +418,9 @@ print("core-owned optimizer finished")
         artifacts.verify(result.runtime_state_digest).kind
         is ArtifactKind.KERNEL_AGENT_RUNTIME_STATE
     )
+    contract = json.loads((root / "input/runtime-contract/tools.json").read_text())
+    assert "result-artifact-read" not in contract["bindings"]
+    assert "kernel-artifact-read" in contract["bindings"]
     assert launch == {
         "phase": "optimization_attempt",
         "attempt": str(manifest_path),

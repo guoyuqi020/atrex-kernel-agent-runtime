@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "name": "fa4-prefill-aka-r0-startpoint",
-  "purpose": "Pristine FA4 source start point for AKA optimization against the current C05 Atrex-bench ABI",
+  "purpose": "Original FA4 algorithmic R0 with native Eval source-validation compatibility patch",
   "source": {
     "repository": "Dao-AILab/flash-attention",
     "revision": "b54df166ebb69b896892826014759d09b9c3c9c6",
@@ -42,5 +42,27 @@
     "c05_vendor_tree": true,
     "recovered_increment_tree": true,
     "excluded_upstream_commit": "3e18806fdc32b6731c6f7dc168e062ae7d0497c7"
+  },
+  "native_eval_compatibility": {
+    "version": 1,
+    "base_bundle_commit": "7b077cf391a98a06ad9464530f0a4c9c7be3f477",
+    "upstream_source_hashes": "source.source_tree_sha256 and source_file_count describe the original upstream snapshot, before this compatibility patch",
+    "changes": [
+      "Task-local static vendor imports; no sys.path changes or dynamic imports",
+      "Process-local JIT cache retained; optional disk cache and external ptxas hook removed",
+      "Explicit configuration replaces optional process configuration overrides; default dispatch flags unchanged",
+      "Fixed metadata protocols replace dynamic attribute lookup and assignment",
+      "Finite NamedTuple/ParamsBase registration preserves MLIR field ordering",
+      "Four oversized modules use AST-equivalent formatting under 128 KiB; no kernel math changes",
+      "Standalone benchmark CLI entrypoints omitted"
+    ],
+    "unchanged": [
+      "Original HD256/P128 algorithm, tiling and dispatch",
+      "Target P64/ragged/PackGQA bring-up work still required",
+      "All 30 target shapes, reference, input, tolerances and mutation checks",
+      "Adapter forward body; editable roots and fixed-source boundaries"
+    ],
+    "patch": "patches/native-eval.patch",
+    "local_gate_reference": "Agate 0.14.2 (621377b5610251d2f3a0ad512794e140915423ca); actual production validation recorded separately"
   }
 }

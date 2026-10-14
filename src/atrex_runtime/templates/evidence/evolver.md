@@ -32,7 +32,8 @@ Supported `gateway-execute` operations:
 - `dev`: runs a bounded remote GPU command with selected workspace files for custom probes.
 - `check`: compilation or sanitizer checks.
 - `disassemble`: the Gateway's disassembly operation; use only evidence actually returned.
-- `env`: remote GPU environment and capabilities.
+- `env`: send only `{"operation":"env"}`. Runtime selects the task GPU and returns both its
+  environment and capabilities; `gpu`, `capabilities`, and `force` are not Agent inputs.
 
 For the standard Agent, the exact CLI form in a later session is
 `python3 agent/optimizer/src/runtime_tools.py <command> --request scratch/<request>.json`.
@@ -352,19 +353,18 @@ microseconds. Career wins plus losses equal completed-Epoch participation.
 
 ## Attempt reports
 
-`reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json` is the Optimizer's own account of one
-Attempt: `hypothesis`, `diagnosis`, `approach`, `experiments`, `findings`, `knowledge_used`,
-`evidence_summary`, `contributing_result_artifact_digests` naming the historical results it drew from,
-`parent_kernel`, `candidate_kernel` including `comparison_with_parent`,
-`production_gate`, and a closing `analysis`. It is an untrusted interpretation like a conversation:
-use it to explain what the Agent believed and attempted, then verify against the measured Gateway
-results in the optimization summary.
+`reports/trajectory-NNNNNNNN/attempt-NNNNNNNN.report.json` is the Runtime outcome and handoff
+view. New compact handoffs contain status, candidate source summary, contribution references and
+blocker; Runtime adds parent_kernel, candidate_kernel with comparison_with_parent, production_gate,
+experiment_ids and direction_ids. Read selected frozen Journal records for analyses rather than
+expecting duplicated report prose. Older reports may contain hypothesis, diagnosis, approach,
+analysis, Findings and embedded Journals; those are Agent interpretations, not new measurements.
 New Experiment records include a deterministic `measurement_summary` generated from the cited
 Agent-visible Results. It contains measured facts and explicit comparison limits, not causal analysis.
 Experiment evidence/analysis may be null, and hypothesis may be inherited by Direction ID. Direction
-start/closure analysis and report Findings may be empty; do not treat absent redundant prose as an Agent
+start/closure analysis may be empty; do not treat absent redundant prose as an Agent
 failure or require a new lesson for each measurement. Use compact indexes, then load selected records.
-Reports also retain `direction_events`, including the selected `supporting_experiment_ids` and
+Historical reports also retain `direction_events`; current Journals retain the selected `supporting_experiment_ids` and
 Agent-declared `hypothesis_status` (`unresolved`, `supported`, `refuted`). These are not Runtime
 certifications of scientific conclusions. Lifecycle closure, including abandonment, does not imply
 falsification. Missing historical judgments mean unresolved. When producing memory, Skills, or

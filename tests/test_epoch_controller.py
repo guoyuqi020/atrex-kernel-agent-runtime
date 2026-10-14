@@ -1741,6 +1741,10 @@ async def test_epoch_promotes_challenger_and_best_kernel_after_scoped_retry(
         optimizer_model="optimizer-model",
         evolver_model="evolver-model",
     )
+    registry._connection.execute(
+        "UPDATE lineages SET result_artifact_read_enabled = 0 WHERE id = ?",
+        (seeded.lineage_id,),
+    )
     evolver = FakeEvolver()
     optimizer = ScriptedOptimizer(
         seeded.active_revision_id,
@@ -1799,6 +1803,7 @@ async def test_epoch_promotes_challenger_and_best_kernel_after_scoped_retry(
     for requests in optimizer.requests.values():
         for request in requests:
             assert request.model == "optimizer-model"
+            assert request.result_artifact_read_enabled is False
             persisted = registry.get_attempt(request.attempt_id)
             assert request.attempt_evidence_digest == persisted.attempt_evidence_digest
             assert request.epoch_evidence_checkpoint == result.epoch.evidence_checkpoint

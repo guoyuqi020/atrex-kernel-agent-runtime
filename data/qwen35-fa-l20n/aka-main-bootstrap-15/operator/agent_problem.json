@@ -1,0 +1,260 @@
+{
+  "coverage_regimes": [
+    {
+      "name": "decode_like",
+      "requirement": "support batches containing query lengths from 1 to 16 against KV histories from the 4k-input/256-output lifecycle"
+    },
+    {
+      "name": "prefill_like",
+      "requirement": "support one or more query segments with hundreds of tokens through the 4k-input prefill scale"
+    },
+    {
+      "name": "ragged_mixed",
+      "requirement": "support a single batch mixing decode-like and prefill-like requests without assuming uniform lengths"
+    },
+    {
+      "name": "cuda_graph_padding",
+      "requirement": "support batches with inactive zero-length request slots and q.shape[0] larger than the active query prefix"
+    }
+  ],
+  "development_cases": [
+    {
+      "init_kwargs": {
+        "fa_version": 3,
+        "max_seqlen_k": 128,
+        "max_seqlen_q": 16,
+        "softmax_scale": 0.0625
+      },
+      "input_kwargs": {
+        "block_table": [
+          1,
+          4097
+        ],
+        "k": [
+          2,
+          64,
+          2,
+          256
+        ],
+        "num_kv_heads": 2,
+        "q": [
+          16,
+          16,
+          256
+        ],
+        "query_start_loc": "0,16",
+        "seq_lens": "128",
+        "use_scheduler_metadata": true,
+        "v": [
+          2,
+          64,
+          2,
+          256
+        ]
+      },
+      "name": "small_single_request"
+    },
+    {
+      "init_kwargs": {
+        "fa_version": 3,
+        "max_seqlen_k": 4096,
+        "max_seqlen_q": 252,
+        "softmax_scale": 0.0625
+      },
+      "input_kwargs": {
+        "block_table": [
+          2,
+          4097
+        ],
+        "k": [
+          80,
+          64,
+          2,
+          256
+        ],
+        "num_kv_heads": 2,
+        "q": [
+          256,
+          16,
+          256
+        ],
+        "query_start_loc": "0,4,256",
+        "seq_lens": "4096,1024",
+        "use_scheduler_metadata": true,
+        "v": [
+          80,
+          64,
+          2,
+          256
+        ]
+      },
+      "name": "two_request_decode_prefill_mix"
+    },
+    {
+      "init_kwargs": {
+        "fa_version": 3,
+        "max_seqlen_k": 4352,
+        "max_seqlen_q": 1536,
+        "softmax_scale": 0.0625
+      },
+      "input_kwargs": {
+        "block_table": [
+          4,
+          4097
+        ],
+        "k": [
+          172,
+          64,
+          2,
+          256
+        ],
+        "num_kv_heads": 2,
+        "q": [
+          2080,
+          16,
+          256
+        ],
+        "query_start_loc": "0,1,32,544,2080",
+        "seq_lens": "4352,3072,2048,1536",
+        "use_scheduler_metadata": true,
+        "v": [
+          172,
+          64,
+          2,
+          256
+        ]
+      },
+      "name": "four_request_ragged_mix"
+    }
+  ],
+  "distribution_profile": {
+    "basis": "metadata.shapes.frequency normalized within this operator and rounded to whole percentages with the largest-remainder method",
+    "kv_split_pattern_definitions": {
+      "comparable_histories": "at least two kv_lengths are positive and max(positive kv_lengths) / min(positive kv_lengths) < 2",
+      "long_tail_histories": "at least two kv_lengths are positive and max(positive kv_lengths) / min(positive kv_lengths) >= 4",
+      "single_active_request": "exactly one kv_length is positive",
+      "skewed_histories": "at least two kv_lengths are positive and 2 <= max(positive kv_lengths) / min(positive kv_lengths) < 4"
+    },
+    "kv_split_pattern_weight_pct": {
+      "comparable_histories": 73,
+      "long_tail_histories": 9,
+      "single_active_request": 17,
+      "skewed_histories": 1
+    },
+    "optimization_priority": "Use these aggregate shares to prioritize common fast paths; correctness is still required across the full shape_domain.",
+    "packed_query_tokens_weight_pct": {
+      "1-1024": 98,
+      "1025-6144": 0,
+      "6145-8192": 2
+    },
+    "query_split_pattern_definitions": {
+      "balanced_segments": "at least two query_lengths are positive and max(query_lengths) / sum(query_lengths) < 0.55",
+      "dominant_plus_tail": "at least two query_lengths are positive and 0.55 <= max(query_lengths) / sum(query_lengths) < 0.80",
+      "one_dominant_segment": "at least two query_lengths are positive and max(query_lengths) / sum(query_lengths) >= 0.80",
+      "single_active_request": "exactly one query_length is positive"
+    },
+    "query_split_pattern_weight_pct": {
+      "balanced_segments": 83,
+      "dominant_plus_tail": 0,
+      "one_dominant_segment": 0,
+      "single_active_request": 17
+    },
+    "request_count_weight_pct": {
+      "1-4": 49,
+      "17-32": 16,
+      "5-8": 18,
+      "9-16": 17
+    },
+    "scheduler_metadata_weight_pct": {
+      "enabled": 100
+    }
+  },
+  "evaluation": {
+    "correctness_requirement": "every hidden case must pass",
+    "development_cases_are_evaluation_cases": false,
+    "exact_cases": "private",
+    "performance_requirement": "performance is measured across hidden cases after correctness passes"
+  },
+  "invariants": [
+    "query_start_loc is the inclusive prefix sum of query_lengths, starts at 0, and ends at active_query_tokens, which may be less than q.shape[0] because q uses CUDA Graph slots",
+    "each query_lengths[i] is less than or equal to kv_lengths[i]",
+    "max_seqlen_q equals max(query_lengths) and max_seqlen_k equals max(kv_lengths)",
+    "q.shape is [cuda_graph_query_slots, 16, 256], active_query_tokens is at most cuda_graph_query_slots, and inactive output slots remain zero",
+    "k_cache.shape and v_cache.shape are [sum(ceil(kv_lengths[i] / 64)), 64, 2, 256]",
+    "block_table.shape is [batch_size, block_table_columns] and its valid prefix maps each request to compact non-overlapping cache pages",
+    "seqused_k contains kv_lengths as int32 values",
+    "zero query and KV lengths represent inactive padded request slots and are skipped by the reference",
+    "an individual request has at most 4578 logical context tokens including MTP lookahead; only packed query slots across concurrent requests may reach 8192",
+    "the candidate must derive dispatch decisions from runtime properties and must not depend on evaluator shape ids"
+  ],
+  "objective": "Implement one flash-attention candidate that is correct and fast for the public 4k-input/256-output workload domain; exact evaluator cases are hidden.",
+  "operator_contract": {
+    "accumulation_target": "float32 reference semantics within evaluator tolerance",
+    "attention": "causal variable-length paged GQA with bottom-right causal alignment",
+    "fa_version": 3,
+    "head_dim": 256,
+    "kv_cache_dtype": "bfloat16",
+    "num_kv_heads": 2,
+    "num_q_heads": 16,
+    "output_dtype": "bfloat16",
+    "page_size": 64,
+    "q_dtype": "bfloat16",
+    "qkv_descale": "float32 ones with shape [batch_size, num_kv_heads]",
+    "scheduler_metadata": "enabled for every shapes.json case; input.py may return None only when the vLLM helper is unavailable",
+    "softmax_scale": 0.0625
+  },
+  "schema_version": "atrex.agent_problem.v1",
+  "shape_domain": {
+    "active_query_tokens": {
+      "max": 8192,
+      "min": 1,
+      "type": "integer"
+    },
+    "batch_size": {
+      "max": 32,
+      "min": 1,
+      "type": "integer"
+    },
+    "block_table_columns": {
+      "note": "This is the fixed physical table capacity/stride in shapes.json, not a logical sequence-length limit.",
+      "type": "integer",
+      "values": [
+        4097
+      ]
+    },
+    "cuda_graph_query_slots": {
+      "max": 8192,
+      "min": 1,
+      "type": "integer"
+    },
+    "kv_lengths": {
+      "element_max": 4578,
+      "element_min": 0,
+      "length": "batch_size",
+      "type": "integer_list"
+    },
+    "query_lengths": {
+      "element_max": 4319,
+      "element_min": 0,
+      "length": "batch_size",
+      "sum_max": 8192,
+      "sum_min": 1,
+      "type": "integer_list"
+    },
+    "use_scheduler_metadata": {
+      "type": "boolean",
+      "values": [
+        true
+      ]
+    }
+  },
+  "workload_profile": {
+    "input_tokens_per_request": 4319,
+    "max_active_query_tokens_per_batch": 8192,
+    "max_cuda_graph_query_slots_per_batch": 8192,
+    "max_logical_context_tokens_per_request": 4578,
+    "max_output_tokens_per_request": 256,
+    "mtp_speculative_tokens": 3,
+    "note": "The 4578-token maximum includes three MTP speculative tokens beyond the 4319+256 lifecycle; 8192 is a packed CUDA Graph slot total, not a per-request context."
+  }
+}

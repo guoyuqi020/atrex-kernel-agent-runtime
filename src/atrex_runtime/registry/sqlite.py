@@ -75,7 +75,7 @@ from ..domain.models import (
 from ..sqlite_support import configure_durable_sqlite
 from .stop_migration import migrate_stops
 
-SCHEMA_VERSION = 45
+SCHEMA_VERSION = 48
 _ACTIVE_FENCE: ContextVar[tuple[LineageId, int, str] | None] = ContextVar(
     "atrex_active_lineage_fence",
     default=None,
@@ -584,16 +584,18 @@ class SqliteRegistry:
                     definition = {
                         field: proposal[field]
                         for field in (
-                            "name", "hypothesis", "rationale", "plan",
-                            "success_criteria", "stop_conditions",
+                            "name",
+                            "hypothesis",
+                            "rationale",
+                            "plan",
+                            "success_criteria",
+                            "stop_conditions",
                         )
                     }
                     definition.update(
                         relationship=None if relationship == "new" else relationship,
                         derived_from_direction_ids=proposal.get("related_direction_ids", []),
-                        derived_from_experiment_ids=proposal.get(
-                            "supporting_experiment_ids", []
-                        ),
+                        derived_from_experiment_ids=proposal.get("supporting_experiment_ids", []),
                         supersedes_direction_id=None,
                     )
                     evolution_key = _required_text(row, "evolution_key")
@@ -722,9 +724,7 @@ class SqliteRegistry:
                         "attempts_per_branch",
                     ):
                         if column in lineage_columns:
-                            self._connection.execute(
-                                f"ALTER TABLE lineages DROP COLUMN {column}"
-                            )
+                            self._connection.execute(f"ALTER TABLE lineages DROP COLUMN {column}")
                 if self._has_tables("epochs"):
                     epoch_columns = self._table_columns("epochs")
                     if "max_challengers" not in epoch_columns:
@@ -754,9 +754,7 @@ class SqliteRegistry:
                         "attempts_per_branch",
                     ):
                         if column in epoch_columns:
-                            self._connection.execute(
-                                f"ALTER TABLE epochs DROP COLUMN {column}"
-                            )
+                            self._connection.execute(f"ALTER TABLE epochs DROP COLUMN {column}")
                 self._connection.execute("PRAGMA user_version = 41")
             self._migrate()
             return
@@ -809,6 +807,39 @@ class SqliteRegistry:
                         "CHECK (trajectory_visibility IN ('isolated', 'broadcast'))"
                     )
                 self._connection.execute("PRAGMA user_version = 44")
+            self._migrate()
+            return
+        if version == 47:
+            with self._transaction(migration=True):
+                lineage_columns = self._table_columns("lineages")
+                if lineage_columns and "raw" not in lineage_columns:
+                    self._connection.execute(
+                        "ALTER TABLE lineages ADD COLUMN raw INTEGER "
+                        "NOT NULL DEFAULT 0 CHECK (raw IN (0, 1))"
+                    )
+                self._connection.execute("PRAGMA user_version = 48")
+            self._migrate()
+            return
+        if version == 46:
+            with self._transaction(migration=True):
+                lineage_columns = self._table_columns("lineages")
+                if lineage_columns and "dev_only" not in lineage_columns:
+                    self._connection.execute(
+                        "ALTER TABLE lineages ADD COLUMN dev_only INTEGER "
+                        "NOT NULL DEFAULT 0 CHECK (dev_only IN (0, 1))"
+                    )
+                self._connection.execute("PRAGMA user_version = 47")
+            self._migrate()
+            return
+        if version == 45:
+            with self._transaction(migration=True):
+                lineage_columns = self._table_columns("lineages")
+                if lineage_columns and "result_artifact_read_enabled" not in lineage_columns:
+                    self._connection.execute(
+                        "ALTER TABLE lineages ADD COLUMN result_artifact_read_enabled INTEGER "
+                        "NOT NULL DEFAULT 1 CHECK (result_artifact_read_enabled IN (0, 1))"
+                    )
+                self._connection.execute("PRAGMA user_version = 46")
             self._migrate()
             return
         if version == 44:
@@ -2877,9 +2908,7 @@ class SqliteRegistry:
             participation = (
                 None if participation_row is None else self._map_epoch(participation_row)
             )
-            successor_epoch = (
-                None if successor_row is None else self._map_epoch(successor_row)
-            )
+            successor_epoch = None if successor_row is None else self._map_epoch(successor_row)
             disposition_epoch = participation or successor_epoch or introduced_epoch
             if introduced_epoch is None:
                 disposition = "baseline"
@@ -3452,8 +3481,8 @@ class SqliteRegistry:
                        next_epoch_number, status, max_challengers,
                        optimizer_model, evolver_model, bootstrap_source_lineage_id,
                        evolver_observer_lineage_id, trajectory_visibility,
-                       tool_modules_json
-                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                       tool_modules_json, result_artifact_read_enabled, dev_only, raw
+                   ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     lineage.id,
                     lineage.campaign_id,
@@ -3472,6 +3501,9 @@ class SqliteRegistry:
                     lineage.evolver_observer_lineage_id,
                     lineage.trajectory_visibility,
                     None if lineage.tool_modules is None else json.dumps(lineage.tool_modules),
+                    int(lineage.result_artifact_read_enabled),
+                    int(lineage.dev_only),
+                    int(lineage.raw),
                 ),
             )
             baseline = self.get_kernel_revision(lineage.best_kernel_revision_id)
@@ -3547,6 +3579,9 @@ class SqliteRegistry:
                 Literal["isolated", "broadcast"],
                 _required_text(row, "trajectory_visibility"),
             ),
+            result_artifact_read_enabled=bool(_required_int(row, "result_artifact_read_enabled")),
+            dev_only=bool(_required_int(row, "dev_only")),
+            raw=bool(_required_int(row, "raw")),
             tool_modules=(
                 None
                 if (modules_json := _optional_text(row, "tool_modules_json")) is None
@@ -3839,9 +3874,7 @@ class SqliteRegistry:
                 )
             if challenger.proposal_type is ChallengerProposalType.REPLICA:
                 if revision.id != base.id or revision.id != epoch.active_kernel_agent_revision_id:
-                    raise InvalidTransitionError(
-                        "Replica must use the current Active Agent"
-                    )
+                    raise InvalidTransitionError("Replica must use the current Active Agent")
                 revision_number = _required_int(base_version, "revision_number")
             elif challenger.proposal_type is ChallengerProposalType.REUSE:
                 if revision.id == epoch.active_kernel_agent_revision_id:
@@ -4055,9 +4088,7 @@ class SqliteRegistry:
             ).fetchone()
             if version is None:
                 if revision.created_by != "evolver" or revision.parent_id is None:
-                    raise InvalidTransitionError(
-                        "new Successor Agent lacks Evolver provenance"
-                    )
+                    raise InvalidTransitionError("new Successor Agent lacks Evolver provenance")
                 self._link_agent_version(
                     lineage.id,
                     revision,
@@ -4065,9 +4096,7 @@ class SqliteRegistry:
                     introduced_epoch_id=epoch.id,
                 )
             elif _required_text(version, "lineage_id") != lineage.id:
-                raise InvalidTransitionError(
-                    "Successor Agent belongs to another Lineage"
-                )
+                raise InvalidTransitionError("Successor Agent belongs to another Lineage")
             completed_at = self._clock()
             changed = self._connection.execute(
                 """UPDATE epoch_successor_evolutions
@@ -4091,9 +4120,7 @@ class SqliteRegistry:
                 ),
             ).rowcount
             if changed != 1:
-                raise InvalidTransitionError(
-                    "Lineage changed while publishing its Successor Agent"
-                )
+                raise InvalidTransitionError("Lineage changed while publishing its Successor Agent")
             self._event(
                 "kernel_agent.evolved_for_next_epoch",
                 revision.id,
@@ -4126,16 +4153,12 @@ class SqliteRegistry:
             next_kernel_agent_revision_id=(
                 None if next_revision is None else parse_kernel_agent_revision_id(next_revision)
             ),
-            evolution_trace_digest=(
-                None if trace is None else parse_artifact_digest(trace)
-            ),
+            evolution_trace_digest=(None if trace is None else parse_artifact_digest(trace)),
             requested_at=_required_text(row, "requested_at"),
             completed_at=_optional_text(row, "completed_at"),
         )
 
-    def ensure_epoch_branch_workflow(
-        self, workflow: EpochBranchWorkflow
-    ) -> EpochBranchWorkflow:
+    def ensure_epoch_branch_workflow(self, workflow: EpochBranchWorkflow) -> EpochBranchWorkflow:
         """Freeze one Agent Revision's validated Workflow for an Epoch Branch."""
         with self._transaction():
             # A deliberately suppressed v32 stop-migration is used by the compatibility
@@ -4146,9 +4169,7 @@ class SqliteRegistry:
             if workflow.branch is BranchRole.ACTIVE:
                 expected_revision = epoch.active_kernel_agent_revision_id
             else:
-                if workflow.challenger_ordinal > len(
-                    epoch.challenger_kernel_agent_revision_ids
-                ):
+                if workflow.challenger_ordinal > len(epoch.challenger_kernel_agent_revision_ids):
                     raise InvalidTransitionError("Workflow Challenger is not attached")
                 expected_revision = epoch.challenger_kernel_agent_revision_ids[
                     workflow.challenger_ordinal - 1
@@ -4219,9 +4240,7 @@ class SqliteRegistry:
             ).fetchone()
         return None if row is None else self._map_epoch_branch_workflow(row)
 
-    def list_epoch_branch_workflows(
-        self, epoch_id: EpochId
-    ) -> list[EpochBranchWorkflow]:
+    def list_epoch_branch_workflows(self, epoch_id: EpochId) -> list[EpochBranchWorkflow]:
         """Return frozen Branch Workflows in Active/Challenger order."""
         with self._lock:
             if not self._has_tables("epoch_branch_workflows"):
@@ -4297,7 +4316,10 @@ class SqliteRegistry:
                        ) VALUES (?, ?, ?, ?, ?, ?, ?)""",
                     (
                         suggested_direction_id(evolution_key, ordinal),
-                        epoch_id, evolution_key, ordinal, trace,
+                        epoch_id,
+                        evolution_key,
+                        ordinal,
+                        trace,
                         json.dumps(
                             direction, sort_keys=True, separators=(",", ":"), ensure_ascii=False
                         ),
@@ -4306,7 +4328,8 @@ class SqliteRegistry:
                 )
             if directions:
                 self._event(
-                    "epoch.suggested_directions_recorded", epoch_id,
+                    "epoch.suggested_directions_recorded",
+                    epoch_id,
                     {"evolution_trace_digest": trace, "count": len(directions)},
                 )
             return self._list_epoch_suggested_directions_locked(epoch_id)
@@ -4391,9 +4414,8 @@ class SqliteRegistry:
         program_sha256: str,
     ) -> None:
         """Freeze the Challenger set selected by executable Workflow code."""
-        if (
-            len(program_sha256) != 64
-            or any(character not in "0123456789abcdef" for character in program_sha256)
+        if len(program_sha256) != 64 or any(
+            character not in "0123456789abcdef" for character in program_sha256
         ):
             raise ValueError("Workflow program SHA-256 is invalid")
         with self._transaction():
@@ -4473,7 +4495,8 @@ class SqliteRegistry:
             raise ValueError("stop reason must contain 1-2048 characters")
         with self._transaction():
             row = self._connection.execute(
-                "SELECT status, lineage_id FROM epochs WHERE id = ?", (epoch_id,),
+                "SELECT status, lineage_id FROM epochs WHERE id = ?",
+                (epoch_id,),
             ).fetchone()
             if row is None:
                 raise KeyError(f"Epoch not found: {epoch_id}")
@@ -4486,7 +4509,8 @@ class SqliteRegistry:
                     (epoch_id, status, reason, now),
                 )
                 self._connection.execute(
-                    "UPDATE epochs SET status = 'stopped' WHERE id = ?", (epoch_id,),
+                    "UPDATE epochs SET status = 'stopped' WHERE id = ?",
+                    (epoch_id,),
                 )
                 attempts = self._connection.execute(
                     "SELECT id FROM attempts WHERE epoch_id = ? AND status = 'running'",
@@ -4494,22 +4518,26 @@ class SqliteRegistry:
                 ).fetchall()
                 self._connection.execute(
                     "UPDATE attempts SET status = 'interrupted', failure_reason = ? "
-                    "WHERE epoch_id = ? AND status = 'running'", (reason, epoch_id),
+                    "WHERE epoch_id = ? AND status = 'running'",
+                    (reason, epoch_id),
                 )
                 self._connection.execute(
                     "UPDATE worker_sessions SET status = 'interrupted', "
                     "finish_reason = 'operator-stopped', completed_at = ? "
-                    "WHERE epoch_id = ? AND status = 'running'", (now, epoch_id),
+                    "WHERE epoch_id = ? AND status = 'running'",
+                    (now, epoch_id),
                 )
                 self._connection.execute(
                     "UPDATE lineage_fences SET generation = generation + 1, "
                     "owner = ?, lease_expires_at = '0001-01-01T00:00:00+00:00' "
-                    "WHERE lineage_id = ?", (f"stopped:{epoch_id}", lineage_id),
+                    "WHERE lineage_id = ?",
+                    (f"stopped:{epoch_id}", lineage_id),
                 )
                 for attempt in attempts:
                     self._event("attempt.interrupted", attempt["id"], {"reason": reason})
                 self._event(
-                    "epoch.stopped", epoch_id,
+                    "epoch.stopped",
+                    epoch_id,
                     {"previous_status": status, "reason": reason, "stopped_at": now},
                 )
         return self.get_epoch(epoch_id)
@@ -4519,7 +4547,8 @@ class SqliteRegistry:
         with self._transaction():
             row = self._connection.execute(
                 "SELECT e.status, s.previous_status FROM epochs e "
-                "LEFT JOIN epoch_stops s ON s.epoch_id = e.id WHERE e.id = ?", (epoch_id,),
+                "LEFT JOIN epoch_stops s ON s.epoch_id = e.id WHERE e.id = ?",
+                (epoch_id,),
             ).fetchone()
             if row is None:
                 raise KeyError(f"Epoch not found: {epoch_id}")
@@ -4529,10 +4558,12 @@ class SqliteRegistry:
                 self._connection.execute(
                     "UPDATE attempts SET status = 'running', failure_reason = NULL, "
                     "recovery_generation = recovery_generation + 1, authority_started_at = ? "
-                    "WHERE epoch_id = ? AND status = 'interrupted'", (now, epoch_id),
+                    "WHERE epoch_id = ? AND status = 'interrupted'",
+                    (now, epoch_id),
                 )
                 self._connection.execute(
-                    "UPDATE epochs SET status = ? WHERE id = ?", (previous, epoch_id),
+                    "UPDATE epochs SET status = ? WHERE id = ?",
+                    (previous, epoch_id),
                 )
                 self._connection.execute("DELETE FROM epoch_stops WHERE epoch_id = ?", (epoch_id,))
                 self._event("epoch.resumed", epoch_id, {"status": previous})

@@ -231,6 +231,9 @@ def run(args):
                 source_lineage_id=source,
                 trajectory_visibility=arm["trajectory_visibility"],
                 tool_modules=arm["tool_modules"],
+                result_artifact_read_enabled=arm.get("result_artifact_read_enabled", True),
+                dev_only=arm.get("dev_only", False),
+                raw=arm.get("raw", False),
                 **{
                     key: arm[key]
                     for key in ("optimizer_attempt_budget", "max_challengers", "workflow_command")

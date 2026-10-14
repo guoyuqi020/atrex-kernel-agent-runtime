@@ -245,34 +245,14 @@ claim kind; insufficient support remains unresolved with assessment notes. Inval
 errors. Abandoning work does not refute a hypothesis, and no diagnostic call is required merely to
 close it. `associated_experiment_ids` lists linked Experiments; selected support is a separate list.
 
-Record one reusable claim per Finding. Set `claim_kind` to `observation` (what was observed),
-`implementation_outcome` (the measured outcome of a particular implementation), or
-`causal_hypothesis` (an explanation of why). Supply the exact sentence in `claim`, its tested
-Kernel/hardware/Shape scope in `scope`, and `assessment=unresolved|supported|refuted`.
-Use `root_cause: null` when the cause is unknown; neither a report nor a completed Attempt requires
-a causal explanation. Missing historical assessment means unresolved.
-
-Bind evidence to that claim using `supporting_results`, available with every Journal module
-selection: `[{"kernel_artifact_digest":"sha256:<kernel>","result_artifact_digests":["sha256:<result>"]}]`.
-When Experiments are enabled, optional `supporting_experiment_ids` may reference this Attempt's
-Journal as an additional organization of evidence; direct Result bindings do not require an
-Experiment. Reuse matching visible historical Results; do not repeat GPU work just to record a claim.
-Runtime validates exact visible bindings and completed operation eligibility: observations may use
-Check, Dev, Profile, or Evaluate; implementation outcomes require Dev or full Evaluate; causal
-hypotheses require Dev, Profile, or full Evaluate. Check-only or correctness-only evidence cannot
-support a performance or causal judgment. These checks do not establish causal relevance or truth.
-Missing claim, scope, or suitable completed evidence downgrades a requested supported/refuted
-Finding to unresolved with `assessment_notes`; invalid or invisible references are still errors.
-
-Keep an untested explanation unresolved even beside a successful measured optimization. General
-`analysis`, diagnosis, root-cause text, and lessons remain Agent interpretations, not verified
-conclusions. Before rejecting a potentially useful mechanism, identify the smallest targeted probe
-that could distinguish it from alternatives; if it is not worth testing now, defer it unresolved.
-For example, observing `autovec_copy` in source does not establish that output cost is negligible.
-A failed implementation does not refute every implementation of its proposed mechanism.
-
-`blocked` or `pivot` may contain empty experiments and findings; give the genuine stopping reason.
-`candidate_ready` still requires the enabled modules' nomination evidence; Findings may be empty.
+Keep local measured-change interpretations in Experiments when enabled; use Directions for
+new cross-experiment synthesis and untested next steps, referencing existing Experiments.
+A failed implementation does not refute all implementations of its mechanism. Scope conclusions
+to actual Kernel/hardware/workloads and keep untested causal explanations unresolved.
+The terminal attempt-report accepts only status, final_candidate, contributing_result_artifact_digests
+and blocker. It does not accept analysis or Findings. Runtime supplies measured outcome summaries.
+Blocked or pivot handoffs may have empty Journals; candidate_ready still requires enabled
+nomination evidence. Own scratch notes remain allowed when Journals are disabled.
 Private evaluator inputs remain hidden; opaque Shape identifiers and measurements must not be used
 to reconstruct them.
 
@@ -288,6 +268,6 @@ Direction start needs no analysis. At closure, cite selected Experiments or dire
 optional analysis only for a new route-level judgment, untested alternatives, or next steps. A failed
 implementation does not refute an entire mechanism. Lifecycle, ownership and evidence gates still apply.
 The report tool embeds authoritative Journals automatically. Reference those records in a concise
-handoff instead of rewriting them. Findings may be empty, even when a candidate is ready; do not
+handoff instead of rewriting them. No analysis or Findings belong in the terminal request; do not
 manufacture a lesson to satisfy reporting. Measurement summaries distinguish ordinary Evaluate from
 ABBA, expose only Agent-visible measurements, and decline incompatible or unfinished comparisons.

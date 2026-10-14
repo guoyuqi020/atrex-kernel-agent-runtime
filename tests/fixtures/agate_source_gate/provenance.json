@@ -1,0 +1,17 @@
+{
+  "release": "0.14.2",
+  "release_commit": "621377b5610251d2f3a0ad512794e140915423ca",
+  "purpose": "Frozen upstream AST validator for FA4 compatibility regression tests; .txt suffix prevents pytest/runtime import.",
+  "files": [
+    {
+      "path": "app/security/validator.py",
+      "sha256": "34206bba24a5923adf9865c48494067ec3a19bc088bf1bf3993dd07662b8d323",
+      "size": 15776
+    },
+    {
+      "path": "app/security/files.py",
+      "sha256": "1507a6dcebad4ba105017e5b6699662484b46d39a7e3fb99bcb9c2ecab3213c4",
+      "size": 3603
+    }
+  ]
+}

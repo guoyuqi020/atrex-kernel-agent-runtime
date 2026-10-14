@@ -22,7 +22,7 @@ from test_agate_gateway_adapter import (
 )
 from test_agent_abba import FakeContexts, NativeFakeAgate
 from test_gateway_abba import _abba_value
-from test_gateway_private_results import _nested_log_tail
+from test_gateway_private_results import SHIM_MESSAGE, _nested_log_tail, _shim_log_tail
 from test_gateway_proxy import _request, _service
 
 from atrex_runtime.artifacts.local import LocalArtifactStore
@@ -35,8 +35,8 @@ from atrex_runtime.gateway.source_tree import SourceTreeAgateClient
 source_seed = test_kernel_sources.source_seed
 
 
-def _failed_job(status: str = "failed") -> dict:
-    return {
+def _failed_job(status: str = "failed", *, shim: bool = False) -> dict:
+    job = {
         "job_id": "ev_candidate_failure",
         "status": status,
         "error": {
@@ -54,6 +54,23 @@ def _failed_job(status: str = "failed") -> dict:
         "stderr": "private-stderr",
         "spec": {"reference_py": "private-reference", "input_py": "private-input"},
     }
+
+    if shim:
+        job["error"]["error_class"] = "validation"
+        job["error"]["reason"] = "source_archive_invalid"
+        job["error"]["details"] = {
+            "failure_origin": "code", "failure_rule": "source_archive_marker",
+            "logs_tail": _shim_log_tail(levels=2),
+        }
+    return job
+
+
+def _assert_shim(text: str) -> None:
+    assert "source_archive_invalid" in text
+    assert "kernel.py" in text and "Blocked import: sys" in text
+    assert "cache_utils.py" in text and "Forbidden name: getattr" in text
+    assert '"retryable":false' in text.replace(" ", "")
+    assert "private" not in text
 
 
 def _assert_diagnostic(text: str, *, include_error_class: bool = True) -> None:
@@ -73,18 +90,14 @@ def _assert_diagnostic(text: str, *, include_error_class: bool = True) -> None:
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("mode", ["full", "correctness_only"])
-@pytest.mark.parametrize("failure", ["failed", "cancelled", "oss_unavailable"])
+@pytest.mark.parametrize("failure", ["failed", "cancelled"])
+@pytest.mark.parametrize("shim", [False, True])
 async def test_source_tree_native_eval_failure_reaches_agent_without_dev_fallback(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source_seed, mode: str, failure: str,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, source_seed, mode: str,
+    failure: str, shim: bool,
 ) -> None:
     registry, control, attempt, capability, service, _ = _service(tmp_path)
-    error = None
-    if failure == "oss_unavailable":
-        error = FakeGatewayError(400, "validation", {
-            "reason": "oss_unavailable", "error_class": "validation",
-            "message": "no OSS-capable cluster matches the requested hardware",
-        })
-    client = FakeAgateClient(_failed_job(failure), submit_error=error)
+    client = FakeAgateClient(_failed_job(failure, shim=shim))
     adapter, _, jobs = _adapter(tmp_path, client)
     adapter._client = SourceTreeAgateClient(client, None)
     adapter._contexts.context = replace(
@@ -111,20 +124,29 @@ async def test_source_tree_native_eval_failure_reaches_agent_without_dev_fallbac
             )
         assert response.status_code == 200, response.text
         assert response.json()["result"]["latency_us_geomean"] is None
-        evaluations = control.list_evaluations(attempt.id)
-        assert all(not item.correct and item.latency_us is None for item in evaluations)
-        if failure != "oss_unavailable":
-            assert not evaluations
+        assert not control.list_evaluations(attempt.id)
         assert client.submitted and {kind for kind, _ in client.submitted} == {"eval"}
         assert all("command" not in payload and "files" not in payload
                    for _, payload in client.submitted)
-        if failure == "oss_unavailable":
-            assert "oss_unavailable" in response.text
-            assert "no OSS-capable cluster" in response.text
-            assert response.json()["job_id"] is None
-        else:
-            assert response.json()["status"] == failure
-            _assert_diagnostic(response.text)
+        assert response.json()["status"] == failure
+        (_assert_shim if shim else _assert_diagnostic)(response.text)
+        if shim:
+            rendered = json.dumps(response.json(), ensure_ascii=False)
+            assert SHIM_MESSAGE in rendered
+            async with AsyncClient(transport=ASGITransport(app=app),
+                                   base_url="http://runtime") as http:
+                read = await http.post(
+                    "/v1/runtime/queries", json={
+                        "schema_version": 2, "attempt_id": attempt.id,
+                        "idempotency_key": "read-source-validation",
+                        "operation": "result_artifact_read",
+                        "result_artifact_digest": response.json()["result_artifact_digest"],
+                    },
+                    headers={"Authorization": f"Bearer {capability.token}"},
+                )
+                assert read.status_code == 200, read.text
+                assert read.json()["result"]["result"] == response.json()["result"]
+                _assert_shim(read.text)
     finally:
         jobs.close()
         control.close()
@@ -309,7 +331,7 @@ async def test_adapter_repetitions_preserve_failure_diagnostics(
 
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    "failure", ["job", "cancelled", "command", "schedule", "sdk_evidence", "exit"],
+    "failure", ["job", "cancelled", "command", "schedule", "sdk_evidence", "exit", "shim"],
 )
 async def test_abba_batch_diagnostic_reaches_http_agent_and_replay(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: str,
@@ -319,8 +341,8 @@ async def test_abba_batch_diagnostic_reaches_http_agent_and_replay(
     class Client(NativeFakeAgate):
         def get_job(self, job_id, **kwargs):
             job = super().get_job(job_id, **kwargs)
-            if failure in {"job", "cancelled"}:
-                job = {**deepcopy(_failed_job()), "job_id": job_id}
+            if failure in {"job", "cancelled", "shim"}:
+                job = {**deepcopy(_failed_job(shim=failure == "shim")), "job_id": job_id}
                 if failure == "cancelled":
                     job["status"] = "cancelled"
             elif failure == "command":
@@ -366,7 +388,9 @@ async def test_abba_batch_diagnostic_reaches_http_agent_and_replay(
                 assert {item["batch_index"] for item in details} == {0, 1}
                 assert all(item["job_id"].startswith("ev_agent_abba_") for item in details)
                 rendered = json.dumps(details)
-                if failure in {"job", "cancelled", "command"}:
+                if failure == "shim":
+                    _assert_shim(rendered)
+                elif failure in {"job", "cancelled", "command"}:
                     _assert_diagnostic(rendered)
                 else:
                     assert expected[failure] in rendered
@@ -378,6 +402,19 @@ async def test_abba_batch_diagnostic_reaches_http_agent_and_replay(
                 else:
                     assert body["result"] == first
                     assert len(client.requests) == submitted
+            if failure == "shim":
+                read = await http.post(
+                    "/v1/runtime/queries", json={
+                        "schema_version": 2, "attempt_id": attempt.id,
+                        "idempotency_key": "read-abba-source-validation",
+                        "operation": "result_artifact_read",
+                        "result_artifact_digest": body["result_artifact_digest"],
+                    },
+                    headers={"Authorization": f"Bearer {capability.token}"},
+                )
+                assert read.status_code == 200, read.text
+                assert read.json()["result"]["result"] == first
+                _assert_shim(read.text)
     finally:
         control.close()
         registry.close()

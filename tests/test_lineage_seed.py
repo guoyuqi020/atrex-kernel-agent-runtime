@@ -175,6 +175,7 @@ async def test_lineage_baseline_seed_clones_bootstrap_and_reuses_its_measurement
         spec = LineageSeedSpecV1.model_validate(
             {
                 "creation_key": "ablation-arm-1",
+                "result_artifact_read_enabled": False,
                 "dsl": "triton",
                 "seed": {
                     "source_type": "lineage_baseline",
@@ -187,6 +188,11 @@ async def test_lineage_baseline_seed_clones_bootstrap_and_reuses_its_measurement
         ablation = await seeder.seed_lineage(campaign_id, spec)
         repeated = await seeder.seed_lineage(campaign_id, spec)
 
+        assert not registry.get_lineage(ablation.lineage_id).result_artifact_read_enabled
+        with pytest.raises(ValueError, match="different content"):
+            await seeder.seed_lineage(
+                campaign_id, spec.model_copy(update={"result_artifact_read_enabled": True})
+            )
         assert repeated == ablation
         # The baseline measurement is reused, so no second authoritative evaluation ran.
         assert len(evaluator.calls) == 1

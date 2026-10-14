@@ -34,8 +34,8 @@ class FakeAgateClient:
         timeout: float = 30.0,
         include_spec: bool = False,
     ) -> dict[str, object]:
-        assert wait is True
-        assert timeout == 90
+        assert wait is False
+        assert timeout == 30
         assert include_spec is False
         if job_id == "job-profile":
             return {"job_id": job_id, "status": "succeeded", "result": {"sol": 71.0}}

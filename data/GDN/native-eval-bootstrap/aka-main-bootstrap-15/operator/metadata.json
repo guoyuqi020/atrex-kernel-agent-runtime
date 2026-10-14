@@ -1,0 +1,249 @@
+{
+  "benchmark_contract": {
+    "abi_evidence": {
+      "artifact": "source://flashinfer@2ab910c58fdd2392914ea05e2a8714946ac0eef6/flashinfer/gdn_kernels/blackwell/gdn_prefill.py",
+      "kind": "source_derived",
+      "locator": "chunk_gated_delta_rule_sm100"
+    },
+    "baseline_policy": "solution.py calls the official non-CP FlashInfer fallback from the pinned public baseline",
+    "deployment": "flashinfer-gdn-sm103-independent-seed",
+    "mutates_inputs": [
+      "output",
+      "output_state"
+    ],
+    "prepared_input_boundary": {
+      "beta_semantics": "FP32 update gate in [0, 1)",
+      "g_semantics": "linear decay in (0, 1]",
+      "qk_normalization": "outside timed boundary",
+      "state_layout": "[num_sequences, num_v_heads, 128, 128] interpreted as [B,H,V,K]"
+    },
+    "replacement_scope": "standalone_callable",
+    "required_runtime": {
+      "cuda_compute_capability": "10.3",
+      "cutedsl_distribution": "nvidia-cutlass-dsl>=4.4.2"
+    },
+    "returns_none": false,
+    "scratch_inputs": [],
+    "timed_boundary": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+  },
+  "category": "OTHER",
+  "correctness_policy": {
+    "max_relative_l2": 0.01,
+    "rationale": "Matches the existing SM103 M64 matrix gate for output and final state."
+  },
+  "dtype": "fp16",
+  "id": "aka_gdn_prefill_sm103_m64_chunk_gated_delta_rule",
+  "input_dtypes": {
+    "beta": "fp32",
+    "cu_seqlens": "int32",
+    "g": "fp32",
+    "initial_state": "fp32",
+    "k": "fp16",
+    "output": "fp16",
+    "output_state": "fp32",
+    "q": "fp16",
+    "v": "fp16"
+  },
+  "num_shapes": 10,
+  "origin": {
+    "commit": "2ab910c58fdd2392914ea05e2a8714946ac0eef6",
+    "framework": "flashinfer",
+    "module": "flashinfer.gdn_kernels.blackwell.gdn_prefill",
+    "symbol": "chunk_gated_delta_rule_sm100"
+  },
+  "output_dtypes": {
+    "output": "fp16",
+    "output_state": "fp32"
+  },
+  "perf_gpu": "NVIDIA L20D",
+  "phase": "prefill",
+  "provider": "flashinfer",
+  "shapes": {
+    "0": {
+      "description": "SM103 M64 prefill B=1 HQ=4 HV=16 T=2048 first state",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b1",
+        "prefill_first"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "1": {
+      "description": "SM103 M64 prefill B=1 HQ=4 HV=32 T=4096 continuation",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b1",
+        "prefill_continuation"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "2": {
+      "description": "SM103 M64 prefill B=1 HQ=8 HV=32 T=5120 first state",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b1",
+        "prefill_first"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "3": {
+      "description": "SM103 M64 prefill B=1 HQ=16 HV=32 T=4096 continuation",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b1",
+        "prefill_continuation"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "4": {
+      "description": "SM103 M64 prefill B=1 HQ=16 HV=48 T=10240 first state",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b1",
+        "prefill_first"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "5": {
+      "description": "SM103 M64 prefill B=1 HQ=16 HV=64 T=16384 continuation",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b1",
+        "prefill_continuation"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "6": {
+      "description": "SM103 M64 prefill B=1 HQ=32 HV=32 T=4096 first state",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b1",
+        "prefill_first"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "7": {
+      "description": "SM103 M64 prefill B=2 HQ=8 HV=32 T=8192 balanced",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b2_balanced",
+        "prefill_first"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "8": {
+      "description": "SM103 M64 prefill B=2 HQ=16 HV=32 T=32768 ragged continuation",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b2_ragged",
+        "prefill_continuation"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "9": {
+      "description": "SM103 M64 prefill B=2 HQ=32 HV=32 T=65536 balanced continuation",
+      "dtype_compute": "fp16",
+      "frequency": null,
+      "group": "SM103 GDN Prefill M64",
+      "kernel": "chunk_gated_delta_rule_sm100",
+      "phase": "prefill",
+      "regimes": [
+        "m64_b2_balanced",
+        "prefill_continuation"
+      ],
+      "source_framework": "FlashInfer",
+      "source_model": "SM103 GDN M64 optimization task",
+      "target_gpus": [
+        "NVIDIA L20D"
+      ],
+      "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    }
+  },
+  "source_commit": "2ab910c58fdd2392914ea05e2a8714946ac0eef6",
+  "source_groups": [
+    "FlashInfer_SM103_GDN_public_baseline"
+  ],
+  "status": "run_eval_validated",
+  "verify_gpu": "NVIDIA L20D"
+}

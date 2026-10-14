@@ -1,0 +1,40 @@
+{
+  "job_id": "ev_3b1cd5669f60",
+  "endpoint": "https://atrex-gateway.alibaba-inc.com",
+  "hardware": "L20D",
+  "shape_count": 10,
+  "correct": true,
+  "latency_us_geomean": 233.07089396164332,
+  "patches": {
+    "historical_kernel_artifact": "sha256:9cd96a961377c4987435bc850af43910683c4e84dd8a33a8eee28e9259461c4b",
+    "changed_files": [
+      "flashinfer/cute_dsl/utils.py",
+      "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py"
+    ],
+    "preserved_function": "get_num_sm (identical AST including functools.cache)",
+    "only_consumer": [
+      "flashinfer/gdn_kernels/blackwell/gdn_prefill.py"
+    ],
+    "kernel_dispatch_and_jit_files_byte_identical": false,
+    "files": {
+      "kernel.py": "b695b2089930e093095973aaa8968d63c8de1fe49640fc555750471a35c1efb6",
+      "LICENSE": "d76ef6f903c7545978e93f91d8a4c7c7574c3f9e80fc5bfba7412f60ad730184",
+      "UPSTREAM_PROVENANCE.json": "dea200d95d75129be444d00d8e732c799762f82fb8fe9976517f21229a6ec4b4",
+      "flashinfer/__init__.py": "746b1229f44c2d61f8eb0c1e3edf748bbfce2c00a967ccc152f2702d36e8508c",
+      "flashinfer/gdn_kernels/__init__.py": "ef9548e7b424bf16b197b97461d28e619df3c26a849cab460a6fe0bd3cf81c0c",
+      "flashinfer/cute_dsl/__init__.py": "35884d18356e6f61c6fb2503c6e5972c48f00269b2ebc469c5bbfc741ee73d44",
+      "flashinfer/cute_dsl/utils.py": "73954e766c7521704837db0d2302635153e155590d9fe84e9cd11aff3ea6943c",
+      "flashinfer/gdn_kernels/blackwell/gdn_prefill.py": "dba25861bb34245a344fc4d4fb443419ecf3f425feb9053823bcd7d7165efe01",
+      "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py": "535c40f075b3bb2ac7b9a871272306dd2bdf8d625030a42928f74c11b68476ee",
+      "flashinfer/gdn_kernels/blackwell/__init__.py": "45c437a7dd9d2c4f5a3d5bd0238e4b3b33344e0a32d517543e2c8ace501b93b9",
+      "flashinfer/gdn_kernels/blackwell/gated_delta_net_tile_scheduler.py": "96654e5e496907907f211b0768a993144b1793c094d2dd9919a5bc78502ed4a9"
+    },
+    "size_compatibility": {
+      "file": "flashinfer/gdn_kernels/blackwell/gated_delta_net_chunked.py",
+      "old_bytes": 203037,
+      "new_bytes": 127617,
+      "executable_ast_unchanged_except_docstrings": true
+    },
+    "kernel_dispatch_and_jit_semantics": "One kernel file reformatted to meet the 128 KiB limit; Executable AST exactly equal after omitting documentation-only docstrings. Other kernel and dispatch files unchanged."
+  }
+}

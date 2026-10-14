@@ -78,6 +78,7 @@ from ..workers.optimizer import (
     OptimizerSessionDriver,
     SessionOptimizerRunner,
 )
+from ..workers.raw import raw_agate_environment
 from ..workers.session_contract import SessionContractPolicy
 from ..workers.token_usage import UsageUnit
 from ..workers.workspace import LocalAttemptWorkspaceAssembler
@@ -197,7 +198,10 @@ def build_campaign_runtime(
         worker_launcher = build_worker_launcher(settings, environment)
         optimizer_environment = campaign.optimizer.environment.resolve(environment)
 
-        optimizer_config = OptimizerSessionConfig(environment=optimizer_environment)
+        optimizer_config = OptimizerSessionConfig(
+            environment=optimizer_environment,
+            raw_agate_environment=raw_agate_environment(settings.agate, environment),
+        )
         core_process_config = build_core_process_config(campaign)
         optimizer_sessions = optimizer_session_driver or CoreOptimizerSessionDriver(
             worker_launcher,

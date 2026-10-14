@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Callable
-from typing import TypeVar, cast
+from collections.abc import Awaitable, Callable
+from contextlib import suppress
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
-from .request_scope import check_execution
+import anyio
+
+from .async_sdk import call_method
+from .request_errors import is_infrastructure_request_error, is_invalid_url_error
+from .request_scope import GatewayExecutionSupersededError, check_execution
 
 _T = TypeVar("_T")
 _EXPONENTIAL_BACKOFF_ERROR_LIMIT = 5
@@ -20,7 +25,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _is_permanent(error: Exception) -> bool:
-    """A 4xx other than request-timeout/overload cannot succeed on retry."""
+    """Known infrastructure reasons override an upstream 4xx classification."""
+    if isinstance(error, GatewayExecutionSupersededError) or is_invalid_url_error(error):
+        return True
+    if is_infrastructure_request_error(error):
+        return False
     status = getattr(error, "status", None)
     if not isinstance(status, int):
         return False
@@ -34,8 +43,10 @@ class RetryingAgateClient:
     five attempts. After the fifth consecutive failure, the request is retried
     every 60 seconds without a terminal attempt limit. Any successful response
     ends the sequence, so the next request starts with a fresh error count. A
-    permanent 4xx other than 408 and 429 is raised immediately because repeating
-    an invalid or unauthorized request cannot recover without changing it.
+    permanent 4xx other than 408 and 429 is raised immediately. Explicit infra
+    errors and oss_unavailable remain retryable even with HTTP 400/validation;
+    invalid candidate sources and unauthorized requests still fail immediately.
+    InvalidURL also fails immediately, including SDK envelopes mislabeled infra.
     """
 
     def __init__(
@@ -43,9 +54,52 @@ class RetryingAgateClient:
         client: object,
         *,
         sleeper: Callable[[float], None] = time.sleep,
+        async_sleeper: Callable[[float], Awaitable[None]] | None = None,
     ) -> None:
         self._client = client
         self._sleeper = sleeper
+        self._async_sleeper = async_sleeper
+
+    async def call_async(self, method: str, *args: object, **kwargs: object) -> Any:
+        """Retry each individual SDK stage without holding a worker during backoff."""
+        if method == "submit_job":
+            kind, raw = args
+            request = cast(dict[str, object], raw)
+            if not request.get("idempotency_key"):
+                request = {**request, "idempotency_key": uuid4().hex}
+            args = (kind, request)
+        error_count = 0
+        while True:
+            check_execution()
+            try:
+                return await call_method(self._client, method, *args, **kwargs)
+            except Exception as error:
+                # Execution fences are not transient transport failures.
+                check_execution()
+                error_count += 1
+                if _is_permanent(error):
+                    raise
+                delay = (
+                    min(_MAX_BACKOFF_SECONDS, _INITIAL_BACKOFF_SECONDS * 2 ** (error_count - 1))
+                    if error_count < _EXPONENTIAL_BACKOFF_ERROR_LIMIT
+                    else _STEADY_RETRY_SECONDS
+                )
+                retry_after = getattr(error, "retry_after_s", None)
+                details = getattr(error, "details", None)
+                if retry_after is None and isinstance(details, dict):
+                    with suppress(TypeError, ValueError):
+                        retry_after = float(details.get("retry_after_s", 0))
+                if isinstance(retry_after, (int, float)) and 0 < retry_after < float("inf"):
+                    delay = max(delay, float(retry_after))
+                _LOGGER.warning(
+                    "Agate %s failed (attempt %d); asynchronously retrying in %.1f seconds: %s: %s",
+                    method,
+                    error_count,
+                    delay,
+                    type(error).__name__,
+                    error,
+                )
+                await (self._async_sleeper or anyio.sleep)(delay)
 
     @property
     def wrapped_client(self) -> object:

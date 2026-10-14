@@ -24,6 +24,7 @@ from .launcher import WorkerLauncher, validate_worker_environment
 from .manifest import AttemptInputManifestV9
 from .optimizer import OptimizerSessionConfig, OptimizerSessionResult
 from .process import BoundedProcessConfig
+from .raw import raw_handoff
 from .session_contract import (
     RUNTIME_CONTRACT_ENVIRONMENT_KEY,
     RUNTIME_CONTRACT_RELATIVE_PATH,
@@ -208,7 +209,18 @@ class CoreOptimizerSessionDriver:
         report_digest = None
         report_error: str | None = None
         candidate_digest = None
-        if launch.attempt_report_path.exists() or launch.attempt_report_path.is_symlink():
+        if config.raw and result.finish_reason == "completed":
+            attempt_id = AttemptInputManifestV9.from_json_bytes(
+                prepared.manifest_path.read_bytes()
+            ).attempt_id
+            report = raw_handoff(attempt_id)
+            report_digest = self._artifacts.put_json(
+                report.model_dump(mode="json"), ArtifactKind.ATTEMPT_REPORT
+            )
+            candidate_digest = self._seal_candidate(prepared, attempt_id)
+        elif not config.raw and (
+            launch.attempt_report_path.exists() or launch.attempt_report_path.is_symlink()
+        ):
             attempt_id = AttemptInputManifestV9.from_json_bytes(
                 prepared.manifest_path.read_bytes()
             ).attempt_id
@@ -314,7 +326,9 @@ class CoreOptimizerSessionDriver:
         attempt_report_path: Path,
         config: OptimizerSessionConfig,
     ) -> Mapping[str, str]:
-        if config.gateway_endpoint is None or config.gateway_capability is None:
+        if not config.raw and (
+            config.gateway_endpoint is None or config.gateway_capability is None
+        ):
             raise ValueError("Optimizer launch requires Attempt-scoped Gateway authority")
         if prepared.correctness_policy_json is None:
             raise ValueError("Optimizer launch requires a trusted correctness policy")
@@ -334,12 +348,25 @@ class CoreOptimizerSessionDriver:
                 "ATREX_ATTEMPT_MANIFEST": str(prepared.manifest_path),
                 "ATREX_ATTEMPT_REPORT_PATH": str(attempt_report_path),
                 "ATREX_EVIDENCE_PROMPT_PATH": str(prepared.root / EVIDENCE_PROMPT_RELATIVE_PATH),
-                "ATREX_GATEWAY_CAPABILITY": config.gateway_capability,
-                "ATREX_GATEWAY_PROXY_URL": config.gateway_endpoint,
                 "ATREX_CORRECTNESS_POLICY_JSON": prepared.correctness_policy_json,
             }
         )
-        if config.wiki_endpoint is not None and config.wiki_capability is not None:
+        if config.raw:
+            if not dict(config.raw_agate_environment).get("AGATE_URL"):
+                raise ValueError("Raw launch requires configured direct Agate credentials/endpoint")
+            for key in ("AGATE_AK", "AGATE_SK", "AGATE_TOKEN", "AGATE_URL"):
+                environment.pop(key, None)
+            environment.update(config.raw_agate_environment)
+            environment["ATREX_AGATE_PYTHON"] = self._config.command_prefix[0]
+        else:
+            assert config.gateway_endpoint is not None and config.gateway_capability is not None
+            environment["ATREX_GATEWAY_CAPABILITY"] = config.gateway_capability
+            environment["ATREX_GATEWAY_PROXY_URL"] = config.gateway_endpoint
+        if (
+            not config.raw
+            and config.wiki_endpoint is not None
+            and config.wiki_capability is not None
+        ):
             environment.update(
                 {
                     "ATREX_WIKI_CAPABILITY": config.wiki_capability,
@@ -360,6 +387,9 @@ class CoreOptimizerSessionDriver:
                 usage_unit=environment["ATREX_USAGE_UNIT"],
                 usage_budget=float(environment["ATREX_USAGE_BUDGET"]),
                 max_attempt_report_bytes=self._config.max_attempt_report_bytes,
+                result_artifact_read_enabled=config.result_artifact_read_enabled,
+                dev_only=config.dev_only,
+                raw=config.raw,
                 tool_modules=(
                     self._config.tool_modules
                     if config.tool_modules is None

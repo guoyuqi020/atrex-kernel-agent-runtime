@@ -182,7 +182,7 @@ async def test_report_waits_for_single_measurement(
         ("dev", {"command": "true"}),
         ("check", {}),
         ("disassemble", {"fmt": "ptx"}),
-        ("env", {"gpu": "L20D"}),
+        ("env", {}),
     ],
 )
 @pytest.mark.parametrize("ending", ["success", "exception", "cancel"])

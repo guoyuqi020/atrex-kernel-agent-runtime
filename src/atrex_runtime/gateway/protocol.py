@@ -300,18 +300,9 @@ class CancelRequestV2(_GatewayRequestV2):
 
 
 class EnvRequestV2(_GatewayRequestV2):
-    """Read selectable GPU environments or one environment's capabilities."""
+    """Read environment and capabilities for the Runtime-owned task GPU."""
 
     operation: Literal["env"]
-    gpu: str | None = Field(default=None, min_length=1, max_length=200)
-    capabilities: bool = False
-    force: bool = False
-
-    @model_validator(mode="after")
-    def _validate_capabilities_target(self) -> EnvRequestV2:
-        if self.capabilities and self.gpu is None:
-            raise ValueError("env capabilities requires gpu")
-        return self
 
 
 class HealthRequestV2(_GatewayRequestV2):

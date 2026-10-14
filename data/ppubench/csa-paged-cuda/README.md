@@ -6,7 +6,7 @@
 - 25 个 shape 全部 Valid，Test 为 0；等权几何平均 latency，无已验证 SOL%。
 - 保留上游 reference、shape 和 metadata；输入使用相邻 agate-inputs 的 8,012 字节精简版，按 SHA-256 校验并冻结。
 - 保留 output 返回别名和 kv_cache/output 原地修改契约，校验全部声明状态。精度为 atol=0.01、rtol=0.05，relative L2 <=0.001。
-- Bootstrap 限时 8 小时；成功后自动启动八臂：轮末/实时共享 × 全开/全关/仅 Experiment/仅 Direction。
+- Bootstrap 限时 8 小时；成功后自动启动十臂：轮末/实时共享 × 全开/全关/仅 Experiment/仅 Direction/全关且禁用结果读取。
 - 每臂三条 trajectory、五个 epoch，每条每轮三次 attempt；每臂最多三次并发。无 Evolver。
 - GPU Wiki 可选开启，查询使用 Agent 原始问题。使用正式 Agate、原生 Eval/ABBA，关闭锁频。
 - Runtime/Campaign 外层时限 72 小时，单独创建新工作区。

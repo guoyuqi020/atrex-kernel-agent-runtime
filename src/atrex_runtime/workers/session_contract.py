@@ -134,6 +134,9 @@ def materialize_session_contract(
     max_attempt_report_bytes: int,
     wiki_available: bool,
     tool_modules: tuple[Literal["directions", "experiments"], ...] = ("directions", "experiments"),
+    result_artifact_read_enabled: bool = True,
+    dev_only: bool = False,
+    raw: bool = False,
     relative_path: Path = RUNTIME_CONTRACT_RELATIVE_PATH,
 ) -> Path:
     """Create one immutable, credential-free contract for the current Session.
@@ -164,6 +167,32 @@ def materialize_session_contract(
         for name, binding in _COMMAND_BINDINGS.items()
         if name not in set().union(*_MODULE_COMMANDS.values()) or name in enabled_commands
     }
+    if type(result_artifact_read_enabled) is not bool:
+        raise ValueError("result_artifact_read_enabled must be a boolean")
+    if not result_artifact_read_enabled:
+        bindings.pop("result-artifact-read")
+    operations = _GATEWAY_OPERATIONS
+    if type(dev_only) is not bool:
+        raise ValueError("dev_only must be a boolean")
+    if dev_only:
+        if tool_modules or result_artifact_read_enabled:
+            raise ValueError("dev_only requires disabled Journals and Result reads")
+        operations = frozenset({"dev"})
+        bindings = {
+            "gateway-execute": {"kind": "gateway", "operations": ["dev"]},
+            "kernel-artifact-read": _COMMAND_BINDINGS["kernel-artifact-read"],
+            "attempt-report": _COMMAND_BINDINGS["attempt-report"],
+            "runtime-contract": _COMMAND_BINDINGS["runtime-contract"],
+        }
+        wiki_available = False
+    if type(raw) is not bool:
+        raise ValueError("raw must be a boolean")
+    if raw:
+        if dev_only or tool_modules or result_artifact_read_enabled:
+            raise ValueError("raw requires no Runtime tools or Result reads")
+        bindings = {}
+        operations = frozenset()
+        wiki_available = False
     if wiki_available:
         bindings["wiki-query"] = {"kind": "runtime-query", "operation": "wiki_query"}
 
@@ -185,7 +214,9 @@ def materialize_session_contract(
                     "policy": "query_on_demand_do_not_copy_into_prompts",
                 },
                 "bindings": bindings,
-                "gateway": gateway_agent_request_schema(allowed_operations=_GATEWAY_OPERATIONS),
+                "gateway": (
+                    {} if raw else gateway_agent_request_schema(allowed_operations=operations)
+                ),
             },
         )
         write_canonical_json(
@@ -198,10 +229,13 @@ def materialize_session_contract(
                 "agent_backend": agent_backend,
                 "model": model,
                 "services": {
-                    "gateway": True,
+                    "gateway": not raw,
                     "wiki": wiki_available,
                 },
                 "tool_modules": list(tool_modules),
+                "result_artifact_read_enabled": result_artifact_read_enabled,
+                "dev_only": dev_only,
+                "raw": raw,
                 "paths": {
                     "read_only": ["agent/", "input/", "prompts/", "skills/"],
                     "writable": ["scratch/", "tools/", "work/"],

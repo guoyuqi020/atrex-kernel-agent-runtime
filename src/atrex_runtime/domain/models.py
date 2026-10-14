@@ -468,8 +468,28 @@ class Lineage:
     evolver_observer_lineage_id: LineageId | None = None
     trajectory_visibility: Literal["isolated", "broadcast"] = "isolated"
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
+    result_artifact_read_enabled: bool = True
+    dev_only: bool = False
+    raw: bool = False
 
     def __post_init__(self) -> None:
+        if type(self.raw) is not bool:
+            raise ValueError("raw must be a boolean")
+        if self.raw and (
+            self.dev_only or self.tool_modules != () or self.result_artifact_read_enabled
+        ):
+            raise ValueError(
+                "raw requires dev_only=false, tool_modules=[] "
+                "and result_artifact_read_enabled=false"
+            )
+        if type(self.dev_only) is not bool:
+            raise ValueError("dev_only must be a boolean")
+        if self.dev_only and (self.tool_modules != () or self.result_artifact_read_enabled):
+            raise ValueError(
+                "dev_only requires tool_modules=[] and result_artifact_read_enabled=false"
+            )
+        if type(self.result_artifact_read_enabled) is not bool:
+            raise ValueError("result_artifact_read_enabled must be a boolean")
         if self.max_challengers < 0:
             raise ValueError("a lineage cannot allow a negative Challenger count")
         if self.bootstrap_source_lineage_id == self.id:
@@ -491,6 +511,7 @@ class Lineage:
         ):
             if model is not None and (not model.strip() or "\x00" in model):
                 raise ValueError(f"Lineage {role} model is invalid")
+
 
 @dataclass(frozen=True, slots=True)
 class Epoch:

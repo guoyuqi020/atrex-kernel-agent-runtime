@@ -1,0 +1,375 @@
+"""AST-based validation for user-submitted source.
+
+The gateway ships user code (candidate + reference bundle) to a GPU worker and runs
+it — that worker is an untrusted execution environment (AGENTS.md §4). These checks
+run at submit time so obviously hostile/broken source is rejected with a clean 400
+instead of failing opaquely on the worker.
+
+Import policy is a **denylist**, not a whitelist: advanced kernels legitimately pull
+in a wide, evolving set of GPU libraries (cutlass, cuda, quack, flash_attn, triton,
+…) plus stdlib (typing, functools, dataclasses, …), and an import whitelist both
+blocks that work and gives false assurance (an allowed lib like ``cuda`` can do
+anything). So we allow any import EXCEPT a small set of dangerous stdlib roots used
+for secret access / file+network I/O / process spawn / sandbox escape. Real
+containment is pod-level (see the three-tier trust model in docs/develop).
+
+Goals:
+1. Block imports of dangerous stdlib (os, subprocess, socket, …) — deny by root.
+2. Block env-var/secret snooping (os.environ, api keys, tokens) via string scan.
+3. Block dangerous calls (eval/exec/open/…) and escape attribute chains.
+4. Enforce the atrex-bench contract (``class Model`` / ``_make_inputs``).
+
+Goal 4 is harness-specific, so it is opt-out: ``validate_sources`` (the SOL-ExecBench
+gate) reuses 1–3 but not 4, because that harness names its entry point explicitly and
+ships half its sources as CUDA/C++ — which ``ast.parse`` cannot read at all.
+"""
+from __future__ import annotations
+
+import ast
+import re
+
+from app.security.files import validate_files
+
+# --- Import denylist: allow everything EXCEPT these top-level roots ---
+# Secret access / process / network / filesystem / native / dynamic-import / deser.
+BLOCKED_IMPORT_ROOTS = {
+    "os", "sys", "subprocess", "multiprocessing",
+    "socket", "http", "urllib", "requests", "ftplib", "smtplib", "telnetlib",
+    "shutil", "pathlib",
+    "ctypes", "cffi", "importlib", "pickle", "marshal", "builtins",
+}
+
+# --- Blacklist: dangerous calls / attribute chains / string patterns ---
+
+FORBIDDEN_NAMES = {
+    # code execution
+    "eval", "exec", "compile", "__import__", "breakpoint",
+    # file / IO
+    "open", "input",
+    # introspection
+    "globals", "locals", "vars", "dir",
+    "getattr", "setattr", "delattr", "hasattr",
+    # type manipulation for sandbox escape
+    "__builtins__", "__loader__", "__spec__",
+}
+
+FORBIDDEN_ATTR_PREFIXES = {
+    # stdlib dangerous modules (catch attribute chains even if the import is blocked)
+    "subprocess.", "shutil.", "pathlib.",
+    "importlib.", "ctypes.", "socket.", "http.", "urllib.",
+    # torch persistence (file I/O)
+    "torch.save", "torch.load",
+    # device manipulation
+    "torch.cuda.set_device",
+}
+
+FORBIDDEN_STRING_PATTERNS = [
+    re.compile(r"environ", re.IGNORECASE),
+    re.compile(r"api[_\s]?key", re.IGNORECASE),
+    re.compile(r"api[_\s]?token", re.IGNORECASE),
+    re.compile(r"secret[_\s]?key", re.IGNORECASE),
+    re.compile(r"access[_\s]?key", re.IGNORECASE),
+    re.compile(r"password", re.IGNORECASE),
+    re.compile(r"credential", re.IGNORECASE),
+]
+
+# Fallback when the caller passes no limit (standalone/tests); the server passes
+# settings.max_kernel_source_bytes so the limit is deployment-tunable.
+MAX_SOURCE_BYTES = 128 * 1024
+
+
+def _import_root(name: str) -> str:
+    """Top-level package of a (possibly dotted) module name."""
+    return name.split(".", 1)[0]
+
+
+def blocked_roots(extra_blocked: list[str] | tuple[str, ...] = ()) -> list[str]:
+    """The effective denylist: built-in dangerous roots + deployment additions."""
+    return sorted(BLOCKED_IMPORT_ROOTS | set(extra_blocked))
+
+
+def blocked_import_roots(source: str, extra_blocked: list[str] | tuple[str, ...] = ()) -> list[str]:
+    """Distinct denied top-level libraries actually imported in ``source``.
+
+    For clear user feedback: collapses ``import os`` / ``from os.path import join``
+    down to the offending root (``os``), deduped & sorted — the set of libraries the
+    caller must drop. Everything else is allowed (see module docstring).
+    """
+    denied = BLOCKED_IMPORT_ROOTS | set(extra_blocked)
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    bad: set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _import_root(alias.name) in denied:
+                    bad.add(_import_root(alias.name))
+        elif isinstance(node, ast.ImportFrom):
+            root = _import_root(node.module or "")
+            if root in denied:
+                bad.add(root)
+    return sorted(bad)
+
+
+def validate_kernel_source(source: str, extra_blocked: list[str] | tuple[str, ...] = (),
+                           max_bytes: int | None = None, *,
+                           require_model_class: bool = True) -> list[str]:
+    """AST gate for one Python source file.
+
+    ``require_model_class=False`` is for harnesses that name their entry point explicitly
+    instead of relying on the ``class Model`` convention — SOL-ExecBench does
+    (``spec.entry_point = "file.py::func"``), and 0 of its 7 sample Python sources define
+    ``class Model``. Everything else (import blacklist, forbidden names/attrs, secret-ish
+    string literals, no ``__main__`` block) still applies.
+    """
+    errors: list[str] = []
+    denied = BLOCKED_IMPORT_ROOTS | set(extra_blocked)
+    limit = max_bytes if max_bytes is not None else MAX_SOURCE_BYTES
+
+    n = len(source.encode("utf-8"))
+    if n > limit:
+        errors.append(f"Source too large: {n} bytes > {limit}")
+        return errors
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        errors.append(f"Syntax error: {e}")
+        return errors
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _import_root(alias.name) in denied:
+                    errors.append(f"Blocked import: {alias.name} (module {_import_root(alias.name)!r} is not permitted)")
+
+        elif isinstance(node, ast.ImportFrom):
+            module = node.module or ""
+            if _import_root(module) in denied:
+                errors.append(f"Blocked import: from {module} (module {_import_root(module)!r} is not permitted)")
+
+        elif isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
+            if isinstance(node.ctx, ast.Load):
+                errors.append(f"Forbidden name: {node.id}")
+
+        elif isinstance(node, ast.Attribute):
+            full = _get_attr_str(node)
+            if full:
+                for prefix in FORBIDDEN_ATTR_PREFIXES:
+                    if full.startswith(prefix):
+                        errors.append(f"Forbidden attribute access: {full}")
+
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            _check_string_literal(node.value, errors)
+
+    if require_model_class:
+        has_model_class = any(
+            isinstance(node, ast.ClassDef) and node.name == "Model"
+            for node in ast.iter_child_nodes(tree)
+        )
+        if not has_model_class:
+            errors.append("Missing class Model(nn.Module)")
+
+    if _has_main_block(tree):
+        errors.append("Source must not contain an if __name__ == '__main__' block")
+
+    return errors
+
+
+def validate_input_generator(source: str) -> list[str]:
+    """Validate the ``_make_inputs`` function source."""
+    errors: list[str] = []
+
+    if len(source.encode("utf-8")) > 8 * 1024:
+        errors.append("Input generator too large")
+        return errors
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as e:
+        errors.append(f"Syntax error in input generator: {e}")
+        return errors
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _import_root(alias.name) in BLOCKED_IMPORT_ROOTS:
+                    errors.append(f"Input generator: blocked import: {alias.name}")
+
+        elif isinstance(node, ast.ImportFrom):
+            if _import_root(node.module or "") in BLOCKED_IMPORT_ROOTS:
+                errors.append(f"Input generator: blocked import: from {node.module}")
+
+        elif isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
+            if isinstance(node.ctx, ast.Load):
+                errors.append(f"Input generator: forbidden name: {node.id}")
+
+        elif isinstance(node, ast.Constant) and isinstance(node.value, str):
+            _check_string_literal(node.value, errors, prefix="Input generator: ")
+
+    has_make_inputs = any(
+        isinstance(node, ast.FunctionDef) and node.name == "_make_inputs"
+        for node in ast.iter_child_nodes(tree)
+    )
+    if not has_make_inputs:
+        errors.append("Input generator must define _make_inputs()")
+
+    return errors
+
+
+def validate_shape_ids(shape_ids) -> list[str]:
+    """Shape ids must be integer-parseable — the worker seeds RNG with ``int(shape_id)``."""
+    errors: list[str] = []
+    for sid in shape_ids:
+        try:
+            int(str(sid))
+        except (TypeError, ValueError):
+            errors.append(
+                f"shape id {sid!r} must be an integer-parseable string (e.g. \"0\", \"8\"); "
+                f"the worker seeds RNG with int(shape_id)."
+            )
+    return errors
+
+
+def validate_io_contract(kernel_src: str, input_src: str) -> list[str]:
+    """Best-effort: ``Model.forward`` must accept every key ``_make_inputs`` returns.
+
+    The worker calls ``model(**inputs)``, so a name mismatch raises a confusing
+    ``TypeError: forward() got an unexpected keyword argument``. Only enforced when
+    both sides are statically determinable (literal return dict, no ``**kwargs``).
+    """
+    params = _forward_param_names(kernel_src)
+    keys = _make_inputs_keys(input_src)
+    if params is None or keys is None:
+        return []
+    missing = sorted(keys - params)
+    if missing:
+        return [
+            f"Model.forward is missing parameter(s) {missing} that _make_inputs() returns. "
+            f"forward must accept exactly the input keys (called as model(**inputs)). "
+            f"forward params={sorted(params)}, input keys={sorted(keys)}."
+        ]
+    return []
+
+
+# --- helpers ---
+
+def _check_string_literal(value: str, errors: list[str], prefix: str = "") -> None:
+    for pattern in FORBIDDEN_STRING_PATTERNS:
+        if pattern.search(value):
+            errors.append(f"{prefix}Forbidden string literal matching '{pattern.pattern}': {value[:60]!r}")
+
+
+def _get_attr_str(node: ast.Attribute) -> str | None:
+    parts = []
+    current: ast.AST = node
+    while isinstance(current, ast.Attribute):
+        parts.append(current.attr)
+        current = current.value
+    if isinstance(current, ast.Name):
+        parts.append(current.id)
+        return ".".join(reversed(parts))
+    return None
+
+
+def _has_main_block(tree: ast.Module) -> bool:
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, ast.If):
+            test = node.test
+            if isinstance(test, ast.Compare) and len(test.comparators) == 1:
+                left, comp = test.left, test.comparators[0]
+                if (isinstance(left, ast.Name) and left.id == "__name__"
+                        and isinstance(comp, ast.Constant) and comp.value == "__main__"):
+                    return True
+    return False
+
+
+def _forward_param_names(kernel_src: str) -> set[str] | None:
+    """Names of ``Model.forward`` params (excluding self), or None if not statically found."""
+    try:
+        tree = ast.parse(kernel_src)
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef) and node.name == "Model":
+            for sub in node.body:
+                if isinstance(sub, ast.FunctionDef) and sub.name == "forward":
+                    if sub.args.kwarg:  # **kwargs -> accepts anything
+                        return None
+                    return {a.arg for a in sub.args.args if a.arg != "self"}
+    return None
+
+
+def _make_inputs_keys(input_src: str) -> set[str] | None:
+    """String keys of the dict returned by ``_make_inputs``, or None if not static."""
+    try:
+        tree = ast.parse(input_src)
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == "_make_inputs":
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Return) and isinstance(sub.value, ast.Dict):
+                    keys = set()
+                    for k in sub.value.keys:
+                        if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                            keys.add(k.value)
+                        else:
+                            return None  # dynamic key -> can't check statically
+                    return keys
+    return None
+
+
+def validate_entry_point(entry_point: str, source_paths: set[str]) -> list[str]:
+    """``"file.py::symbol"`` must be well-formed and name a submitted source.
+
+    This is the check that replaces ``class Model`` for explicit-entry harnesses: without it
+    a typo becomes a runtime import failure on the GPU instead of a 400 at submit. Note the
+    file need NOT be Python — upstream's own samples use ``main.cpp::run`` and ``kernel.cu::run``.
+    """
+    if "::" not in entry_point:
+        return [f"entry_point must be '<path>::<symbol>', got {entry_point!r}"]
+    path, _, symbol = entry_point.partition("::")
+    errors: list[str] = []
+    if not path or not symbol:
+        errors.append(f"entry_point must be '<path>::<symbol>', got {entry_point!r}")
+        return errors
+    if path not in source_paths:
+        errors.append(f"entry_point file {path!r} is not among sources "
+                      f"({sorted(source_paths)[:8]})")
+    if not symbol.isidentifier():
+        errors.append(f"entry_point symbol {symbol!r} is not a valid identifier")
+    return errors
+
+
+def validate_sources(sources: dict[str, str], entry_point: str,
+                     extra_blocked: list[str] | tuple[str, ...] = (),
+                     max_bytes: int | None = None) -> list[str]:
+    """Gate for a multi-file, possibly multi-language solution (SOL-ExecBench).
+
+    The middle tier of the three trust levels (docs/develop/api-contract.md §设计公理 3):
+    stricter than ``dev`` (which does no source inspection at all), looser than ``eval``
+    (which can assume one Python file with ``class Model``).
+
+    Why it can't just call ``validate_kernel_source`` on everything: half of upstream's own
+    sample sources are ``.cu``/``.cpp``/``.h``, and ``ast.parse`` on those returns a
+    "Syntax error" — i.e. the strict gate rejects every valid CUDA/CUTLASS submission. So
+    Python files get the full AST treatment (minus ``class Model``) and non-Python files get
+    the size/path rules plus a raw scan for the same secret-ish patterns, which is the only
+    part of the AST check that survives without a parse tree.
+    """
+    errors = list(validate_files(sources))
+    errors += validate_entry_point(entry_point, set(sources))
+    for path, content in sorted(sources.items()):
+        if not isinstance(path, str) or not isinstance(content, str):
+            continue                      # already reported by validate_files
+        if path.endswith(".py"):
+            errors += [f"{path}: {e}" for e in validate_kernel_source(
+                content, extra_blocked, max_bytes, require_model_class=False)]
+        else:
+            # No parse tree, so literal-vs-comment is indistinguishable. Verified against
+            # upstream's 8 non-Python samples: zero false positives.
+            _check_string_literal(content, errors, prefix=f"{path}: ")
+    return errors

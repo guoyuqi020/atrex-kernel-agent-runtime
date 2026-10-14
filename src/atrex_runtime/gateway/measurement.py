@@ -22,6 +22,7 @@ from .agate import (
     AgateRequestBuilder,
     parse_agate_evaluation,
 )
+from .async_sdk import sdk_call
 from .batched_evaluate import (
     ShapeBatch,
     ShapeBatchedEvaluateExecutor,
@@ -33,6 +34,7 @@ from .execution import build_evaluation_request, call_agate_json
 from .job_recovery import JobExecution, run_with_job_recovery
 from .job_wait import wait_for_terminal_job
 from .protocol import EvaluationV2
+from .request_errors import is_infrastructure_request_error
 
 _TERMINAL = frozenset({"succeeded", "failed", "cancelled"})
 
@@ -115,11 +117,17 @@ class AgateKernelMeasurementRunner(KernelMeasurementRunner):
 
             async def execute(submission: dict[str, object]) -> JobExecution:
                 try:
-                    accepted = await self._call(lambda: self._client.submit_job("eval", submission))
+                    accepted = await self._call(sdk_call(
+                        self._client, "submit_job", "eval", submission,
+                    ))
                 except InfrastructureError as error:
                     source = error.__cause__
                     fields = vars(source) if source is not None else {}
-                    if fields.get("status") in {400, 422}:
+                    if (
+                        fields.get("status") in {400, 422}
+                        and source is not None
+                        and not is_infrastructure_request_error(source)
+                    ):
                         raise AgateCandidateRejection("candidate request rejected") from error
                     raise
                 job_id = accepted.get("job_id")

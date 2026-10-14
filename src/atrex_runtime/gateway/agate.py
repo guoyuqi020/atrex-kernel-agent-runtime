@@ -29,6 +29,7 @@ from ..domain.errors import (
 from ..domain.ids import AttemptId, parse_attempt_id
 from ..roofline import strip_roofline_hardware_suffix
 from ..sqlite_support import configure_durable_sqlite, immediate_transaction
+from .async_sdk import run_sdk_call, sdk_call
 from .batched_evaluate import (
     ShapeBatch,
     ShapeBatchedEvaluateExecutor,
@@ -57,6 +58,11 @@ from .repeated_evaluate import (
     aggregate_evaluations,
     repeated_evaluate_result,
     repeated_evaluate_worker_result,
+)
+from .request_errors import (
+    infrastructure_request_error,
+    is_infrastructure_request_error,
+    is_invalid_url_error,
 )
 from .request_scope import GatewayExecutionSupersededError, check_execution
 from .retrying_client import RETRYABLE_CLIENT_STATUSES, RetryingAgateClient
@@ -205,7 +211,9 @@ def load_agate_sdk(
             "atrex-gateway-client is required for the Agate Gateway adapter"
         ) from error
 
-    client_type = cast(Callable[..., AgateClient], package.__dict__["Client"])
+    from .sdk_transport import RuntimeAgateClient
+
+    client_type = cast(Callable[..., AgateClient], RuntimeAgateClient)
     builder = cast(
         AgateRequestBuilder,
         package.__dict__["build_eval_request_from_content"],
@@ -229,7 +237,9 @@ def load_agate_sdk(
             config.access_key.get_secret_value(),
             config.secret_key.get_secret_value(),
         )
-    client = client_type(config.base_url, auth=auth, timeout=config.http_timeout_s)
+    client = client_type(
+        config.base_url, auth=auth, timeout=config.http_timeout_s, transport_retries=0,
+    )
     return cast(AgateClient, OssAgateClient(RetryingAgateClient(client))), builder
 
 
@@ -528,7 +538,7 @@ class AgateGatewayAdapter:
         if request.operation is GatewayOperation.ENV:
             return await self._environment(request)
         if request.operation is GatewayOperation.HEALTH:
-            ok = await anyio.to_thread.run_sync(self._client.health)
+            ok = await run_sdk_call(sdk_call(self._client, "health"))
             return GatewayAdapterResult("completed", {"ok": ok})
         if request.operation is GatewayOperation.CONFIG:
             summary: dict[str, JsonValue] = dict(self._connection_summary)
@@ -636,7 +646,7 @@ class AgateGatewayAdapter:
         existing = self._jobs.find_request(attempt_id, idempotency_key)
         if existing is None:
             acceptance = await self._call(
-                lambda: self._client.submit_job(kind, submission),
+                sdk_call(self._client, "submit_job", kind, submission),
                 validation_is_candidate=True,
             )
             job_id = acceptance.get("job_id")
@@ -941,21 +951,23 @@ class AgateGatewayAdapter:
         binding = self._jobs.require_owned(request.attempt_id, request.job_id)
         wait = bool(request.parameters.get("wait", False))
         include_spec = bool(request.parameters.get("include_spec", False))
-        job = await self._call(
-            lambda: self._client.get_job(
-                request.job_id or "",
-                wait=wait,
-                timeout=self._wait_timeout_s if wait else 30.0,
-                include_spec=include_spec,
+        if wait:
+            job = await wait_for_terminal_job(
+                self._client, request.job_id, call=self._call,
+                wait_timeout_s=self._wait_timeout_s, include_spec=include_spec,
             )
-        )
+        else:
+            job = await self._call(sdk_call(
+                self._client, "get_job", request.job_id,
+                wait=False, timeout=30.0, include_spec=include_spec,
+            ))
         return self._map_bound_job(binding, job)
 
     async def _cancel(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
         if request.job_id is None:
             raise ValueError("cancel requires job_id")
         binding = self._jobs.require_owned(request.attempt_id, request.job_id)
-        job = await self._call(lambda: self._client.cancel_job(request.job_id or ""))
+        job = await self._call(sdk_call(self._client, "cancel_job", request.job_id or ""))
         return self._map_bound_job(binding, job)
 
     async def _list_jobs(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
@@ -969,7 +981,9 @@ class AgateGatewayAdapter:
         bindings = self._jobs.list_owned(request.attempt_id, kind=kind, limit=limit_value)
         rows: list[JsonValue] = []
         for binding in bindings:
-            job = await self._call(partial(self._client.get_job, binding.job_id))
+            job = await self._call(sdk_call(
+                self._client, "get_job", binding.job_id, wait=False, timeout=30.0,
+            ))
             if status is None or job.get("status") == status:
                 mapped = self._map_bound_job(binding, job)
                 if mapped.worker_result is None:
@@ -1024,8 +1038,27 @@ class AgateGatewayAdapter:
             or result.get("operation") != operation.value
             or not isinstance(result.get("passed"), bool)
         ):
+            if isinstance(result, dict) and result.get("output_truncated") is True:
+                stdout = result.get("stdout")
+                retained_bytes = len(stdout.encode("utf-8")) if isinstance(stdout, str) else 0
+                output_bytes = result.get("output_bytes")
+                sizes = f"retained_stdout_bytes={retained_bytes}"
+                if isinstance(output_bytes, int) and not isinstance(output_bytes, bool):
+                    sizes += f", original_output_bytes={output_bytes}"
+                raise InfrastructureError(
+                    "diagnostic_output_truncated: Agate truncated the diagnostic stdout "
+                    f"({sizes}); its structured summary is missing or incomplete. "
+                    "The outer process exited successfully, but the diagnostic verdict is "
+                    "unavailable; this is not a Kernel failure. Reading the same completed "
+                    "job again cannot restore discarded bytes. Runtime's diagnostic driver "
+                    "must bound its output; a narrower kernel filter/launch range can also "
+                    "reduce export size."
+                )
             raise InfrastructureError(
-                "source-tree diagnostic completed without its structured result"
+                "source-tree diagnostic completed without its structured result: "
+                "the diagnostic record is missing, malformed, or does not match the "
+                "requested operation. The diagnostic verdict is unavailable; this is "
+                "not evidence of a Kernel failure."
             )
 
     def _binding_shape_ids(
@@ -1059,18 +1092,14 @@ class AgateGatewayAdapter:
         return replace(context, contract=contract)
 
     async def _environment(self, request: GatewayAdapterRequest) -> GatewayAdapterResult:
-        force = bool(request.parameters.get("force", False))
-        gpu_value = request.parameters.get("gpu")
-        gpu = gpu_value if isinstance(gpu_value, str) else None
-        capabilities = bool(request.parameters.get("capabilities", False))
-        if gpu is None:
-            value = await self._call_json(lambda: self._client.list_env(force=force))
-            return GatewayAdapterResult("completed", {"env": value})
-        if capabilities:
-            value = await self._call(lambda: self._client.get_capabilities(gpu, force=force))
-        else:
-            value = await self._call(lambda: self._client.get_env(gpu, force=force))
-        return GatewayAdapterResult("completed", value)
+        gpu = self._contexts.resolve(request.attempt_id).agate_gpu
+        environment = await self._call(sdk_call(self._client, "get_env", gpu, force=False))
+        capabilities = await self._call(sdk_call(
+            self._client, "get_capabilities", gpu, force=False,
+        ))
+        return GatewayAdapterResult(
+            "completed", {"gpu": gpu, "env": environment, "capabilities": capabilities}
+        )
 
     def _build_request(
         self,
@@ -1435,11 +1464,20 @@ class AgateGatewayAdapter:
     ) -> JsonValue:
         check_execution()
         try:
-            value = await anyio.to_thread.run_sync(operation)
+            value = await run_sdk_call(operation)
         except (GatewayExecutionSupersededError, InfrastructureError):
             raise
         except Exception as error:
             error_fields = vars(error)
+            if is_invalid_url_error(error):
+                raise ValueError(
+                    "Agate SDK rejected an invalid request URL (InvalidURL) before sending it. "
+                    "This configuration error is not retryable; the Runtime operator must check "
+                    "the task's agate_gpu selector and Agate base URL. "
+                    "Do not add GPU parameters to the Agent env request."
+                ) from error
+            if is_infrastructure_request_error(error):
+                raise infrastructure_request_error(error) from error
             if (
                 validation_is_candidate
                 and error_fields.get("status") in {400, 422}
@@ -1667,8 +1705,9 @@ def _has_correctness_failure(value: JsonValue | None) -> bool:
             return True
         if value.get("status") in ("failed", "skipped"):
             return True
-        if value.get("unexpected_mutations"):
-            return True
+        # Agate's unexpected_mutations contains comparison records, including
+        # successful checks. Inspect their verdicts recursively, like outputs
+        # and mutated_inputs; a nonempty list is not itself a violation.
         return any(_has_correctness_failure(child) for child in value.values())
     if isinstance(value, list):
         return any(_has_correctness_failure(child) for child in value)

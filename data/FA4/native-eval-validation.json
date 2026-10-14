@@ -1,0 +1,46 @@
+{
+  "validated_at": "2026-10-13 Asia/Shanghai",
+  "endpoint": "https://atrex-gateway.alibaba-inc.com",
+  "gpu": "L20D",
+  "transport": "native Eval with OSS source archive; no Dev fallback",
+  "source_bundle_commit": "2d0f4282f5d0df338d0fc9c352309becbce86352",
+  "source_bundle_sha256": "dffb0db84006622bd986e6101ed8adee6509e5efcef369392a95e5f809f6afea",
+  "adapter_sha256": "026d0360b6deff98b2462a2c8a8077b2909c0dbbef8a6c941bd98cf2ef608f7c",
+  "local_whole_tree_gate": {
+    "python_files": 65,
+    "archive_files": 75,
+    "failures": {},
+    "archive_errors": [],
+    "passed": true
+  },
+  "upstream_p128": {
+    "job_id": "ev_af6542f4a6a0",
+    "job_status": "succeeded",
+    "source_validation": "passed",
+    "jit_and_correctness": "passed",
+    "num_correctness_cases": 1,
+    "atol": 0.06,
+    "rtol": 0.04,
+    "latency_measured": false,
+    "purpose": "Regression of original supported R0 path; does not replace target acceptance"
+  },
+  "target_contract": {
+    "job_id": "ev_aa461753ecb6",
+    "job_status": "succeeded",
+    "source_validation": "passed",
+    "shape_count": 30,
+    "correctness": "expected_bringup_required",
+    "candidate_errors": {
+      "AssertionError: SM100 forward with head_dim=256 does not support seqused_q/seqused_k": 30
+    },
+    "accepted_baseline": false
+  },
+  "scope": "Compatibility only: original algorithmic R0, unchanged task contract. This is not a successful Bootstrap or a full-library equivalence claim.",
+  "regression_tests": {
+    "passed": 118,
+    "deselected": 4,
+    "deselection_reason": "Unrelated removed FA4-SM120 assets and separate pin-review fixture",
+    "ruff": "passed",
+    "mypy": "passed"
+  }
+}

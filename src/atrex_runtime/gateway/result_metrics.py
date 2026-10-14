@@ -12,6 +12,7 @@ from typing import cast
 
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, parse_artifact_digest
+from ..domain.models import KernelRevision
 from .contract import load_evaluation_contract
 from .correctness import correctness_summary, merge_correctness_summaries
 
@@ -74,6 +75,28 @@ def gateway_result_projection(
         projected["measurement_domain"] = "valid"
         projected["shape_ids_are_opaque"] = True
     return projected
+
+
+def input_result_payload(
+    artifacts: LocalArtifactStore,
+    revision: KernelRevision,
+) -> dict[str, JsonValue]:
+    """One safe view for reading and citing a sealed input's authoritative result."""
+    result = gateway_result_projection(
+        artifacts,
+        revision.evaluation.gateway_result_digest,
+        correct=revision.evaluation.correct,
+        latency_us=revision.evaluation.latency_us,
+    )
+    result.pop("operation", None)
+    result.pop("status", None)
+    return {
+        "operation": "evaluate",
+        "status": "completed",
+        "result": result,
+        "kernel_artifact_digest": str(revision.artifact_digest),
+        "result_artifact_digest": str(revision.evaluation.gateway_result_digest),
+    }
 
 
 def _sealed_agent_shape_id_map(
@@ -188,6 +211,27 @@ def _latency_by_shape_value(
     direct = _shape_mapping(value.get("latency_us_by_shape"))
     if direct:
         return direct
+    performance = value.get("performance")
+    shapes = performance.get("shapes") if isinstance(performance, Mapping) else None
+    if isinstance(shapes, Mapping):
+        native: dict[str, float] = {}
+        for shape_id, shape in shapes.items():
+            if not isinstance(shape, Mapping) or shape.get("error") is not None:
+                continue
+            samples = shape.get("samples")
+            if not isinstance(samples, list):
+                continue
+            times = [
+                number
+                for sample in samples
+                if isinstance(sample, Mapping)
+                and (number := _positive_finite_number(sample.get("end_to_end_time_ms")))
+                is not None
+            ]
+            if times:
+                native[str(shape_id)] = statistics.median(times) * 1000.0
+        if native:
+            return native
     for key in ("result", "worker_result", "job"):
         nested = value.get(key)
         if isinstance(nested, Mapping):

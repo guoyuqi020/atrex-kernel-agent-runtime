@@ -6,9 +6,9 @@ import json
 from pathlib import Path
 from typing import Any, cast
 
-from ..domain.errors import InfrastructureError
 from ..kernel_sources import KernelSourceBundle, KernelSourceContract
 from .abba import CommitPinnedAtrexBenchEvaluator
+from .async_sdk import call_method, prepare_call
 from .contract import AgateEvaluationContractV1
 from .eval_sources import prepare_eval_sources
 from .protocol import AGATE_MAX_JOB_TIMEOUT_S
@@ -44,9 +44,24 @@ class SourceTreeAgateClient:
         return getattr(self._client, name)
 
     def submit_job(self, kind: str, payload: dict[str, object]) -> dict[str, object]:
+        kind, request = self._prepare_submission(kind, payload)
+        return self._client.submit_job(kind, request)  # type: ignore[attr-defined,no-any-return]
+
+    async def call_async(self, method: str, *args: object, **kwargs: object) -> Any:
+        if method == "submit_job":
+            kind, payload = await prepare_call(self._prepare_submission, *args)
+            return await call_method(self._client, method, kind, payload)
+        value = await call_method(self._client, method, *args, **kwargs)
+        return self._decode_job(value) if method == "get_job" else value
+
+    def _prepare_submission(
+        self,
+        kind: str,
+        payload: dict[str, object],
+    ) -> tuple[str, dict[str, object]]:
         raw = payload.get(SOURCE_REQUEST_KEY)
         if raw is None:
-            return self._client.submit_job(kind, payload)  # type: ignore[attr-defined,no-any-return]
+            return kind, payload
         if kind not in {"eval", "profile", "compile", "disassemble"}:
             raise ValueError(f"unsupported source-tree operation: {kind}")
         if not isinstance(raw, dict):
@@ -61,17 +76,19 @@ class SourceTreeAgateClient:
             request = build_diagnostic_request(
                 kind, payload, source, contract, raw["hardware_target"]
             )
-            return self._client.submit_job("dev", request)  # type: ignore[attr-defined,no-any-return]
-        candidate, _, attachments = prepare_eval_sources(
-            source, requirements=contract.requirements
-        )
+            return "dev", request
+        candidate, _, attachments = prepare_eval_sources(source, requirements=contract.requirements)
         request = {key: value for key, value in payload.items() if key != SOURCE_REQUEST_KEY}
         request.update(attachments)
         request["candidate"] = candidate
-        return self._client.submit_job("eval", request)  # type: ignore[attr-defined,no-any-return]
+        return "eval", request
 
     def get_job(self, job_id: str, **kwargs: Any) -> dict[str, object]:
         job = self._client.get_job(job_id, **kwargs)  # type: ignore[attr-defined]
+        return self._decode_job(job)
+
+    @staticmethod
+    def _decode_job(job: Any) -> dict[str, object]:
         if (
             not isinstance(job, dict)
             or job.get("status") != "succeeded"
@@ -84,9 +101,18 @@ class SourceTreeAgateClient:
             return job
         for line in reversed(stdout.splitlines()):
             if line.startswith(DIAGNOSTIC_PREFIX):
-                diagnostic = json.loads(line[len(DIAGNOSTIC_PREFIX) :])
-                if diagnostic.get("operation") not in {"profile", "check", "disassemble"}:
-                    raise InfrastructureError("invalid source-tree diagnostic result")
+                try:
+                    diagnostic = json.loads(line[len(DIAGNOSTIC_PREFIX) :])
+                except ValueError:
+                    # Preserve the transport's truncation evidence. The adapter
+                    # knows whether this is a diagnostic or an ordinary Dev job.
+                    return job
+                if (
+                    not isinstance(diagnostic, dict)
+                    or diagnostic.get("operation") not in {"profile", "check", "disassemble"}
+                    or not isinstance(diagnostic.get("passed"), bool)
+                ):
+                    return job
                 return {**job, "result": diagnostic, "source_tree_execution": result}
 
         return job

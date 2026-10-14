@@ -14,6 +14,7 @@ from conftest import digest
 from evaluation_failure_fixture import device_failure_result
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
+from atrex_runtime.domain.errors import InfrastructureError
 from atrex_runtime.domain.ids import (
     new_attempt_id,
     parse_campaign_id,
@@ -65,8 +66,8 @@ class FakeClient:
         timeout: float = 30.0,
         include_spec: bool = False,
     ) -> dict[str, object]:
-        assert (job_id, wait, include_spec) == ("ev_final", True, False)
-        assert timeout == 100.0
+        assert (job_id, wait, include_spec) == ("ev_final", False, False)
+        assert timeout == 30.0
         return {
             "job_id": job_id,
             "status": "succeeded",
@@ -96,8 +97,8 @@ class RepeatedFinalClient:
         timeout: float = 30.0,
         include_spec: bool = False,
     ) -> dict[str, object]:
-        assert wait is True
-        assert timeout == 100.0
+        assert wait is False
+        assert timeout == 30.0
         assert include_spec is False
         return {
             "job_id": job_id,
@@ -124,8 +125,8 @@ class ProfilingClient:
         timeout: float = 30.0,
         include_spec: bool = False,
     ) -> dict[str, object]:
-        assert wait is True
-        assert timeout == 100.0
+        assert wait is False
+        assert timeout == 30.0
         assert include_spec is False
         if job_id == "ev_final":
             return {
@@ -177,12 +178,12 @@ class TransientPollingClient(FakeClient):
         timeout: float = 30.0,
         include_spec: bool = False,
     ) -> dict[str, object]:
-        assert (job_id, wait, include_spec) == ("ev_final", True, False)
+        assert (job_id, wait, include_spec) == ("ev_final", False, False)
         self.poll_calls += 1
         if self.poll_calls == 1:
-            assert timeout == 100.0
+            assert timeout == 30.0
             raise TransientPollError
-        assert 0 < timeout <= 100.0
+        assert timeout == 30.0
         return {
             "job_id": job_id,
             "status": "succeeded",
@@ -502,7 +503,10 @@ async def test_finalizer_uses_shared_client_retry_for_transient_poll_failure(
         agate_job_id="ev_agent",
     )
     raw_client = TransientPollingClient()
-    client = RetryingAgateClient(raw_client, sleeper=lambda _: None)
+    async def no_backoff(_):
+        pass
+
+    client = RetryingAgateClient(raw_client, async_sleeper=no_backoff)
     events = FakeEvents()
     finalizer = AgateAuthoritativeCandidateEvaluator(
         client,  # type: ignore[arg-type]
@@ -738,8 +742,10 @@ async def test_finalizer_profiles_correct_kernel_when_roofline_is_missing(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize("oss_unavailable", [False, True])
 async def test_finalizer_records_validation_rejection_as_authoritative_outcome(
     tmp_path: Path,
+    oss_unavailable: bool,
 ) -> None:
     registry = SqliteRegistry(tmp_path / "registry.sqlite")
     control = SqliteGatewayControl(
@@ -773,8 +779,15 @@ async def test_finalizer_records_validation_rejection_as_authoritative_outcome(
         latency_us=8.0,
         agate_job_id="ev_agent",
     )
+    class Client(RejectingClient):
+        def submit_job(self, kind, request):
+            error = CandidateValidationError()
+            if oss_unavailable:
+                error.payload["reason"] = "oss_unavailable"
+            raise error
+
     finalizer = AgateAuthoritativeCandidateEvaluator(
-        RejectingClient(),  # type: ignore[arg-type]
+        Client(),  # type: ignore[arg-type]
         _builder,
         FakeContexts(),
         artifacts,
@@ -784,6 +797,23 @@ async def test_finalizer_records_validation_rejection_as_authoritative_outcome(
         bootstrap_stages=(BootstrapEvaluationStage(1),),
         clock=lambda: NOW,
     )
+
+    if oss_unavailable:
+        with pytest.raises(ExceptionGroup) as caught:
+            await finalizer.finalize(attempt_id, candidate_digest)
+        assert all(isinstance(e, InfrastructureError) for e in caught.value.exceptions)
+        assert "oss_unavailable" in caught.value.exceptions[0].public_detail
+        assert control.get_committed_outcome(attempt_id) is None
+        assert [e.source for e in control.list_evaluations(attempt_id)] == [
+            GatewayEvaluationSource.AGENT,
+        ]
+        finalizer._client = FakeClient()
+        recovered = await finalizer.finalize(attempt_id, candidate_digest)
+        assert recovered.correct is True
+        assert all(e.correct for e in control.list_evaluations(attempt_id))
+        control.close()
+        registry.close()
+        return
 
     outcome = await finalizer.finalize(attempt_id, candidate_digest)
 

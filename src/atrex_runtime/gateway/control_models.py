@@ -16,7 +16,7 @@ from ..domain.ids import (
     KernelAgentRevisionId,
     LineageId,
 )
-from ..domain.models import Dsl
+from ..domain.models import Dsl, KernelRevision
 
 
 class GatewayOperation(StrEnum):
@@ -165,7 +165,7 @@ class GatewayKernelTrialObservation:
 
     idempotency_key: str
     operation: GatewayOperation
-    request_digest: ArtifactDigest
+    request_digest: ArtifactDigest | None
     gateway_result_digest: ArtifactDigest | None
     result_artifact_digest: ArtifactDigest | None
     created_at: str
@@ -199,6 +199,9 @@ class GatewayKernelTrialRecord:
     observations: tuple[GatewayKernelTrialObservation, ...]
     annotations: tuple[GatewayKernelTrialAnnotation, ...]
     created_at: str
+    # Read-only input evidence has no Agent operation/measurement row. Its
+    # attempt_id names the visibility scope, never a newly measured candidate.
+    input_revision: KernelRevision | None = None
 
     def __post_init__(self) -> None:
         if not self.id.startswith("gtrial_"):

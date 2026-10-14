@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 import pytest
+from atrex_gateway_client.errors import GatewayError
 
 from atrex_runtime.gateway.retrying_client import RetryingAgateClient
 
@@ -128,3 +129,44 @@ def test_retryable_statuses_keep_the_backoff_contract(status: int) -> None:
 
     assert raw.calls == 7
     assert delays == [5.0, 10.0, 20.0, 40.0, 60.0, 60.0]
+
+
+@pytest.mark.parametrize("status", [400, 422])
+@pytest.mark.parametrize("reason,error_class", [
+    ("oss_unavailable", "validation"),
+    ("oss_unavailable", None),
+    ("placement_unavailable", "infra"),
+])
+def test_structured_infrastructure_errors_retry_despite_client_status(
+    status, reason, error_class,
+):
+    calls = []
+
+    class Client:
+        def prepare_uploads(self, gpu, files, *, kind):
+            calls.append((gpu, files, kind))
+            if len(calls) < 3:
+                raise GatewayError(status, {"reason": reason, "error_class": error_class})
+            return {"job_id": "ev_upload", "uploads": []}
+
+    delays = []
+    client = RetryingAgateClient(Client(), sleeper=delays.append)
+    assert client.prepare_uploads("L20D", [], kind="eval")["job_id"] == "ev_upload"
+    assert calls == [("L20D", [], "eval")] * 3
+    assert delays == [5, 10]
+
+
+@pytest.mark.parametrize("reason", ["candidate_validation_failed", "source_archive_invalid", None])
+def test_candidate_validation_is_not_retryable_from_message_text(reason):
+    class Client:
+        def submit_job(self, kind, request):
+            raise GatewayError(400, {
+                "reason": reason, "error_class": "validation",
+                "message": "candidate contains the string oss_unavailable",
+            })
+
+    delays = []
+    client = RetryingAgateClient(Client(), sleeper=delays.append)
+    with pytest.raises(GatewayError):
+        client.submit_job("eval", {})
+    assert not delays

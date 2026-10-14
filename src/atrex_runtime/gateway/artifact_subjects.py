@@ -50,7 +50,10 @@ def resolve_artifact_subject(
         for trial in trials
         if (digest is None or trial.kernel_artifact_digest == digest)
         and (historical_trial is None or trial.id == historical_trial)
-        and (not require_current or trial.attempt_id == attempt_id)
+        and (
+            not require_current
+            or (trial.attempt_id == attempt_id and trial.input_revision is None)
+        )
         and set(results).issubset({o.result_artifact_digest for o in trial.observations})
     ]
     if not candidates:

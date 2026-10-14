@@ -68,6 +68,11 @@ by opaque numeric Shape ID, and sanitized profiler data.
 
 ## Exploratory operations
 
+Agate's `outputs`, `mutated_inputs`, and `unexpected_mutations` contain comparison records,
+including successful checks. For `correctness_only`, Runtime inspects each record's verdict/error; a nonempty
+`unexpected_mutations` list alone is not a correctness failure. Correctness-only results require
+complete passing compile/correctness coverage and no failed checks across all Shape batches.
+
 Optimizer Runtime Tools expose `check`, `dev`, `evaluate`, `profile`, `disassemble`, and `env`
 through `gateway-execute`. Candidate-bearing operations seal
 the exact source before calling Agate. Every result is immutable and queryable by the identities
@@ -279,6 +284,23 @@ Dev, Check, and Disassemble are outside this rule because they do not share the 
 contract.
 
 - The first accepted task executes one logical Agate call, partitioned into Shape batches.
+- Infrastructure rejection `oss_unavailable` is retryable even when Agate labels it
+  HTTP 400/`validation`. Runtime retries upload reservation/submission with backoff inside the
+  pending tool call; it records neither a correctness verdict nor a completed-task dedup entry.
+  If execution is interrupted, the same source and request can resume after recovery. Genuine
+  source-validation rejections retain their existing behavior. This does not rewrite historical
+  Results or negative evaluations produced by older Runtime versions.
+- A terminal `oss_input_download_failed` with `error_class=infra` replaces only the failed batch's
+  Job, reserving and uploading fresh OSS references before native Eval submission. Successful sibling
+  batches remain reusable. Upload transport failures are also retried within the pending tool call.
+  An SDK upload error labeled 502 may wrap a direct OSS PUT timeout or broken pipe; that label alone
+  does not establish an HTTP 502 response from the Agate gateway.
+- For post-upload source rejection, Runtime parses `ATREX_SHIM_ERROR` and exposes the
+  candidate/baseline `source_archive_invalid` message as `error.shim_error`, including the
+  rejected files and operations. It marks the diagnostic `retryable: false` and asks for source
+  changes. Only this source-validation message is projected; raw logs, private Reference/input
+  details and unrelated shim failures remain hidden. Diagnostic truncation is explicit at 16,000
+  characters; Runtime cannot recover errors omitted from Agate's own log tail.
 - Runtime validates Shape coverage and mechanically computes aggregate latency and ABBA speedup.
   Explicit correctness failures are retained.
 - Runtime returns one Agent-visible Result Artifact with
@@ -311,6 +333,19 @@ Exploratory operations report safe Production Gate warnings so the Agent can rep
 publication still fails closed.
 
 ## Bootstrap and Kernel retention
+
+`result-artifact-read` can read the authoritative evaluation of an Attempt's sealed input Kernel
+and its immutable ancestors, including restored Bootstrap seeds with no Agent Trial rows. It
+returns an Agent-safe measurement projection, never raw jobs or hidden Test measurements.
+Cloned Lineages also inherit pre-evolution Bootstrap Trial history through their recorded source
+chain; later Optimizer work in those source Lineages remains isolated. `kernel-artifact-read`
+lists the baseline evaluation reference. The frozen result-read disable switch still applies.
+
+The same sealed input results can serve as an Experiment's `before` baseline and as Direction or
+report Findings evidence. Runtime uses the same safe projection for measurement summaries and claim
+eligibility. This creates no Agent Trial or evaluation row and cannot satisfy the requirement for a
+freshly measured `after` candidate in the current Attempt. Unrelated Lineage results and hidden Test
+measurements remain unavailable, and citing input evidence does not enable disabled Journal tools.
 
 Bootstrap runs ordered correctness stages from `gate_policy.bootstrap`. A successful terminal
 Candidate becomes Lineage-local Kernel `v0`; there is no incumbent comparison. Because that `v0` is

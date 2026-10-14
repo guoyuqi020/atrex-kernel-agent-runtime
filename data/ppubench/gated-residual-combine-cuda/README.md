@@ -24,7 +24,7 @@
 | `campaign.template.json` | 目标卡、模型、种子与初始 evidence 路径 |
 | `evaluation.template.json` | Native Eval 参数、容差、eager/trusted 与关闭锁频 |
 | `policy.json` | 生产门禁、并发、Bootstrap/Optimizer 时限和会话预算 |
-| `ablation.json` | 完整冻结的八臂计划，不随全局消融默认值变化 |
+| `ablation.json` | 完整冻结的十臂计划，不随全局消融默认值变化 |
 
 原始题目数据仍来自相邻的 `../curated/`。准备时复制 Reference、输入生成器和
 shape/metadata 文件，保持其原始字节；上游实现不作为 Bootstrap 起点。
@@ -37,12 +37,12 @@ KDA 与 Runtime 的 Evaluator/Evolver 配置固定为这些提交，不使用旧
   原始 Roofline 没有已验证的 `SOL_time_ms`，此任务不计算 SOL%。
 - 保留 BF16 乘法的中间舍入，再进行 BF16 加法；支持输入 view 的非零 storage offset，
   不得修改输入。
-- Bootstrap 最多 8 小时，成功后自动启动全部八臂；失败时不启动后续优化。
-- 轮末共享与实时共享，各包含全开、全关、仅 Experiment、仅 Direction 四种组合。
+- Bootstrap 最多 8 小时，成功后自动启动全部十臂；失败时不启动后续优化。
+- 轮末共享与实时共享，各包含全开、全关、仅 Experiment、仅 Direction、全关且禁用结果读取五种组合。
 - 每臂 3 条 trajectory、5 个 epoch；每条每轮 3 次 attempt，共 15 次，
   每臂最多并发 3 次。臂间不共享 Bootstrap 之后的历史，不运行 Evolver。
 - 生产门禁开启，PPU 禁用锁频；普通 Evaluate 和 ABBA 均使用原生 Eval。
-- GPU Wiki 默认开启，Bootstrap 与全部八臂均可查询，与 Direction/Experiment 开关独立。
+- GPU Wiki 默认开启，Bootstrap 与全部十臂均可查询，与 Direction/Experiment 开关独立。
   自然语言检索需要模型解析，单次查询等待上限为 600 秒。
   服务地址由 `policy.json` 的 `runtime.wiki_url` 指定；`task.json` 中设置
   `runtime.gpu_wiki.enabled: false`（或 `runtime.gpu_wiki: null`）可关闭。

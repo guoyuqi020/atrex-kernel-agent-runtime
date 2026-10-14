@@ -27,11 +27,12 @@ round, evolution, Kernel-routing, and State-routing decisions described below. R
 resource envelope and trusted evaluation/promotion policy; it does not reconstruct this schedule
 from arm labels or topology parameters.
 
-The current plan enables two communication modes for each of four Direction/Experiment tool
-settings: both enabled, both disabled, Experiment only, and Direction only. Each setting/mode owns
-one Campaign/Lineage with three retained Trajectories. All eight arms share one frozen Bootstrap v0.
+The current plan enables two communication modes for each of seven tool
+settings: both enabled, both disabled, Experiment only, Direction only, both disabled with
+Result Artifact reads disabled, Dev-only, and Raw. Each setting/mode owns
+one Campaign/Lineage with three retained Trajectories. All fourteen arms share one frozen Bootstrap v0.
 Default: 5 Epochs, three serial Attempts per Trajectory per Epoch; 15 Attempts per Trajectory,
-45 per arm, and 360 in total, excluding Bootstrap. No Evolver runs.
+45 per arm, and 630 in total, excluding Bootstrap. No Evolver runs.
 
 | Mode | Workflow | Within the Epoch | After the Epoch |
 |---|---|---|---|
@@ -39,7 +40,8 @@ Default: 5 Epochs, three serial Attempts per Trajectory per Epoch; 15 Attempts p
 | `broadcast` | `broadcast_3.py` | Recorded measurements, Artifacts and enabled Journals are immediately queryable across Trajectories; each round routes the best accepted Kernel so far | All three share completed history and the selected best Kernel |
 
 Each mode has arm labels `ablation-MODE-3`, `ablation-MODE-no-modules-3`,
-`ablation-MODE-experiments-3`, and `ablation-MODE-directions-3`. Broadcast also exposes sealed
+`ablation-MODE-experiments-3`, `ablation-MODE-directions-3`,
+`ablation-MODE-no-result-read-3`, and `ablation-MODE-dev-only-3`. Broadcast also exposes sealed
 reports and conversations from completed earlier-round peers in the next Attempt's filesystem
 snapshot. Working source, scratch and live conversations remain private; retained Tool State is
 routed independently per Trajectory. History is accessible when relevant, not a requirement to
@@ -239,3 +241,5 @@ In shared-control-plane mode, trusted databases and Artifact paths in task `runt
 the service workspace. The task-local `state/` contains only Attempt, Evolution, Generalization,
 and Bootstrap Worker workspaces. Always pass the task workspace—not the service workspace—to
 `inspect.sh`.
+
+Raw adds direct Agate access, no Runtime tools or supplied history, and only trajectory-owned files as memory. Private final evaluation and kernel routing remain unchanged. See `docs/configuration.md` for the boundary and budget semantics.

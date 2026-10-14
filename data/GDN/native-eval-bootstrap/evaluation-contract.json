@@ -1,0 +1,599 @@
+{
+  "accelerator_backend": "cuda",
+  "agate_gpu": "L20D",
+  "atrex_bench_version": null,
+  "candidate_path": "kernel.py",
+  "deps_mode": null,
+  "device_slug": null,
+  "env_vars": {},
+  "harness": "atrex_bench",
+  "input_py": "import torch\nimport torch.nn.functional as F\n\n\ndef _make_inputs(\n    total_tokens: int,\n    num_q_heads: int,\n    num_v_heads: int,\n    sequence_lengths_values: list[int],\n    initial_state_mode: str,\n    head_dim: int,\n    qkv_dtype: str,\n    gate_dtype: str,\n    beta_dtype: str,\n    state_dtype: str,\n) -> dict[str, torch.Tensor]:\n    if head_dim != 128:\n        raise ValueError(\"SM103 M64 requires head_dim=128\")\n    if qkv_dtype != \"fp16\":\n        raise ValueError(\"SM103 M64 requires fp16 q/k/v/output\")\n    if gate_dtype != \"fp32\" or beta_dtype != \"fp32\" or state_dtype != \"fp32\":\n        raise ValueError(\"SM103 M64 requires fp32 gate/beta/state\")\n    if len(sequence_lengths_values) not in (1, 2):\n        raise ValueError(\"SM103 M64 requires one or two packed sequences\")\n    if any(length <= 0 for length in sequence_lengths_values):\n        raise ValueError(\"packed sequence lengths must be positive\")\n    if sum(sequence_lengths_values) != total_tokens:\n        raise ValueError(\"sequence_lengths_values must sum to total_tokens\")\n    if num_v_heads % num_q_heads != 0:\n        raise ValueError(\"num_v_heads must be divisible by num_q_heads\")\n    if initial_state_mode not in {\"zero\", \"nonzero\"}:\n        raise ValueError(\"initial_state_mode must be zero or nonzero\")\n\n    device = \"cuda\"\n    q = (\n        F.normalize(\n            torch.randn(\n                total_tokens,\n                num_q_heads,\n                head_dim,\n                dtype=torch.float32,\n                device=device,\n            ),\n            dim=-1,\n        )\n        .to(torch.float16)\n        .contiguous()\n    )\n    k = (\n        F.normalize(\n            torch.randn(\n                total_tokens,\n                num_q_heads,\n                head_dim,\n                dtype=torch.float32,\n                device=device,\n            ),\n            dim=-1,\n        )\n        .to(torch.float16)\n        .contiguous()\n    )\n    v = torch.randn(\n        total_tokens,\n        num_v_heads,\n        head_dim,\n        dtype=torch.float16,\n        device=device,\n    ).contiguous()\n    g = (\n        torch.rand(\n            total_tokens,\n            num_v_heads,\n            dtype=torch.float32,\n            device=device,\n        )\n        .clamp_(min=2.0**-12, max=1.0)\n        .contiguous()\n    )\n    beta = torch.rand(\n        total_tokens,\n        num_v_heads,\n        dtype=torch.float32,\n        device=device,\n    ).contiguous()\n\n    num_sequences = len(sequence_lengths_values)\n    initial_state = torch.zeros(\n        num_sequences,\n        num_v_heads,\n        head_dim,\n        head_dim,\n        dtype=torch.float32,\n        device=device,\n    )\n    if initial_state_mode == \"nonzero\":\n        initial_state.normal_(mean=0.0, std=0.1)\n\n    endpoints = [0]\n    for length in sequence_lengths_values:\n        endpoints.append(endpoints[-1] + length)\n\n    return {\n        \"q\": q,\n        \"k\": k,\n        \"v\": v,\n        \"g\": g,\n        \"beta\": beta,\n        \"initial_state\": initial_state.contiguous(),\n        \"cu_seqlens\": torch.tensor(endpoints, dtype=torch.int32, device=device),\n        \"output\": torch.empty_like(v),\n        \"output_state\": torch.empty_like(initial_state),\n    }\n",
+  "kernel_sources": {
+    "cutedsl": {
+      "editable_roots": [
+        "flashinfer/gdn_kernels/blackwell"
+      ],
+      "immutable_files": {
+        "LICENSE": "d76ef6f903c7545978e93f91d8a4c7c7574c3f9e80fc5bfba7412f60ad730184",
+        "UPSTREAM_PROVENANCE.json": "dea200d95d75129be444d00d8e732c799762f82fb8fe9976517f21229a6ec4b4",
+        "flashinfer/__init__.py": "746b1229f44c2d61f8eb0c1e3edf748bbfce2c00a967ccc152f2702d36e8508c",
+        "flashinfer/cute_dsl/__init__.py": "35884d18356e6f61c6fb2503c6e5972c48f00269b2ebc469c5bbfc741ee73d44",
+        "flashinfer/cute_dsl/utils.py": "ad075e28ee3ee6025b6561180318e316a01f8aee526cffc6a0b5ee307cf33abc",
+        "flashinfer/gdn_kernels/__init__.py": "ef9548e7b424bf16b197b97461d28e619df3c26a849cab460a6fe0bd3cf81c0c",
+        "kernel.py": "b695b2089930e093095973aaa8968d63c8de1fe49640fc555750471a35c1efb6"
+      },
+      "package_root": ".",
+      "runtime_requirements": [
+        {
+          "distribution": "torch",
+          "import": "torch",
+          "version": ">=2.9.0"
+        },
+        {
+          "distribution": "nvidia-cutlass-dsl",
+          "import": "cutlass",
+          "version": ">=4.4.2"
+        }
+      ],
+      "seed_digest": "sha256:9cd96a961377c4987435bc850af43910683c4e84dd8a33a8eee28e9259461c4b",
+      "source_revision": "60c83174e82e4566e6ee360fd38b85c5bb0794b6"
+    }
+  },
+  "lock_clocks": true,
+  "metadata": {
+    "benchmark_contract": {
+      "abi_evidence": {
+        "artifact": "source://flashinfer@2ab910c58fdd2392914ea05e2a8714946ac0eef6/flashinfer/gdn_kernels/blackwell/gdn_prefill.py",
+        "kind": "source_derived",
+        "locator": "chunk_gated_delta_rule_sm100"
+      },
+      "baseline_policy": "solution.py calls the official non-CP FlashInfer fallback from the pinned public baseline",
+      "deployment": "flashinfer-gdn-sm103-independent-seed",
+      "mutates_inputs": [
+        "output",
+        "output_state"
+      ],
+      "prepared_input_boundary": {
+        "beta_semantics": "FP32 update gate in [0, 1)",
+        "g_semantics": "linear decay in (0, 1]",
+        "qk_normalization": "outside timed boundary",
+        "state_layout": "[num_sequences, num_v_heads, 128, 128] interpreted as [B,H,V,K]"
+      },
+      "replacement_scope": "standalone_callable",
+      "required_runtime": {
+        "cuda_compute_capability": "10.3",
+        "cutedsl_distribution": "nvidia-cutlass-dsl>=4.4.2"
+      },
+      "returns_none": false,
+      "scratch_inputs": [],
+      "timed_boundary": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+    },
+    "category": "OTHER",
+    "correctness_policy": {
+      "max_relative_l2": 0.01,
+      "rationale": "Matches the existing SM103 M64 matrix gate for output and final state."
+    },
+    "dtype": "fp16",
+    "id": "aka_gdn_prefill_sm103_m64_chunk_gated_delta_rule",
+    "input_dtypes": {
+      "beta": "fp32",
+      "cu_seqlens": "int32",
+      "g": "fp32",
+      "initial_state": "fp32",
+      "k": "fp16",
+      "output": "fp16",
+      "output_state": "fp32",
+      "q": "fp16",
+      "v": "fp16"
+    },
+    "num_shapes": 10,
+    "origin": {
+      "commit": "2ab910c58fdd2392914ea05e2a8714946ac0eef6",
+      "framework": "flashinfer",
+      "module": "flashinfer.gdn_kernels.blackwell.gdn_prefill",
+      "symbol": "chunk_gated_delta_rule_sm100"
+    },
+    "output_dtypes": {
+      "output": "fp16",
+      "output_state": "fp32"
+    },
+    "perf_gpu": "NVIDIA L20D",
+    "phase": "prefill",
+    "provider": "flashinfer",
+    "shapes": {
+      "0": {
+        "description": "SM103 M64 prefill B=1 HQ=4 HV=16 T=2048 first state",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b1",
+          "prefill_first"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "1": {
+        "description": "SM103 M64 prefill B=1 HQ=4 HV=32 T=4096 continuation",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b1",
+          "prefill_continuation"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "2": {
+        "description": "SM103 M64 prefill B=1 HQ=8 HV=32 T=5120 first state",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b1",
+          "prefill_first"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "3": {
+        "description": "SM103 M64 prefill B=1 HQ=16 HV=32 T=4096 continuation",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b1",
+          "prefill_continuation"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "4": {
+        "description": "SM103 M64 prefill B=1 HQ=16 HV=48 T=10240 first state",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b1",
+          "prefill_first"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "5": {
+        "description": "SM103 M64 prefill B=1 HQ=16 HV=64 T=16384 continuation",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b1",
+          "prefill_continuation"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "6": {
+        "description": "SM103 M64 prefill B=1 HQ=32 HV=32 T=4096 first state",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b1",
+          "prefill_first"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "7": {
+        "description": "SM103 M64 prefill B=2 HQ=8 HV=32 T=8192 balanced",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b2_balanced",
+          "prefill_first"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "8": {
+        "description": "SM103 M64 prefill B=2 HQ=16 HV=32 T=32768 ragged continuation",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b2_ragged",
+          "prefill_continuation"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      },
+      "9": {
+        "description": "SM103 M64 prefill B=2 HQ=32 HV=32 T=65536 balanced continuation",
+        "dtype_compute": "fp16",
+        "frequency": null,
+        "group": "SM103 GDN Prefill M64",
+        "kernel": "chunk_gated_delta_rule_sm100",
+        "phase": "prefill",
+        "regimes": [
+          "m64_b2_balanced",
+          "prefill_continuation"
+        ],
+        "source_framework": "FlashInfer",
+        "source_model": "SM103 GDN M64 optimization task",
+        "target_gpus": [
+          "NVIDIA L20D"
+        ],
+        "vllm_callsite": "flashinfer.gdn_kernels.blackwell.gdn_prefill.chunk_gated_delta_rule_sm100"
+      }
+    },
+    "source_commit": "2ab910c58fdd2392914ea05e2a8714946ac0eef6",
+    "source_groups": [
+      "FlashInfer_SM103_GDN_public_baseline"
+    ],
+    "status": "run_eval_validated",
+    "verify_gpu": "NVIDIA L20D"
+  },
+  "mode": "full",
+  "options": {
+    "atol": 0.01,
+    "bench_iters": 100,
+    "num_correctness_cases": 1,
+    "rtol": 0.05,
+    "timeout_s": 600
+  },
+  "production_gate": true,
+  "reference_py": "import torch\nimport torch.nn as nn\n\n\nclass Model(nn.Module):\n    \"\"\"Prepared-input GDN prefill recurrence used by the SM103 M64 task.\"\"\"\n\n    def forward(\n        self,\n        q: torch.Tensor,\n        k: torch.Tensor,\n        v: torch.Tensor,\n        g: torch.Tensor,\n        beta: torch.Tensor,\n        initial_state: torch.Tensor,\n        cu_seqlens: torch.Tensor,\n        output: torch.Tensor,\n        output_state: torch.Tensor,\n    ) -> dict[str, torch.Tensor]:\n        total_tokens, num_q_heads, head_dim = q.shape\n        num_v_heads = v.shape[1]\n        repeats = num_v_heads // num_q_heads\n        scale = head_dim**-0.5\n\n        q_float = q.float().repeat_interleave(repeats, dim=1) * scale\n        k_float = k.float().repeat_interleave(repeats, dim=1)\n        v_float = v.float()\n        bounds = [int(value) for value in cu_seqlens.tolist()]\n\n        for request_index, (start, end) in enumerate(zip(bounds, bounds[1:])):\n            state = initial_state[request_index].float().clone()\n            for token_index in range(start, end):\n                state = state * g[token_index].view(num_v_heads, 1, 1)\n                key = k_float[token_index]\n                reconstructed = (state * key.unsqueeze(1)).sum(dim=-1)\n                delta = (v_float[token_index] - reconstructed) * beta[token_index].unsqueeze(-1)\n                state = state + delta.unsqueeze(-1) * key.unsqueeze(1)\n                output[token_index] = (\n                    (state * q_float[token_index].unsqueeze(1)).sum(dim=-1).to(output.dtype)\n                )\n            output_state[request_index] = state.to(output_state.dtype)\n\n        if output.shape != (total_tokens, num_v_heads, head_dim):\n            raise ValueError(\"output shape does not match the GDN result\")\n        return {\"output\": output, \"final_state\": output_state}\n",
+  "requirements": [],
+  "roofline": {
+    "shapes": {
+      "0": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.002916352
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 13893632,
+        "semantic_Q_write_bytes": 9437184,
+        "semantic_W_flops": {
+          "fp16": 2147483648
+        }
+      },
+      "1": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.010092544
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 45088768,
+        "semantic_Q_write_bytes": 35651584,
+        "semantic_W_flops": {
+          "fp16": 8589934592
+        }
+      },
+      "2": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.013795327999999999
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 66322432,
+        "semantic_Q_write_bytes": 44040192,
+        "semantic_W_flops": {
+          "fp16": 10737418240
+        }
+      },
+      "3": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.013238272
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 70254592,
+        "semantic_Q_write_bytes": 35651584,
+        "semantic_W_flops": {
+          "fp16": 8589934592
+        }
+      },
+      "4": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.043220992
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 216793088,
+        "semantic_Q_write_bytes": 128974848,
+        "semantic_W_flops": {
+          "fp16": 32212254720
+        }
+      },
+      "5": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.085983232
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 415236096,
+        "semantic_Q_write_bytes": 272629760,
+        "semantic_W_flops": {
+          "fp16": 68719476736
+        }
+      },
+      "6": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.017432576
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 103809024,
+        "semantic_Q_write_bytes": 35651584,
+        "semantic_W_flops": {
+          "fp16": 8589934592
+        }
+      },
+      "7": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.022282240000000002
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 106954752,
+        "semantic_Q_write_bytes": 71303168,
+        "semantic_W_flops": {
+          "fp16": 17179869184
+        }
+      },
+      "8": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.102760448
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 549453824,
+        "semantic_Q_write_bytes": 272629760,
+        "semantic_W_flops": {
+          "fp16": 68719476736
+        }
+      },
+      "9": {
+        "SOL_time_ms": {
+          "NVIDIA L20D": 0.271581184
+        },
+        "bottleneck": "memory",
+        "semantic_Q_read_bytes": 1631584256,
+        "semantic_Q_write_bytes": 541065216,
+        "semantic_W_flops": {
+          "fp16": 137438953472
+        }
+      }
+    }
+  },
+  "runner_overrides": {
+    "benchmark_mode": "eager",
+    "candidate_timeout_s": 120.0,
+    "perf_timeout_s": 120.0,
+    "warmup_iters": 10
+  },
+  "schema_version": 1,
+  "shapes": {
+    "0": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "zero",
+        "num_q_heads": 4,
+        "num_v_heads": 16,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          2048
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 2048
+      }
+    },
+    "1": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "nonzero",
+        "num_q_heads": 4,
+        "num_v_heads": 32,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          4096
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 4096
+      }
+    },
+    "2": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "zero",
+        "num_q_heads": 8,
+        "num_v_heads": 32,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          5120
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 5120
+      }
+    },
+    "3": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "nonzero",
+        "num_q_heads": 16,
+        "num_v_heads": 32,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          4096
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 4096
+      }
+    },
+    "4": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "zero",
+        "num_q_heads": 16,
+        "num_v_heads": 48,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          10240
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 10240
+      }
+    },
+    "5": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "nonzero",
+        "num_q_heads": 16,
+        "num_v_heads": 64,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          16384
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 16384
+      }
+    },
+    "6": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "zero",
+        "num_q_heads": 32,
+        "num_v_heads": 32,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          4096
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 4096
+      }
+    },
+    "7": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "zero",
+        "num_q_heads": 8,
+        "num_v_heads": 32,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          4096,
+          4096
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 8192
+      }
+    },
+    "8": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "nonzero",
+        "num_q_heads": 16,
+        "num_v_heads": 32,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          1,
+          32767
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 32768
+      }
+    },
+    "9": {
+      "init_kwargs": null,
+      "input_kwargs": {
+        "beta_dtype": "fp32",
+        "gate_dtype": "fp32",
+        "head_dim": 128,
+        "initial_state_mode": "nonzero",
+        "num_q_heads": 32,
+        "num_v_heads": 32,
+        "qkv_dtype": "fp16",
+        "sequence_lengths_values": [
+          32768,
+          32768
+        ],
+        "state_dtype": "fp32",
+        "total_tokens": 65536
+      }
+    }
+  }
+}

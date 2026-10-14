@@ -72,6 +72,25 @@ class RuntimeAttemptReportProjector:
         experiments = agent.get("experiments")
         if not isinstance(experiments, list):
             raise ValueError("Agent Attempt Report has invalid experiments")
+        journal_view: dict[str, JsonValue] = {"experiments": experiments}
+        if agent.get("schema_version") == 13:
+            events = agent_fields.pop("direction_events", [])
+            linked = experiments + (events if isinstance(events, list) else [])
+            direction_ids: list[JsonValue] = list(
+                sorted(
+                    {
+                        str(item["direction_id"])
+                        for item in linked
+                        if isinstance(item, dict) and item.get("direction_id") is not None
+                    }
+                )
+            )
+            journal_view = {
+                "experiment_ids": [
+                    str(item["experiment_id"]) for item in experiments if isinstance(item, dict)
+                ],
+                "direction_ids": direction_ids,
+            }
         return cast(
             dict[str, JsonValue],
             {
@@ -84,7 +103,7 @@ class RuntimeAttemptReportProjector:
                 "candidate_kernel": candidate_value,
                 "production_gate": self._production_gate(attempt),
                 **agent_fields,
-                "experiments": experiments,
+                **journal_view,
                 "interpretation_notice": (
                     "Analysis, diagnosis, Findings and Experiment explanations are Agent "
                     "interpretations. Missing assessment means unresolved. Result bindings "
@@ -215,6 +234,7 @@ class RuntimeAttemptReportProjector:
                 for shape_id in shared
             },
         }
+
 
 def _positive_number(value: object) -> float | None:
     if (

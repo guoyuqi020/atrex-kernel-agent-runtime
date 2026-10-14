@@ -15,6 +15,7 @@ from typing import Any
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from .control import SqliteGatewayControl
 from .control_models import GatewayKernelTrialRecord
+from .result_metrics import input_result_payload
 
 
 def _positive(value: object) -> float | None:
@@ -111,8 +112,12 @@ def experiment_measurement_summary(
             trial, observation = observations[(kernel, str(digest))]
             assert observation.result_artifact_digest is not None
             artifact = artifacts.verify(observation.result_artifact_digest)
-            # Legacy/private Gateway artifacts may contain sealed Test data. Never project them.
-            if artifact.kind is not ArtifactKind.RESULT_ARTIFACT:
+            # Only sealed input ancestry authorizes projecting an authoritative
+            # Gateway result. Other private/legacy results remain unavailable.
+            value: dict[str, Any]
+            if trial.input_revision is not None:
+                value = input_result_payload(artifacts, trial.input_revision)
+            elif artifact.kind is not ArtifactKind.RESULT_ARTIFACT:
                 entries.append(
                     {
                         "kernel_artifact_digest": kernel,
@@ -122,10 +127,11 @@ def experiment_measurement_summary(
                     }
                 )
                 continue
-            value = json.loads((artifact.payload_path / "value.json").read_bytes())
-            metadata = json.loads((artifact.payload_path / "metadata.json").read_bytes())
-            if metadata.get("kernel_artifact_digest") != kernel:
-                raise ValueError("Measurement summary Result does not match its Kernel")
+            else:
+                value = json.loads((artifact.payload_path / "value.json").read_bytes())
+                metadata = json.loads((artifact.payload_path / "metadata.json").read_bytes())
+                if metadata.get("kernel_artifact_digest") != kernel:
+                    raise ValueError("Measurement summary Result does not match its Kernel")
             operator, hardware, dsl, contract = control.evaluation_identity(trial.attempt_id)
             payload = value.get("result")
             payload = payload if isinstance(payload, dict) else {}
@@ -140,11 +146,12 @@ def experiment_measurement_summary(
             }
             if value.get("operation") == "evaluate":
                 comparison_spec = payload.get("comparison")
+                candidate_payload = payload.get("candidate")
                 measured = (
-                    payload["candidate"]
+                    candidate_payload
                     if isinstance(comparison_spec, dict)
                     and comparison_spec.get("method") == "abba"
-                    and isinstance(payload.get("candidate"), dict)
+                    and isinstance(candidate_payload, dict)
                     else payload
                 )
                 entry.update(

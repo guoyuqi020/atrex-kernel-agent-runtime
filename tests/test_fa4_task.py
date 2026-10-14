@@ -259,7 +259,7 @@ def test_fa4_target_contract_and_schedule_are_self_contained() -> None:
     assert spec.max_challengers == 1
     assert spec.optimizer_attempt_budget == 6
     plan = build_ablation_plan({"schedule": {**spec.model_dump(mode="json"), "event_only": True}})
-    assert len(plan["arms"]) == 8
+    assert len(plan["arms"]) == 14
     assert plan["optimizer_attempt_budget_per_trajectory"] == 15
     assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
     shapes = json.loads((INPUTS / "task/shape_valid.json").read_text())
@@ -323,7 +323,7 @@ def test_preparation_is_offline_preserves_inputs_and_exposes_real_r0(
     prepared = json.loads((workspace / "prepared.json").read_text())
     assert prepared["gpu_jobs_submitted"] == 0
     assert prepared["seed_static_policy_violations"]  # Why this task disables that static scan.
-    assert prepared["ablation_arm_count"] == 8
+    assert prepared["ablation_arm_count"] == 14
     assert prepared["ablation_optimizer_attempt_budget_per_trajectory"] == 15
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     source = import_source_tree(
@@ -463,7 +463,7 @@ def test_runner_uses_current_python_and_absolute_epoch_target(
 def test_original_asset_hashes_cover_full_source_and_evaluator(tmp_path: Path, runner) -> None:
     integrity = json.loads((INPUTS / "asset-integrity.json").read_text())
     runner.verify_assets(INPUTS, integrity["files_sha256"])
-    for name, count in (("source", 70), ("evaluator", 32)):
+    for name, count in (("source", 74), ("evaluator", 32)):
         component = integrity["components"][name]
         assert len(component["files_sha256"]) == count
         root = tmp_path / name

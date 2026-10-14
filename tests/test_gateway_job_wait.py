@@ -116,7 +116,7 @@ async def test_tool_waits_for_same_job_before_http_reply_and_artifact(
                 assert read.status_code == 200, read.text
                 assert read.json()["result"]["status"] == agent_status
                 assert read.json()["result"]["result"] == body["result"]
-        assert client.fetched == [("job_test", True, 1200)] * 3
+        assert client.fetched == [("job_test", False, 30.0)] * 3
         assert [kind for kind, _ in client.submitted] == [
             "compile" if operation == "check" else operation,
         ]
@@ -151,13 +151,13 @@ async def test_interrupted_tool_wait_resumes_same_job_without_queued_artifact(
         ) is None
         assert jobs.find_request(attempt.id, request["idempotency_key"]).job_id == "job_test"
         # The polling backoff yields and prevents a busy loop, even on immediate replies.
-        assert client.fetched == [("job_test", True, 1200)]
+        assert client.fetched == [("job_test", False, 30.0)]
 
         client.job = _terminal_job("succeeded", operation)
         with anyio.fail_after(5):
             completed = await service.execute(capability.token, payload)
         assert completed.status == "completed"
-        assert client.fetched == [("job_test", True, 1200)] * 2
+        assert client.fetched == [("job_test", False, 30.0)] * 2
         assert len(client.submitted) == 1
         assert client.cancelled == []
     finally:
@@ -209,7 +209,7 @@ async def test_unknown_job_status_is_not_waited_or_sealed(
         assert control.get_operation_artifact(
             attempt.id, request["idempotency_key"], GatewayOperation(operation),
         ) is None
-        assert client.fetched == [("job_test", True, 1200)]
+        assert client.fetched == [("job_test", False, 30.0)]
         assert len(client.submitted) == 1
     finally:
         jobs.close()

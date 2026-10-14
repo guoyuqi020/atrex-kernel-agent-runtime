@@ -1,0 +1,125 @@
+{
+  "schema_version": "atrex.shape_train.v1",
+  "generator": {
+    "name": "benchmark-converter-shape-train",
+    "version": 1,
+    "domain_policy": "evidence_gated_non_enumerating"
+  },
+  "objective": "Implement and optimize a prepared-input GDN prefill candidate that is correct and fast across the public input domain on the specified target GPU; exact evaluator cases are hidden and must not be used for case-specific dispatch.",
+  "operator_contract": {
+    "operation": "chunk gated delta rule",
+    "category": "OTHER",
+    "dtype": "fp16",
+    "fixed_init_kwargs": null,
+    "fixed_architecture": {
+      "head_dim": 128
+    },
+    "fixed_parameters": {
+      "qkv_dtype": "fp16",
+      "gate_dtype": "fp32",
+      "beta_dtype": "fp32",
+      "state_dtype": "fp32"
+    }
+  },
+  "workload_profile": {
+    "phase": "prefill",
+    "input_form": "packed variable length",
+    "state_mode": "initial and final state are present",
+    "normalization": "q and k are normalized before the timed boundary"
+  },
+  "shape_domain": {
+    "total_tokens": {
+      "type": "integer",
+      "min": 1536,
+      "max": 65536
+    },
+    "num_q_heads": {
+      "type": "integer",
+      "min": 4,
+      "max": 32
+    },
+    "num_v_heads": {
+      "type": "integer",
+      "min": 16,
+      "max": 64
+    },
+    "sequence_lengths_values": {
+      "type": "array",
+      "length": {
+        "min": 1,
+        "max": 2
+      },
+      "items": {
+        "type": "integer",
+        "min": 1,
+        "max": 65536
+      }
+    },
+    "initial_state_mode": {
+      "type": "string",
+      "values": ["zero", "nonzero"]
+    },
+    "head_dim": {
+      "type": "integer",
+      "values": [128]
+    },
+    "qkv_dtype": {
+      "type": "string",
+      "values": ["fp16"]
+    },
+    "gate_dtype": {
+      "type": "string",
+      "values": ["fp32"]
+    },
+    "beta_dtype": {
+      "type": "string",
+      "values": ["fp32"]
+    },
+    "state_dtype": {
+      "type": "string",
+      "values": ["fp32"]
+    }
+  },
+  "invariants": [
+    "sum(sequence_lengths_values) == total_tokens",
+    "len(sequence_lengths_values) in [1, 2]",
+    "num_v_heads % num_q_heads == 0",
+    "(num_q_heads, num_v_heads) in [(4, 16), (4, 32), (8, 32), (16, 32), (16, 48), (16, 64), (32, 32)]",
+    "len(sequence_lengths_values) != 1 or (((num_q_heads, num_v_heads) in [(8, 32), (16, 32), (16, 48), (16, 64), (32, 32)] and total_tokens in [2048, 4096, 8192, 16384, 32768, 65536]) or ((num_q_heads, num_v_heads) == (4, 16) and 1536 <= total_tokens <= 3072) or ((num_q_heads, num_v_heads) in [(4, 32), (8, 32), (16, 32), (32, 32)] and 2048 <= total_tokens <= 5120) or ((num_q_heads, num_v_heads) == (16, 48) and 2048 <= total_tokens <= 10240) or ((num_q_heads, num_v_heads) == (16, 64) and 2048 <= total_tokens <= 65536))",
+    "len(sequence_lengths_values) != 2 or ((num_q_heads, num_v_heads) in [(8, 32), (16, 32), (32, 32)] and 4096 <= total_tokens <= 65536)"
+  ],
+  "development_cases": [
+    {
+      "name": "single_sequence_lower_boundary",
+      "init_kwargs": null,
+      "input_kwargs": {
+        "total_tokens": 1536,
+        "num_q_heads": 4,
+        "num_v_heads": 16,
+        "sequence_lengths_values": [1536],
+        "initial_state_mode": "zero",
+        "head_dim": 128,
+        "qkv_dtype": "fp16",
+        "gate_dtype": "fp32",
+        "beta_dtype": "fp32",
+        "state_dtype": "fp32"
+      }
+    },
+    {
+      "name": "two_sequence_ragged_interior",
+      "init_kwargs": null,
+      "input_kwargs": {
+        "total_tokens": 5000,
+        "num_q_heads": 16,
+        "num_v_heads": 32,
+        "sequence_lengths_values": [1, 4999],
+        "initial_state_mode": "nonzero",
+        "head_dim": 128,
+        "qkv_dtype": "fp16",
+        "gate_dtype": "fp32",
+        "beta_dtype": "fp32",
+        "state_dtype": "fp32"
+      }
+    }
+  ]
+}

@@ -76,6 +76,10 @@ Kernel/Result 绑定。自定义输入、仅正确性检查、Profile 和探索�
 配置的独立 Retention 比较保持不变。不兼容的历史证据需要重新做完整
 Evaluate，无需通过修改注释来制造不同 Digest。
 
+Agate 的 `outputs`、`mutated_inputs`、`unexpected_mutations` 都包含比较检查记录，其中可以有
+成功记录。`correctness_only` 逐项检查判定与错误；`unexpected_mutations` 列表非空本身不代表正确性失败。
+仅正确性结果要求所有 Shape 批次的编译与正确性覆盖完整、全部通过，且不存在失败的检查项。
+
 `evaluate` 接受可选的 `mode`、`input_py` 和 `shapes`。`mode` 只能为 `full`（默认）或
 `correctness_only`；后者仅检查正确性，不测量性能，也不自动执行 SOL Profile。`input_py` 提供兼容
 Agate 的 Python `_make_inputs` 生成器；`shapes` 提供以整数字符串为键的非空 JSON Object，每条
@@ -244,6 +248,18 @@ Agate 调用，对逐 Shape 延迟取几何平均，不再额外重复三次或�
 同一种逐 Shape 性能聚合语义。
 
 - 第一次被接受的任务执行一次逻辑 Agate 调用，内部按 Shape 分批。
+- 即使 Agate 将 `oss_unavailable` 标为 HTTP 400／`validation`，Runtime 仍将它作为基础设施
+  故障，在当前工具调用内退避重试上传预约和提交；不生成正确性结论，也不写入完成去重记录。
+  执行被中断后，相同源码和请求可在恢复后继续提交。真正的源码校验拒绝保留原有行为。
+  此修复不改写旧版本已经生成的历史 Result 或负面评测记录。
+- 终态 `oss_input_download_failed` 明确标记 `error_class=infra` 时，仅替换失败批次的 Job，
+  重新预约并上传新的 OSS 引用，再提交原生 Eval；成功的同组批次继续复用。上传网络故障也在
+  当前工具调用内重试。SDK 上传错误中的 502 可能包装的是直连 OSS PUT 超时或断管，不能仅凭
+  这个标签认定 Agate 网关实际返回了 HTTP 502。
+- 上传后的源码拒绝会解析 `ATREX_SHIM_ERROR`，通过 `error.shim_error` 返回 Candidate／Baseline
+  的 `source_archive_invalid` 消息，列出具体文件和被拒绝的用法，并标记 `retryable: false`、要求修改
+  源码。只提取源码校验信息，不返回原始日志、私有 Reference／输入或无关的 shim 错误。
+  诊断超过 16,000 字符会明确标注截断；Agate 日志尾部本来未包含的错误无法补回。
 - Runtime 校验 Shape 覆盖，并机械计算聚合延迟和 ABBA Speedup；明确的正确性失败会被保留。
 - Runtime 只返回一个 Agent 可见 Result Artifact，并附带
   `measurement_aggregation: {"repetitions": 1, "method": "single_measurement"}`；原始返回只作为
@@ -276,6 +292,17 @@ DSL，拒绝 PyTorch 计算回退和动态/预构建实现加载，并在存在 
 探索性操作会返回安全的 Production Gate 警告，便于 Agent 修正；发布阶段仍然 Fail Closed。
 
 ## Bootstrap 与 Kernel Retention
+
+`result-artifact-read` 允许读取 Attempt 封存的输入 Kernel 及其不可变祖先的权威评测，覆盖没有
+Agent Trial 记录的恢复 Bootstrap。返回安全的测量投影，不暴露原始 Job 或隐藏的 Test 测量。
+克隆 Lineage 沿登记的来源链继承演化前的 Bootstrap Trial 历史，但来源 Lineage 后续的
+Optimizer 工作仍然隔离。`kernel-artifact-read` 会列出基线评测引用；禁用结果读取的冻结开关
+仍对这些结果生效。
+
+同一批封存输入结果也可作为 Experiment 的 `before` 基线，以及 Direction 或报告 Findings 的
+证据；测量摘要与证据资格判断复用相同的安全投影。这不会新增 Agent Trial 或评测记录，也不能
+代替当前 Attempt 对 `after` 候选的新测量。无关 Lineage 的结果和隐藏 Test 测量仍不可见，
+引用输入证据也不会开启已禁用的 Journal 工具。
 
 Bootstrap 按 `gate_policy.bootstrap` 运行有序正确性阶段。成功的终态 Candidate 成为 Lineage 内
 Kernel `v0`，此时没有 Incumbent 比较。

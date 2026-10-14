@@ -31,7 +31,7 @@ async def test_evaluate_waits_for_terminal_jobs_before_http_reply_and_artifact(
     original_get = scenario.client.get_job
 
     def get_job(job_id, **kwargs):
-        assert kwargs == {"wait": True, "timeout": 90 if mode == "abba" else 1200}
+        assert kwargs == {"wait": False, "timeout": 30.0}
         assert scenario.control.get_operation_artifact(
             scenario.attempt.id, scenario.request["idempotency_key"], GatewayOperation.EVALUATE,
         ) is None
@@ -127,7 +127,7 @@ async def test_interrupted_evaluate_wait_resumes_original_jobs(
         assert response.json()["result"]["correct"] is True
         assert {row[0] for row in scenario.client.fetches} == job_ids
         # Full/ABBA recovery probes durable bindings first; completed jobs are reused.
-        assert {wait for _, wait in scenario.client.fetches} == {mode == "correctness_only"}
+        assert {wait for _, wait in scenario.client.fetches} == {False}
         assert len(scenario.client.submissions) == 2
         assert not scenario.client.cancellations
     finally:

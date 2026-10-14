@@ -88,10 +88,14 @@ if '--import' in args:
             print("==ERROR== Option '--print-metric-name' is only supported for the details page.")
             sys.exit(1)
         if not os.environ.get('FAKE_EMPTY'): print(METRICS)
+        if os.environ.get('FAKE_LARGE_EXPORTS'): print(METRICS * 2500)
     elif args[args.index('--print-source')+1] == 'ptx':
         if os.environ.get('FAKE_NO_PTX'): sys.exit(2)
         print('.version 8.0\\n.target sm_103\\n.entry candidate() { ret; }')
-    else: print('/*0010*/ MOV R1, R2;')
+    else:
+        print('/*0010*/ MOV R1, R2;')
+        if os.environ.get('FAKE_LARGE_EXPORTS'):
+            print(('/*0020*/ MOV R1, R2; // '+chr(34)+chr(92)+'中文'+chr(1)+'\\n') * 50000)
 else:
     target = args.index('--target')
     child = subprocess.run(args[target-2:])
@@ -106,6 +110,9 @@ with open(os.environ['FAKE_TOOL_LOG'], 'a') as stream:
 assert '--error-exitcode' in sys.argv
 child = subprocess.run(sys.argv[sys.argv.index('all')+1:])
 if os.environ.get('FAKE_SANITIZER_ERROR'):
+    if os.environ.get('FAKE_LARGE_EXPORTS'):
+        print('PRIVATE_INPUT failure detail\\n' * 50000)
+        print('PRIVATE_INPUT stderr detail\\n' * 50000, file=sys.stderr)
     print('========= ERROR SUMMARY: 1 error')
     sys.exit(86)
 sys.exit(child.returncode)
@@ -155,7 +162,14 @@ class DiagnosticDevClient:
             "job_id": job_id,
             "kind": "dev",
             "status": "succeeded",
-            "result": {"stdout": result.stdout, "stderr": result.stderr},
+            "result": {
+                # Model the production Agate Dev tail limit at the SDK boundary.
+                "stdout": result.stdout.encode()[-1048576:].decode(errors="replace"),
+                "stderr": result.stderr,
+                "exit_code": 0,
+                "output_bytes": len(result.stdout.encode()),
+                "output_truncated": len(result.stdout.encode()) > 1048576,
+            },
         }
         return {"job_id": job_id}
 

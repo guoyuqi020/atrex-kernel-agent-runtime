@@ -517,13 +517,17 @@ class OptimizerDevShell:
 
             request = self._request(attempt, epoch)
             prepared = self._workspaces.prepare(request)
-            authority = anyio.run(self._authorities.get_authority, request)
+            authority = None if request.raw else anyio.run(self._authorities.get_authority, request)
             session_config = replace(
                 self._config,
-                gateway_endpoint=authority.endpoint,
-                gateway_capability=authority.capability,
-                wiki_endpoint=authority.endpoint if self._wiki_enabled else None,
-                wiki_capability=authority.capability if self._wiki_enabled else None,
+                gateway_endpoint=authority.endpoint if authority else None,
+                gateway_capability=authority.capability if authority else None,
+                wiki_endpoint=authority.endpoint if self._wiki_enabled and authority else None,
+                wiki_capability=authority.capability if self._wiki_enabled and authority else None,
+                tool_modules=request.tool_modules,
+                result_artifact_read_enabled=request.result_artifact_read_enabled,
+                dev_only=request.dev_only,
+                raw=request.raw,
             )
             launch = self._sessions.prepare_launch(prepared, session_config)
             event = {
@@ -691,6 +695,10 @@ class OptimizerDevShell:
             attempt_evidence_digest=attempt.attempt_evidence_digest,
             dsl=revision.dsl,
             model=lineage.optimizer_model,
+            tool_modules=lineage.tool_modules,
+            result_artifact_read_enabled=lineage.result_artifact_read_enabled,
+            dev_only=lineage.dev_only,
+            raw=lineage.raw,
         )
 
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from atrex_runtime.gateway.private_results import (
     project_candidate_rejection,
     project_private_job,
@@ -165,3 +167,89 @@ def test_a_failed_job_reports_why_without_revealing_evaluator_cases() -> None:
         "check_correctness",
     ):
         assert private not in rendered
+
+
+SHIM_MESSAGE = (
+    "candidate: source validation failed: kernel.py: Blocked import: sys "
+    "(module 'sys' is not permitted); vendor/flash_attn/cache_utils.py: "
+    "Blocked import: pickle (module 'pickle' is not permitted); "
+    "vendor/算子.py: Forbidden name: getattr"
+)
+
+
+def _shim_log_tail(*, levels: int = 0, payload: dict | None = None) -> str:
+    value = (
+        "private evaluator output\n===ATREX_SHIM_ERROR_BEGIN===\n"
+        + json.dumps(payload if payload is not None else {
+            "error_class": "source_archive_invalid", "message": SHIM_MESSAGE,
+            "input_py": "private-input", "shapes": {"secret": 100},
+        }, ensure_ascii=False)
+        + "\n===ATREX_SHIM_ERROR_END===\nprivate evaluator output"
+    )
+    for _ in range(levels):
+        value = json.dumps(value, ensure_ascii=False)[1:-1]
+    return value
+
+
+@pytest.mark.parametrize("levels", range(5))
+@pytest.mark.parametrize("role", ["candidate", "baseline"])
+def test_source_archive_shim_retains_files_and_reasons(levels: int, role: str) -> None:
+    message = SHIM_MESSAGE.replace("candidate:", f"{role}:")
+    result = project_private_job({
+        "status": "failed", "job_id": "ev_shim",
+        "error": {"reason": "source_archive_invalid", "error_class": "validation",
+                  "details": {"logs_tail": _shim_log_tail(levels=levels, payload={
+                      "error_class": "source_archive_invalid", "message": message,
+                      "input_py": "private-input", "shapes": {"secret": 100},
+                  })}},
+    })
+    shim = result["error"]["shim_error"]
+    assert shim["message"] == message
+    assert shim["error_class"] == "source_archive_invalid"
+    assert shim["retryable"] is False
+    assert "Modify" in shim["resolution"]
+    assert "private" not in json.dumps(result)
+    assert "secret" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("payload", [
+    {"error_class": "correctness_failed", "message": "private shape failed"},
+    {"error_class": "source_archive_invalid", "message": "reference: private-input"},
+    {"error_class": "source_archive_invalid", "message": "input: private-input"},
+    {"message": SHIM_MESSAGE},
+    {"error_class": "source_archive_invalid", "message": {"private": "input"}},
+])
+def test_shim_does_not_expose_unqualified_evaluator_errors(payload: dict) -> None:
+    result = project_private_job({
+        "status": "failed", "error": {"details": {"logs_tail": _shim_log_tail(payload=payload)}},
+    })
+    assert "shim_error" not in json.dumps(result)
+    assert "private" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("tail", [
+    "===ATREX_SHIM_ERROR_BEGIN===not-json===ATREX_SHIM_ERROR_END===",
+    "===ATREX_SHIM_ERROR_BEGIN===[]===ATREX_SHIM_ERROR_END===",
+    "===ATREX_SHIM_ERROR_BEGIN===", "===ATREX_SHIM_ERROR_END===", "", None,
+])
+def test_truncated_or_malformed_shim_is_safe(tail: str | None) -> None:
+    result = project_private_job({"status": "failed", "error": {"details": {"logs_tail": tail}}})
+    assert "shim_error" not in json.dumps(result)
+
+
+def test_source_archive_shim_has_explicit_diagnostic_size_limit() -> None:
+    result = project_private_job({"status": "failed", "error": {"details": {
+        "logs_tail": _shim_log_tail(payload={"error_class": "source_archive_invalid",
+                                            "message": SHIM_MESSAGE + "x" * 20_000}),
+    }}})
+    shim = result["error"]["shim_error"]
+    assert len(shim["message"]) == 16_000
+    assert shim["message_truncated"] is True
+
+
+@pytest.mark.parametrize("levels", range(1, 5))
+def test_shim_parses_escaped_body_inside_literal_log_lines(levels: int) -> None:
+    result = project_private_job({"status": "failed", "error": {"details": {
+        "logs_tail": "literal log\n" + _shim_log_tail(levels=levels) + "\nmore log",
+    }}})
+    assert result["error"]["shim_error"]["message"] == SHIM_MESSAGE

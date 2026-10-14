@@ -10,10 +10,12 @@ import shlex
 import tarfile
 import tempfile
 import zipfile
+from collections.abc import Generator
 from pathlib import Path
 from typing import Any, Protocol, cast
 
 from . import oss_remote
+from .async_sdk import SdkCall, call_method, prepare_call, sdk_call
 from .eval_sources import EVAL_ARCHIVES_KEY
 
 AGATE_MAX_INLINE_DEV_BYTES = 4 * 1024 * 1024
@@ -48,20 +50,60 @@ class OssAgateClient:
         return getattr(self._client, name)
 
     def submit_job(self, kind: str, request: dict[str, object]) -> dict[str, object]:
+        with _Submission(self._submission(kind, request)) as submission:
+            value = None
+            while True:
+                step, result = submission.advance(value)
+                if step is None:
+                    return cast(dict[str, object], result)
+                value = step()
+
+    async def call_async(self, method: str, *args: object, **kwargs: object) -> Any:
+        if method != "submit_job":
+            return await call_method(self._client, method, *args, **kwargs)
+        kind, request = args
+        # The generator retains one reservation/archive across per-stage retries.
+        # Packing and cleanup run separately from both the event loop and network slots.
+        submission = _Submission(self._submission(str(kind), cast(dict[str, object], request)))
+        try:
+            value = None
+            while True:
+                step, result = await prepare_call(submission.advance, value)
+                if step is None:
+                    return result
+                value = await step.run()
+        finally:
+            # Cleanup must run even after request cancellation/recovery fencing.
+            import anyio
+
+            from .async_sdk import sdk_limiter
+
+            with anyio.CancelScope(shield=True):
+                await anyio.to_thread.run_sync(submission.close, limiter=sdk_limiter("prepare"))
+
+    def _submission(
+        self, kind: str, request: dict[str, object]
+    ) -> Generator[SdkCall, Any, dict[str, object]]:
         if EVAL_ARCHIVES_KEY in request:
             if kind != "eval":
                 raise ValueError("native source archives can only be submitted through Eval")
-            return self._submit_eval(request)
+            return (yield from self._submit_eval(request))
         files = request.get("files")
         if kind != "dev" or not isinstance(files, dict) or not files:
-            return self._client.submit_job(kind, request)
+            return cast(
+                dict[str, object], (yield sdk_call(self._client, "submit_job", kind, request))
+            )
         # Leave malformed wire payloads to the Gateway's schema validation.
         if not all(isinstance(path, str) and isinstance(text, str) for path, text in files.items()):
-            return self._client.submit_job(kind, request)
+            return cast(
+                dict[str, object], (yield sdk_call(self._client, "submit_job", kind, request))
+            )
         texts = cast(dict[str, str], files)
         decoded_bytes = sum(len(text.encode("utf-8")) for text in texts.values())
         if decoded_bytes <= self._max_inline_bytes:
-            return self._client.submit_job(kind, request)
+            return cast(
+                dict[str, object], (yield sdk_call(self._client, "submit_job", kind, request))
+            )
         command = request.get("command")
         spec = request.get("spec")
         targets = spec.get("target_hardware") if isinstance(spec, dict) else None
@@ -93,7 +135,9 @@ class OssAgateClient:
             }
             if archive_path in occupied or driver_path in occupied:
                 raise ValueError("OSS transport staging paths conflict with request files")
-            reservation = self._client.prepare_uploads(
+            reservation = yield sdk_call(
+                self._client,
+                "prepare_uploads",
                 targets[0],
                 [{"path": archive_path, "bytes": archive.stat().st_size, "sha256": digest}],
                 kind=kind,
@@ -112,7 +156,7 @@ class OssAgateClient:
                 raise ValueError(
                     "Agate OSS reservation has an invalid path, URL or upload reference"
                 )
-            self._client.upload_file(upload["put_url"], str(archive))
+            yield sdk_call(self._client, "upload_file", upload["put_url"], str(archive))
             wire = {
                 **request,
                 "files": {driver_path: Path(oss_remote.__file__).read_text(encoding="utf-8")},
@@ -131,9 +175,11 @@ class OssAgateClient:
                 decoded_bytes,
                 archive.stat().st_size,
             )
-            return self._client.submit_job(kind, wire)
+            return cast(dict[str, object], (yield sdk_call(self._client, "submit_job", kind, wire)))
 
-    def _submit_eval(self, request: dict[str, object]) -> dict[str, object]:
+    def _submit_eval(
+        self, request: dict[str, object]
+    ) -> Generator[SdkCall, Any, dict[str, object]]:
         archives = request[EVAL_ARCHIVES_KEY]
         if not isinstance(archives, dict) or not archives:
             raise ValueError("native Eval requires nonempty source archives")
@@ -194,7 +240,9 @@ class OssAgateClient:
                     {"path": archive_path, "bytes": archive.stat().st_size, "sha256": digest}
                 )
                 staged.append(archive)
-            reservation = self._client.prepare_uploads(targets[0], descriptors, kind="eval")
+            reservation = yield sdk_call(
+                self._client, "prepare_uploads", targets[0], descriptors, kind="eval"
+            )
             uploads = reservation.get("uploads")
             if (
                 not reservation.get("job_id")
@@ -214,8 +262,32 @@ class OssAgateClient:
                     raise ValueError("Agate Eval reservation has an invalid path, URL or reference")
             attachments = list(existing)
             for archive, upload in zip(staged, uploads, strict=True):
-                self._client.upload_file(upload["put_url"], str(archive))
+                yield sdk_call(self._client, "upload_file", upload["put_url"], str(archive))
                 attachments.append({"path": upload["path"], "upload_ref": upload["upload_ref"]})
             wire = {key: value for key, value in request.items() if key != EVAL_ARCHIVES_KEY}
             wire["oss_files"] = attachments
-            return self._client.submit_job("eval", wire)
+            return cast(
+                dict[str, object], (yield sdk_call(self._client, "submit_job", "eval", wire))
+            )
+
+
+class _Submission:
+    """Drive the same staged upload protocol from sync and async entry points."""
+
+    def __init__(self, steps: Generator[SdkCall, Any, dict[str, object]]) -> None:
+        self.steps = steps
+
+    def advance(self, value: object) -> tuple[SdkCall | None, dict[str, object] | None]:
+        try:
+            return self.steps.send(value), None
+        except StopIteration as done:
+            return None, cast(dict[str, object], done.value)
+
+    def close(self) -> None:
+        self.steps.close()
+
+    def __enter__(self) -> _Submission:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()

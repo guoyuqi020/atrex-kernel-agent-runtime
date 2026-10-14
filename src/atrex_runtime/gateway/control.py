@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
+from ..artifacts.local import JsonValue
 from ..direction_genealogy import suggestion_availability
 from ..domain.errors import (
     DirectionConcurrencyError,
@@ -39,6 +40,7 @@ from ..domain.models import (
     AttemptStatus,
     Dsl,
     EpochStatus,
+    KernelRevision,
     TokenUsage,
     WorkerSessionRole,
     WorkerSessionStatus,
@@ -405,6 +407,43 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         modules = self._registry.get_lineage(epoch.lineage_id).tool_modules
         return default if modules is None else modules
 
+    def result_artifact_read_enabled_for_attempt(self, attempt_id: AttemptId) -> bool:
+        """Resolve the frozen read policy; pre-Lineage Bootstrap retains normal tools."""
+        try:
+            attempt = self._registry.get_attempt(attempt_id)
+        except KeyError:
+            return True
+        epoch = self._registry.get_epoch(attempt.epoch_id)
+        return self._registry.get_lineage(epoch.lineage_id).result_artifact_read_enabled
+
+    def dev_only_for_attempt(self, attempt_id: AttemptId) -> bool:
+        """Bootstrap keeps standard tools; optimizer policy comes only from its Lineage."""
+        try:
+            attempt = self._registry.get_attempt(attempt_id)
+        except KeyError:
+            return False
+        epoch = self._registry.get_epoch(attempt.epoch_id)
+        return self._registry.get_lineage(epoch.lineage_id).dev_only
+
+    def raw_for_attempt(self, attempt_id: AttemptId) -> bool:
+        """Bootstrap keeps standard tools; optimizer policy comes only from its Lineage."""
+        try:
+            attempt = self._registry.get_attempt(attempt_id)
+        except KeyError:
+            return False
+        epoch = self._registry.get_epoch(attempt.epoch_id)
+        return self._registry.get_lineage(epoch.lineage_id).raw
+
+    def evaluation_trajectory_scope(self, attempt_id: AttemptId) -> dict[str, JsonValue]:
+        """Namespace a measurement when its Lineage cache belongs to an invisible peer."""
+        attempt = self._registry.get_attempt(attempt_id)
+        return {
+            "epoch_id": str(attempt.epoch_id),
+            "branch": attempt.branch.value,
+            "challenger_ordinal": attempt.challenger_ordinal,
+            "trajectory_ordinal": attempt.trajectory_ordinal,
+        }
+
     def issue_bootstrap(
         self,
         subject: BootstrapGatewaySubject,
@@ -684,6 +723,18 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 raise PermissionError("Gateway capability is revoked")
             if self._clock() >= datetime.fromisoformat(row["expires_at"]):
                 raise PermissionError("Gateway capability has expired")
+            if self.raw_for_attempt(capability.attempt_id):
+                raise PermissionError("All Runtime operations are disabled for this raw Lineage")
+            if self.dev_only_for_attempt(capability.attempt_id) and operation not in {
+                GatewayOperation.DEV,
+                GatewayOperation.KERNEL_ARTIFACT_READ,
+                GatewayOperation.ATTEMPT_REPORT,
+                GatewayOperation.ATTEMPT_REPORT_STATUS,
+            }:
+                raise PermissionError(
+                    f"Operation {operation.value!r} is disabled for this dev-only Lineage; "
+                    "only dev, Kernel source reads and terminal report handoff are available"
+                )
             allowed = json.loads(row["operations_json"])
             if operation not in _IMPLICIT_RUNTIME_OPERATIONS and operation.value not in allowed:
                 raise PermissionError(f"Gateway operation is not allowed: {operation.value}")
@@ -743,11 +794,13 @@ class SqliteGatewayControl(AttemptOutcomeSource):
     def session_wait(self, authorization: GatewayAuthorization) -> Iterator[None]:
         """Exclude authenticated tool service time from the current Agent's budget."""
         sessions = self._registry.list_worker_sessions(
-            attempt_id=authorization.attempt_id, status=WorkerSessionStatus.RUNNING,
+            attempt_id=authorization.attempt_id,
+            status=WorkerSessionStatus.RUNNING,
         )
         for session in reversed(sessions):
             if session.role not in {
-                WorkerSessionRole.OPTIMIZER, WorkerSessionRole.FRAMEWORK_BASELINE,
+                WorkerSessionRole.OPTIMIZER,
+                WorkerSessionRole.FRAMEWORK_BASELINE,
             }:
                 continue
             if session.recovery_generation not in (None, authorization.recovery_generation):
@@ -777,7 +830,8 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         """
         key = json.dumps(
             [
-                "evaluate-request" if authorization.operation is GatewayOperation.EVALUATE
+                "evaluate-request"
+                if authorization.operation is GatewayOperation.EVALUATE
                 else "gateway-request",
                 str(authorization.attempt_id),
                 authorization.recovery_generation,
@@ -793,8 +847,11 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     connection.execute(
                         """DELETE FROM gateway_active_calls WHERE attempt_id = ?
                            AND recovery_generation = ? AND idempotency_key = ?""",
-                        (authorization.attempt_id, authorization.recovery_generation,
-                         authorization.idempotency_key),
+                        (
+                            authorization.attempt_id,
+                            authorization.recovery_generation,
+                            authorization.idempotency_key,
+                        ),
                     )
             yield acquired
 
@@ -813,7 +870,8 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             ).fetchone()
         if (
             generation != authorization.recovery_generation
-            or row is None or row["revoked"]
+            or row is None
+            or row["revoked"]
             or row["recovery_generation"] != authorization.recovery_generation
         ):
             raise GatewayExecutionSupersededError(
@@ -893,7 +951,8 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         return parse_artifact_digest(value)
 
     def get_operation_gateway_result(
-        self, authorization: GatewayAuthorization,
+        self,
+        authorization: GatewayAuthorization,
     ) -> ArtifactDigest | None:
         """Read a request's private result checkpoint before replaying its response."""
         self.check_execution_authority(authorization)
@@ -901,15 +960,21 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             row = self._connection.execute(
                 """SELECT gateway_result_digest FROM gateway_operations WHERE attempt_id=?
                    AND recovery_generation=? AND idempotency_key=? AND operation=?""",
-                (authorization.attempt_id, authorization.recovery_generation,
-                 authorization.idempotency_key, authorization.operation.value),
+                (
+                    authorization.attempt_id,
+                    authorization.recovery_generation,
+                    authorization.idempotency_key,
+                    authorization.operation.value,
+                ),
             ).fetchone()
         if row is None or row["gateway_result_digest"] is None:
             return None
         return parse_artifact_digest(str(row["gateway_result_digest"]))
 
     def retire_nonterminal_checkpoint(
-        self, authorization: GatewayAuthorization, expected: ArtifactDigest,
+        self,
+        authorization: GatewayAuthorization,
+        expected: ArtifactDigest,
     ) -> None:
         """Retire a verified legacy queued snapshot under its request lease.
 
@@ -922,8 +987,13 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 """UPDATE gateway_operations SET gateway_result_digest=NULL,
                    result_artifact_digest=NULL WHERE attempt_id=? AND recovery_generation=?
                    AND idempotency_key=? AND operation=? AND gateway_result_digest=?""",
-                (authorization.attempt_id, authorization.recovery_generation,
-                 authorization.idempotency_key, authorization.operation.value, expected),
+                (
+                    authorization.attempt_id,
+                    authorization.recovery_generation,
+                    authorization.idempotency_key,
+                    authorization.operation.value,
+                    expected,
+                ),
             ).rowcount
             if changed != 1:
                 raise InvalidTransitionError("Gateway checkpoint changed during recovery")
@@ -952,8 +1022,11 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                     (str(task_digest),),
                 ).fetchone()
             owned, result = self.reserve_evaluate_task(
-                attempt_id, idempotency_key, task_digest,
-                recover_orphan=True, active_call_id=active_call_id,
+                attempt_id,
+                idempotency_key,
+                task_digest,
+                recover_orphan=True,
+                active_call_id=active_call_id,
             )
             recovery = None
             if previous is not None and owned:
@@ -965,7 +1038,10 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             yield owned, result, recovery
 
     def reconcile_evaluate_replay(
-        self, attempt_id: AttemptId, idempotency_key: str, active_call_id: str | None,
+        self,
+        attempt_id: AttemptId,
+        idempotency_key: str,
+        active_call_id: str | None,
     ) -> None:
         """Finish a crash after committing the response but before releasing the task."""
         with self._lock:
@@ -976,7 +1052,9 @@ class SqliteGatewayControl(AttemptOutcomeSource):
             ).fetchone()
         if row is not None:
             with self.evaluate_task_execution(
-                attempt_id, idempotency_key, parse_artifact_digest(row["task_digest"]),
+                attempt_id,
+                idempotency_key,
+                parse_artifact_digest(row["task_digest"]),
                 active_call_id,
             ):
                 pass
@@ -1038,8 +1116,10 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                          AND idempotency_key = ? AND operation = 'evaluate'
                          AND call_id IS NOT ?""",
                     (
-                        row["attempt_id"], row["recovery_generation"],
-                        row["idempotency_key"], active_call_id,
+                        row["attempt_id"],
+                        row["recovery_generation"],
+                        row["idempotency_key"],
+                        active_call_id,
                     ),
                 )
             result_value = row["result_artifact_digest"]
@@ -1078,8 +1158,10 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 # Attempt row. Recovery without a newer generation requires the
                 # execution lease proving that the former executor has stopped.
                 owner_is_running = True
-            if recover_orphan or not owner_is_running or (
-                owner_attempt_id == attempt_id and owner_generation < generation
+            if (
+                recover_orphan
+                or not owner_is_running
+                or (owner_attempt_id == attempt_id and owner_generation < generation)
             ):
                 connection.execute(
                     """UPDATE gateway_evaluate_tasks
@@ -1522,10 +1604,7 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         generation = self._subject_generation(attempt_id)
         if recovery_generation is not None and recovery_generation != generation:
             raise InvalidTransitionError("Kernel Trial annotations belong to a stale generation")
-        _, visible_attempt_ids = self.visible_kernel_trial_attempt_ids(attempt_id)
-        visible_trials = {
-            trial.id: trial for trial in self.list_kernel_trials(visible_attempt_ids, limit=5_000)
-        }
+        visible_trials = {trial.id: trial for trial in self.visible_kernel_evidence(attempt_id)}
         _validate_profile_supporting_results(
             visible_trials,
             profile_supporting_results,
@@ -2094,8 +2173,12 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         # history is visible too. This admits only pre-evolution Bootstrap Attempts; the
         # Epoch loop below stays scoped to this Lineage.
         bootstrap_lineage_ids = [str(lineage.id)]
-        if lineage.bootstrap_source_lineage_id is not None:
-            bootstrap_lineage_ids.append(str(lineage.bootstrap_source_lineage_id))
+        source_id = lineage.bootstrap_source_lineage_id
+        while source_id is not None:
+            if str(source_id) in bootstrap_lineage_ids:
+                raise InfrastructureError("Bootstrap Lineage ancestry contains a cycle")
+            bootstrap_lineage_ids.append(str(source_id))
+            source_id = self._registry.get_lineage(source_id).bootstrap_source_lineage_id
         with self._lock:
             bootstrap_rows = self._connection.execute(
                 f"""SELECT attempt_id FROM bootstrap_gateway_subjects
@@ -2159,6 +2242,81 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                         and attempt.ordinal < current.ordinal
                     )
         return lineage.id, tuple(visible)
+
+    def visible_input_kernel_revisions(self, attempt_id: AttemptId) -> tuple[KernelRevision, ...]:
+        """Authorize sealed input ancestry even when restored seeds have no Trial rows.
+
+        Follow immutable input revisions, never a source Lineage's mutable best Kernel:
+        that Lineage may have advanced independently since the Bootstrap was cloned.
+        """
+        try:
+            attempt = self._registry.get_attempt(attempt_id)
+        except KeyError:
+            self.get_bootstrap_subject(attempt_id)
+            return ()
+        revision = self._registry.get_kernel_revision(attempt.input_kernel_revision_id)
+        revisions = []
+        seen = set()
+        while True:
+            if revision.id in seen:
+                raise InfrastructureError("Input Kernel ancestry contains a cycle")
+            seen.add(revision.id)
+            revisions.append(revision)
+            if revision.parent_id is None:
+                return tuple(revisions)
+            revision = self._registry.get_kernel_revision(revision.parent_id)
+
+    def visible_kernel_evidence(
+        self,
+        attempt_id: AttemptId,
+        *,
+        journal_history: bool = False,
+    ) -> tuple[GatewayKernelTrialRecord, ...]:
+        """Visible operations plus sealed input results, without inventing Trial rows.
+
+        Restored/authoritative inputs can have no Agent operation. The explicit
+        input_revision marker permits historical citation but never satisfies a
+        current-Attempt measurement or adoption of an Agent-evaluated candidate.
+        """
+        _, visible = (
+            self.visible_journal_attempt_ids(attempt_id)
+            if journal_history
+            else self.visible_kernel_trial_attempt_ids(attempt_id)
+        )
+        trials = list(self.list_kernel_trials(visible, limit=5_000))
+        known = {
+            (trial.kernel_artifact_digest, observation.result_artifact_digest)
+            for trial in trials
+            for observation in trial.observations
+        }
+        for revision in self.visible_input_kernel_revisions(attempt_id):
+            digest = revision.evaluation.gateway_result_digest
+            if (revision.artifact_digest, digest) in known:
+                continue
+            known.add((revision.artifact_digest, digest))
+            trials.append(
+                GatewayKernelTrialRecord(
+                    id="gtrial_input_" + str(revision.id),
+                    attempt_id=attempt_id,
+                    recovery_generation=0,
+                    ordinal=1,
+                    kernel_artifact_digest=revision.artifact_digest,
+                    observations=(
+                        GatewayKernelTrialObservation(
+                            idempotency_key="input:" + str(revision.id),
+                            operation=GatewayOperation.EVALUATE,
+                            request_digest=None,
+                            gateway_result_digest=digest,
+                            result_artifact_digest=digest,
+                            created_at=revision.created_at,
+                        ),
+                    ),
+                    annotations=(),
+                    created_at=revision.created_at,
+                    input_revision=revision,
+                )
+            )
+        return tuple(trials)
 
     def visible_kernel_trial_attempt_ids(
         self,

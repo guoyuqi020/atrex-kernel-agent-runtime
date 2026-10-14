@@ -169,7 +169,14 @@ retention/promotion. It returns B's `kernel_artifact_digest` and a
 `improvement_pct`. These results are readable through Trial/Result Artifact queries, not the
 ordinary Evaluate history routes. See [Evaluation](evaluation.md#exploratory-abba).
 
-For `env`, Core returns the Agent-safe service result directly. Kernel operations always return
+For `env`, the Agent sends only `{"operation":"env"}`. Runtime resolves the task's `agate_gpu`
+(falling back to its configured hardware target) and returns `{gpu, env, capabilities}` with both
+environment detail and capabilities. These are cached/default SDK queries (`force=false`);
+Agent-supplied `gpu`, `capabilities`, and `force` are rejected. Core returns this safe result
+directly. A local SDK `InvalidURL`, including one wrapped as a retryable transport error, fails
+immediately with a configuration error instead of entering the infrastructure retry loop.
+
+Kernel operations always return
 `kernel_artifact_digest` and `result_artifact_digest`; `dev` and `profile` keep those identities
 beside the flattened Agent-safe Job result. Its nested `result` uses a numeric opaque
 `shape_id`, normalizes Kernel duration to microseconds and common resource aliases, retains safe
@@ -302,14 +309,14 @@ helpers are supported for a shared custom input generator and Shapes.
 | `list-experiments` | Requires a safe `file` under `scratch/`; atomically writes Experiment ID, name, Direction ID, change, compact measurement_summary, action, and `knowledge_used` from frozen history plus the current live Journal, then returns only status, file, and count. |
 | `load-experiment` | With exactly one `experiment_id`, returns that complete Agent-visible Experiment without Runtime-internal ordering metadata. |
 | `find-kernel-experiments` | With exactly one `kernel_artifact_digest`, returns visible `experiment_ids` citing that Kernel Artifact as before or after; it does not return Direction IDs. |
-| `attempt-report` | Terminal schema-v12 Agent handoff with engineering evidence, Direction events, and Direction-bound Experiments. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
+| `attempt-report` | Compact schema-v13 handoff with status, candidate source summary, contribution references and blocker. Both `framework_baseline` and ordinary optimization use it; Bootstrap may report only `candidate_ready` or `blocked`. It has no duplicate next-direction list or top-level `decision`; Runtime alone decides retention. |
 
 The Direction and Experiment command families are independently enabled by
 `campaign.optimizer.tool_modules`. Disabled commands are absent from the live Session contract
 and rejected if called directly. With Directions alone, closures require
 `hypothesis_status` with optional analysis but no `supporting_experiment_ids`. With Experiments alone,
 `record-experiment` omits `direction_id`; Findings still cite their Experiments. With Experiments
-disabled, Findings omit `supporting_experiment_ids`. The terminal Report records the enabled
+disabled, new reports still contain no Findings; old v12 Findings remain readable. The terminal Report records the enabled
 modules and attaches empty Journals for disabled families.
 
 If `load-direction`, a lifecycle `update-direction`, or `record-experiment` cannot resolve a
@@ -356,6 +363,15 @@ uses Linux `/proc` identities. On platforms without that verifier, including mac
 failure remains a failure rather than risking concurrent writers. Local cleanup does not cancel
 already submitted remote Gateway jobs: their existing receipts and Runtime deduplication rules
 still apply, and a missing receipt does not mean a job never ran.
+
+
+### Compact Attempt Report (v13)
+
+New Agent requests contain exactly status, final_candidate, contributing_result_artifact_digests and blocker. Candidate-ready requires a non-null {"change_summary":"exact source change or unchanged"} and null blocker; pivot requires both null; blocked requires a null candidate and nonblank blocker. Bootstrap disallows pivot.
+
+Hypothesis, diagnosis, approach, analysis, evidence_summary, profile_evidence, knowledge_used and findings are rejected, not merely optional. Local interpretation belongs to an Experiment; only new cross-experiment synthesis, untested alternatives or next steps belong to a Direction, referencing Experiments rather than copying analyses. A failed implementation does not refute all variants. No additional Claim entity/tool is introduced. With both modules off, experience analysis is not required and own notes remain allowed.
+
+Runtime still validates the exact nomination, Journal closure and in-flight request barrier. The CLI attaches authoritative Journal snapshots for validation/recovery. New Agent-facing final report views carry experiment_ids and direction_ids rather than copied Journal prose, plus Runtime-generated measured outcomes. Contribution references remain attribution, not nomination evidence. Sealed v12 reports and frozen clients remain compatible; archives are never rewritten. The profile_evidence/Findings sections below describe legacy v12 only.
 
 ### Report completion after normal model exit
 
@@ -407,8 +423,8 @@ Calls remain active through result persistence; success, failure, and cancellati
 Local Journal/history reads and report-status queries do not block handoff. A process crash leaves
 a fail-closed reservation scoped to its recovery generation; normal Attempt recovery fences it off.
 
-`candidate_ready` requires nomination journals for enabled modules; Findings may be empty.
-`blocked` and `pivot` may have empty journals and Findings; give the genuine reason instead of
+`candidate_ready` requires nomination journals for enabled modules; new reports contain no Findings.
+`blocked` and `pivot` may have empty journals; give the genuine reason instead of
 fabricating evidence. Close this Attempt's in-progress Directions before handoff; an unmeasured
 Direction can close unresolved with no Experiment or Gateway call.
 The first successful `attempt-report`
@@ -587,6 +603,9 @@ Each subject has 1–4096 unique Result digests. This route works with either, b
 module enabled. Optional `supporting_experiment_ids` (0–32 unique IDs from this Attempt's attached
 Journal) organize additional evidence when Experiments are enabled; omit them when disabled.
 Matching visible historical Results can be reused without a new GPU job or Experiment.
+One claim subject may combine Results for the same exact Kernel from a restored Bootstrap,
+different visible Attempts, or recovery generations. Each Kernel/Result pair is checked separately;
+this does not merge Trials or qualify historical evidence as a new current-Attempt evaluation.
 
 Runtime checks exact visibility and identity bindings. Supported/refuted observations require a
 completed Check, Dev, Profile, or Evaluate; implementation outcomes require completed Dev or full
@@ -610,9 +629,9 @@ The Gateway defines no low-level Agate `submit` passthrough and no standalone `s
 Measurements use Runtime-constructed `evaluate`, optionally with an exploratory comparison; SOL profiling remains available through
 `profile` with `level="sol"`.
 
-The sealed schema-v12 value is the Agent handoff, not the authoritative outcome. Runtime derives a
+The sealed schema-v13 value (or historical v12) is the handoff, not the authoritative outcome. Runtime derives a
 schema-v1 Final Attempt Report for the administration route and later Evidence snapshots. It keeps
-the engineering narrative, then adds exact `parent_kernel` and `candidate_kernel` objects. Kernel
+legacy v12 narrative; new v13 views reference Journal IDs instead of duplicating analysis, then add exact `parent_kernel` and `candidate_kernel` objects. Kernel
 identity uses `kernel_artifact_digest`, not an internal Revision ID. Each Kernel contains a
 normalized `gateway_result` with operation, completion status, correctness, geometric and
 arithmetic aggregate latency, and latency keyed by opaque Shape ID. Correctness includes `status`

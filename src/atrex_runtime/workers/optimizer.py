@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from typing import Literal, Protocol
 
@@ -69,8 +69,25 @@ class OptimizerSessionConfig:
     wiki_endpoint: str | None = None
     wiki_capability: str | None = None
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
+    result_artifact_read_enabled: bool = True
+    dev_only: bool = False
+    raw: bool = False
+    raw_agate_environment: tuple[tuple[str, str], ...] = field(default=(), repr=False)
 
     def __post_init__(self) -> None:
+        if type(self.raw) is not bool:
+            raise ValueError("raw must be a boolean")
+        if self.raw and (
+            self.dev_only or self.tool_modules != () or self.result_artifact_read_enabled
+        ):
+            raise ValueError(
+                "raw requires dev_only=false, tool_modules=[] "
+                "and result_artifact_read_enabled=false"
+            )
+        if type(self.dev_only) is not bool:
+            raise ValueError("dev_only must be a boolean")
+        if type(self.result_artifact_read_enabled) is not bool:
+            raise ValueError("result_artifact_read_enabled must be a boolean")
         if (self.gateway_endpoint is None) != (self.gateway_capability is None):
             raise ValueError("Gateway endpoint and capability must be set together")
         if (self.wiki_endpoint is None) != (self.wiki_capability is None):
@@ -206,17 +223,24 @@ class SessionOptimizerRunner(OptimizerRunner):
         self._events.record_runtime_event("worker.started", request.attempt_id, event_base)
         exit_kind = "failed"
         try:
-            authority = await self._gateway_authorities.get_authority(request)
+            authority = (
+                None if request.raw else await self._gateway_authorities.get_authority(request)
+            )
             result = await self._sessions.run(
                 prepared,
                 replace(
                     self._config,
                     model=request.model,
-                    gateway_endpoint=authority.endpoint,
-                    gateway_capability=authority.capability,
-                    wiki_endpoint=authority.endpoint if self._wiki_enabled else None,
-                    wiki_capability=authority.capability if self._wiki_enabled else None,
+                    gateway_endpoint=authority.endpoint if authority else None,
+                    gateway_capability=authority.capability if authority else None,
+                    wiki_endpoint=authority.endpoint if self._wiki_enabled and authority else None,
+                    wiki_capability=authority.capability
+                    if self._wiki_enabled and authority
+                    else None,
                     tool_modules=request.tool_modules,
+                    result_artifact_read_enabled=request.result_artifact_read_enabled,
+                    dev_only=request.dev_only,
+                    raw=request.raw,
                 ),
             )
         except InfrastructureError as error:

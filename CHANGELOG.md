@@ -6,6 +6,58 @@ All notable changes to Atrex Kernel Agent Runtime are documented here.
 
 ## Unreleased
 
+- Move Agate Job polling and persistent transport backoff to Runtime coroutines, isolate SDK
+  request capacity from the shared worker pool, and retain terminal-only tool replies, idempotency,
+  per-stage OSS retry and cancellation cleanup. Keep the installed Agate SDK unchanged and cover
+  more than 40 concurrent HTTP waits, overload recovery and control-request availability.
+
+- Simplify new attempt-report submissions to status, candidate summary, contribution references and blocker (v13). Keep analysis in Experiments/Directions, project Journal IDs in final report views, retain v12 compatibility and all handoff safety gates, and align Core/KDA normal, Bootstrap and recovery contracts.
+
+- Supervise Runtime HTTP calls outside the Provider tree and suspend its owned process groups,
+  including subagents, until both the calls and trusted Runtime in-flight state finish. Shell
+  timeouts, backgrounding, and CLI death cannot resume the Agent early. Keep terminal errors intact,
+  clean up on cancellation, and test real processes, HTTP, overlapping requests and long responses.
+
+- Add Raw ablations with direct Agate, no Runtime tools/history, trajectory-owned memory and private final validation.
+
+- Add the Dev-only ablation: disable Journals and Result Artifact/Pareto/Wiki queries, expose Dev
+  plus visible Kernel source reads and report handoff/discovery, and enforce the frozen policy on authenticated server requests.
+  Accept nominations without Agent Evaluate while always running private authoritative validation;
+  align normal/recovery Prompts and add three independent repeats plus both shared modes.
+
+- Fix false correctness-only failures when Agate returns nonempty `unexpected_mutations`
+  check records that all passed. Inspect individual verdicts/errors instead of list presence;
+  preserve real failures and regression-test archived FA4 data, 30-Shape batching and Agent HTTP
+  responses with result reads enabled or disabled.
+
+- Bound complete source-tree diagnostic records to 768 KiB, remove duplicate successful command
+  output, and preserve verdicts with explicit Agent-visible truncation summaries. Diagnose old
+  Agate-truncated output without leaking private logs; add real-driver/HTTP regressions for
+  Disassemble, Profile and Check, including durable result reads.
+
+- Let Experiments, Directions and report Findings cite authoritative sealed input results, including
+  restored Bootstrap baselines with no Agent Trial row. Share the safe projection with result reads
+  and measurement summaries without counting input evidence as a fresh Attempt measurement.
+  Add HTTP regressions for module combinations, isolation and OSS upload/download recovery.
+
+- Fix restored Bootstrap result visibility using sealed input Kernel ancestry and transitive
+  Bootstrap source history. Project native Eval measurements safely, preserve peer isolation and
+  the frozen no-result-read policy, and cover restoration and HTTP reads with regression tests.
+
+- Add a frozen per-Lineage `result_artifact_read_enabled` switch and a no-journals/no-result-read ablation to both default sharing modes and FA4 independent repeats. Keep original tool responses, historical reports, source queries, and transport recovery; enforce the switch in HTTP and live Agent contracts.
+
+- Expose candidate/baseline `ATREX_SHIM_ERROR` source-validation details to Agents through
+  Evaluate and ABBA, including rejected paths/usages and non-retryable repair guidance. Keep
+  evaluator material private and cover nested log encoding and HTTP/result replay.
+- Patch the FA4 R0 task for whole-tree native Eval validation: static vendor imports, process-local
+  caches, explicit metadata protocols and AST-preserving size reduction. Preserve algorithmic R0
+  and the full target contract, with reproducible bundle provenance and source-gate regressions.
+
+- Treat `oss_unavailable` as retryable infrastructure failure even when Agate returns
+  HTTP 400/validation. Evaluate, correctness-only and ABBA wait through OSS recovery without
+  recording false correctness verdicts or completed-task dedup; authoritative submissions use
+  the same classification. Preserve candidate-validation behavior and regression-test retries.
+
 - Remove legacy Dev ABBA request construction, remote evaluation execution, result decoding and
   dedicated tests. Evaluate and ABBA remain native Eval only, including when OSS uploads fail.
   Keep diagnostic clock/dependency helpers and add native source-tree failure regressions.

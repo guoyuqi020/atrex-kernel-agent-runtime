@@ -145,7 +145,13 @@ A、B、B、A，更长 Schedule 还须满足 Allocation 预算。ABBA 始终仅�
 以及 A/B `speedup` 和 `improvement_pct`。结果通过 Trial/Result Artifact 查询读取，不进入普通
 Evaluate 历史路由。详见[评测说明](evaluation.zh.md#探索性-abba)。
 
-对于 `env`，Core 直接返回安全的服务结果。Kernel 操作统一返回
+对于 `env`，Agent 只提交 `{"operation":"env"}`。Runtime 读取题目的 `agate_gpu`
+（未配置时使用题目的硬件目标），一次返回 `{gpu, env, capabilities}`，同时包含环境详情和能力。
+查询使用 SDK 默认缓存行为（`force=false`），拒绝 Agent 传入 `gpu`、`capabilities` 或 `force`。
+Core 直接返回这份安全结果。SDK 本地 `InvalidURL` 即使被包装为可重试的传输错误，也会立即返回
+配置错误，不再进入基础设施故障重试循环。
+
+Kernel 操作统一返回
 `kernel_artifact_digest` 和 `result_artifact_digest`；`dev` 与 `profile` 在展平的安全 Job
 Result 旁保留这两个身份。Profile 的嵌套 `result` 仅用数字型
 不透明 `shape_id` 标识 Shape，把 Kernel Duration 和常见资源字段规范化，并保留安全的 Profiler
@@ -269,13 +275,13 @@ Workspace 相对路径；单个 `.py` 文件映射为 `kernel.py`，目录保留
 | `list-experiments` | 请求必须指定 `scratch/` 下的安全 `file`；工具把冻结历史及当前实时 Journal 中的 Experiment ID、名称、Direction ID、Change、精简测量摘要、Action 和 `knowledge_used` 原子写入文件，stdout 只返回状态、文件路径和条目数。 |
 | `load-experiment` | 请求只包含一个 `experiment_id`，返回该 Experiment 的完整 Agent 可见记录，不包含 Runtime 内部排序元数据。 |
 | `find-kernel-experiments` | 请求只包含 `kernel_artifact_digest`，返回把该 Kernel Artifact 记录为 before 或 after 的可见 `experiment_ids`；不返回 Direction ID。 |
-| `attempt-report` | Schema-v12 终态 Agent Handoff，包含工程证据、Direction 事件及与 Direction 绑定的 Experiment；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
+| `attempt-report` | Schema-v13 精简终态 Agent Handoff，仅提交状态、候选说明、历史结果引用和阻塞原因；`framework_baseline` 和普通优化均使用它，Bootstrap 只允许 `candidate_ready` 或 `blocked`；不含重复的下一方向列表或顶层 `decision`。 |
 
 Direction 与 Experiment 两组命令由 `campaign.optimizer.tool_modules` 独立启用。关闭的命令
 不会出现在 Session 实时契约中，直接调用也会被拒绝。仅启用 Directions 时，关闭 Direction
 需要 `hypothesis_status`，`analysis` 可选，不需要 `supporting_experiment_ids`；仅启用
 Experiments 时，`record-experiment` 不填写 `direction_id`，Finding 仍引用其 Experiment；
-关闭 Experiments 时，Finding 不填写 `supporting_experiment_ids`。终态 Report 记录启用
+新 Report 不再接受 Findings；旧 v12 的 Finding 仅保留读取兼容。终态 Report 记录启用
 的模块，并为关闭的模块附上空 Journal。
 
 `load-direction`、更新已有 Direction 的 `update-direction` 和 `record-experiment` 找不到 Direction ID
@@ -311,6 +317,24 @@ Token/Credit 配额。优化恢复次数耗尽后，只允许在独立的 `repor
 没有该验证能力的平台（包括 macOS）会保留输出上限失败，避免两个会话同时写入工作区。
 本地清理不会取消已提交的远端 Gateway Job；仍须使用已有回执并遵守 Runtime 去重规则，
 缺少回执不代表远端任务没有执行。
+
+
+### 精简 Attempt Report（v13）
+
+新 Agent 请求严格只有四个字段：
+
+```json
+{
+  "status": "candidate_ready",
+  "final_candidate": {"change_summary": "本次实际源码改动，或保持原候选"},
+  "contributing_result_artifact_digests": [],
+  "blocker": null
+}
+```
+
+不接受 hypothesis、diagnosis、approach、analysis、evidence_summary、profile_evidence、knowledge_used 或 findings；不是将其改成可选，而是从新提交协议移除。Experiment 负责单次改动的分析，Direction 只增加跨实验归纳、未测替代方案或下一步，引用 Experiment ID 而不复述。同一个失败实现不代表整个方向被推翻；暂停决策与假设判断分开。所有分析均可省略，不新增 Claim 实体或工具。
+
+两模块全关时，不要求经验分析；Agent 仍可自行记笔记。候选的 change_summary 只描述源码状态。历史结果引用仅为来源声明，不替代候选评测证据。Runtime 继续验证候选、Journal 和进行中的请求；工具自动附加权威 Journal 快照供校验/恢复。对后续 Agent 展示的 Report 仅保留 experiment_ids、direction_ids，测量结果由 Runtime 生成。旧 v12 报告和冻结客户端保持兼容，不改写存档。以下 profile_evidence/Findings 相关说明仅适用于旧 v12 报告。
 
 ### 模型正常退出后的报告补交
 
@@ -493,6 +517,8 @@ Experiment 快照之后取得的 Profile，都无需补录 Journal 或重新打�
 每个 Subject 含 1–4096 个无重复 Result Digest；四种 Journal 模块组合均可使用这条证据路径。
 启用 Experiments 时，可选的 `supporting_experiment_ids` 用 0–32 个同一附加 Journal 内的无重复 ID
 组织额外证据；关闭时不填写。可复用匹配且可见的历史 Result，无需为记录结论重复执行 GPU 工作或创建 Experiment。
+同一结论的一个 Subject 可以合并同一精确 Kernel 在恢复的 Bootstrap、不同可见 Attempt 或恢复代次中的
+多个 Result。Runtime 逐一核对 Kernel/Result 配对；不会合并 Trial，也不会把历史证据当成本次新评测。
 
 Runtime 检查精确身份和可见性。supported/refuted 的 observation 需要已完成的 Check/Dev/Profile/Evaluate；
 implementation_outcome 需要已完成的 Dev 或 full Evaluate；causal_hypothesis 需要已完成的
@@ -510,7 +536,7 @@ Gateway 不定义低层 Agate `submit` 透传，也不定义独立的 `sol` 操�
 Runtime 构造的 `evaluate`，其中可包含探索性比较；SOL Profile 仍通过 `profile` 的 `level="sol"` 使用。
 
 封存的 schema-v12 内容是 Agent Handoff，并非权威结果。Runtime 为管理接口和后续 Evidence
-Snapshot 派生 schema-v1 最终 Attempt Report：保留工程叙述，并补充准确的 `parent_kernel` 与
+Snapshot 派生 schema-v1 最终 Attempt Report：旧 v12 保留原有叙述；新 v13 以 Journal ID 引用替代重复分析，并补充准确的 `parent_kernel` 与
 `candidate_kernel`。Kernel 身份使用 `kernel_artifact_digest`，不暴露内部 Revision ID。每个 Kernel
 都包含规范化 `gateway_result`，展示 Operation、完成状态、正确性、几何平均/算术平均延迟，以及按
 不透明 Shape ID 索引的延迟。Correctness 包含 `status`，以及安全聚合后的最坏 relative-L2、逐元素

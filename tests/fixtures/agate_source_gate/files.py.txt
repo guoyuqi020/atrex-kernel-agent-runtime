@@ -1,0 +1,72 @@
+"""Submit-time validation of user-supplied ``files`` (the ``dev`` file map).
+
+``JobDevRequest.files`` is ``{relative path: UTF-8 text}`` and the backends materialize it
+verbatim into the per-job workdir. It had **no bound of any kind** — not count, not size,
+not path shape — which mattered once ``agate dev --working-dir`` started filling it from a
+whole directory: one mistyped path could hand the gateway an arbitrarily large tree to hold
+in memory and persist in every ``JobRecord.spec``.
+
+Division of labour with the client (see ``client/atrex_gateway_client/cli.py``):
+the CLI enforces the *real* budget — the ~900KB **packed** cap the ray dashboard's ingress
+imposes — because zipping is the only way to know that number and it belongs where the
+files are. This module is the backstop for a caller that skips the CLI, so the limits here
+are deliberately looser and cheap to evaluate: sums and lengths over data already parsed,
+no compression.
+
+Paths get the same treatment they'd get later in the backends (``safe_join`` /
+``_files_targz_b64`` reject absolute and traversal paths) — but rejecting at submit turns a
+mid-execution ``BackendError`` into a clean ``validation`` envelope naming the path.
+"""
+from __future__ import annotations
+
+MAX_FILES = 2000
+MAX_FILE_PATH_LEN = 512
+MAX_TOTAL_FILE_BYTES = 4 * 1024 * 1024
+TRANSFER_RESERVED_PATHS = frozenset({".agate_transfers.py", ".agate_transfers.json"})
+
+
+def validate_transfer_path(path: str) -> str | None:
+    """Return an error for a path that cannot safely live below a job workdir."""
+    if not isinstance(path, str) or not path:
+        return "must be a non-empty string"
+    if path == "." or "\x00" in path or "\\" in path:
+        return "must name an ordinary relative file"
+    if len(path) > MAX_FILE_PATH_LEN:
+        return f"is too long ({len(path)} chars > {MAX_FILE_PATH_LEN})"
+    parts = path.split("/")
+    if path.startswith("/") or any(part in {"", ".", ".."} for part in parts):
+        return "must be a normalized relative path without '.', '..', or empty segments"
+    if path.endswith("/"):
+        return "must name a file, not a directory"
+    if path in TRANSFER_RESERVED_PATHS:
+        return "is reserved by the gateway"
+    return None
+
+
+def validate_files(files: dict[str, str]) -> list[str]:
+    """Return a list of human-readable errors (empty = OK)."""
+    errors: list[str] = []
+    if len(files) > MAX_FILES:
+        errors.append(f"too many files: {len(files)} > {MAX_FILES}")
+
+    total = 0
+    for path, content in files.items():
+        if not isinstance(path, str) or not path:
+            errors.append(f"file path must be a non-empty string: {path!r}")
+            continue
+        if not isinstance(content, str):
+            errors.append(f"file {path!r}: content must be a string, "
+                          f"got {type(content).__name__}")
+            continue
+        if len(path) > MAX_FILE_PATH_LEN:
+            errors.append(f"file path too long ({len(path)} chars): {path[:80]!r}...")
+        # Same rule the backends enforce when packing, hoisted to submit so it reads as a
+        # validation error instead of surfacing mid-run as an infra fault.
+        if path.startswith("/") or ".." in path.split("/"):
+            errors.append(f"file {path!r}: must be a relative path without '..'")
+        total += len(content.encode("utf-8", errors="ignore"))
+
+    if total > MAX_TOTAL_FILE_BYTES:
+        errors.append(f"files total {total} bytes > {MAX_TOTAL_FILE_BYTES} "
+                      f"(use --working-dir, which packs and enforces the real limit)")
+    return errors

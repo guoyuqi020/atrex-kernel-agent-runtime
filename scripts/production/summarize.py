@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from atrex_runtime.ablation_plan import ABLATION_PLAN_SCHEMA_VERSION
+from atrex_runtime.ablation_plan import SUPPORTED_ABLATION_PLAN_SCHEMA_VERSIONS
 
 DSLS = ("cuda", "triton", "cutedsl")
 CAMPAIGN_ID = re.compile(r"campaign_[0-9a-f]{32}")
@@ -153,10 +153,11 @@ def main() -> None:
     ablation_plan = _load(workspace / "ablation.json") if arguments.phase == "campaign" else {}
     if (
         arguments.phase == "campaign"
-        and ablation_plan.get("schema_version") != ABLATION_PLAN_SCHEMA_VERSION
+        and ablation_plan.get("schema_version") not in SUPPORTED_ABLATION_PLAN_SCHEMA_VERSIONS
     ):
         raise SystemExit(
-            f"campaign summary requires Ablation Plan schema {ABLATION_PLAN_SCHEMA_VERSION}"
+            "campaign summary requires Ablation Plan schema "
+            f"{sorted(SUPPORTED_ABLATION_PLAN_SCHEMA_VERSIONS)}"
         )
     results: dict[str, Any] = {}
     main_evolve_enabled = bool(ablation_plan.get("main_evolve_enabled", True))

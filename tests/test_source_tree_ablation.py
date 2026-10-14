@@ -20,6 +20,8 @@ from atrex_runtime.bootstrap import CampaignSpecV3
         "data/GDN/ablation.json",
         "data/GDN-full/ablation.json",
         "examples/source-tree/ablation.example.json",
+        "data/ppubench/csa-paged-cuda/ablation.json",
+        "data/ppubench/gated-residual-combine-cuda/ablation.json",
     ],
 )
 def test_source_tree_arms_keep_topology_with_five_epochs(relative: str) -> None:
@@ -30,25 +32,41 @@ def test_source_tree_arms_keep_topology_with_five_epochs(relative: str) -> None:
     assert single_file["optimizer_attempt_budget_per_trajectory"] == 15
     assert all(arm["target_epoch_number"] == 5 for arm in single_file["arms"])
     assert plan["main_evolve_enabled"] is False
-    assert len(plan["arms"]) == 8
+    assert len(plan["arms"]) == 14
     assert all(arm["target_epoch_number"] == 5 for arm in plan["arms"])
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 360
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in plan["arms"]) == 630
     assert all("observer_label" not in arm for arm in plan["arms"])
     assert [arm["label"] for arm in plan["arms"]] == [
         f"ablation-{kind}-{suffix}3"
         for kind in ("epoch-shared", "broadcast")
-        for suffix in ("", "no-modules-", "experiments-", "directions-")
+        for suffix in (
+            "",
+            "no-modules-",
+            "experiments-",
+            "directions-",
+            "no-result-read-",
+            "dev-only-",
+            "raw-",
+        )
     ]
     assert [arm["tool_modules"] for arm in plan["arms"]] == [
         modules
         for _ in range(2)
-        for modules in (["directions", "experiments"], [], ["experiments"], ["directions"])
+        for modules in (
+            ["directions", "experiments"],
+            [],
+            ["experiments"],
+            ["directions"],
+            [],
+            [],
+            [],
+        )
     ]
     assert [arm["workflow_command"] for arm in plan["arms"]] == (
-        ["workflow/epoch_shared_3.py"] * 4 + ["workflow/broadcast_3.py"] * 4
+        ["workflow/epoch_shared_3.py"] * 7 + ["workflow/broadcast_3.py"] * 7
     )
     assert [arm["trajectory_visibility"] for arm in plan["arms"]] == (
-        ["isolated"] * 4 + ["broadcast"] * 4
+        ["isolated"] * 7 + ["broadcast"] * 7
     )
     campaign = CampaignSpecV3.from_file(REPOSITORY / "data/GDN/ablation-campaign.json")
     for key in ("max_challengers", "optimizer_attempt_budget"):
@@ -113,10 +131,17 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
             planned_arms = json.loads(plan_path.read_text())["arms"]
             planned = next(arm for arm in planned_arms if arm["label"] == label)
             for key in (
-                "max_challengers", "optimizer_attempt_budget", "workflow_command",
-                "trajectory_visibility", "tool_modules",
+                "max_challengers",
+                "optimizer_attempt_budget",
+                "workflow_command",
+                "trajectory_visibility",
+                "tool_modules",
             ):
                 assert seed[key] == planned[key]
+            assert seed["dev_only"] == planned.get("dev_only", False)
+            assert seed["result_artifact_read_enabled"] == planned.get(
+                "result_artifact_read_enabled", True
+            )
             if planned.get("observer_label") is None:
                 assert seed["evolver_observer_lineage_id"] is None
             else:
@@ -127,10 +152,7 @@ def launch_fixture(tmp_path, monkeypatch, *, fail=None, target=2, control_epochs
                         / "seed-result.json"
                     ).read_text()
                 )
-                assert (
-                    seed["evolver_observer_lineage_id"]
-                    == observer["lineage"]["lineage_id"]
-                )
+                assert seed["evolver_observer_lineage_id"] == observer["lineage"]["lineage_id"]
             if fail == "seed":
                 raise subprocess.CalledProcessError(1, command)
             # Deterministic arm identity across resumptions.
@@ -194,18 +216,18 @@ def test_bootstrap_once_shared_seed_parallel_launch_and_resume(tmp_path, monkeyp
     test = launch_fixture(tmp_path, monkeypatch)
     test.module.main()
     summary = json.loads((test.workspace / "campaign-results.json").read_text())
-    assert len(summary["arms"]) == 8
+    assert len(summary["arms"]) == 14
     assert all(arm["status"] == "completed" for arm in summary["arms"])
-    assert len(test.calls) == 9  # one Bootstrap, eight measurement-free seed operations
-    assert len(test.processes) == 8
-    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 8
+    assert len(test.calls) == 15  # one Bootstrap, fourteen measurement-free seed operations
+    assert len(test.processes) == 14
+    assert len({arm["campaign_id"] for arm in summary["arms"]}) == 14
     for arm in summary["arms"]:
         assert Path(arm["result_path"]).is_file()
         assert "attempt finished" in Path(arm["log"]).read_text()
     test.module.main()
     resumed = json.loads((test.workspace / "campaign-results.json").read_text())
     assert resumed == summary
-    assert len(test.processes) == 16
+    assert len(test.processes) == 28
 
 
 def test_source_tree_runner_defaults_all_arms_to_five_epochs(tmp_path, monkeypatch):
@@ -213,7 +235,7 @@ def test_source_tree_runner_defaults_all_arms_to_five_epochs(tmp_path, monkeypat
     test.module.main()
     arms = json.loads((test.workspace / "campaign-results.json").read_text())["arms"]
     assert all(arm["target_epoch_number"] == 5 for arm in arms)
-    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 360
+    assert sum(arm["optimizer_attempt_budget_total"] for arm in arms) == 630
 
 
 def test_existing_one_hundred_epoch_plan_is_not_rewritten(tmp_path, monkeypatch):

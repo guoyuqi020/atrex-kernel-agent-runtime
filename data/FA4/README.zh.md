@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-这是从两份提供的资料组装的独立任务：Qwen3.8-Max Attention 的 Atrex-Bench 输入与评测器，以及原始 FA4 R0 源码。任务使用 **L20D、CuteDSL、Claude**；只创建一条 DSL Lineage。Wiki 关闭。这里仅存放任务输入、离线源码 Bundle 和配置模板；运行数据写入 `workspaces/FA4/`。
+这是从两份提供的资料组装的独立任务：Qwen3.8-Max Attention 的 Atrex-Bench 输入与评测器，以及保留原始算法的 FA4 R0 源码（含原生 Eval 兼容补丁）。任务使用 **L20D、CuteDSL、Claude**；只创建一条 DSL Lineage。Wiki 关闭。这里仅存放任务输入、离线源码 Bundle 和配置模板；运行数据写入 `workspaces/FA4/`。
 
 ## 优化目标
 
@@ -40,7 +40,26 @@ data/FA4/
 
 准备时还会用公共生产拓扑生成并冻结 `ablation.json`。
 
-离线封装的 Source Commit 是 `7b077cf391a98a06ad9464530f0a4c9c7be3f477`；它与上游 Commit 不同，因为封装加入了 Quack 依赖和来源记录，但没有修改原始 FA4 源码。Evaluator Commit 是 `ed449b63ecd8aeff4db23be0d9f658d7d50b1cfa`，来自提供的新版评测器，不使用 runtime 当前的 `third_party/atrex-bench`。准备时会验证文件 SHA256、两个 Commit，以及封装的全部 70 个 Source 和 32 个 Evaluator 文件，并实际加载封存的 Optimizer、Evolver 和 Evaluator。详细核对与评测策略差异见 [资料对齐记录](ALIGNMENT.zh.md)。
+离线封装的 Source Commit 是 `2d0f4282f5d0df338d0fc9c352309becbce86352`，包含原生 Eval 兼容补丁；原始封装 `7b077cf391a98a06ad9464530f0a4c9c7be3f477` 保留在 Bundle 历史中，`patches/native-eval.patch` 可从原始封装复现当前源码。Evaluator Commit 是 `ed449b63ecd8aeff4db23be0d9f658d7d50b1cfa`，来自提供的新版评测器，不使用 runtime 当前的 `third_party/atrex-bench`。准备时会验证文件 SHA256、两个 Commit，以及封装的全部 74 个 Source 和 32 个 Evaluator 文件，并实际加载封存的 Optimizer、Evolver 和 Evaluator。详细核对与评测策略差异见 [资料对齐记录](ALIGNMENT.zh.md)。
+
+## 原生 Eval 源码兼容补丁
+
+Agate 会检查 Candidate 和 ABBA Baseline 归档里的**每一个 Python 文件**；这项检查与 Runtime 的
+`production_gate` 开关无关。非 Python 文件也会检查路径、大小和禁止的字符串，来源 JSON 同样在范围内。
+当前 R0 已做以下兼容修补：
+
+- 直接导入 `vendor.flash_attention.flash_attn` 和 `vendor_support.quack`，无需 `sys.path`、动态导入或机器上预装的 FlashAttention。
+- 保留进程内 JIT 缓存及完整缓存键，移除可选的磁盘缓存与外部 PTXAS hook；以 `fa4_config` 显式配置替代环境变量覆盖，默认调度参数不变。
+- 将动态属性访问改为固定字段协议，保持 MLIR 参数的字段顺序；移除独立 Benchmark 的命令行入口。
+- 四个大文件以 AST 等价的格式压缩到 128 KiB 以下；不改动其已审阅兼容补丁之外的算法逻辑。
+
+适配器 `forward`、原始 HD256/P128 算法、30 个目标 Shape、Reference、输入生成器、精度及副作用要求不变。
+R0 仍需完成 P64／ragged／PackGQA 功能补齐，没有混入旧 Bootstrap 的优化实现。
+`source-provenance.json` 的上游哈希描述原始快照，当前补丁包由 `asset-integrity.json` 锁定。
+正式环境验证记录及适用范围见 `native-eval-validation.json`；`smoke/native_eval/` 的 P128 测试不替代目标题目的验收。
+
+新增 `ParamsBase` 数据字段时，需在 `__quack_field_items__` 中按 dataclass 顺序列出全部字段（含继承字段）；
+新增 NamedTuple kernel 参数需通过 `register_namedtuple_type` 或 `mlir_namedtuple` 注册，避免静默改变参数打包。
 
 ## 评测策略和限制
 
@@ -121,3 +140,11 @@ atrex-kernel-agent-runtime list-worker-sessions --config workspaces/FA4/runtime.
 ```
 
 ID 来自 `bootstrap-result.json`。Bootstrap 尚未成功时，该结果文件可能不存在；此时应先查看终端错误和 `state/lineage-bootstrap-workspaces/` 中的 Session。配置和源码加载成功不代表 R0 已通过目标正确性；第一次模型运行仍必须完成上述源码能力补齐。
+
+独立搜索计划 `independent-ablation.json` 包含七种配置，各三次重复（共 21 个独立 Lineage）：
+全关、仅 Experiment、仅 Direction、全开、全关且无结果回读，Dev-only，以及 Raw。
+第五种保留报告、会话、源码读取、帕累托边界和自身笔记；第六种额外关闭其他 Runtime 操作，
+保留 Dev、可见源码回读、报告提交和本地契约查询。候选提交后仍由 Runtime 运行私有正式验证。
+默认共享计划为轮末与实时各七臂，共十四臂；已有臂和 Bootstrap 的规则不变。
+
+第七种 Raw 直接调用 Agate，关闭所有 Runtime tools 和历史挂载，只延续本轨迹自己写的文件。保留控制器私下终评和 kernel 选择，具体边界见 `docs/configuration.zh.md`。

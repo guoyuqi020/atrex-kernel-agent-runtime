@@ -6,9 +6,11 @@ import json
 from pathlib import Path
 
 import pytest
+from atrex_gateway_client.errors import GatewayError
 from conftest import seed_lineage
 
 from atrex_runtime.artifacts.local import ArtifactKind, LocalArtifactStore
+from atrex_runtime.domain.errors import InfrastructureError
 from atrex_runtime.domain.models import KernelMeasurementPurpose
 from atrex_runtime.gateway.contract import (
     AgateEvaluationContractV1,
@@ -36,8 +38,8 @@ class FakeAgateClient:
     ) -> dict[str, object]:
         assert (job_id, wait, timeout, include_spec) == (
             "ev_measurement",
-            True,
-            90.0,
+            False,
+            30.0,
             False,
         )
         return {
@@ -67,10 +69,12 @@ class CapturingBuilder:
 @pytest.mark.anyio
 @pytest.mark.parametrize("holdout", [False, True])
 @pytest.mark.parametrize("long_poll_expiry", [False, True])
+@pytest.mark.parametrize("oss_unavailable", [False, True])
 async def test_repeated_evaluate_runner_uses_sealed_kernel_and_campaign_contract(
     tmp_path: Path,
     holdout: bool,
     long_poll_expiry: bool,
+    oss_unavailable: bool,
 ) -> None:
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     contract = AgateEvaluationContractV1(
@@ -107,6 +111,14 @@ async def test_repeated_evaluate_runner_uses_sealed_kernel_and_campaign_contract
         revision = seeded.baseline
         class Client(FakeAgateClient):
             pending = ["queued", "running"] if long_poll_expiry else []
+            unavailable = oss_unavailable
+
+            def submit_job(self, kind, request):
+                if self.unavailable:
+                    raise GatewayError(400, {
+                        "reason": "oss_unavailable", "error_class": "validation",
+                    })
+                return super().submit_job(kind, request)
 
             def get_job(self, job_id, **kwargs):
                 if self.pending:
@@ -123,6 +135,14 @@ async def test_repeated_evaluate_runner_uses_sealed_kernel_and_campaign_contract
             registry,
             wait_timeout_s=90,
         )
+
+        if oss_unavailable:
+            with pytest.raises(ExceptionGroup) as caught:
+                await runner.run(revision, 0, KernelMeasurementPurpose.KERNEL_RETENTION)
+            assert all(isinstance(e, InfrastructureError) for e in caught.value.exceptions)
+            assert not registry.list_kernel_measurements(revision.id)
+            assert not client.submissions
+            client.unavailable = False
 
         first = await runner.run(
             revision,

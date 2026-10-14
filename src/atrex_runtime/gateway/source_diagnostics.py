@@ -7,6 +7,7 @@ Diagnostics are not correctness or performance Gate evidence.
 
 from __future__ import annotations
 
+import copy
 import csv
 import hashlib
 import importlib.util
@@ -27,6 +28,10 @@ from typing import Any
 
 DIAGNOSTIC_PREFIX = "__ATREX_RUNTIME_SOURCE_DIAGNOSTIC__="
 TEXT_LIMIT = 512 * 1024
+# Agate Dev retains only the last 1 MiB of stdout. Budget the complete encoded
+# record (including framing), with headroom for any surrounding tool output.
+RESPONSE_LIMIT = 768 * 1024
+LOG_TEXT_LIMIT = 4 * 1024
 
 
 def _load(path: Path, name: str) -> Any:
@@ -121,10 +126,10 @@ def _execute(argv: list[str], root: Path, deadline: float, log: list[dict[str, A
             with suppress(ProcessLookupError):
                 os.killpg(process.pid, signal.SIGKILL)
             stdout, stderr = process.communicate()
-            log.append({"command": argv, "timeout": True, "stdout": stdout, "stderr": stderr})
+            log.append(_command_log(argv, stdout, stderr, timeout=True))
             raise DiagnosticError("timeout", "diagnostic command timed out") from error
         code = process.returncode
-    log.append({"command": argv, "exit_code": code, "stdout": stdout, "stderr": stderr})
+    log.append(_command_log(argv, stdout, stderr, exit_code=code))
     if code:
         raise DiagnosticError("execution", "compiler, GPU tool or candidate execution failed")
     return stdout
@@ -137,14 +142,117 @@ def _tool(name: str) -> str:
     return result
 
 
-def _export(text: str) -> dict[str, Any]:
+def _export(text: str, *, limit: int = TEXT_LIMIT, tail: bool = False) -> dict[str, Any]:
     raw = text.encode("utf-8")
+    selected = (raw[-limit:] if tail else raw[:limit]) if limit else b""
     return {
-        "text": raw[:TEXT_LIMIT].decode("utf-8", errors="ignore"),
+        "text": selected.decode("utf-8", errors="ignore"),
         "size_bytes": len(raw),
         "sha256": hashlib.sha256(raw).hexdigest(),
-        "truncated": len(raw) > TEXT_LIMIT,
+        "truncated": len(raw) > limit,
     }
+
+
+def _command_log(argv: list[str], stdout: str, stderr: str, **outcome: Any) -> dict[str, Any]:
+    # Successful output is already represented by parsed metrics/exports. Do
+    # not duplicate hundreds of KiB of SASS/CSV inside a JSON-escaped log.
+    success = outcome.get("exit_code") == 0
+    out = _export(stdout, limit=0 if success else LOG_TEXT_LIMIT, tail=True)
+    if success:
+        out.pop("text")
+        out.pop("truncated")
+        out["content_omitted"] = True
+    return {
+        "command": argv,
+        **outcome,
+        "stdout": out,
+        "stderr": _export(stderr, limit=LOG_TEXT_LIMIT, tail=True),
+    }
+
+
+def _text_records(value: Any, path: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    if isinstance(value, dict):
+        if isinstance(value.get("text"), str) and "sha256" in value:
+            yield path, value
+        else:
+            for key, item in value.items():
+                yield from _text_records(item, f"{path}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            yield from _text_records(item, f"{path}[{index}]")
+
+
+def _encode_result(result: dict[str, Any]) -> str:
+    """Keep the verdict intact; shrink optional evidence before emitting one record."""
+    value = copy.deepcopy(result)
+    records = [
+        *list(_text_records(value.get("exports"), "exports")),
+        *list(_text_records(value.get("logs"), "logs")),
+    ]
+    truncated = {path for path, item in records if item.get("truncated")}
+    budget_applied = False
+
+    def encode() -> str:
+        value["output_summary"] = {
+            "truncated": bool(truncated),
+            "reason": (
+                "diagnostic_response_size_limit"
+                if budget_applied
+                else "diagnostic_text_size_limit"
+                if truncated
+                else None
+            ),
+            "response_limit_bytes": RESPONSE_LIMIT,
+            "truncated_fields": sorted(truncated),
+            "message": (
+                "Diagnostic verdict and failure summary are complete. Optional evidence was "
+                "truncated to fit Runtime output limits and prevent Agate stdout truncation. "
+                "Truncation itself is not a Kernel failure; use passed/status for the verdict. "
+                "Text sizes and SHA-256 describe the original content. "
+                "Use a narrower kernel filter/launch range to obtain a smaller export."
+                if truncated
+                else "Diagnostic summary and exports are complete."
+            ),
+        }
+        return DIAGNOSTIC_PREFIX + json.dumps(value, separators=(",", ":")) + "\n"
+
+    encoded = encode()
+    while len(encoded.encode("utf-8")) > RESPONSE_LIMIT:
+        budget_applied = True
+        # Cut previews first, preserving all original size/hash metadata. Size
+        # is rechecked after JSON escaping, including non-ASCII/control chars.
+        available = [(path, item) for path, item in records if item["text"]]
+        if available:
+            path, item = max(available, key=lambda pair: len(json.dumps(pair[1]["text"])))
+            text = item["text"]
+            item["text"] = (
+                text[len(text) // 2 + 1 :] if path.startswith("logs") else (text[: len(text) // 2])
+            )
+            item["truncated"] = True
+            truncated.add(path)
+        elif any("metrics" in k for k in value.get("kernels", [])):
+            for kernel in value["kernels"]:
+                kernel.pop("metrics", None)
+            truncated.add("kernels.metrics")
+        elif value.get("kernels"):
+            kernels = value["kernels"]
+            value.setdefault("collected_kernel_count", len(kernels))
+            value["kernels"] = kernels[: len(kernels) // 2]
+            truncated.add("kernels")
+        else:
+            # Last resort for oversized log metadata: retain the fixed driver
+            # verdict/error/clock/scope fields, never slice serialized JSON.
+            if not any(key in value for key in ("logs", "exports")):
+                # The driver's remaining fixed summary is small. Fail closed if
+                # a future extension breaks that invariant, rather than looping.
+                raise ValueError("fixed diagnostic summary exceeds response budget")
+            for key in ("logs", "exports"):
+                if key in value:
+                    value.pop(key)
+                    truncated.add(key)
+            records = []
+        encoded = encode()
+    return encoded
 
 
 def _metric_rows(text: str) -> Iterator[dict[str, str]]:
@@ -406,7 +514,7 @@ def _driver(request_path: Path) -> int:
     except DiagnosticError as error:
         result.update(error=str(error), failure_stage=error.stage)
     except Exception as error:
-        log.append({"error": f"{type(error).__name__}: {error}"})
+        log.append({"error": _export(f"{type(error).__name__}: {error}", limit=LOG_TEXT_LIMIT)})
         result.update(
             error="diagnostic environment or clock setup failed", failure_stage="environment"
         )
@@ -418,8 +526,9 @@ def _driver(request_path: Path) -> int:
             sanitizer_passed=False if parameters.get("sanitize") else None,
         )
     # Kept in trusted raw evidence; normal private-result projection removes logs.
-    result["logs"] = [_export(json.dumps(item)) for item in log]
-    print(DIAGNOSTIC_PREFIX + json.dumps(result), flush=True)
+    result["logs"] = log
+    sys.stdout.write(_encode_result(result))
+    sys.stdout.flush()
     # A failed diagnostic is a recorded tool result, not a lost Dev transport job.
     return 0
 

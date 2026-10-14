@@ -182,7 +182,7 @@ def test_attempt_input_runtime_state_is_recorded_once(tmp_path: Path) -> None:
         ("poll", {"job_id": "job-1", "wait": True, "include_spec": True}, False),
         ("jobs", {"kind": "dev", "status": "running", "limit": 10}, False),
         ("cancel", {"job_id": "job-1"}, False),
-        ("env", {"gpu": "H20", "capabilities": True}, False),
+        ("env", {}, False),
         ("health", {}, False),
         ("config", {}, False),
         (
@@ -1817,19 +1817,19 @@ def test_validation_detail_names_the_cause_without_the_union_or_the_request() ->
     except ValidationError as error:
         response = _invalid_request_response(payload, error, operation_scope="gateway")
     else:
-        raise AssertionError("env capabilities without gpu must fail validation")
+        raise AssertionError("Agent-supplied env capabilities must fail validation")
 
     detail = response["detail"]
     assert isinstance(detail, str)
-    assert detail == "$: Value error, env capabilities requires gpu"
+    assert detail == "capabilities: Extra inputs are not permitted"
     assert "tagged-union" not in detail
     assert "EvaluateRequestV2" not in detail
     assert "schema_version" not in detail
     assert response["issues"] == [
         {
-            "path": "$",
-            "code": "value_error",
-            "message": "Value error, env capabilities requires gpu",
+            "path": "capabilities",
+            "code": "extra_forbidden",
+            "message": "Extra inputs are not permitted",
         }
     ]
 

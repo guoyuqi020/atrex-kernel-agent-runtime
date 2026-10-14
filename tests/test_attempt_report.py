@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from atrex_runtime.domain.ids import new_attempt_id
-from atrex_runtime.workers.attempt_report import AttemptReportV12
+from atrex_runtime.workers.attempt_report import REPORT_ANALYSIS_FIELDS, AttemptReportV12
 
 
 def _value(attempt_id: str) -> dict[str, object]:
@@ -569,7 +569,9 @@ def test_report_field_set_matches_the_pinned_core_contract() -> None:
         "experiments",
         "direction_events",
     }
-    assert set(AttemptReportV12.model_fields) - runtime_owned == set(_REPORT_FIELDS)
+    assert set(AttemptReportV12.model_fields) - runtime_owned - REPORT_ANALYSIS_FIELDS == set(
+        _REPORT_FIELDS
+    )
 
 
 @pytest.mark.parametrize(

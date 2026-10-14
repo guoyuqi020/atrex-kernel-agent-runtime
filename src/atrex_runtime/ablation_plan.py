@@ -5,7 +5,8 @@ from __future__ import annotations
 from typing import Any, cast
 
 ABLATION_OPTIMIZER_ATTEMPT_BUDGET_PER_TRAJECTORY = 15
-ABLATION_PLAN_SCHEMA_VERSION = 11
+ABLATION_PLAN_SCHEMA_VERSION = 14
+SUPPORTED_ABLATION_PLAN_SCHEMA_VERSIONS = frozenset({11, 12, 13, ABLATION_PLAN_SCHEMA_VERSION})
 ABLATION_REPLICA_COUNT = 3
 ENABLED_ABLATION_ARM_KINDS = frozenset({"epoch-shared", "broadcast"})
 
@@ -34,6 +35,9 @@ def build_ablation_plan(
         evolves_after_each_epoch: bool = False,
         trajectory_visibility: str = "isolated",
         tool_modules: tuple[str, ...] | None = None,
+        result_artifact_read_enabled: bool = True,
+        dev_only: bool = False,
+        raw: bool = False,
     ) -> dict[str, Any]:
         if attempt_budget % 3:
             raise ValueError(
@@ -54,6 +58,12 @@ def build_ablation_plan(
         value["trajectory_visibility"] = trajectory_visibility
         if tool_modules is not None:
             value["tool_modules"] = list(tool_modules)
+        if raw:
+            value["raw"] = True
+        if dev_only:
+            value["dev_only"] = True
+        if not result_artifact_read_enabled:
+            value["result_artifact_read_enabled"] = False
         return value
 
     if enabled:
@@ -68,6 +78,9 @@ def build_ablation_plan(
                 ("no-modules", ()),
                 ("experiments", ("experiments",)),
                 ("directions", ("directions",)),
+                ("no-result-read", ()),
+                ("dev-only", ()),
+                ("raw", ()),
             ):
                 arms.append(
                     arm(
@@ -78,6 +91,10 @@ def build_ablation_plan(
                         workflow_command=workflow,
                         trajectory_visibility=visibility,
                         tool_modules=modules,
+                        result_artifact_read_enabled=suffix
+                        not in {"no-result-read", "dev-only", "raw"},
+                        dev_only=suffix == "dev-only",
+                        raw=suffix == "raw",
                     )
                 )
         # One retained Pool runs three parallel Trajectories, each with three serial Attempts.

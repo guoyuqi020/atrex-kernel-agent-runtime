@@ -37,11 +37,11 @@ Runtime 只约束资源边界与可信评测/晋升策略，不根据消融臂�
 - 每个启用臂默认运行至 Epoch 5；
 - CUDA、Triton、CuteDSL 三个 Campaign 独立调度并并行推进。
 
-当前计划为四种 Direction/Experiment 工具配置（全开、全关、仅 Experiment、仅 Direction）
+当前计划为七种工具配置（全开、全关、仅 Experiment、仅 Direction、全关且禁用结果读取、Dev-only、Raw）
 各启用两种互通模式。每个配置/模式对应一个 Campaign/Lineage，内含三条保留 State 的 Trajectory。
-共八个臂，复用同一份冻结的 Bootstrap v0，不重复 Baseline 测量，不运行 Evolver。
+共十四个臂，复用同一份冻结的 Bootstrap v0，不重复 Baseline 测量，不运行 Evolver。
 默认每臂 5 个 Epoch，每条轨迹每轮串行执行 3 次 Attempt：每轨迹 15 次、每臂 45 次、
-全套 360 次 Optimizer Attempt，不含 Bootstrap。
+全套 630 次 Optimizer Attempt，不含 Bootstrap。
 
 | 模式 | Workflow | Epoch 内 | Epoch 结束后 |
 |---|---|---|---|
@@ -49,7 +49,8 @@ Runtime 只约束资源边界与可信评测/晋升策略，不根据消融臂�
 | `broadcast` | `broadcast_3.py` | 已记录的评测、Artifact 和启用的 Journal 实时互通；每个 round 广播截至当时最佳的已接受 Kernel | 三条轨迹共享已完成历史及选出的最佳 Kernel |
 
 每种模式对应 `ablation-MODE-3`、`ablation-MODE-no-modules-3`、
-`ablation-MODE-experiments-3`、`ablation-MODE-directions-3` 四个臂。
+`ablation-MODE-experiments-3`、`ablation-MODE-directions-3`、
+`ablation-MODE-no-result-read-3`、`ablation-MODE-dev-only-3` 六个臂。
 Broadcast 的后续 Attempt 文件快照也包含其他轨迹已完成的前序 round 的 report 和对话。
 工作源码、scratch、实时对话保持私有；Tool State 按轨迹独立路由。
 历史按需读取，不要求扫描全部旧对话。不同消融臂不共享 Bootstrap 之后的历史。

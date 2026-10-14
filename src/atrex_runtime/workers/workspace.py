@@ -18,6 +18,7 @@ from uuid import uuid4
 from ..artifacts.local import ArtifactKind, LocalArtifactStore
 from ..domain.ids import ArtifactDigest, parse_artifact_digest
 from ..domain.models import (
+    Attempt,
     BranchRole,
     Epoch,
     EpochStatus,
@@ -236,9 +237,7 @@ def validate_reusable_agent_state_seed(
     present = {child.name for child in state_root.iterdir()}
     allowed = set(REUSABLE_AGENT_DIRECTORIES) if require_complete else _LEGACY_STATE_DIRECTORIES
     if not present <= allowed:
-        raise ValueError(
-            "Candidate runtime-state may contain only prompts/, skills/, tools/"
-        )
+        raise ValueError("Candidate runtime-state may contain only prompts/, skills/, tools/")
     # Older immutable snapshots may contain task-specific learned directories. They
     # are accepted for historical reads only; new Candidate output has three indexes.
     files = 0
@@ -418,7 +417,7 @@ class LocalAttemptWorkspaceAssembler:
         previous_runtime_state_digest = (
             attempt.runtime_state_digest or attempt.input_runtime_state_digest
         )
-        if previous_runtime_state_digest is None:
+        if previous_runtime_state_digest is None and not lineage.raw:
             if attempt.branch is BranchRole.ACTIVE:
                 previous_runtime_state_digest = self._active_branch_seed(epoch)
             if previous_runtime_state_digest is None:
@@ -445,14 +444,19 @@ class LocalAttemptWorkspaceAssembler:
             )
             if active_workflow is not None:
                 state_trajectory += active_workflow.trajectories
-        persistent_state, persistent_lock = self._persistent_root(
-            lineage_id=lineage.id,
-            revision=revision,
-            trajectory_ordinal=state_trajectory,
-            previous_runtime_state_digest=previous_runtime_state_digest,
-            reset_from_seed=True,
-            bootstrap_seed=self._shared_bootstrap_seed(lineage),
-        )
+        if lineage.raw:
+            persistent_state, persistent_lock = self._raw_persistent_root(
+                attempt, epoch, revision, state_trajectory
+            )
+        else:
+            persistent_state, persistent_lock = self._persistent_root(
+                lineage_id=lineage.id,
+                revision=revision,
+                trajectory_ordinal=state_trajectory,
+                previous_runtime_state_digest=previous_runtime_state_digest,
+                reset_from_seed=True,
+                bootstrap_seed=self._shared_bootstrap_seed(lineage),
+            )
         copy_reusable_agent_state(persistent_state, root)
 
         manifest = AttemptInputManifestV9(
@@ -484,25 +488,32 @@ class LocalAttemptWorkspaceAssembler:
         attempt_evidence = self._artifacts.verify(request.attempt_evidence_digest)
         if attempt_evidence.kind is not ArtifactKind.ATTEMPT_EVIDENCE:
             raise ValueError("Attempt branch Evidence has the wrong artifact kind")
-        assemble_optimizer_evidence_view(
-            root / paths.evidence,
-            control_root=root / ".runtime",
-            lineage_payload=epoch_evidence.payload_path,
-            lineage_checkpoint=request.epoch_evidence_checkpoint,
-            attempt_payload=attempt_evidence.payload_path,
-            attempt_snapshot=request.attempt_evidence_digest,
-            current_epoch_number=epoch.number,
-            branch=attempt.branch,
-            challenger_ordinal=attempt.challenger_ordinal,
-            trajectory_ordinal=attempt.trajectory_ordinal,
-            selected_revision=request.kernel_agent_revision_id,
-            attempt_ordinal=attempt.ordinal,
-            artifacts=self._artifacts,
-            tool_modules=(
-                self._default_tool_modules if request.tool_modules is None else request.tool_modules
-            ),
-            trajectory_visibility=lineage.trajectory_visibility,
-        )
+        if lineage.raw:
+            (root / paths.evidence).mkdir(parents=True, mode=0o500)
+        else:
+            assemble_optimizer_evidence_view(
+                root / paths.evidence,
+                control_root=root / ".runtime",
+                lineage_payload=epoch_evidence.payload_path,
+                lineage_checkpoint=request.epoch_evidence_checkpoint,
+                attempt_payload=attempt_evidence.payload_path,
+                attempt_snapshot=request.attempt_evidence_digest,
+                current_epoch_number=epoch.number,
+                branch=attempt.branch,
+                challenger_ordinal=attempt.challenger_ordinal,
+                trajectory_ordinal=attempt.trajectory_ordinal,
+                selected_revision=request.kernel_agent_revision_id,
+                attempt_ordinal=attempt.ordinal,
+                artifacts=self._artifacts,
+                tool_modules=(
+                    self._default_tool_modules
+                    if request.tool_modules is None
+                    else request.tool_modules
+                ),
+                trajectory_visibility=lineage.trajectory_visibility,
+                result_artifact_read_enabled=lineage.result_artifact_read_enabled,
+                dev_only=lineage.dev_only,
+            )
         visible_digest = campaign.agent_problem_digest
         contract = self._artifacts.verify(visible_digest)
         if contract.kind is not ArtifactKind.AGENT_PROBLEM:
@@ -525,7 +536,22 @@ class LocalAttemptWorkspaceAssembler:
             self._artifacts, campaign.evaluation_contract_digest, request.dsl
         )
         if source_contract is not None:
-            inject_source_instructions(root, source_contract)
+            if lineage.raw:
+                (root / ".runtime").mkdir(mode=0o700, exist_ok=True)
+                (root / ".runtime/source-instructions.md").write_text(
+                    "# Source tree contract\nEdit only editable_roots; the adapter and other files "
+                    "are fixed. Keep builds in scratch/. Upload the entire source tree using "
+                    "the installed Agate client's source-directory and entrypoint options.\n"
+                    + json.dumps(
+                        {
+                            "editable_roots": source_contract.editable_roots,
+                            "package_root": source_contract.package_root,
+                            "runtime_requirements": source_contract.runtime_requirements,
+                        }
+                    )
+                )
+            else:
+                inject_source_instructions(root, source_contract)
 
         manifest_path = root / ATTEMPT_MANIFEST_RELATIVE_PATH
         manifest_path.parent.mkdir(mode=0o700, exist_ok=True)
@@ -554,6 +580,61 @@ class LocalAttemptWorkspaceAssembler:
         protect_optimizer_agent_state(root)
         return prepared
 
+    def _raw_persistent_root(
+        self, attempt: Attempt, epoch: Epoch, revision: KernelAgentRevision, state_trajectory: int
+    ) -> tuple[Path, Path]:
+        """Carry only this Raw trajectory's authored files, never winner/Bootstrap notes."""
+        previous = attempt.runtime_state_digest
+        if previous is None:
+            candidates = [
+                (past_epoch.number, item.ordinal, item.runtime_state_digest)
+                for past_epoch in self._registry.list_epochs(epoch.lineage_id)
+                if past_epoch.number <= epoch.number
+                for item in self._registry.list_attempts(past_epoch.id)
+                if (past_epoch.number, item.ordinal) < (epoch.number, attempt.ordinal)
+                and item.trajectory_ordinal == attempt.trajectory_ordinal
+                and item.branch == attempt.branch
+                and item.challenger_ordinal == attempt.challenger_ordinal
+                and item.kernel_agent_revision_id == attempt.kernel_agent_revision_id
+                and item.runtime_state_digest is not None
+            ]
+            if candidates:
+                previous = max(candidates)[2]
+        persistent = self._root / ".reusable"
+        lock = persistent / ".lock"
+        scope = (
+            persistent
+            / str(epoch.lineage_id)
+            / str(revision.id)
+            / f"trajectory-{state_trajectory:08d}"
+        )
+        with _exclusive_lock(lock):
+            if scope.exists():
+                _validate_reusable_tree(scope)
+                make_tree_owner_writable(scope)
+                shutil.rmtree(scope)
+            scope.mkdir(parents=True, mode=0o700)
+            initialize_reusable_agent_state(
+                scope, self._artifacts.verify(revision.optimizer_digest).payload_path
+            )
+            # Prompts/Skills stay at the pinned bundle. Only Agent-authored tools/ are memory.
+            make_tree_owner_writable(scope / "tools")
+            shutil.rmtree(scope / "tools")
+            if previous is not None:
+                state = self._artifacts.verify(previous)
+                if state.kind is not ArtifactKind.KERNEL_AGENT_RUNTIME_STATE:
+                    raise ValueError("Raw trajectory State has the wrong Artifact kind")
+                _copy_reusable_tree(state.payload_path / "tools", scope / "tools")
+            else:
+                (scope / "tools").mkdir(mode=0o700)
+                (scope / "tools/README.md").write_text(
+                    "# Raw Agent files\nSave your own scripts, notes, job IDs, source versions and "
+                    "responses here in any format. No Runtime history is generated here. "
+                    "Do not save credentials.\n"
+                )
+            ensure_reusable_directories(scope)
+        return scope, lock
+
     def _active_branch_seed(self, epoch: Epoch) -> ArtifactDigest | None:
         """Resolve the prior winner's best-Trajectory terminal State for Active."""
         if epoch.number <= 1:
@@ -569,8 +650,7 @@ class LocalAttemptWorkspaceAssembler:
             if (
                 successor is None
                 or successor.status != "completed"
-                or successor.next_kernel_agent_revision_id
-                != epoch.active_kernel_agent_revision_id
+                or successor.next_kernel_agent_revision_id != epoch.active_kernel_agent_revision_id
             ):
                 raise ValueError("Active Agent disagrees with the previous Epoch winner")
             # Post-Epoch Evolution starts from the winning Trajectory and seals its

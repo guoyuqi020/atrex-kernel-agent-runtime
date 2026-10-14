@@ -10,9 +10,11 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     ValidationInfo,
     field_serializer,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -20,7 +22,7 @@ from ..domain.ids import ArtifactDigest, AttemptId, parse_artifact_digest, parse
 
 
 class AttemptExperimentSubjectV1(BaseModel):
-    """One exact Kernel Trial snapshot materialized by Runtime when recorded."""
+    """Exact Kernel/Result bindings; each consumer enforces its evidence scope."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -488,23 +490,39 @@ class AttemptDirectionEventV1(BaseModel):
         return self
 
 
+REPORT_ANALYSIS_FIELDS = frozenset(
+    {
+        "hypothesis",
+        "diagnosis",
+        "approach",
+        "evidence_summary",
+        "profile_evidence",
+        "analysis",
+        "knowledge_used",
+        "findings",
+    }
+)
+
+
 class AttemptReportV12(BaseModel):
-    """Versioned Agent engineering handoff awaiting Runtime reconciliation."""
+    """Read sealed v12 reports and compact v13 handoffs without rewriting history."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    schema_version: Literal[12]
+    schema_version: Literal[12, 13]
     attempt_id: AttemptId
     status: Literal["candidate_ready", "pivot", "blocked"]
-    hypothesis: str = Field(min_length=1)
-    diagnosis: AttemptDiagnosisV1
-    approach: AttemptApproachV1
+    # These fields exist only to read sealed v12 artifacts / frozen v12 clients.
+    # New v13 handoffs cannot submit them and do not serialize them.
+    hypothesis: str | None = Field(default=None, min_length=1)
+    diagnosis: AttemptDiagnosisV1 | None = None
+    approach: AttemptApproachV1 | None = None
     final_candidate: AttemptFinalCandidateV1 | None
-    evidence_summary: AttemptEvidenceSummaryV1
-    profile_evidence: AttemptProfileEvidenceV1 | None
-    analysis: str = Field(min_length=1)
-    knowledge_used: tuple[AttemptKnowledgeUseV1, ...]
-    findings: tuple[AttemptFindingV1, ...]
+    evidence_summary: AttemptEvidenceSummaryV1 | None = None
+    profile_evidence: AttemptProfileEvidenceV1 | None = None
+    analysis: str | None = Field(default=None, min_length=1)
+    knowledge_used: tuple[AttemptKnowledgeUseV1, ...] = ()
+    findings: tuple[AttemptFindingV1, ...] = ()
     # Defaulted because sealed historical reports predating this field are re-parsed
     # strictly by composition/bootstrap.py.
     contributing_result_artifact_digests: tuple[
@@ -537,10 +555,39 @@ class AttemptReportV12(BaseModel):
     ) -> list[dict[str, object]]:
         return [event.model_dump(mode="json") for event in value]
 
+    @model_validator(mode="before")
+    @classmethod
+    def _report_version_contract(cls, value: object) -> object:
+        if isinstance(value, dict):
+            if value.get("schema_version") == 13:
+                duplicated = REPORT_ANALYSIS_FIELDS.intersection(value)
+                if duplicated:
+                    raise ValueError(
+                        "Compact attempt-report cannot contain analysis fields: "
+                        f"{sorted(duplicated)}; record interpretations in an enabled Experiment "
+                        "or Direction, not in the terminal handoff"
+                    )
+            elif value.get("schema_version") == 12:
+                missing = REPORT_ANALYSIS_FIELDS.difference(value)
+                if missing:
+                    raise ValueError(f"Legacy v12 report is missing fields: {sorted(missing)}")
+                for name in ("hypothesis", "diagnosis", "approach", "evidence_summary", "analysis"):
+                    if value.get(name) is None:
+                        raise ValueError(f"Legacy v12 report requires {name}")
+        return value
+
+    @model_serializer(mode="wrap")
+    def _serialize_version(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        value: dict[str, object] = handler(self)
+        if self.schema_version == 13:
+            for name in REPORT_ANALYSIS_FIELDS:
+                value.pop(name, None)
+        return value
+
     @field_validator("hypothesis", "analysis")
     @classmethod
-    def _validate_text(cls, value: str) -> str:
-        if not value.strip():
+    def _validate_text(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
             raise ValueError("Attempt report text fields cannot be blank")
         return value
 

@@ -143,6 +143,9 @@ class LineageSeedSpecV1(BaseModel):
     evolver_observer_lineage_id: LineageId | None = None
     trajectory_visibility: Literal["isolated", "broadcast"] = "isolated"
     tool_modules: tuple[Literal["directions", "experiments"], ...] | None = None
+    result_artifact_read_enabled: bool = Field(default=True, strict=True)
+    dev_only: bool = Field(default=False, strict=True)
+    raw: bool = Field(default=False, strict=True)
 
     @field_validator("creation_key")
     @classmethod
@@ -179,6 +182,17 @@ class LineageSeedSpecV1(BaseModel):
 
     @model_validator(mode="after")
     def _validate_seed_combination(self) -> Self:
+        if self.raw and (
+            self.dev_only or self.tool_modules != () or self.result_artifact_read_enabled
+        ):
+            raise ValueError(
+                "raw requires dev_only=false, tool_modules=[] "
+                "and result_artifact_read_enabled=false"
+            )
+        if self.dev_only and (self.tool_modules != () or self.result_artifact_read_enabled):
+            raise ValueError(
+                "dev_only requires tool_modules=[] and result_artifact_read_enabled=false"
+            )
         if self.tool_modules is not None and len(self.tool_modules) != len(set(self.tool_modules)):
             raise ValueError("Lineage seed tool modules cannot repeat")
         if isinstance(self.seed, LineageBaselineSeedV1) and self.initial_evidence is not None:
@@ -339,9 +353,7 @@ class LineageSeeder:
         if spec.evolver_observer_lineage_id is not None:
             observer = self._registry.get_lineage(spec.evolver_observer_lineage_id)
             if observer.dsl is not spec.dsl:
-                raise ValueError(
-                    "Evolver observer must use the same DSL as the observed Lineage"
-                )
+                raise ValueError("Evolver observer must use the same DSL as the observed Lineage")
             if (
                 roots.source_lineage_id is None
                 or observer.bootstrap_source_lineage_id != roots.source_lineage_id
@@ -450,6 +462,9 @@ class LineageSeeder:
             evolver_observer_lineage_id=spec.evolver_observer_lineage_id,
             trajectory_visibility=spec.trajectory_visibility,
             tool_modules=spec.tool_modules,
+            result_artifact_read_enabled=spec.result_artifact_read_enabled,
+            dev_only=spec.dev_only,
+            raw=spec.raw,
         )
         self._registry.insert_lineage(lineage)
         self._registry.record_runtime_event(
@@ -465,6 +480,32 @@ class LineageSeeder:
             },
         )
         return self._result(lineage, agent, kernel, provenance_digest, roots, evidence)
+
+    def baseline_was_independently_seeded(self, lineage_id: LineageId) -> bool:
+        """Distinguish a restored root's history link from a cloned ablation baseline.
+
+        Read the immutable v0 receipt, not the current Agent (which may have evolved).
+        Unknown provenance fails closed when the ablation seeder checks a history link.
+        """
+        lineage = self._registry.get_lineage(lineage_id)
+        entries = self._registry.list_lineage_agent_revisions(lineage_id)
+        if not entries or entries[0].revision_number != 0:
+            return False
+        digest = entries[0].revision.source_provenance_digest
+        if digest is None:
+            return False
+        artifact = self._artifacts.verify(digest)
+        if artifact.kind is not ArtifactKind.OPTIMIZER_SOURCE:
+            return False
+        value = json.loads((artifact.payload_path / "value.json").read_bytes())
+        return (
+            isinstance(value, dict)
+            and value.get("source_type") == "lineage_seed"
+            and value.get("lineage_id") == lineage_id
+            and value.get("campaign_id") == lineage.campaign_id
+            and "source_lineage_id" in value
+            and value["source_lineage_id"] is None
+        )
 
     def _resolve_roots(
         self,
@@ -590,6 +631,12 @@ class LineageSeeder:
             value["workflow_command"] = spec.workflow_command
         if spec.trajectory_visibility != "isolated":
             value["trajectory_visibility"] = spec.trajectory_visibility
+        if spec.raw:
+            value["raw"] = True
+        if spec.dev_only:
+            value["dev_only"] = True
+        if not spec.result_artifact_read_enabled:
+            value["result_artifact_read_enabled"] = False
         if spec.tool_modules is not None:
             value["tool_modules"] = list(spec.tool_modules)
         return self._artifacts.put_json(value, ArtifactKind.OPTIMIZER_SOURCE)
@@ -623,6 +670,9 @@ class LineageSeeder:
             lineage.evolver_observer_lineage_id,
             lineage.trajectory_visibility,
             lineage.tool_modules,
+            lineage.result_artifact_read_enabled,
+            lineage.dev_only,
+            lineage.raw,
             agent.optimizer_digest,
             agent.source_provenance_digest,
             kernel.artifact_digest,
@@ -637,6 +687,9 @@ class LineageSeeder:
             spec.evolver_observer_lineage_id,
             spec.trajectory_visibility,
             spec.tool_modules,
+            spec.result_artifact_read_enabled,
+            spec.dev_only,
+            spec.raw,
             roots.agent_artifact_digest,
             provenance_digest,
             roots.kernel_artifact_digest,

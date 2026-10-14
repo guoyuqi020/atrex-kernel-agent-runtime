@@ -3,7 +3,7 @@
 English | [中文](README.zh.md)
 
 This independent task combines the supplied Qwen3.8-Max Attention Atrex-Bench problem and
-pristine FA4 R0 source package. Defaults: **L20D, CuteDSL, Claude**, one DSL Lineage, Wiki off.
+FA4 R0 source package with a native Eval compatibility patch. Defaults: **L20D, CuteDSL, Claude**, one DSL Lineage, Wiki off.
 Inputs and offline Bundles live here; all generated state lives in `workspaces/FA4/`.
 
 ## Objective and source boundary
@@ -14,7 +14,7 @@ The target has FP8 E4M3 Query/KV, BF16 output, 16 Query Heads, one KV Head, Head
 P64 KV pages and causal Attention. `shape_train.json` supplies the public domain; the 30
 precise validation Shapes, Metadata and Roofline remain private.
 
-The complete CuTe tree is pinned to upstream FlashAttention
+The complete CuTe tree is based on upstream FlashAttention
 `b54df166ebb69b896892826014759d09b9c3c9c6`, with Quack 0.5.3 source support. R0 supports the
 HD256 two-CTA P128 path but lacks the target capabilities. Bootstrap must compose two independently
 mapped P64 pages into an N128 Tile, implement authoritative `seqused_k` and dedicated PackGQA,
@@ -34,16 +34,18 @@ snapshot is not a runtime immutability rule; the Runtime Manifest defines that r
 
 - `task/`: fixed `adapter.py`, Source Manifest, Reference, input generator, public Shape Train,
   private Shape Valid, Metadata and the supplied Roofline. The adapter becomes Candidate `kernel.py`.
-- `source.bundle`: offline FA4/Quack package, Commit `7b077cf391a98a06ad9464530f0a4c9c7be3f477`.
-  This packaging Commit differs from upstream because it includes dependencies/provenance;
-  the FA4 source bytes are unchanged.
+- `source.bundle`: offline FA4/Quack package, Commit `2d0f4282f5d0df338d0fc9c352309becbce86352`.
+  It includes dependencies, provenance and the native Eval compatibility patch described below.
+  The original package Commit `7b077cf391a98a06ad9464530f0a4c9c7be3f477` remains in bundle history.
+- `patches/native-eval.patch`: reproducible source-only patch against that original package.
 - `evaluator.bundle`: supplied Atrex-Bench evaluator with metadata-owned elementwise tolerances,
   Commit `ed449b63ecd8aeff4db23be0d9f658d7d50b1cfa`. It does not use or alter the existing
   `third_party/atrex-bench`.
 - `source-provenance.json` and `source-validation.json`: original source and historical smoke
   records. They are not acceptance results for this Campaign.
-- `smoke/`: unchanged original Agate smoke scripts and legacy Shape document.
-- `asset-integrity.json`: hashes checked against both supplied packages, including all 70 Source
+- `smoke/`: original Agate smoke scripts and legacy Shape document; `native_eval/` adds a
+  P128 regression fixture for native Eval, without replacing the 30 target Shapes.
+- `asset-integrity.json`: hashes checked against both supplied packages, including all 74 Source
   files and all 32 Evaluator files. Preparation verifies these and the offline Bundle hashes.
 - `initial-evidence/`, `campaign.json`, `runtime.template.json`: task instructions and independent
   configuration. Preparation also generates a frozen `ablation.json` from the shared production
@@ -53,6 +55,30 @@ Preparation verifies offline Commits, source locks, public/private Shapes and th
 Optimizer, Evolver and Evaluator import paths. Nothing depends on the original directories
 outside this repository.
 See [alignment audit](ALIGNMENT.md) for exact file checks and evaluation-policy differences.
+
+## Native Eval source compatibility
+
+The upstream Gateway validates **every Python file in both Candidate and ABBA Baseline archives**.
+Non-Python archive files also receive path, size and forbidden-string checks.
+This check remains enabled independently of Runtime's `production_gate` setting. The patched R0:
+
+- imports `vendor.flash_attention.flash_attn` and `vendor_support.quack` directly, with no
+  `sys.path`, dynamic import or dependency on an installed FlashAttention package;
+- retains process-local JIT caches and their complete keys, removes optional disk caching and
+  the external PTXAS hook, and uses explicit `fa4_config` flags with the original default dispatch;
+- replaces dynamic metadata lookups with fixed field protocols and ordered MLIR field declarations;
+- removes standalone benchmark entrypoints and reformats four modules below 128 KiB while
+  preserving their AST after the reviewed compatibility changes.
+
+The adapter's forward body, original HD256/P128 algorithm, 30 target Shapes, Reference, input
+generator, tolerances and mutation policy are unchanged. R0 still requires P64/ragged/PackGQA
+bring-up; the patch does not contain a previous Bootstrap solution. Source hashes in the upstream
+section of `source-provenance.json` describe the original snapshot; `asset-integrity.json` locks the
+patched package. See `native-eval-validation.json` for production verification and its limits.
+
+New `ParamsBase` fields must also appear in `__quack_field_items__` in dataclass order, including
+inherited fields. New NamedTuple kernel arguments must use `register_namedtuple_type` or
+`mlir_namedtuple`. This preserves argument packing without unrestricted attribute inspection.
 
 ## Evaluation policy and limitations
 
@@ -111,7 +137,7 @@ python3 scripts/source-tree/task.py smoke --smoke-mode upstream-p128
 python3 scripts/source-tree/task.py smoke --smoke-mode target --shape-id 0
 ```
 
-The runner stages pristine R0, its fixed adapter and original `reference/shapes.json` in a
+The runner stages the compatibility-patched R0, its fixed adapter and original `reference/shapes.json` in a
 temporary directory, executes the original scripts and cleans up afterward. It does not test
 an Agent-modified Candidate and is not a replacement for full evaluation.
 
@@ -170,3 +196,13 @@ atrex-kernel-agent-runtime list-worker-sessions --config workspaces/FA4/runtime.
 Before successful Bootstrap, that result file may not exist. Read the terminal error and Sessions
 under `state/lineage-bootstrap-workspaces/` instead. Passing preparation checks does not mean R0
 passes correctness; the first model session must still implement the missing capabilities.
+
+`independent-ablation.json` contains seven configurations, each repeated independently three times
+(21 Lineages): neither journal, Experiment only, Direction only, both journals, neither journal
+with result reads disabled, Dev-only, and Raw. The fifth preserves reports, conversations, source
+reads, Pareto and notes. Dev-only additionally closes every Agent Runtime operation except Dev,
+visible Kernel source reads and report handoff/discovery; private controller validation still runs after nomination.
+Both settings preserve authorized file history. Default shared plans have seven settings in each
+of two sharing modes (fourteen arms total).
+
+Raw adds direct Agate access, no Runtime tools or supplied history, and only trajectory-owned files as memory. Private final evaluation and kernel routing remain unchanged. See `docs/configuration.md` for the boundary and budget semantics.
