@@ -474,6 +474,15 @@ files are written under `scratch/`. A Bootstrap Session starts without prior jou
 terminal journals, Kernel Trials, and Result Artifacts become the root history of ordinary Attempts
 in that Lineage.
 
+Malformed Journal requests return field-specific `issues`: missing required keys use `missing`,
+unexpected keys use `extra_forbidden`, and invalid values retain their type/enum error codes.
+Paths identify the request field, including nested bindings such as
+`request.after.result_artifact_digest`. An absent `action` is distinct from a non-string action.
+The CLI preserves these issues and gives recovery advice for the submitted Direction action:
+`propose`, `start`, or the specific closure. Missing/invalid actions require choosing the intended
+action; they never imply a closure. Disabled modules do not introduce required cross-module links,
+and server-provided ownership/concurrency recovery takes precedence over generic advice.
+
 Experiment `evidence` and `analysis` are optional nonblank strings when supplied. With Directions
 on, `hypothesis` may be omitted to reference the associated Direction; in Experiment-only mode a
 local hypothesis is required. Direction `start` and closure `analysis` are optional; closure status,

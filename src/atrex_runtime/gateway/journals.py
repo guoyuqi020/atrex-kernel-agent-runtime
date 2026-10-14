@@ -9,6 +9,9 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import uuid4
 
+from pydantic import ValidationError
+from pydantic_core import InitErrorDetails
+
 from ..artifacts.local import ArtifactKind, JsonValue, LocalArtifactStore
 from ..direction_genealogy import RELATIONSHIP_FIELDS, relationship_fields, validate_relationship
 from ..domain.errors import (
@@ -77,6 +80,47 @@ _DIRECTION_STATUSES = {
     "block": "blocked",
     "defer": "deferred",
 }
+
+
+def _request_fields(
+    value: Mapping[str, object],
+    required: set[str],
+    optional: set[str],
+    *,
+    path: tuple[str, ...] = ("request",),
+) -> None:
+    """Report actual missing/extra fields through the structured HTTP error boundary."""
+    issues: list[InitErrorDetails] = [
+        {"type": "missing", "loc": (*path, field), "input": None}
+        for field in sorted(required - value.keys())
+    ]
+    issues.extend(
+        {"type": "extra_forbidden", "loc": (*path, field), "input": None}
+        for field in sorted(value.keys() - required - optional)
+    )
+    if issues:
+        raise ValidationError.from_exception_data("Journal request", issues)
+
+
+def _request_action(value: Mapping[str, object], allowed: set[str]) -> str:
+    _request_fields(value, {"action"}, set(value))
+    action = value["action"]
+    if not isinstance(action, str):
+        raise ValidationError.from_exception_data(
+            "Journal request",
+            [{"type": "string_type", "loc": ("request", "action"), "input": None}],
+        )
+    if action not in allowed:
+        raise ValidationError.from_exception_data(
+            "Journal request",
+            [
+                {
+                    "type": "literal_error", "loc": ("request", "action"), "input": None,
+                    "ctx": {"expected": ", ".join(repr(item) for item in sorted(allowed))},
+                }
+            ],
+        )
+    return action
 
 
 def _text(value: object, label: str) -> str:
@@ -757,17 +801,11 @@ class RuntimeJournalService:
     ) -> dict[str, JsonValue]:
         value = dict(request.request)
         assessment_notes: tuple[str, ...] = ()
-        action = value.get("action")
-        if not isinstance(action, str):
-            raise ValueError("Direction action must be text")
-        if action == "suggest":
+        if value.get("action") == "suggest":
             raise DirectionSuggestionForbiddenError("request.action")
+        action = _request_action(value, set(_DIRECTION_STATUSES) - {"suggest"})
         if action == "propose":
-            if set(value) - RELATIONSHIP_FIELDS != _DIRECTION_PROPOSAL_FIELDS:
-                raise ValueError(
-                    f"Direction proposal requires {sorted(_DIRECTION_PROPOSAL_FIELDS)}; "
-                    f"optional genealogy fields are {sorted(RELATIONSHIP_FIELDS)}"
-                )
+            _request_fields(value, _DIRECTION_PROPOSAL_FIELDS, set(RELATIONSHIP_FIELDS))
             for field in (
                 "name",
                 "hypothesis",
@@ -816,14 +854,7 @@ class RuntimeJournalService:
             optional_fields = {"analysis"} | (
                 _DIRECTION_CLOSURE_OPTIONAL_FIELDS if action in _DIRECTION_CLOSURES else set()
             )
-            if set(value) - optional_fields != expected_fields:
-                raise ValueError(
-                    f"Direction {action} requires {sorted(expected_fields)}; "
-                    f"optional fields are {sorted(optional_fields)}. "
-                    "An untested closure may select no evidence and remain unresolved"
-                )
-            if action not in {"start", "complete", "abandon", "block", "defer"}:
-                raise ValueError("Direction update action is invalid")
+            _request_fields(value, expected_fields, optional_fields)
             direction_id = _text(value.get("direction_id"), "Direction ID")
             direction = self._require_direction(
                 request.attempt_id, direction_id, field_path="request.direction_id"
@@ -918,13 +949,9 @@ class RuntimeJournalService:
         expected_fields = (
             _EXPERIMENT_FIELDS
             if "directions" in self.tool_modules
-            else _EXPERIMENT_FIELDS - {"direction_id"}
+            else (_EXPERIMENT_FIELDS - {"direction_id"}) | {"hypothesis"}
         )
-        if set(value) - _EXPERIMENT_OPTIONAL_FIELDS != expected_fields:
-            raise ValueError(
-                f"Experiment fields must be exactly {sorted(expected_fields)} "
-                f"with optional {sorted(_EXPERIMENT_OPTIONAL_FIELDS)}"
-            )
+        _request_fields(value, expected_fields, _EXPERIMENT_OPTIONAL_FIELDS)
         for field in expected_fields - {"action", "before", "after"}:
             _text(value.get(field), f"Experiment {field}")
         for field in ("hypothesis", "evidence", "analysis"):
@@ -956,8 +983,7 @@ class RuntimeJournalService:
         actions = {"keep_after", "restore_before", "discard", "abandon_direction", "adopt"}
         if allow_baseline:
             actions.add("baseline")
-        if value.get("action") not in actions:
-            raise ValueError("Experiment action is invalid")
+        _request_action(value, actions)
         current = list(self._current_experiments(request.attempt_id))
         if value.get("action") == "baseline" and any(
             experiment.get("action") == "baseline" for experiment in current
@@ -1018,11 +1044,12 @@ class RuntimeJournalService:
         """Bind one exact Result Artifact to its immutable Kernel and observation."""
         if value is None:
             return None
-        if not isinstance(value, Mapping) or set(value) != {"result_artifact_digest"}:
-            raise ValueError(
-                f"Experiment {side_name} fields must be exactly ['result_artifact_digest']; "
-                "Runtime resolves the corresponding Kernel Artifact"
+        if not isinstance(value, Mapping):
+            raise ValidationError.from_exception_data(
+                "Journal request",
+                [{"type": "dict_type", "loc": ("request", side_name), "input": None}],
             )
+        _request_fields(value, {"result_artifact_digest"}, set(), path=("request", side_name))
         trial = resolve_artifact_subject(
             trials.values(),
             value,

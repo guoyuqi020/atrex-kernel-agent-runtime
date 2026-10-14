@@ -435,6 +435,13 @@ Runtime Journal 与授权冻结历史的合并视图，只有显式请求的紧�
 Bootstrap Session 开始时没有更早 Journal；成功后，
 其终态 Journal、Kernel Trial 与 Result Artifact 会成为该 Lineage 后续普通 Attempt 的根历史。
 
+Journal 请求校验失败时，`issues` 会逐项标明字段路径：缺失必填字段为 `missing`，
+多余字段为 `extra_forbidden`；类型或枚举错误保留对应错误码。嵌套路径例如
+`request.after.result_artifact_digest`。缺少 `action` 与传入非字符串会分别报告。
+CLI 保留这些诊断，并按请求中的 `propose`、`start` 或具体结束操作提供恢复建议；
+缺失或无效的 action 要求明确选择意图，不会默认引导关闭 Direction。关闭模块不会引入
+对应关联字段要求，服务端针对所有权、并发冲突等情况的专用恢复建议优先保留。
+
 Experiment 可以通过 `knowledge_used` 声明本实验采用的 Wiki 知识：
 
 ```json

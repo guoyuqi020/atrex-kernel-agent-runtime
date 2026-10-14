@@ -2063,6 +2063,14 @@ async def test_candidate_ready_needs_an_evaluate_for_the_exact_sealed_candidate(
         "kernel_artifact_digest": evaluated.kernel_artifact_digest,
         "result_artifact_digests": [evaluated.result_artifact_digest],
     }
+    # Validate a changed candidate before sealing: accepted reports are immutable.
+    with pytest.raises(ValueError, match="No Agent evaluate covers it"):
+        await service.execute(
+            capability_value.token,
+            payload("report-after-edit", path="other.py"),
+            operation_scope="runtime",
+        )
+
     accepted = await service.execute(
         capability_value.token,
         payload("report-after-evaluate"),
@@ -2072,13 +2080,6 @@ async def test_candidate_ready_needs_an_evaluate_for_the_exact_sealed_candidate(
     assert accepted.operation == "attempt_report"
     assert isinstance(accepted.result, dict)
     assert accepted.result["status"] == "registered"
-
-    with pytest.raises(ValueError, match="No Agent evaluate covers it"):
-        await service.execute(
-            capability_value.token,
-            payload("report-after-edit", path="other.py"),
-            operation_scope="runtime",
-        )
 
     control.close()
     registry.close()

@@ -305,7 +305,7 @@ async def test_discard_never_closes_direction_or_promotes_diagnostic(case: Case)
 @pytest.mark.anyio
 async def test_agent_cannot_forge_runtime_summary(case: Case) -> None:
     result, _ = await case.measure({"s0": 100})
-    with pytest.raises(AssertionError, match="Experiment fields"):
+    with pytest.raises(AssertionError, match=r"request\.measurement_summary.*extra_forbidden"):
         await case.record(result, result, measurement_summary={"comparison": {"speedup": 100}})
     assert not case.control.list_experiments(case.attempt.id)
 
