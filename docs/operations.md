@@ -167,6 +167,18 @@ atrex-kernel-agent-runtime show-bootstrap-run \
 New failures include Attempt, Generation, and Run identity in the exception and emit
 `bootstrap.lineage_baseline_failed` lifecycle events.
 
+When resetting Optimizer progress while retaining Bootstrap, restore its registry ancestry and
+Artifact closure **and** call `SqliteGatewayControl.restore_bootstrap_history(lineage_id,
+source_database, source_artifacts, artifacts)` against the archived Gateway database before
+starting the new service. Reports alone are insufficient: their Result, Direction and Experiment
+IDs need the original Bootstrap Gateway facts to remain readable. Do not alias historical Result
+IDs to the retained baseline's measurement. The import preserves exact IDs, is transactional and
+idempotent, and rejects conflicting facts or missing root Artifacts. It includes only Bootstrap
+ancestry, excluding Optimizer progress, active jobs and dedup reservations; historical capability
+records are revoked placeholders. Legacy archives without Bootstrap run rows are supported when
+their subject and operation facts survive. Run it only while the destination service is stopped;
+existing tool-module and history-visibility restrictions still apply after import.
+
 ## Optimizer debug shell
 
 `dev-shell --lineage` creates or reuses the current Epoch's first Active Attempt while holding the

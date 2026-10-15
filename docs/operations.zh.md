@@ -152,6 +152,15 @@ atrex-kernel-agent-runtime show-bootstrap-run \
 新的失败异常会携带 Attempt、Generation 和 Run 身份，并产生
 `bootstrap.lineage_baseline_failed` 生命周期事件。
 
+清空 Optimizer 进度并保留 Bootstrap 时，除了恢复 Registry 祖先链和 Artifact 闭包，还必须在
+启动新服务前，针对归档 Gateway 数据库调用
+`SqliteGatewayControl.restore_bootstrap_history(lineage_id, source_database, source_artifacts, artifacts)`。
+仅恢复报告不够：报告引用的 Result、Direction、Experiment ID 需要原始 Bootstrap Gateway
+事实才能继续读取，不能把历史 Result ID 映射成保留基线的另一份测量。该导入保留原 ID，使用事务、
+支持幂等，遇到事实冲突或根 Artifact 缺失会拒绝恢复。只导入 Bootstrap 祖先历史，不导入 Optimizer
+进度、运行中任务或去重预留；历史 Capability 仅保留已撤销的占位记录。旧归档没有 Bootstrap Run 行时，
+只要 Subject 和操作事实仍在，也可恢复。必须在目标服务停止时执行；恢复后仍遵守工具模块和历史可见性限制。
+
 ## Optimizer 调试 Shell
 
 `dev-shell --lineage` 会在持有 Lineage Fence 时创建或复用当前 Epoch 的首个 Active Attempt，

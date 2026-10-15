@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-from ..artifacts.local import JsonValue
+from ..artifacts.local import JsonValue, LocalArtifactStore
 from ..direction_genealogy import suggestion_availability
 from ..domain.errors import (
     DirectionConcurrencyError,
@@ -253,6 +253,21 @@ class SqliteGatewayControl(AttemptOutcomeSource):
         """Close the Gateway database after request handling has stopped."""
         with self._lock:
             self._connection.close()
+
+    def restore_bootstrap_history(
+        self,
+        lineage_id: LineageId,
+        source_database: Path,
+        source_artifacts: LocalArtifactStore,
+        artifacts: LocalArtifactStore,
+    ) -> dict[str, int]:
+        """Restore archived Bootstrap facts while this destination is quiescent."""
+        from .bootstrap_history import restore_bootstrap_history
+
+        with self._transaction() as connection:
+            return restore_bootstrap_history(
+                connection, self._registry, lineage_id, source_database, source_artifacts, artifacts
+            )
 
     def check_health(self) -> None:
         """Verify that the Gateway control store can read and acquire a write transaction."""
