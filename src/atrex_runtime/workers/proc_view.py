@@ -20,10 +20,14 @@ import sys
 import tempfile
 import threading
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 
 def _write(path: Path, value: bytes) -> None:
+    if path.is_file() and path.read_bytes() == value:
+        return
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(".next")
     temporary.write_bytes(value)
@@ -203,13 +207,33 @@ def _install_maps_shim(destination: Path) -> None:
     shutil.copy2(compiled, target)
 
 
-def main() -> int:
-    """Own bwrap and its process view for precisely the lifetime of one Worker."""
-    destination = Path(sys.argv[1])
-    argv = sys.argv[2:]
-    if not argv or not destination.is_dir():
-        raise ValueError("proc view requires a prepared directory and bwrap argv")
-    _install_maps_shim(destination)
+@contextmanager
+def local_process_view(prepared: Path, argv: list[str]) -> Iterator[tuple[Path, list[str]]]:
+    """Keep high-frequency process metadata off the persistent workspace filesystem."""
+    source = next(
+        i + 1 for i in range(len(argv) - 2)
+        if argv[i:i + 3] == ["--ro-bind", str(prepared), "/proc"]
+    )
+    # Linux containers normally provide a small local tmpfs here. No shared host
+    # /dev/shm tree is exposed: bwrap mounts only this private directory read-only.
+    memory = Path("/dev/shm")
+    parent = str(memory) if memory.is_dir() and os.access(memory, os.W_OK) else None
+    with tempfile.TemporaryDirectory(prefix="atrex-proc-view-", dir=parent) as name:
+        destination = Path(name)
+        (destination / "1").mkdir()
+        for relative in ("1/cgroup", "1/exe", "cpuinfo", "meminfo", "stat", "uptime",
+                         "version", "loadavg"):
+            path = prepared / relative
+            if path.is_symlink():
+                (destination / relative).symlink_to(path.readlink())
+            elif path.is_file():
+                shutil.copyfile(path, destination / relative)
+        rewritten = list(argv)
+        rewritten[source] = str(destination)
+        yield destination, rewritten
+
+
+def _run(destination: Path, argv: list[str], workspace: Path) -> int:
     endpoint = destination / ".maps.sock"
     endpoint.unlink(missing_ok=True)
     listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -226,7 +250,6 @@ def main() -> int:
     listener.settimeout(0.2)
     process = subprocess.Popen(argv)
     stopped = threading.Event()
-    workspace = destination.parent.parent
     visible_workspace = next(
         argv[i + 2]
         for i in range(len(argv) - 2)
@@ -250,7 +273,17 @@ def main() -> int:
         if process.poll() is None:
             process.kill()
             process.wait()
-        shutil.rmtree(destination, ignore_errors=True)
+
+
+def main() -> int:
+    """Own bwrap and its process view for precisely the lifetime of one Worker."""
+    prepared = Path(sys.argv[1])
+    argv = sys.argv[2:]
+    if not argv or not prepared.is_dir():
+        raise ValueError("proc view requires a prepared directory and bwrap argv")
+    _install_maps_shim(prepared)
+    with local_process_view(prepared, argv) as (destination, rewritten):
+        return _run(destination, rewritten, prepared.parent.parent)
 
 
 if __name__ == "__main__":

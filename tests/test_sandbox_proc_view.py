@@ -61,3 +61,44 @@ def test_maps_broker_ancestry_rejects_peers_and_cycles(tmp_path):
     assert not owns_process(100, 50, proc=tmp_path)
     process(tmp_path, 999, 999, [999], [999], [])
     assert not owns_process(100, 999, proc=tmp_path)
+
+
+def test_live_process_view_never_writes_census_to_persistent_workspace(tmp_path):
+    from atrex_runtime.workers.proc_view import local_process_view
+
+    prepared = tmp_path / 'workspace/.runtime/proc-view'
+    (prepared / '1').mkdir(parents=True)
+    (prepared / '1/cgroup').write_text('0::/\n')
+    (prepared / '1/exe').symlink_to('/usr/bin/claude')
+    (prepared / 'cpuinfo').touch()
+    argv = ['bwrap', '--ro-bind', str(prepared), '/proc', '--bind',
+            str(tmp_path / 'workspace'), '/home/agent/workspace']
+    proc = tmp_path / 'host-proc'
+    process(proc, 100, 50, [100], [100], [101])
+    process(proc, 101, 100, [101, 1], [100, 0], [102])
+    process(proc, 102, 101, [102, 2], [102, 2], [])
+    with local_process_view(prepared, argv) as (view, rewritten):
+        assert not view.is_relative_to(tmp_path)
+        assert view.stat().st_mode & 0o777 == 0o700
+        assert rewritten[2] == str(view)
+        assert rewritten[3:] == argv[3:]
+        assert (view / '1/exe').readlink() == Path('/usr/bin/claude')
+        assert (view / '1/cgroup').read_text() == '0::/\n'
+        assert snapshot(100, view, proc=proc)
+        assert (view / '2/stat').exists()
+        assert not (prepared / '2').exists()
+        assert not (prepared / 'self').exists()
+    assert not view.exists()
+    assert argv[2] == str(prepared)
+
+
+def test_unchanged_process_metadata_does_not_rewrite_files(tmp_path):
+    from atrex_runtime.workers.proc_view import _write
+
+    path = tmp_path / 'view/1/stat'
+    _write(path, b'one')
+    inode = path.stat().st_ino
+    _write(path, b'one')
+    assert path.stat().st_ino == inode
+    _write(path, b'two')
+    assert path.read_bytes() == b'two'

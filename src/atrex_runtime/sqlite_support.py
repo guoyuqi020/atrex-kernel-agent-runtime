@@ -19,11 +19,11 @@ def immediate_transaction(
         connection.execute("BEGIN IMMEDIATE")
         try:
             yield connection
-        except BaseException:
-            connection.rollback()
-            raise
-        else:
             connection.commit()
+        except BaseException:
+            if connection.in_transaction:
+                connection.rollback()
+            raise
 
 
 def configure_durable_sqlite(

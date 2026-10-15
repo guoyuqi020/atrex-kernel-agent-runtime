@@ -493,11 +493,11 @@ class SqliteRegistry:
                 if self._require_fencing and not migration:
                     self._assert_active_fence()
                 yield
-            except BaseException:
-                self._connection.execute("ROLLBACK")
-                raise
-            else:
                 self._connection.execute("COMMIT")
+            except BaseException:
+                if self._connection.in_transaction:
+                    self._connection.execute("ROLLBACK")
+                raise
 
     def _migrate(self) -> None:
         version_row = self._connection.execute("PRAGMA user_version").fetchone()

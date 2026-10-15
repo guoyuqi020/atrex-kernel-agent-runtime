@@ -314,6 +314,8 @@ Runtime Python 包、所选 Provider 程序/凭据和当前 Agent 工作区。�
 其他轨迹和宿主 Home 默认不可见。额外挂载不能覆盖 Runtime 状态或兄弟工作区及其父目录。
 容器不挂宿主 `/proc`；父进程只投影当前 Worker 的进程元数据，保留子代理暂停/清理能力，
 不暴露宿主 root/fd/cwd/environ。Bun 所需 exe 链接固定指向已允许的 Provider 二进制。
+高频刷新的进程信息保存在独立的宿主临时目录（优先 `/dev/shm` 内存盘），不写持久工作盘；
+只把该私有目录只读挂载给 Worker，退出后清理。
 
 原生 Bun 的主线程初始化需要自身 memory maps；只读本地代理通过 socket peer credentials 和
 父子进程归属校验返回调用者自身 maps 的只读 FD，不接受文件名或其他 PID。小型 libc 兼容层

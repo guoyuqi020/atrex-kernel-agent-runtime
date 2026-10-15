@@ -294,7 +294,10 @@ Systemd mode mounts a fresh PID-namespace procfs. Container mode projects only t
 namespace-local process metadata through a trusted parent, retaining Core's detached-subprocess
 suspension and cleanup without exposing host process `root`, `fd`, `cwd` or `environ`. A fixed
 `exe` alias points to the allowlisted Provider binary for standalone Bun. No host procfs directory
-is mounted. A small libc compatibility shim obtains only the calling process's read-only memory
+is mounted. Frequently refreshed process metadata lives in a private host tmpfs directory
+(`/dev/shm` when available), not on the durable workspace filesystem; only that directory is
+mounted read-only and it is removed when the Worker exits. A small libc compatibility shim
+obtains only the calling process's read-only memory
 map from a peer-credential/ancestry-checked local broker; Agents cannot request a path or another
 PID. It lets standalone Bun initialize with accurate stack bounds without host procfs. Container
 hosts require a C compiler (`cc`) to build this cached shim; no GPU toolkit or Torch is required.

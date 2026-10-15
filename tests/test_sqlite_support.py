@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
+
+import pytest
 
 from atrex_runtime.sqlite_support import SQLITE_BUSY_TIMEOUT_MS, configure_durable_sqlite
 
@@ -31,3 +34,36 @@ def test_durable_sqlite_leaves_memory_journal_unchanged() -> None:
         assert connection.execute("PRAGMA busy_timeout").fetchone() == (SQLITE_BUSY_TIMEOUT_MS,)
     finally:
         connection.close()
+
+
+@pytest.mark.parametrize('registry_transaction', [False, True])
+def test_busy_commit_rolls_back_and_releases_writer_lock(tmp_path, registry_transaction):
+    from atrex_runtime.registry.sqlite import SqliteRegistry
+    from atrex_runtime.sqlite_support import immediate_transaction
+
+    path = tmp_path / 'busy.sqlite'
+    with SqliteRegistry(path) as registry:
+        writer = registry._connection
+        writer.execute('CREATE TABLE example(value INTEGER)')
+        writer.execute('INSERT INTO example VALUES (1)')
+        writer.execute('PRAGMA busy_timeout=5')
+        reader = sqlite3.connect(path, isolation_level=None)
+        try:
+            reader.execute('BEGIN')
+            assert reader.execute('SELECT value FROM example').fetchone() == (1,)
+            transaction = (registry._transaction if registry_transaction else
+                           lambda: immediate_transaction(writer, threading.RLock()))
+            with pytest.raises(sqlite3.OperationalError, match='locked'), transaction():
+                writer.execute('UPDATE example SET value=2')
+            assert not writer.in_transaction
+            reader.rollback()
+            # A separate process/connection can write immediately after the failure.
+            reader.execute('PRAGMA busy_timeout=5')
+            reader.execute('BEGIN IMMEDIATE')
+            assert reader.execute('SELECT value FROM example').fetchone() == (1,)
+            reader.commit()
+            with transaction():
+                writer.execute('UPDATE example SET value=3')
+            assert reader.execute('SELECT value FROM example').fetchone() == (3,)
+        finally:
+            reader.close()
