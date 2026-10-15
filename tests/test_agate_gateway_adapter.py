@@ -443,11 +443,13 @@ async def test_eval_uses_sealed_context_and_maps_raw_atrex_result(tmp_path: Path
             "max_rel_err": 0.01,
         },
         "failures": [],
+        "diagnostics": [],
+        "performance_by_shape": {},
         "latency_us_geomean": pytest.approx(math.sqrt(2000 * 4000)),
         "latency_us_by_shape": {"0": 2000.0, "1": 4000.0},
         "shape_batch_count": 2,
         "shape_ids_are_opaque": True,
-        "hidden_case_details": "shape inputs and failure details withheld",
+        "hidden_case_details": "shape inputs withheld; upstream diagnostics preserved",
     }
     assert client.submitted[0][0] == "eval"
     assert sorted(client.fetched) == [("ev_test", False, 30.0), ("ev_test_1", False, 30.0)]
@@ -683,7 +685,9 @@ def test_correctness_only_reports_failure_without_performance(failure: str) -> N
     assert mapped.worker_result["correct"] is False
     assert mapped.worker_result["correctness"]["status"] == "FAIL"
     assert "latency" not in json.dumps(mapped.worker_result)
-    assert "private" not in json.dumps(mapped.worker_result)
+    assert "input_artifact" not in json.dumps(mapped.worker_result)
+    if failure in {"shape_error", "case_error", "result", "job"}:
+        assert "error" in json.dumps(mapped.worker_result["diagnostics"])
 
 
 @pytest.mark.parametrize(
@@ -1249,7 +1253,8 @@ async def test_compile_failure_is_a_candidate_outcome(tmp_path: Path) -> None:
     assert isinstance(mapped.worker_result, dict)
     assert mapped.worker_result["all_pass"] is False
     assert mapped.worker_result["failures"] == [
-        "one or more hidden evaluator cases failed; reproduce within the public shape_domain"
+        "Evaluation failed. See diagnostics for Agate's original failure reasons; "
+        "the input_scope field identifies whether this evaluated custom or contract inputs."
     ]
     assert "passed" not in mapped.worker_result
     jobs.close()

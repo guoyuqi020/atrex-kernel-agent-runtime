@@ -327,6 +327,7 @@ class KernelPairMeasurementResult:
     gateway_result_digest: ArtifactDigest | None = None
     incumbent_latency_us: float | None = None
     candidate_latency_us: float | None = None
+    rejection_reason: str | None = None
 
 
 class KernelPairMeasurementRunner(Protocol):

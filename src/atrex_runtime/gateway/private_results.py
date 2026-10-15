@@ -9,7 +9,10 @@ import statistics
 from typing import cast
 
 from ..artifacts.local import JsonValue
+from ..domain.errors import InfrastructureError
 from .correctness import correctness_summary
+from .evaluation_feedback import evaluation_feedback, failure_notice
+from .failures import infrastructure_detail
 from .protocol import EvaluationV2
 
 _PRIVATE_RESULT_KEYS = frozenset(
@@ -48,10 +51,7 @@ _PRIVATE_RESULT_KEYS = frozenset(
         "workloads",
     }
 )
-_HIDDEN_DETAIL = "shape inputs and failure details withheld"
-_HIDDEN_FAILURE = (
-    "one or more hidden evaluator cases failed; reproduce within the public shape_domain"
-)
+_HIDDEN_DETAIL = "shape inputs withheld; upstream diagnostics preserved"
 _HIDDEN_JOB_FAILURE = "gateway job did not complete; hidden-case details withheld"
 _CANDIDATE_REJECTED_CATEGORY = "candidate_rejected"
 _EVALUATION_STAGES = ("compile", "correctness", "performance")
@@ -77,13 +77,14 @@ def project_private_evaluation(
     evaluation: EvaluationV2,
     expected_shape_ids: tuple[str, ...],
 ) -> JsonValue:
-    """Expose useful measurements without exposing exact cases or evaluator diagnostics."""
+    """Expose measurements and original diagnostics without evaluator input material."""
     payload = _evaluation_payload(raw)
     latency_by_shape = _latency_by_shape(payload, expected_shape_ids)
     return {
         "all_pass": evaluation.correct,
         "correctness": correctness_summary(payload, passed=evaluation.correct),
-        "failures": [] if evaluation.correct else [_HIDDEN_FAILURE],
+        "failures": failure_notice(evaluation.correct),
+        **evaluation_feedback(raw, expected_shape_ids),
         "latency_us_geomean": evaluation.latency_us if evaluation.correct else 0.0,
         "latency_us_by_shape": latency_by_shape,
         "shape_ids_are_opaque": True,
@@ -143,10 +144,16 @@ def _project_job_failure(error: JsonValue) -> JsonValue:
         ("failure_origin", details.get("failure_origin")),
         ("failure_rule", details.get("failure_rule")),
         ("reason", error.get("reason")),
+        ("message", error.get("message")),
         ("trace_id", error.get("trace_id")),
     ):
         if isinstance(source, str) and source.strip():
-            projected[key] = source[:_MAX_FAILURE_TEXT]
+            if key == "message":
+                projected[key] = infrastructure_detail(InfrastructureError(source))
+                if len(source) > 8192:
+                    projected["message_truncated"] = True
+            else:
+                projected[key] = source[:_MAX_FAILURE_TEXT]
     stages = _evaluation_stages(logs)
     if stages:
         projected["stages"] = cast(JsonValue, stages)

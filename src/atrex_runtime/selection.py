@@ -162,6 +162,8 @@ class SameAllocationAbbaKernelComparator(KernelComparator):
             shape_batch_size=self._shape_batch_size,
             max_parallel_shape_batches=self._max_parallel_shape_batches,
         )
+        if result.rejection_reason is not None:
+            return KernelComparisonResult(False, result.rejection_reason, None)
         incumbent_mean = (
             result.incumbent_latency_us
             if result.incumbent_latency_us is not None

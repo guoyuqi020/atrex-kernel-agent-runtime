@@ -7,6 +7,7 @@ import statistics
 from typing import cast
 
 from ..artifacts.local import JsonValue
+from .evaluation_feedback import FEEDBACK_KEYS, merge_feedback
 from .protocol import EvaluationV2
 
 
@@ -65,18 +66,26 @@ def repeated_evaluate_worker_result(
             "aggregation": "arithmetic_mean",
             "correct": aggregate.correct,
             "latency_us": aggregate.latency_us,
+            **merge_feedback(worker_results),
             "measurements": [
                 {
                     "repeat": repeat,
+                    **_feedback(worker_results[repeat] if repeat < len(worker_results) else None),
                     "correct": evaluation.correct,
                     "latency_us": evaluation.latency_us,
                 }
                 for repeat, evaluation in enumerate(evaluations)
             ],
-            "hidden_case_details": "shape inputs and failure details withheld",
+            "hidden_case_details": ("shape inputs withheld; upstream diagnostics preserved"),
             **(
                 {"error": {"category": "evaluate_repetition_failed", "details": errors}}
                 if errors else {}
             ),
         },
     )
+
+
+def _feedback(value: JsonValue) -> dict[str, JsonValue]:
+    if not isinstance(value, dict):
+        return {}
+    return {key: value[key] for key in FEEDBACK_KEYS if key in value}

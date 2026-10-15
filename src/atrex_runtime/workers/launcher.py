@@ -10,6 +10,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ from ..config import (
     BwrapSandboxSettings,
 )
 from .extensions import install_optimizer_extensions
+from .filesystem import dependency_mounts, restricted_proc_mounts, system_mounts
 
 _ENVIRONMENT_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _PRIVATE_PATH_ENVIRONMENT_KEYS = frozenset(
@@ -185,16 +187,15 @@ class BackendCredentialMounts:
         if executable is None:
             return ()
         absolute = Path(executable).absolute()
-        try:
-            relative = absolute.relative_to(self.host_home)
-        except ValueError:
-            return ()
-        if not relative.parts:
-            return ()
-        root = self.host_home / relative.parts[0]
-        if root.is_dir() and not root.is_symlink():
-            return (root,)
-        return ()
+        resolved = absolute.resolve(strict=True)
+        # npm CLIs need their package, native installations only their binary.
+        # Never restore an entire ~/.local, ~/.nvm or /opt tree.
+        package = next((p for p in resolved.parents if (p / "package.json").is_file()), None)
+        paths = [package or resolved, absolute]
+        node = shutil.which("node", path=self.environment.get("PATH"))
+        if node:
+            paths.append(Path(node).absolute())
+        return tuple(dict.fromkeys(paths))
 
     def writable_home_subpaths_for(self, backend: str) -> tuple[Path, ...]:
         """Return Provider runtime-state directories overlaid per Session."""
@@ -458,9 +459,9 @@ class CleanEnvironmentLauncher:
             str(bwrap_executable),
             "--die-with-parent",
             "--new-session",
-            "--ro-bind",
+            "--tmpfs",
             "/",
-            "/",
+            *system_mounts(),
             "--dev",
             "/dev",
             "--proc",
@@ -532,7 +533,7 @@ class BwrapSandboxLauncher:
             if not controllers.is_file():
                 raise RuntimeError("Sandbox requires a mounted cgroup v2 hierarchy")
         for path in self.settings.read_only_bind_paths:
-            if path.is_symlink() or not path.exists():
+            if not path.exists():
                 raise RuntimeError(f"Sandbox read-only bind source is unavailable: {path}")
         worker: pwd.struct_passwd | None = None
         if self.use_systemd_cgroup:
@@ -812,11 +813,11 @@ class BwrapSandboxLauncher:
             path.resolve() for path in (*self.workspace_roots, *self.settings.hidden_host_paths)
         )
         if any(
-            path.resolve().is_relative_to(root)
-            for path in restored_host_paths
+            path.resolve().is_relative_to(root) or root.is_relative_to(path.resolve())
+            for path in (*restored_host_paths, *self.settings.read_only_bind_paths)
             for root in forbidden_roots
         ):
-            raise ValueError("Backend credential mounts cannot expose hidden Runtime paths")
+            raise ValueError("Sandbox mounts cannot expose hidden Runtime paths or their parents")
         session_home = Path(mapped_environment["HOME"])
         writable_backends = (
             ()
@@ -870,10 +871,10 @@ class BwrapSandboxLauncher:
         translated_argv = tuple(
             self._translate_value(value, workspace, sandbox_workspace) for value in runtime_argv
         )
+        if not self.use_systemd_cgroup:
+            mapped_environment["LD_PRELOAD"] = str(sandbox_workspace / ".runtime/libproc-maps.so")
+            mapped_environment["ATREX_PROC_MAPS_SOCKET"] = "/proc/.maps.sock"
         assignments = tuple(f"{key}={value}" for key, value in sorted(mapped_environment.items()))
-        hidden = self._minimal_hidden_paths(
-            (*self.workspace_roots, *self.settings.hidden_host_paths)
-        )
         bwrap = [
             str(self.settings.bwrap_executable),
             "--die-with-parent",
@@ -887,20 +888,36 @@ class BwrapSandboxLauncher:
             "atrex-agent",
             "--cap-drop",
             "ALL",
-            "--ro-bind",
+            "--tmpfs",
             "/",
-            "/",
+            *system_mounts(),
             "--dev",
             "/dev",
         ]
         if self.use_systemd_cgroup:
             bwrap.extend(("--proc", "/proc"))
         else:
-            # Common OCI seccomp profiles reject a fresh procfs mount even when
-            # bubblewrap's user/mount namespace setup is otherwise permitted.
-            # Keep the outer container's procfs read-only in this deployment
-            # mode; the PID namespace still prevents signalling ancestor tasks.
-            bwrap.extend(("--ro-bind", "/proc", "/proc"))
+            proc_view = workspace / ".runtime" / "proc-view"
+            proc_view.mkdir(parents=True, exist_ok=True, mode=0o700)
+            (proc_view / "1").mkdir(exist_ok=True)
+            (proc_view / "1/cgroup").write_text("0::/\n", encoding="utf-8")
+            # Standalone Bun reads its embedded program through /proc/self/exe.
+            # This alias targets only the explicitly mounted Provider executable,
+            # never a live host-process link.
+            if self.credentials is not None and len(backends) == 1:
+                executable = shutil.which(
+                    backends[0], path=self.credentials.environment.get("PATH"),
+                )
+                if executable:
+                    alias = proc_view / "1/exe"
+                    alias.parent.mkdir(exist_ok=True)
+                    if alias.is_symlink():
+                        alias.unlink()
+                    alias.symlink_to(Path(executable).resolve(strict=True))
+            for name in ("cpuinfo", "meminfo", "stat", "uptime", "version", "loadavg"):
+                (proc_view / name).touch(exist_ok=True)
+            bwrap.extend(("--ro-bind", str(proc_view), "/proc"))
+            bwrap.extend(restricted_proc_mounts())
         bwrap.extend(
             (
                 "--tmpfs",
@@ -915,6 +932,9 @@ class BwrapSandboxLauncher:
                 "--ro-bind",
                 str(self.settings.resolv_conf.resolve()),
                 "/run/systemd/resolve/stub-resolv.conf",
+                "--ro-bind",
+                str(self.settings.resolv_conf.resolve()),
+                "/etc/resolv.conf",
             )
         )
         if interactive:
@@ -932,17 +952,9 @@ class BwrapSandboxLauncher:
                 "/root",
             )
         )
-        for path in hidden:
-            if path.as_posix() not in {"/home", "/root", "/run", "/tmp"}:
-                bwrap.extend(("--tmpfs", str(path)))
-        for path in self.settings.read_only_bind_paths:
-            for parent in self._missing_masked_parents(path):
-                bwrap.extend(("--dir", str(parent)))
-            bwrap.extend(("--ro-bind", str(path), str(path)))
-        for path in restored_host_paths:
-            for parent in self._missing_masked_parents(path):
-                bwrap.extend(("--dir", str(parent)))
-            bwrap.extend(("--ro-bind", str(path), str(path)))
+        bwrap.extend(dependency_mounts(tuple(dict.fromkeys(
+            (*self.settings.read_only_bind_paths, *restored_host_paths)
+        ))))
         bwrap.extend(
             (
                 "--dir",
@@ -1006,11 +1018,20 @@ class BwrapSandboxLauncher:
                 str(self.env_executable),
                 "-i",
                 *assignments,
+                *(
+                    () if self.use_systemd_cgroup else (
+                        "/bin/sh", "-c",
+                        'while [ ! -r /proc/self/stat ]; do sleep 0.025; done; exec "$@"',
+                        "atrex-proc-ready",
+                    )
+                ),
                 *translated_argv,
             )
         )
         if not self.use_systemd_cgroup:
-            return tuple(bwrap)
+            return (
+                sys.executable, "-m", "atrex_runtime.workers.proc_view", str(proc_view), *bwrap,
+            )
         if not isinstance(self.settings, BwrapSandboxSettings):
             raise ValueError("systemd cgroup launch requires Sandbox settings")
         unit = f"atrex-worker-{uuid4().hex}.service"
@@ -1076,31 +1097,6 @@ class BwrapSandboxLauncher:
                 return str(sandbox_workspace / resolved.relative_to(workspace))
         return value
 
-    @staticmethod
-    def _minimal_hidden_paths(paths: tuple[Path, ...]) -> tuple[Path, ...]:
-        resolved = sorted({path.resolve() for path in paths}, key=lambda path: len(path.parts))
-        selected: list[Path] = []
-        for path in resolved:
-            if path == Path("/"):
-                raise ValueError("Sandbox cannot hide the host root")
-            if not any(path.is_relative_to(parent) for parent in selected):
-                selected.append(path)
-        return tuple(selected)
-
-    @staticmethod
-    def _missing_masked_parents(path: Path) -> tuple[Path, ...]:
-        if path.is_relative_to("/home"):
-            boundary = Path("/home")
-        elif path.is_relative_to("/root"):
-            boundary = Path("/root")
-        else:
-            return ()
-        parents: list[Path] = []
-        current = path.parent
-        while current != boundary:
-            parents.append(current)
-            current = current.parent
-        return tuple(reversed(parents))
 
 
 @dataclass(frozen=True, slots=True)

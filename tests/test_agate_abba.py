@@ -1053,7 +1053,7 @@ async def test_abba_infrastructure_error_gives_up_past_the_ceiling(
 
 
 @pytest.mark.anyio
-async def test_failed_abba_command_is_retried(
+async def test_failed_abba_command_is_rejected_without_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1078,15 +1078,13 @@ async def test_failed_abba_command_is_retried(
     client = CommandFailureClient()
     result, journal = await _run_pair(client, tmp_path)
 
-    assert len(client.requests) == 3
-    retries = [
-        payload for kind, _, payload in journal.events if kind == "comparison.abba_batch_retried"
-    ]
-    assert len(retries) == 1
-    assert retries[0]["error_class"] == "user"
-    assert retries[0]["reason"] == "nonzero_exit"
-    assert retries[0]["retryable"] is True
+    assert len(client.requests) <= 2  # Other initially concurrent batch may already be submitted.
+    assert not any(kind == "comparison.abba_batch_retried" for kind, _, _ in journal.events)
+    assert any(kind == "comparison.abba_rejected" for kind, _, _ in journal.events)
     assert result.gateway_result_digest is not None
+    assert "nonzero_exit" in result.rejection_reason
+    assert result.incumbent_runs == result.candidate_runs == ()
+    assert journal.measurements == []
 
 
 @pytest.mark.anyio
@@ -1167,3 +1165,35 @@ async def test_persistent_embedded_abba_device_failure_does_not_reset_retry_budg
     assert journal.abba_batches == {} and journal.measurements == []
     assert len([k for k, _, _ in journal.events
                 if k == "comparison.abba_evaluation_infrastructure_failed"]) == 11
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('source_tree', [False, True])
+@pytest.mark.parametrize('terminal', [False, True])
+async def test_abba_source_rejection_does_not_retry_or_record_false_measurement(
+    tmp_path, source_tree, terminal,
+):
+    class SourceRejected(Exception):
+        status = 400
+        def __init__(self):
+            self.status = 400
+            self.error_class = 'validation'
+            self.payload = {'error_class': 'validation', 'reason': 'source_archive_invalid',
+                            'message': 'vendor/cache.py: Blocked import: pickle'}
+
+    class Client(FakeAgateClient):
+        def submit_job(self, kind, request):
+            if not terminal:
+                self.requests.append(request)
+                raise SourceRejected()
+            accepted = super().submit_job(kind, request)
+            self.jobs[accepted['job_id']].update(status='failed', error=SourceRejected().payload)
+            return accepted
+
+    client = Client()
+    result, journal = await _run_pair(client, tmp_path, source_tree=source_tree, shape_batch_size=5)
+    assert len(client.requests) == 1
+    assert 'vendor/cache.py: Blocked import: pickle' in result.rejection_reason
+    assert not journal.measurements
+    assert result.incumbent_latency_us is result.candidate_latency_us is None
+    assert not any(kind == 'comparison.abba_batch_retried' for kind, _, _ in journal.events)

@@ -316,3 +316,25 @@ async def test_abba_comparator_uses_authoritative_pair_metrics() -> None:
     assert not result.accepted
     assert result.authoritative_candidate is not None
     assert result.authoritative_candidate.latency_us == 99.0
+
+
+@pytest.mark.anyio
+async def test_authoritative_abba_rejection_retains_incumbent_without_false_correctness():
+    class Runner:
+        async def run_pair(self, *args, **kwargs):
+            return KernelPairMeasurementResult(
+                (), (), gateway_result_digest=digest('rejection'),
+                rejection_reason='candidate/kernel.py: Blocked import: sys',
+            )
+    kernel = KernelRevision(new_kernel_revision_id(), None, digest('source'), None,
+                            KernelEvaluation(True, 10.0, digest('previous')), NOW)
+    result = await SameAllocationAbbaKernelComparator(
+        Runner(), repeats=2, minimum_improvement_percent=1.0,
+        per_run_timeout_seconds=100, allocation_timeout_seconds=500,
+        shape_batch_size=1, max_parallel_shape_batches=2,
+        purpose=KernelMeasurementPurpose.KERNEL_RETENTION,
+    ).compare(kernel, kernel)
+    assert not result.accepted
+    assert result.authoritative_candidate is None
+    assert 'Blocked import: sys' in result.reason
+    assert kernel.evaluation.correct is True

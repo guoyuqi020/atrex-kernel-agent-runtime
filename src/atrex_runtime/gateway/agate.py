@@ -43,6 +43,7 @@ from .contract import (
 )
 from .control_models import GatewayOperation
 from .correctness import correctness_summary
+from .evaluation_feedback import evaluation_feedback, failure_notice
 from .job_recovery import JobExecution, run_with_job_recovery
 from .job_wait import wait_for_terminal_job
 from .oss_client import OssAgateClient
@@ -1549,7 +1550,9 @@ class AgateGatewayAdapter:
                 worker_result=(
                     {
                         "status": status,
-                        "hidden_case_details": "shape inputs and failure details withheld",
+                        "hidden_case_details": (
+                            "shape inputs withheld; upstream diagnostics preserved"
+                        ),
                     }
                     if operation is GatewayOperation.EVALUATE
                     else _worker_view(job, operation)
@@ -1588,7 +1591,9 @@ class AgateGatewayAdapter:
                 status="completed",
                 result=job,
                 job_id=job_id,
-                worker_result=_correctness_worker_result(job, correct=correct),
+                worker_result=_correctness_worker_result(
+                    job, correct=correct, shape_ids=expected_shape_ids or (),
+                ),
             )
         evaluation = (
             parse_agate_evaluation(job, expected_shape_ids or ())
@@ -1612,6 +1617,7 @@ def _correctness_worker_result(
     job: dict[str, JsonValue],
     *,
     correct: bool,
+    shape_ids: tuple[str, ...] = (),
 ) -> dict[str, JsonValue]:
     """Expose correctness evidence without inventing measurements or leaking input cases."""
     payload = job.get("result")
@@ -1619,16 +1625,12 @@ def _correctness_worker_result(
         "correct": correct,
         "all_pass": correct,
         "correctness": correctness_summary(payload, passed=correct),
-        "failures": (
-            []
-            if correct
-            else [
-                "one or more hidden evaluator cases failed; "
-                "reproduce within the public shape_domain"
-            ]
-        ),
+        "failures": failure_notice(correct),
+        **evaluation_feedback(job, shape_ids),
         "shape_ids_are_opaque": True,
-        "hidden_case_details": "shape inputs and failure details withheld",
+        "hidden_case_details": (
+                            "shape inputs withheld; upstream diagnostics preserved"
+                        ),
     }
     if job.get("status") == "rejected":
         rejection = project_candidate_rejection(job.get("error"))

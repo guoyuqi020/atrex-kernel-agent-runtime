@@ -754,3 +754,8 @@ Optimizer Tool，也不会暴露到 Optimizer Session 内。
 - 完整 Schema、Evidence Layout、版本和 Bundle 语义见[协议](protocols.zh.md)，所有部署字段见
   [配置说明](configuration.zh.md)。
 - Evaluation、Production Gate、比较、Roofline 与 SOL 语义见[评测与晋升](evaluation.zh.md)。
+
+Evaluate 的 `diagnostics` 保留 Agate 错误原文及 stage/匿名 shape ID/case/check；
+`performance_by_shape` 保留计时分布、kernel 名称/调用次数/设备耗时和 benchmark/cache/采集配置。
+ABBA 按每个 A/B 测量分别保留。首次返回与 Result Artifact 回读一致，始终标明 mode/input_scope，
+超过大小限制用 feedback_truncation 明确计数；不暴露输入生成器、种子、实参和完整请求。

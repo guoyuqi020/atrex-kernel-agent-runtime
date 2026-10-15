@@ -111,7 +111,7 @@ class NativeFakeAgate:
             elif self.failure == "missing_shape":
                 first["result"]["performance"]["shapes"] = {"999": {"samples": []}}
             elif self.failure == "result_error":
-                first["result"]["error"] = _PRIVATE
+                first["result"]["error"] = "candidate raised CUDA illegal instruction"
             elif self.failure == "incorrect":
                 for block in blocks:
                     for run in block["abba"]["runs"]:

@@ -211,6 +211,14 @@ Re-derive conclusions from trusted measurements and exact source.
 Evaluate returns correctness and latency without automatically running Profile. When you need
 SOL or hardware counters to test a bottleneck hypothesis, call `profile` explicitly with the
 appropriate level (`sol`, `survey`, or `deep`); a completed Evaluate alone is not profiling evidence.
+Inspect `diagnostics` before explaining a failure: it preserves Agate's error text with stage,
+opaque Shape ID and case/output context. `input_scope` says whether the call used your custom
+inputs or the trusted contract; do not infer that hidden cases ran on a custom probe.
+`performance_by_shape` retains available `timing_stats`, `kernel_events` (name, calls,
+`device_time_us`), benchmark mode and cache/collection settings. Device-event timings may come
+from a separate pass; subtracting them from end-to-end latency does not measure host overhead.
+`feedback_truncation` explicitly reports omitted details. Source-validation rejections require
+source changes; repeating unchanged rejected code cannot fix them.
 An Evaluate with operation status `failed` or `cancelled` and null `correct` has no correctness
 or performance verdict. Read its structured error, repair the execution problem, and retry with
 a new request key. Do not treat that failure as evidence that the Kernel is incorrect or slower.

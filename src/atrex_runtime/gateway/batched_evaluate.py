@@ -13,6 +13,7 @@ import anyio
 from ..artifacts.local import JsonValue
 from .contract import AgateEvaluationContractV1
 from .correctness import merge_correctness_summaries
+from .evaluation_feedback import failure_notice, merge_feedback
 from .private_results import project_candidate_rejection
 from .protocol import EvaluationV2
 
@@ -404,19 +405,13 @@ def _worker_result(
                 correctness_values,
                 passed=evaluation.correct,
             ),
-            "failures": (
-                []
-                if evaluation.correct
-                else [
-                    "one or more hidden evaluator cases failed; "
-                    "reproduce within the public shape_domain"
-                ]
-            ),
+            "failures": failure_notice(evaluation.correct),
+            **merge_feedback(outcome.worker_result for outcome in outcomes),
             "latency_us_geomean": evaluation.latency_us if evaluation.correct else 0.0,
             "latency_us_by_shape": latency_by_shape,
             "shape_batch_count": len(batches),
             "shape_ids_are_opaque": True,
-            "hidden_case_details": "shape inputs and failure details withheld",
+            "hidden_case_details": "shape inputs withheld; upstream diagnostics preserved",
         },
     )
 
@@ -482,17 +477,11 @@ def _correctness_only_worker_result(
                 correctness_values,
                 passed=correct,
             ),
-            "failures": (
-                []
-                if correct
-                else [
-                    "one or more hidden evaluator cases failed; "
-                    "reproduce within the public shape_domain"
-                ]
-            ),
+            "failures": failure_notice(correct),
+            **merge_feedback(outcome.worker_result for outcome in outcomes),
             "shape_batch_count": len(batches),
             "shape_ids_are_opaque": True,
-            "hidden_case_details": "shape inputs and failure details withheld",
+            "hidden_case_details": "shape inputs withheld; upstream diagnostics preserved",
             **shared_fields,
         },
     )

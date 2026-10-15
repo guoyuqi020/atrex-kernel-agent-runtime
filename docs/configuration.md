@@ -284,9 +284,21 @@ are not forwarded. Do not configure isolated-home keys such as `HOME` through th
 - `sandbox`: bubblewrap launched through systemd with per-Session cgroup v2 limits.
 
 `backend_credentials` controls read-only projection of selected CLI login state. Both production
-modes share filesystem settings: bwrap executable, private home and workspace mount, resolver,
-extra read-only binds, hidden host paths, and optional read-only reference-project root. The
-reference-project tree is available to framework Bootstrap only, not ordinary Attempts.
+modes start with an empty filesystem and share an explicit dependency allowlist: OS binaries and
+libraries, public certificates/resolver data, the active Python environment, the Runtime Python
+package, selected Provider binaries/credentials, and the current Agent workspace. Extra read-only
+binds cannot include Runtime storage, sibling workspace roots, or their ancestors. Repository
+`data`, prior experiments, archives and other home files are absent by default.
+
+Systemd mode mounts a fresh PID-namespace procfs. Container mode projects only this Worker's
+namespace-local process metadata through a trusted parent, retaining Core's detached-subprocess
+suspension and cleanup without exposing host process `root`, `fd`, `cwd` or `environ`. A fixed
+`exe` alias points to the allowlisted Provider binary for standalone Bun. No host procfs directory
+is mounted. A small libc compatibility shim obtains only the calling process's read-only memory
+map from a peer-credential/ancestry-checked local broker; Agents cannot request a path or another
+PID. It lets standalone Bun initialize with accurate stack bounds without host procfs. Container
+hosts require a C compiler (`cc`) to build this cached shim; no GPU toolkit or Torch is required.
+The legacy `reference_projects_root` setting is ignored.
 
 `sandbox.resources` sets memory, swap, CPU quota, and PID limits. Container mode has no per-Session
 resource block because the outer container owns aggregate limits. Both modes preserve the

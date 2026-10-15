@@ -192,7 +192,7 @@ async def test_exploration_is_recorded_but_cannot_authorize_candidate_submission
         assert full.evaluation is not None
         assert len(control.list_evaluations(attempt.id)) == 1
         assert isinstance(full.result, dict)
-        assert "input_scope" not in full.result
+        assert full.result["input_scope"] == "contract"
         # The successful handoff cites real completed observations rather than the
         # placeholder Artifact IDs in the generic report fixture.
         report_value = cast(dict[str, Any], report["report"])

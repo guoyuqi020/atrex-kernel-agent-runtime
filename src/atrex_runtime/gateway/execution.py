@@ -80,6 +80,7 @@ async def call_agate_json(
     request_error: str,
     invalid_response: str,
     non_object_response: str,
+    validation_is_candidate: bool = False,
 ) -> dict[str, JsonValue]:
     """Run one blocking SDK call and validate a JSON-object response."""
     try:
@@ -87,6 +88,10 @@ async def call_agate_json(
     except Exception as error:
         if is_infrastructure_request_error(error):
             raise infrastructure_request_error(error) from error
+        if (validation_is_candidate and vars(error).get("status") in {400, 422}
+                and vars(error).get("error_class") == "validation"):
+            rejection = _JSON_ADAPTER.validate_python(vars(error).get("payload"))
+            raise AgateCandidateRejection(rejection) from error
         raise InfrastructureError(f"{request_error}: {type(error).__name__}: {error}") from error
     return require_json_object(
         value,

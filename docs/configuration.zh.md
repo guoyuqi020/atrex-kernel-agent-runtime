@@ -235,7 +235,7 @@ Campaign Bootstrap 会冻结 Evolver Commit；Resume、Schedule 与 Debug Shell 
 
 `backend_credentials` 控制所选 CLI 登录态的只读投影。两个生产 Mode 共用文件系统设置：bwrap
 程序、私有 Home/Workspace Mount、Resolver、额外只读 Bind、隐藏 Host Path 和可选只读 Reference
-Project Root。Reference Project 只对 Framework Bootstrap 可见，普通 Attempt 不可见。
+Project Root（旧字段已忽略）。生产环境从空根目录构建最小文件系统，详见下方隔离说明。
 
 `sandbox.resources` 设置内存、Swap、CPU Quota 与 PID 上限。Container Mode 没有逐 Session
 Resource Block，由外层容器持有总限制。两个 Mode 都保留所在 Network Namespace，因此允许公网
@@ -308,3 +308,14 @@ Optimizer 模型也默认继承，可显式覆盖。Baseline Outcome 直接复�
 - Workspace Root 与 Storage Location 必须互不相同。
 - Production Launcher 只读 Bind 不能暴露 Runtime Storage 或兄弟 Worker Root。
 - 相同 Creation Key 下不能修改不可变 Campaign 输入。
+
+生产 bwrap 从空文件系统开始，只挂载系统程序/库、证书和 DNS、当前 Python 环境、
+Runtime Python 包、所选 Provider 程序/凭据和当前 Agent 工作区。仓库 data、旧实验、归档、
+其他轨迹和宿主 Home 默认不可见。额外挂载不能覆盖 Runtime 状态或兄弟工作区及其父目录。
+容器不挂宿主 `/proc`；父进程只投影当前 Worker 的进程元数据，保留子代理暂停/清理能力，
+不暴露宿主 root/fd/cwd/environ。Bun 所需 exe 链接固定指向已允许的 Provider 二进制。
+
+原生 Bun 的主线程初始化需要自身 memory maps；只读本地代理通过 socket peer credentials 和
+父子进程归属校验返回调用者自身 maps 的只读 FD，不接受文件名或其他 PID。小型 libc 兼容层
+据此获取真实线程栈边界，宿主无需暴露 procfs。容器宿主需 cc 编译并缓存该兼容层，无需 Torch
+或 GPU 工具链。

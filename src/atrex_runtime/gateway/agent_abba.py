@@ -6,6 +6,7 @@ import hashlib
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import partial
 from typing import cast
 
 import anyio
@@ -24,6 +25,7 @@ from .abba import (
     build_native_abba_request,
 )
 from .agate import (
+    AgateCandidateRejection,
     AgateClient,
     AgateJobBinding,
     AgateRequestBuilder,
@@ -39,10 +41,11 @@ from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContext, AgateEvaluationContextResolver
 from .control_models import GatewayOperation
 from .correctness import correctness_summary
+from .evaluation_feedback import FEEDBACK_KEYS
 from .execution import call_agate_json
 from .failures import infrastructure_detail
 from .job_recovery import JobExecution, run_with_job_recovery
-from .private_results import project_job_failure
+from .private_results import project_candidate_rejection, project_job_failure
 from .protocol import AGATE_MAX_JOB_TIMEOUT_S, EvaluateParametersV2
 from .proxy import GatewayAdapter, GatewayAdapterRequest, GatewayAdapterResult
 
@@ -157,7 +160,10 @@ class AgentAbbaGatewayAdapter:
                     name=f"agent-abba-{context.operator}",
                 )
                 payload["idempotency_key"] = f"agent-abba:{key}"
-                batches[index] = await self._run_batch(request, payload, schedule, [shape_id])
+                batch = await self._run_batch(request, payload, schedule, [shape_id])
+                batches[index] = batch
+                if batch.job.get("status") == "rejected":
+                    tasks.cancel_scope.cancel()
 
         try:
             async with anyio.create_task_group() as tasks:
@@ -169,7 +175,8 @@ class AgentAbbaGatewayAdapter:
                 raise infrastructure from errors
             raise
         completed = [batch for batch in batches if batch is not None]
-        if len(completed) != len(shape_ids):
+        source_rejected = any(batch.job.get("status") == "rejected" for batch in completed)
+        if len(completed) != len(shape_ids) and not source_rejected:
             raise InfrastructureError("Agent ABBA did not produce every requested Shape batch")
         complete_payloads = [batch.payload for batch in completed if batch.payload is not None]
         failed = len(complete_payloads) != len(completed)
@@ -188,6 +195,8 @@ class AgentAbbaGatewayAdapter:
         )
         public = self._public_result(request, parameters, schedule, merged, baseline, candidate)
         public["shape_batch_count"] = len(shape_ids)
+        if source_rejected:
+            public["completed_shape_batch_count"] = len(completed)
         public["max_parallel_shape_batches"] = EVALUATE_MAX_PARALLEL_BATCHES
         if failed:
             public["error"] = {
@@ -287,12 +296,16 @@ class AgentAbbaGatewayAdapter:
                 ),
                 submission,
                 call=self._call,
-                submit_call=self._call,
+                submit_call=partial(self._call, validation_is_candidate=True),
                 wait_timeout_s=self._wait_timeout_s,
                 recover=request.recover_running_task,
             )
 
-        _, job = await run_with_job_recovery(payload, execute)
+        try:
+            _, job = await run_with_job_recovery(payload, execute)
+        except AgateCandidateRejection as error:
+            rejection = project_candidate_rejection(error.payload)
+            return _BatchResult({"status": "rejected"}, None, rejection)
         if job.get("status") not in {"succeeded", "failed", "cancelled"}:
             raise InfrastructureError("Agent ABBA job did not reach a terminal state")
         if job.get("status") != "succeeded" or job.get("command_ok") is False:
@@ -403,16 +416,20 @@ class AgentAbbaGatewayAdapter:
                     "correctness": correctness_summary(row, passed=row.get("correct") is True),
                     "latency_us": cast(JsonValue, row.get("latency_us")),
                     "latency_us_by_shape": cast(JsonValue, row.get("latency_us_by_shape", {})),
+                    **{key: cast(JsonValue, row[key]) for key in FEEDBACK_KEYS if key in row},
                 }
                 for row in measurements
             ],
-            "hidden_case_details": "shape inputs and failure details withheld",
+            "hidden_case_details": "shape inputs withheld; upstream diagnostics preserved",
         }
 
-    async def _call(self, operation: Callable[[], object]) -> dict[str, JsonValue]:
+    async def _call(
+        self, operation: Callable[[], object], *, validation_is_candidate: bool = False,
+    ) -> dict[str, JsonValue]:
         return await call_agate_json(
             operation,
             request_error="Agent ABBA request failed",
             invalid_response="Agent ABBA returned invalid JSON",
             non_object_response="Agent ABBA returned a non-object",
+            validation_is_candidate=validation_is_candidate,
         )

@@ -383,3 +383,17 @@ Runtime 保留精确 Candidate 源码、原始 Agate 结果、归一化 Measurem
 Kernel Trial、Attempt Report 和版本化 Kernel/Agent 结果。Worker 投影保持隐私边界；管理接口可
 读取有界的精确源码与原始结果。命令见[接口参考](interfaces.zh.md)，身份与可见性语义见
 [协议](protocols.zh.md)。
+
+### 评测诊断与 ABBA 拒绝
+
+Evaluate/correctness-only 的 `diagnostics` 保留 Agate 原始错误，附阶段、匿名 shape ID、
+case/输出检查位置；只脱敏凭据并限制长度，不替换成笼统隐藏样本失败。`input_scope` 明确区分
+自建样本和题目契约。`performance_by_shape` 保留计时分布、kernel 名称/调用次数/设备耗时、
+benchmark 模式、cache_flush_mb 和 capture_time_ms。ABBA 每个 A/B 测量分别保留，批次合并与
+Result Artifact 回读不会再次丢失。每条错误限 8 KiB，反馈限 256 KiB；超限优先移除可选计时，
+并用 `feedback_truncation` 明确计数。设备事件可能来自另一次采集，不能直接用总延迟减设备时间
+来推断精确的主机开销。输入生成器、种子、实参和完整请求不进入公开返回。
+
+ABBA 遇到确定的源码规则拒绝或非 infra 终态失败，不再进行基础设施重试；记录原始原因并保留
+当前最优实现，不伪造性能/正确性测量，后续 attempt 可以修复。真实基础设施和不完整结果仍按
+现有有界策略自动重试。Agent 主动 ABBA 的提交校验错误同样返回具体诊断。

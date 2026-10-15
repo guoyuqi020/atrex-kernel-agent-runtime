@@ -114,7 +114,9 @@ async def test_mutation_verdict_reaches_agent_across_all_shape_batches(
             assert result["mode"] == "correctness_only"
             assert result["latency_us_geomean"] is None
             assert result["latency_us_by_shape"] == {}
-            assert "unexpected_mutations" not in response.text
+            assert "unexpected_mutations" not in result  # No raw input/check collection.
+            if failed_field is not None:
+                assert any(d.get("check") == failed_field for d in result["diagnostics"])
             assert not control.list_evaluations(attempt.id)
             assert len(client.submitted) == 30 // batch_size
             assert all(kind == "eval" and payload["mode"] == "correctness_only"

@@ -905,3 +905,10 @@ execution, Gateway, Gate, persistence, comparison, and promotion authority.
   [Protocols](protocols.md); every deployment field is in [Configuration](configuration.md).
 - Evaluation, Production Gate, comparison, Roofline, and SOL semantics are in
   [Evaluation and Promotion](evaluation.md).
+
+Evaluate responses retain Agate's original bounded error text in `diagnostics`, with stage and
+opaque Shape ID/case/check context. `performance_by_shape` retains compact timing distributions,
+kernel event names/calls/device times and benchmark/cache/collection settings. ABBA keeps these
+per A/B run. The canonical initial response and later Result Artifact read agree. `mode` and
+`input_scope` are always explicit; `feedback_truncation` reports size-bound omissions. Input
+values/generators/seeds and full request documents remain private.

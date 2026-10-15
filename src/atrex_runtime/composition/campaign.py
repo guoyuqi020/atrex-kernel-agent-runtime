@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Mapping
 from datetime import timedelta
 from pathlib import Path
@@ -520,6 +521,13 @@ def build_worker_launcher(
     boundary = boundary.model_copy(
         update={
             "hidden_host_paths": (*boundary.hidden_host_paths, *storage_hidden),
+            "read_only_bind_paths": tuple(dict.fromkeys((
+                *boundary.read_only_bind_paths,
+                Path(sys.prefix),
+                Path(sys.base_prefix),
+                Path(str(getattr(sys, "_base_executable", sys.executable))).parent.parent,
+                Path(__file__).resolve().parents[1],
+            ))),
         }
     )
     workspace_roots = (

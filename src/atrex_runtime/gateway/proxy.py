@@ -54,6 +54,7 @@ from .control_models import (
 )
 from .correctness import correctness_summary
 from .diff_policy import RegistryCandidateDiffValidator
+from .evaluation_feedback import FEEDBACK_KEYS
 from .failures import infrastructure_detail
 from .journals import RuntimeJournalService
 from .measurement_history import normalized_measurement_points
@@ -347,9 +348,11 @@ def _canonical_agent_result(
                 "improvement_pct",
                 "aggregation",
                 "shape_batch_count",
+                "completed_shape_batch_count",
                 "error",
                 "failures",
                 "measurement_aggregation",
+                *FEEDBACK_KEYS,
             )
             if key in payload
         }
@@ -392,7 +395,10 @@ def _canonical_agent_result(
             latency = None
         normalized: dict[str, JsonValue] = {
             key: payload[key]
-            for key in ("failures", "error", "production_gate", "measurement_aggregation")
+            for key in (
+                "failures", "error", "production_gate", "measurement_aggregation",
+                "measurements", *FEEDBACK_KEYS,
+            )
             if key in payload
         }
         normalized.update(
@@ -410,9 +416,8 @@ def _canonical_agent_result(
                 "latency_us_by_shape": (by_shape if isinstance(by_shape, dict) else {}),
             }
         )
-        if not parameters.is_contract_evaluation:
-            normalized["mode"] = parameters.mode
-            normalized["input_scope"] = parameters.input_scope
+        normalized["mode"] = parameters.mode
+        normalized["input_scope"] = parameters.input_scope
         return cast(JsonValue, normalized)
     if request.operation is GatewayOperation.PROFILE and isinstance(payload, dict):
         normalized = cast(dict[str, JsonValue], dict(payload))
@@ -1893,8 +1898,13 @@ class GatewayProxyService:
         if not isinstance(result, dict) or operation != GatewayOperation.EVALUATE.value:
             return {"operation": operation, "status": status, "result": result}
 
+        if isinstance(result.get("comparison"), dict):
+            return {"operation": operation, "status": status, "result": result}
         normalized: dict[str, JsonValue] = {}
-        for key in ("failures", "error", "mode", "input_scope", "production_gate"):
+        for key in (
+            "failures", "error", "mode", "input_scope", "production_gate",
+            "measurement_aggregation", "measurements", *FEEDBACK_KEYS,
+        ):
             if key in result:
                 normalized[key] = result[key]
         evaluation = value.get("evaluation")

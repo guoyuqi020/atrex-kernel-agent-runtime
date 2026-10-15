@@ -31,17 +31,19 @@ from ..ports import (
 from ..roofline import strip_roofline_hardware_suffix
 from ..serialization import canonical_json_digest
 from . import abba_remote
-from .agate import AgateClient, AgateRequestBuilder
-from .async_sdk import sdk_call
+from .agate import AgateCandidateRejection, AgateClient, AgateRequestBuilder
 from .batched_evaluate import sorted_shape_ids, subset_shape_document
 from .candidate import resolve_kernel_candidate
 from .contract import AgateEvaluationContractV1, RegistryKernelEvaluationContextResolver
 from .correctness import merge_correctness_summaries
 from .eval_sources import prepare_eval_sources
 from .evaluation_failures import embedded_device_failure
-from .execution import call_agate_json
+from .evaluation_feedback import evaluation_feedback, merge_feedback
+from .execution import call_agate_json, submit_agate_job
+from .failures import infrastructure_detail
 from .job_recovery import JobExecution, run_with_job_recovery
 from .job_wait import wait_for_terminal_job
+from .private_results import project_candidate_rejection, project_job_failure
 from .stability import (
     MEASUREMENT_REPETITIONS,
     measurement_aggregation_summary,
@@ -65,7 +67,8 @@ class AbbaBatchFailure(InfrastructureError):
         self.error_class = detail.get("error_class")
         self.reason = detail.get("reason")
         self.trace_id = detail.get("trace_id") or job.get("trace_id")
-        self.retryable = True
+        self.retryable = self.error_class == "infra" or self.reason == "oss_unavailable"
+        self.diagnostic = project_job_failure(job)
         super().__init__(
             "Agate ABBA batch produced no measurement: "
             f"job_id={job.get('job_id')} status={job.get('status')} "
@@ -410,6 +413,8 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             ] = [None] * len(batch_specs)
             observation_failures: list[dict[str, JsonValue] | None] = [None] * len(batch_specs)
 
+            rejections: list[JsonValue] = []
+
             async def run_batch(
                 index: int,
                 domain: str,
@@ -419,6 +424,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                     tuple[dict[str, JsonValue], dict[str, JsonValue], ArtifactDigest, str] | None
                 ],
                 failures: list[dict[str, JsonValue] | None],
+                rejected: list[JsonValue],
             ) -> None:
                 attempt = 0
                 while True:
@@ -442,7 +448,15 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                                 incumbent=incumbent,
                                 candidate=candidate,
                             )
+                    except AgateCandidateRejection as error:
+                        rejected.append(project_candidate_rejection(error.payload))
+                        tasks.cancel_scope.cancel()
+                        return
                     except InfrastructureError as error:
+                        if isinstance(error, AbbaBatchFailure) and not error.retryable:
+                            rejected.append({"status": "rejected", "error": error.diagnostic})
+                            tasks.cancel_scope.cancel()
+                            return
                         attempt += 1
                         if attempt > _ABBA_BATCH_RETRIES:
                             if domain == "test":
@@ -509,7 +523,22 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
                         repetition,
                         results,
                         observation_failures,
+                        rejections,
                     )
+            if rejections:
+                rejection = rejections[0]
+                digest = self._artifacts.put_json(rejection, ArtifactKind.GATEWAY_RESULT)
+                detail = infrastructure_detail(InfrastructureError(json.dumps(rejection)))
+                self._journal.record_runtime_event(
+                    "comparison.abba_rejected", candidate.id,
+                    {"comparison_id": comparison_id, "gateway_result_digest": digest,
+                     "retryable": False, "diagnostic": rejection},
+                )
+                # Neither side was measured: do not invent a correctness verdict or
+                # overwrite the candidate's previous valid evaluation.
+                return KernelPairMeasurementResult(
+                    (), (), gateway_result_digest=digest, rejection_reason=detail,
+                )
             valid_indices = [
                 index for index, (domain, _batch) in enumerate(batch_specs) if domain == "valid"
             ]
@@ -786,7 +815,12 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
         submission["idempotency_key"] = f"runtime-abba:{task_digest}:retry-{retry}"
 
         async def execute(submission: dict[str, object]) -> JobExecution:
-            accepted = await self._call(sdk_call(self._client, "submit_job", "eval", submission))
+            accepted = await submit_agate_job(
+                self._client, "eval", submission,
+                request_error="Agate ABBA submission failed",
+                invalid_response="Agate ABBA returned invalid JSON",
+                non_object_response="Agate ABBA returned a non-object",
+            )
             job_id = accepted.get("job_id")
             if not isinstance(job_id, str) or not job_id:
                 raise InfrastructureError("Agate ABBA acceptance has no job_id")
@@ -1021,6 +1055,7 @@ class AgateSameAllocationAbbaRunner(KernelPairMeasurementRunner):
             merged.append(
                 {
                     **step,
+                    **merge_feedback(row.get("result") for row in rows),
                     "correct": passed,
                     "correctness": merge_correctness_summaries(
                         correctness_values,
@@ -1218,6 +1253,7 @@ def _parse_native_abba_payload(
             if not isinstance(raw_result, dict):
                 raise InfrastructureError("native Agate ABBA run has no evaluation result")
             normalized = abba_remote._summarize(raw_result, shape_ids)
+            normalized.update(evaluation_feedback(raw_result, shape_ids))
             arm_repeat = block_index * 2 + cast(int, expected["repeat"])
             rows.append(
                 cast(

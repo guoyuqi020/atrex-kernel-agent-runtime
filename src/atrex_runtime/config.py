@@ -474,6 +474,8 @@ class BwrapFilesystemSettings(BaseModel):
                 raise ValueError(f"Sandbox {label} paths cannot repeat")
             if any(path.is_relative_to("/run") for path in paths):
                 raise ValueError(f"Sandbox {label} paths cannot be below /run")
+        if any(path.resolve() == Path("/") for path in self.read_only_bind_paths):
+            raise ValueError("Sandbox read-only binds cannot expose the host root")
         return self
 
     def resolve_from(self, base: Path) -> BwrapFilesystemSettings:

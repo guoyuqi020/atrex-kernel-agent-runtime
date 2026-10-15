@@ -443,6 +443,7 @@ async def test_proxy_records_agent_evaluation_without_committing_outcome(tmp_pat
     assert response.status == "completed"
     assert response.evaluation == EvaluationV2(correct=True, latency_us=12.0)
     assert response.result == {
+        "mode": "full", "input_scope": "contract",
         "measurement_aggregation": {
             "repetitions": 1,
             "method": "single_measurement",
@@ -671,6 +672,7 @@ async def test_proxy_persists_raw_private_result_but_returns_only_worker_project
     response = await service.execute(capability_value.token, _request(attempt))
 
     assert response.result == {
+        "mode": "full", "input_scope": "contract",
         "measurement_aggregation": {
             "repetitions": 1,
             "method": "single_measurement",
@@ -2001,7 +2003,7 @@ async def test_optimizer_reads_known_current_kernel_trial_without_agate(
         "result_artifact_digest": evaluated.result_artifact_digest,
         "operation": "evaluate",
         "status": "completed",
-        "result": {
+        "result": {"mode": "full", "input_scope": "contract",
             "correct": True,
             "correctness": {
                 "status": "PASS",

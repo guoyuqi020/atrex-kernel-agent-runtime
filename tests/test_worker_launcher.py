@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pwd
+from itertools import pairwise
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -104,13 +105,13 @@ def test_container_launcher_uses_bwrap_without_systemd_and_projects_credentials(
         },
     )
 
-    assert argv[0] == "/usr/bin/bwrap"
+    assert "atrex_runtime.workers.proc_view" in argv
+    assert argv[4] == "/usr/bin/bwrap"
     assert "/usr/bin/systemd-run" not in argv
     assert not any(value.startswith("--property=") for value in argv)
     assert "--proc" not in argv
-    assert any(
-        argv[index : index + 3] == ("--ro-bind", "/proc", "/proc") for index in range(len(argv) - 2)
-    )
+    assert ("--ro-bind", "/proc", "/proc") not in set(zip(argv, argv[1:], argv[2:], strict=False))
+    assert ("--ro-bind", "/", "/") not in set(zip(argv, argv[1:], argv[2:], strict=False))
     assert "ATREX_SANDBOX=bwrap-container" in argv
     assert "ATREX_WORKSPACE=/home/agent/workspace" in argv
     assert str(qoder) in argv
@@ -468,8 +469,8 @@ def test_bwrap_launcher_builds_private_workspace_cgroup_with_host_network(
     assert not any(value.startswith("--property=NetworkNamespacePath=") for value in argv)
     bwrap_index = argv.index("/usr/bin/bwrap")
     bwrap = argv[bwrap_index:]
-    ro_bind_index = bwrap.index("--ro-bind")
-    assert bwrap[ro_bind_index : ro_bind_index + 3] == ("--ro-bind", "/", "/")
+    assert ("--ro-bind", "/", "/") not in set(zip(bwrap, bwrap[1:], bwrap[2:], strict=False))
+    assert ("--tmpfs", "/") in set(pairwise(bwrap))
     proc_index = bwrap.index("--proc")
     assert bwrap[proc_index : proc_index + 2] == ("--proc", "/proc")
     assert str(tmp_path / "resolver/resolv.conf") in bwrap
@@ -884,3 +885,33 @@ def test_bwrap_rejects_foreign_root_in_both_root_and_worker_views(
 
     with pytest.raises(RuntimeError, match=r"Worker view is 999:999"):
         launcher._ensure_worker_directory(workspace_root, worker)
+
+
+def test_sandbox_rejects_ancestor_bind_that_would_restore_history(tmp_path: Path) -> None:
+    work = tmp_path / 'repository/workspaces/attempt/run'
+    work.mkdir(parents=True)
+    launcher = BwrapContainerLauncher(Path('/usr/bin/env'), BwrapContainerSettings(
+        bwrap_executable=Path('/usr/bin/bwrap'), resolv_conf=_resolver(tmp_path),
+        read_only_bind_paths=(tmp_path / 'repository',),
+    ), (work.parent,))
+    with pytest.raises(ValueError, match='hidden Runtime paths or their parents'):
+        launcher.wrap(('/bin/true',), workspace=work, environment={})
+
+
+def test_backend_installation_restores_package_not_home(tmp_path: Path) -> None:
+    home = tmp_path / 'host-home'
+    package = home / '.local/lib/node_modules/claude'
+    package.mkdir(parents=True)
+    (package / 'package.json').write_text('{}')
+    cli = package / 'cli.js'
+    cli.write_text('#!/usr/bin/env node\n')
+    cli.chmod(0o700)
+    bins = home / '.local/bin'
+    bins.mkdir(parents=True)
+    (bins / 'claude').symlink_to(cli)
+    credentials = BackendCredentialMounts.from_environment(
+        BackendCredentialSettings(host_home=home), {'HOME': str(home), 'PATH': str(bins)},
+    )
+    assert credentials is not None
+    assert credentials.installation_roots_for('claude') == (package, bins / 'claude')
+    assert home not in credentials.installation_roots_for('claude')

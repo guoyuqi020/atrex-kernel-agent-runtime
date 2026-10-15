@@ -63,8 +63,9 @@ Create a new Campaign/workspace to use all source Shapes as Valid.
 
 Agents never receive exact validation Shapes, `reference.py`, `input.py`, metadata, or Roofline.
 They receive a public `shape_train` contract describing the legal parameter domain and non-Shape
-ABI constraints. Gateway responses expose only aggregate correctness, aggregate latency, latency
-by opaque numeric Shape ID, and sanitized profiler data.
+ABI constraints. Gateway responses expose correctness, aggregate and per-Shape latency,
+Agate's original bounded error text, compact timing distributions, kernel-event timings and
+sanitized profiler data. They omit evaluator inputs, seeds and request/source documents.
 
 ## Exploratory operations
 
@@ -444,3 +445,23 @@ Kernel Trials, Attempt reports, and versioned Kernel/Agent outcomes. Worker proj
 privacy-preserving; administration interfaces can retrieve bounded exact source and raw results.
 See [Interface Reference](interfaces.md) for commands and [Protocols](protocols.md) for identity and
 visibility semantics.
+
+### Evaluation feedback and deterministic ABBA rejection
+
+Ordinary Evaluate and correctness-only return `diagnostics` with original Agate errors and
+stage/opaque Shape ID/case/output context. Credential strings are redacted. Each message is
+bounded to 8 KiB; truncation is explicit. `performance_by_shape` retains `timing_stats`,
+`kernel_events` (name/calls/device_time_us), `benchmark_mode`, `cache_flush_mb` and
+`capture_time_ms` when supplied. Batching, repeated measurements, ABBA A/B runs and Result
+Artifact rereads retain this evidence. A 256 KiB feedback budget drops optional timing entries
+before diagnostic entries and reports omission counts in `feedback_truncation`. This is compact
+evidence, not raw sample arrays. Device events may be collected in another pass and must not be
+subtracted from end-to-end timing to infer precise host overhead. `input_scope` is explicit for
+both contract and custom calls; custom failure does not imply hidden cases ran.
+
+Authoritative ABBA retries infrastructure/transport or incomplete-result failures with the existing
+bounded policy. Structured source-validation and non-infrastructure terminal rejections stop that
+comparison immediately. Runtime records the rejection and keeps the incumbent, without inventing
+new correctness/latency measurements or overwriting the candidate's earlier evaluation. The
+rejection reason accompanies the selection decision so the next attempt can repair the source.
+Agent-requested ABBA also returns submission validation errors instead of treating them as 503.
