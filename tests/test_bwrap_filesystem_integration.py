@@ -3,6 +3,7 @@
 import os
 import platform
 import shutil
+import ssl
 import subprocess
 import sys
 from pathlib import Path
@@ -11,6 +12,41 @@ import pytest
 
 from atrex_runtime.config import BwrapContainerSettings
 from atrex_runtime.workers.launcher import BwrapContainerLauncher
+
+
+@pytest.mark.skipif(platform.system() != "Linux", reason="requires Linux user/PID namespaces")
+def test_default_tls_trust_store_is_available_without_ca_environment_override(tmp_path):
+    if not shutil.which("bwrap") or not shutil.which("cc"):
+        pytest.skip("requires bubblewrap and C compiler")
+    if not ssl.create_default_context().get_ca_certs():
+        pytest.skip("host has no default CA certificates")
+    workspace = tmp_path / "worker"
+    workspace.mkdir()
+    settings = BwrapContainerSettings(
+        bwrap_executable=Path(shutil.which("bwrap")),
+        read_only_bind_paths=tuple(dict.fromkeys((
+            Path(sys.prefix), Path(sys.base_prefix),
+            Path(str(getattr(sys, "_base_executable", sys.executable))).parent.parent,
+        ))),
+    )
+    launcher = BwrapContainerLauncher(Path("/usr/bin/env"), settings, (tmp_path,))
+    code = """
+import os, ssl
+assert 'SSL_CERT_FILE' not in os.environ and 'SSL_CERT_DIR' not in os.environ
+context = ssl.create_default_context()
+assert context.get_ca_certs(), 'Default trust store became empty inside bwrap'
+assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+print('TLS_TRUST_READY')
+"""
+    argv = launcher.wrap(
+        (sys.executable, "-c", code), workspace=workspace,
+        environment={"PATH": os.environ.get("PATH", "/usr/bin:/bin")},
+    )
+    result = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+    if "Operation not permitted" in result.stderr and "bwrap:" in result.stderr:
+        pytest.skip("host disables user namespaces")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "TLS_TRUST_READY"
 
 
 @pytest.mark.skipif(platform.system() != "Linux", reason="requires Linux user/PID namespaces")
