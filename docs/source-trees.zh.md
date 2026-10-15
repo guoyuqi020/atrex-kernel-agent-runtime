@@ -39,10 +39,18 @@ work/kernel/
     └── gdn_kernels/blackwell/        可编辑源码子树
 ```
 
-Runtime 注入实际 editable roots 和调用说明，并同步更新 Prompt Fragment 的完整性哈希。
-文件只读属性用于避免误改；真正的验收依据是 Runtime 侧的源码锁校验：固定文件修改或删除、
+Runtime 将实际 editable roots 和固定文件名直接写入 system prompt，Raw 臂同样适用。
+固定文件设置只读权限，并在 bwrap 内单独只读挂载，禁止 chmod、删除和替换。
+变更说明应写入 `tools/memory/`，不能修改 provenance 或固定适配器。
+真正的验收依据是 Runtime 侧的源码锁校验：固定文件修改或删除、
 范围外新增文件、symlink、遮蔽受保护依赖、预编译加载产物都会被拒绝。允许在可编辑范围内
 新增/删除源码，也允许不修改源码直接评测或复用历史版本，不要求为了生成新 digest 而修改注释。
+
+Optimizer 收尾前，Core/KDA 使用 Runtime 投射的同一份无依赖源码校验器检查候选。
+失败后把具体路径和修正建议交给续跑会话，沿用原时间/token 剩余预算，最多修正
+`report_completion_retries` 次（默认 2）。Raw 只做本地检查，不增加 Runtime 工具或报告要求。
+修正耗尽则拒绝本次 Attempt，不触发无限缺失报告重试，也不终止整个 Campaign。
+Runtime 接受候选前仍独立校验源码。
 
 Evaluate 和最终提交通道共用整树封存规则。Python 缓存、`.git` 元数据和空目录不改变源码身份，
 其他文件不会被悄悄忽略，构建产物应写到 `scratch/`。每次 Trial 和 Kernel Revision 都指向

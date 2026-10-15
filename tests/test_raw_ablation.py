@@ -140,7 +140,7 @@ raw.json_object_file=lambda *a,**k:{'schema_version':'atrex.agent_problem.v1','o
 raw.correctness_policy_value=lambda x:x
 called=[]
 def execute(context,config,prompt,**kwargs):
-    assert 'completion_check' not in kwargs
+    assert kwargs['completion_check'](60) is None
     assert 'No Runtime tools' in kwargs['system_prompt']
     assert 'Agate directly' in kwargs['system_prompt']
     assert 'tools/memory/' in kwargs['system_prompt']
@@ -174,12 +174,17 @@ def test_raw_workspace_excludes_bootstrap_history_and_only_restores_own_notes(
         )
         enable_raw(registry, lineage)
         if source_tree:
-            from types import SimpleNamespace
+            from atrex_runtime.kernel_sources import KernelSourceContract
 
             monkeypatch.setattr(
                 "atrex_runtime.kernel_sources.load_kernel_source_contract",
-                lambda *args: SimpleNamespace(
-                    editable_roots=("kernels",), package_root=".", runtime_requirements=()
+                lambda *args: KernelSourceContract(
+                    editable_roots=("kernel.txt", "kernels"),
+                    package_root=".",
+                    runtime_requirements=(),
+                    source_revision="a" * 40,
+                    seed_digest="sha256:" + "b" * 64,
+                    immutable_files={},
                 ),
             )
         request = replace(request, raw=True, tool_modules=(), result_artifact_read_enabled=False)
@@ -262,7 +267,10 @@ def test_direct_agate_uses_configured_auth_and_destination(mode):
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("raw", [False, True])
-async def test_raw_process_gets_direct_auth_and_hands_off_without_report(tmp_path, raw):
+@pytest.mark.parametrize("source_invalid", [False, True])
+async def test_raw_process_gets_direct_auth_and_hands_off_without_report(
+    tmp_path, raw, source_invalid, monkeypatch
+):
     root = tmp_path / "workspace"
     repository = root / "agent/optimizer"
     repository.mkdir(parents=True)
@@ -328,6 +336,12 @@ Path(os.environ['ATREX_TOKEN_USAGE_REPORT']).write_text(json.dumps({
         ),
     )
     assert "test-credential" not in repr(config)
+    if source_invalid:
+
+        def reject_source(*args):
+            raise ValueError("fixed source file was modified: PROVENANCE.json")
+
+        monkeypatch.setattr(driver, "_seal_candidate", reject_source)
     result = await driver.run(
         PreparedAttempt(
             root,
@@ -338,6 +352,11 @@ Path(os.environ['ATREX_TOKEN_USAGE_REPORT']).write_text(json.dumps({
         ),
         config,
     )
+    if raw and source_invalid:
+        assert result.finish_reason == "candidate-validation-failed"
+        assert result.attempt_report is None and result.kernel_artifact_digest is None
+        assert "PROVENANCE.json" in result.attempt_report_error
+        return
     assert result.finish_reason == "completed"
     assert bool(result.attempt_report) == raw
     assert bool(result.kernel_artifact_digest) == raw
@@ -462,7 +481,10 @@ async def test_raw_nomination_without_gateway_calls_always_runs_private_eval(tmp
 
 @pytest.mark.anyio
 @pytest.mark.parametrize("bundle", ["atrex-kernel-agent-core", "kernel-design-agents"])
-async def test_raw_real_bundle_runs_one_agent_session_without_report_tool(tmp_path, bundle):
+@pytest.mark.parametrize("source_case", ["none", "valid", "repair", "exhausted"])
+async def test_raw_real_bundle_runs_one_agent_session_without_report_tool(
+    tmp_path, bundle, source_case
+):
     import shutil
 
     root = tmp_path / "attempt"
@@ -492,10 +514,28 @@ async def test_raw_real_bundle_runs_one_agent_session_without_report_tool(tmp_pa
         )
     )
     (root / "work/kernel/kernel.py").write_text("def kernel(): pass\n")
+    if source_case != "none":
+        import hashlib
+
+        from atrex_runtime.kernel_sources import KernelSourceContract, project_source_guard
+
+        contract = KernelSourceContract(
+            source_revision="a" * 40,
+            seed_digest="sha256:" + "b" * 64,
+            package_root=".",
+            editable_roots=("kernels",),
+            immutable_files={
+                "kernel.py": hashlib.sha256(
+                    (root / "work/kernel/kernel.py").read_bytes()
+                ).hexdigest()
+            },
+        )
+        project_source_guard(root, contract)
     bins = tmp_path / "bin"
     bins.mkdir()
     provider = bins / "claude"
-    provider.write_text(r"""#!/usr/bin/env python3
+    provider.write_text(
+        r"""#!/usr/bin/env python3
 import json,os,sys,subprocess
 from pathlib import Path
 assert not os.environ.get('ATREX_GATEWAY_CAPABILITY')
@@ -504,8 +544,19 @@ assert not list(Path('input/evidence').iterdir())
 probe=subprocess.run([os.environ['ATREX_AGATE_PYTHON'],'-m','atrex_gateway_client.cli','--help'],capture_output=True)
 assert probe.returncode==0
 counter=Path('scratch/calls.txt')
-assert not counter.exists()
-counter.write_text('1')
+ordinal=int(counter.read_text())+1 if counter.exists() else 1
+counter.write_text(str(ordinal))
+source_case=SOURCE_CASE
+if source_case != 'none':
+    system=sys.argv[sys.argv.index('--append-system-prompt')+1]
+    assert 'kernel.py' in system and 'Mandatory source edit boundary' in system
+if source_case in ('repair','exhausted'):
+    if ordinal==1:
+        Path('work/kernel/change-notes.txt').write_text('notes are not kernel source')
+    else:
+        assert 'source file is outside editable_roots: change-notes.txt' in sys.argv[-1]
+        assert 'terminal attempt report' not in sys.argv[-1]
+        if source_case=='repair': Path('work/kernel/change-notes.txt').unlink()
 Path('tools/my-notes.md').write_text('Agent-owned memory')
 session=sys.argv[sys.argv.index('--session-id')+1]
 usage={'input_tokens':10,'output_tokens':4,'cache_read_input_tokens':2,'cache_creation_input_tokens':0}
@@ -515,7 +566,8 @@ message={'type':'assistant','message':{'id':'one','usage':usage}}
 native.write_text(json.dumps(message)+'\n')
 print(json.dumps(message),flush=True)
 print(json.dumps({'type':'result','usage':usage}),flush=True)
-""")
+""".replace("SOURCE_CASE", repr(source_case))
+    )
     provider.chmod(0o700)
     artifacts = LocalArtifactStore(tmp_path / "artifacts")
     driver = CoreOptimizerSessionDriver(
@@ -553,11 +605,21 @@ print(json.dumps({'type':'result','usage':usage}),flush=True)
             ),
         ),
     )
-    assert result.finish_reason == "completed"
-    assert result.token_usage.total_tokens == 16
+    assert result.finish_reason == (
+        "candidate-validation-exhausted" if source_case == "exhausted" else "completed"
+    )
+    assert (
+        result.token_usage.total_tokens
+        == 16 * {"none": 1, "valid": 1, "repair": 2, "exhausted": 3}[source_case]
+    )
+    if source_case == "exhausted":
+        assert result.finish_reason == "candidate-validation-exhausted"
+        assert result.attempt_report is None and result.kernel_artifact_digest is None
+        assert result.attempt_report_error
+        return
     assert result.attempt_report.status == "candidate_ready"
     assert result.kernel_artifact_digest and result.session_trace_digest
     assert not (root / "scratch/attempt-report.json").exists()
-    assert (root / "scratch/calls.txt").read_text() == "1"
+    assert (root / "scratch/calls.txt").read_text() == ("2" if source_case == "repair" else "1")
     state = artifacts.verify(result.runtime_state_digest).payload_path
     assert (state / "tools/my-notes.md").read_text() == "Agent-owned memory"

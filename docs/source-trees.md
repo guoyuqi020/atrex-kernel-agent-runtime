@@ -51,12 +51,21 @@ work/kernel/
     └── gdn_kernels/blackwell/        editable source subtree
 ```
 
-Runtime injects the actual scope into the Optimizer prompt and updates the fragment's integrity
-hash. Read-only file modes prevent accidental fixed-file edits. **Acceptance enforcement** is
+Runtime includes the actual editable roots and fixed filenames directly in the system prompt,
+including Raw mode. Fixed files have read-only modes and individual read-only bwrap mounts,
+which also prevent chmod, unlink and replacement. Notes belong in `tools/memory/`, not provenance
+or the fixed adapter. **Acceptance enforcement** is
 the Runtime's source-lock validation, not file modes or the prompt: edits/deletions of fixed
 files, out-of-scope additions, symlinks, import shadowing of protected dependencies, and prebuilt
 loading artifacts are rejected. New/deleted source files inside editable roots are allowed.
 An unchanged seed or historical tree is valid; no mandatory-edit rule applies to this mode.
+
+Before the Optimizer finishes, Core/KDA run the same dependency-free source validator used by
+Runtime sealing. A failure returns its exact path and repair guidance to a continuation using
+the original remaining time/token allowance (at most `report_completion_retries`, default 2).
+Raw uses this local check without adding Runtime tools or a report requirement. Exhausted source
+repair rejects that Attempt; it does not trigger an unlimited missing-report retry or terminate
+the Campaign. Runtime still independently validates the final source before accepting it.
 
 Evaluate submission and final nomination use the same complete-tree sealing rule. Generated
 Python caches, `.git` metadata and empty directories do not affect the identity. Other files

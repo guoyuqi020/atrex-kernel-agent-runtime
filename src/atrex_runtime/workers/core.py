@@ -209,6 +209,7 @@ class CoreOptimizerSessionDriver:
         report_digest = None
         report_error: str | None = None
         candidate_digest = None
+        finish_reason = result.finish_reason
         if config.raw and result.finish_reason == "completed":
             attempt_id = AttemptInputManifestV9.from_json_bytes(
                 prepared.manifest_path.read_bytes()
@@ -217,7 +218,13 @@ class CoreOptimizerSessionDriver:
             report_digest = self._artifacts.put_json(
                 report.model_dump(mode="json"), ArtifactKind.ATTEMPT_REPORT
             )
-            candidate_digest = self._seal_candidate(prepared, attempt_id)
+            try:
+                candidate_digest = self._seal_candidate(prepared, attempt_id)
+            except ValueError as error:
+                report_error = f"candidate source validation failed: {error}"
+                report = None
+                report_digest = None
+                finish_reason = "candidate-validation-failed"
         elif not config.raw and (
             launch.attempt_report_path.exists() or launch.attempt_report_path.is_symlink()
         ):
@@ -240,9 +247,20 @@ class CoreOptimizerSessionDriver:
                     ArtifactKind.ATTEMPT_REPORT,
                 )
                 if report.status == "candidate_ready":
-                    candidate_digest = self._seal_candidate(prepared, attempt_id)
+                    try:
+                        candidate_digest = self._seal_candidate(prepared, attempt_id)
+                    except ValueError as error:
+                        report_error = f"candidate source validation failed: {error}"
+                        report = None
+                        report_digest = None
+                        finish_reason = "candidate-validation-failed"
+        if result.finish_reason == "candidate-validation-exhausted":
+            report = None
+            report_digest = None
+            candidate_digest = None
+            report_error = "candidate source validation still failed after bounded repair"
         return OptimizerSessionResult(
-            finish_reason=result.finish_reason,
+            finish_reason=finish_reason,
             final_response=result.process.stdout,
             token_usage=result.token_usage.to_domain(),
             token_budget=int(result.token_usage.require_budget()),

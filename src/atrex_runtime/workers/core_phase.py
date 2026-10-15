@@ -98,6 +98,8 @@ class CorePhaseResult:
             return "usage-budget-exhausted"
         if self.process.returncode == 127:
             return "report-completion-exhausted"
+        if self.process.returncode == 128:
+            return "candidate-validation-exhausted"
         return f"process-exit-{self.process.returncode}"
 
 
@@ -224,6 +226,7 @@ class CorePhaseRunner:
                 for path in (
                     prepared.root / ".runtime/initial-evidence-instructions.md",
                     prepared.root / ".runtime/source-instructions.md",
+                    prepared.root / ".runtime/source-boundaries.md",
                 )
                 if path.is_file()
             )

@@ -1000,6 +1000,13 @@ class BwrapSandboxLauncher:
                         str(sandbox_workspace / name),
                     )
                 )
+        from ..kernel_sources import fixed_source_mounts
+
+        for source in fixed_source_mounts(workspace):
+            bwrap.extend((
+                "--ro-bind", str(source),
+                str(sandbox_workspace / source.relative_to(workspace)),
+            ))
         for source in sorted(workspace.glob("*.json")):
             if source.is_symlink() or not source.is_file():
                 raise ValueError("Sandbox top-level manifest must be a regular file")

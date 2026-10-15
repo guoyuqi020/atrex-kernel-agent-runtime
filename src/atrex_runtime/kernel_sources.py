@@ -7,7 +7,7 @@ import json
 import shutil
 import tempfile
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -16,25 +16,7 @@ from .artifacts.local import ArtifactKind, LocalArtifactStore
 from .domain.ids import ArtifactDigest
 from .domain.models import Dsl
 from .git_import import SafeGitImporter
-
-
-def source_path(value: str, *, dot: bool = False) -> str:
-    """Validate portable paths before Git, filesystem, or remote use."""
-    if dot and value == ".":
-        return value
-    if not value or "\\" in value or "\x00" in value or value.startswith(("/", "-")):
-        raise ValueError(f"unsafe source path: {value!r}")
-    if any(part in {"", ".", ".."} for part in value.split("/")):
-        raise ValueError(f"unsafe source path: {value!r}")
-    return value
-
-
-def ignored_source_path(path: PurePosixPath | Path, directory: bool = False) -> bool:
-    """Only generated caches are omitted; source files never disappear silently."""
-    return any(
-        part in {".git", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"}
-        for part in path.parts
-    ) or path.suffix in {".pyc", ".pyo"}
+from .source_validation import ignored_source_path, source_path, validate_source_tree
 
 
 class SourceRevision(BaseModel):
@@ -134,57 +116,12 @@ class KernelSourceContract(BaseModel):
 
     def validate_tree(self, root: Path) -> dict[str, str]:
         """Validate every file, including fixed deletions and unauthorized additions."""
-        if root.is_symlink() or not root.is_dir():
-            raise ValueError("Kernel source root must be a real directory")
-        files: dict[str, str] = {}
-        for path in sorted(root.rglob("*")):
-            relative = path.relative_to(root)
-            if path.is_symlink():
-                raise ValueError(f"source tree cannot contain symlinks: {relative}")
-            if ignored_source_path(relative) or path.is_dir():
-                continue
-            name = source_path(relative.as_posix())
-            package_path = PurePosixPath(name)
-            if self.package_root != "." and package_path.is_relative_to(self.package_root):
-                package_path = package_path.relative_to(self.package_root)
-            if package_path.parts[0].removesuffix(".py") in {
-                "atrex_bench",
-                "torch",
-                "cutlass",
-                "cuda",
-                "triton",
-                "site",
-                "sitecustomize",
-                "usercustomize",
-                "importlib",
-                "packaging",
-                "json",
-                "subprocess",
-                "os",
-                "sys",
-            }:
-                raise ValueError(f"source tree shadows a protected import: {name}")
-            if not path.is_file():
-                raise ValueError(f"source tree contains a special file: {name}")
-            content = path.read_bytes()
-            try:
-                files[name] = content.decode("utf-8")
-            except UnicodeDecodeError as error:
-                raise ValueError(
-                    f"source tree must contain UTF-8 source, not build products: {name}"
-                ) from error
-            expected = self.immutable_files.get(name)
-            if expected is not None:
-                if hashlib.sha256(content).hexdigest() != expected:
-                    raise ValueError(f"fixed source file was modified: {name}")
-            elif not self.editable(name):
-                raise ValueError(f"source file is outside editable_roots: {name}")
-            elif path.suffix in {".so", ".a", ".o", ".cubin", ".whl", ".pth"}:
-                raise ValueError(f"prebuilt/loading artifact is not permitted: {name}")
-        missing = self.immutable_files.keys() - files.keys()
-        if missing:
-            raise ValueError(f"fixed source files were removed: {', '.join(sorted(missing))}")
-        return files
+        return validate_source_tree(
+            root,
+            package_root=self.package_root,
+            editable_roots=self.editable_roots,
+            immutable_files=self.immutable_files,
+        )
 
     def seal(self, root: Path, artifacts: LocalArtifactStore) -> ArtifactDigest:
         self.validate_tree(root)
@@ -258,6 +195,60 @@ def import_source_tree(
         return contract
 
 
+def project_source_guard(root: Path, contract: KernelSourceContract) -> None:
+    """Protect fixed files and project the same validator into every Agent mode."""
+    contract.validate_tree(root / "work/kernel")
+    runtime = root / ".runtime"
+    runtime.mkdir(mode=0o700, exist_ok=True)
+    policy = {
+        "package_root": contract.package_root,
+        "editable_roots": contract.editable_roots,
+        "immutable_files": contract.immutable_files,
+    }
+    for name, content in (
+        ("source-policy.json", json.dumps(policy)),
+        ("source-validator.py", Path(__file__).with_name("source_validation.py").read_text()),
+        (
+            "source-boundaries.md",
+            (
+                "## Mandatory source edit boundary\n"
+                "In work/kernel/, edit/add/delete source only inside editable_roots: "
+                + json.dumps(contract.editable_roots)
+                + ".\n"
+                "All other paths are fixed, including: "
+                + json.dumps(sorted(contract.immutable_files))
+                + ".\n"
+                "Do not modify, delete, rename, chmod, or replace fixed files, "
+                "even to record changes. "
+                "The adapter and provenance are task inputs, not a change log. "
+                "Keep notes in tools/memory/ and generated files in scratch/. "
+                "input/kernel/ is the read-only source reference. "
+                "Final source validation must pass.\n"
+            ),
+        ),
+    ):
+        path = runtime / name
+        path.write_text(content, encoding="utf-8")
+        path.chmod(0o400)
+    for relative in contract.immutable_files:
+        (root / "work/kernel" / relative).chmod(0o400)
+
+
+def fixed_source_mounts(root: Path) -> tuple[Path, ...]:
+    """Read only the trusted policy and reject symlinks before creating overlays."""
+    policy = root / ".runtime/source-policy.json"
+    if not policy.exists():
+        return ()
+    if policy.is_symlink():
+        raise ValueError("source policy must be a regular file")
+    value = json.loads(policy.read_bytes())
+    working = root / "work/kernel"
+    if working.resolve() != working.absolute():
+        raise ValueError("source workspace cannot contain symlinks")
+    validate_source_tree(working, **value)
+    return tuple(working / source_path(name) for name in sorted(value["immutable_files"]))
+
+
 def source_instructions(contract: KernelSourceContract) -> str:
     return (
         "\n# Kernel source tree\n"
@@ -306,6 +297,7 @@ def inject_source_instructions(root: Path, contract: KernelSourceContract) -> No
 
 def inject_bootstrap_source_instructions(root: Path, contract: KernelSourceContract) -> None:
     """Write source rules for the launcher's session-only Bootstrap prompt projection."""
+    project_source_guard(root, contract)
     text = source_instructions(contract) + (
         "\n## Source-tree Bootstrap\n"
         "The complete pinned implementation is already supplied in input/kernel/ and "

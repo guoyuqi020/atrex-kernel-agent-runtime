@@ -530,12 +530,17 @@ class LocalAttemptWorkspaceAssembler:
         shutil.copytree(root / paths.input_kernel, working_kernel)
         make_tree_owner_writable(working_kernel)
 
-        from ..kernel_sources import inject_source_instructions, load_kernel_source_contract
+        from ..kernel_sources import (
+            inject_source_instructions,
+            load_kernel_source_contract,
+            project_source_guard,
+        )
 
         source_contract = load_kernel_source_contract(
             self._artifacts, campaign.evaluation_contract_digest, request.dsl
         )
         if source_contract is not None:
+            project_source_guard(root, source_contract)
             if lineage.raw:
                 (root / ".runtime").mkdir(mode=0o700, exist_ok=True)
                 (root / ".runtime/source-instructions.md").write_text(
