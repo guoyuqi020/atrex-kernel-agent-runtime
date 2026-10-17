@@ -80,6 +80,7 @@ def test_complete_kda_bundle_can_be_sealed(exported_bundle: Path, tmp_path: Path
         "pool_3.py",
         "pool_retained_3.py",
         "broadcast_3.py",
+        "broadcast_epoch_1.py",
         "epoch_shared_3.py",
     ):
         assert not (sealed / "workflow" / name).exists()
@@ -315,6 +316,7 @@ def test_default_workflow_executes_complete_pool_epoch(bundle_name: str) -> None
         ("pool_3.py", 6, (2, 3, False)),
         ("pool_retained_3.py", 9, (3, 3, True)),
         ("broadcast_3.py", 9, (3, 3, True)),
+        ("broadcast_epoch_1.py", 3, (3, 1, False)),
         ("epoch_shared_3.py", 9, (3, 3, True)),
     ),
 )

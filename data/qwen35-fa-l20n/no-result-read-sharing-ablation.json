@@ -1,0 +1,35 @@
+{
+  "schema_version": 14,
+  "enabled": true,
+  "main_evolve_enabled": false,
+  "optimizer_attempt_budget_per_trajectory": 15,
+  "sharing_comparison": "no-result-read",
+  "arms": [
+    {
+      "kind": "epoch-shared",
+      "label": "rerun-20261017-epoch-shared-no-result-read-3",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/epoch_shared_3.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 9,
+      "optimizer_attempt_budget_total": 45,
+      "evolution_count": 0,
+      "trajectory_visibility": "isolated",
+      "tool_modules": [],
+      "result_artifact_read_enabled": false
+    },
+    {
+      "kind": "broadcast",
+      "label": "rerun-20261017-broadcast-epoch1-no-result-read-3",
+      "target_epoch_number": 15,
+      "workflow_command": "workflow/broadcast_epoch_1.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 3,
+      "optimizer_attempt_budget_total": 45,
+      "evolution_count": 0,
+      "trajectory_visibility": "broadcast",
+      "tool_modules": [],
+      "result_artifact_read_enabled": false
+    }
+  ]
+}

@@ -273,6 +273,37 @@ def test_fa4_independent_plan_has_three_repeats_of_all_seven_settings() -> None:
         )
 
 
+def test_focused_no_result_read_sharing_plans_hold_equal_per_trajectory_budgets() -> None:
+    paths = (
+        REPOSITORY / "data/FA4/no-result-read-sharing-ablation.json",
+        REPOSITORY / "data/qwen35-fa-l20n/no-result-read-sharing-ablation.json",
+        REPOSITORY / "data/GDN/native-eval-bootstrap/no-result-read-sharing-ablation.json",
+    )
+    plans = [json.loads(path.read_text()) for path in paths]
+    assert plans[1:] == plans[:-1]
+    plan = plans[0]
+    assert plan["main_evolve_enabled"] is False
+    assert plan["optimizer_attempt_budget_per_trajectory"] == 15
+    assert [
+        (
+            arm["kind"],
+            arm["target_epoch_number"],
+            arm["workflow_command"],
+            arm["optimizer_attempt_budget"],
+            arm["optimizer_attempt_budget_total"],
+            arm["trajectory_visibility"],
+        )
+        for arm in plan["arms"]
+    ] == [
+        ("epoch-shared", 5, "workflow/epoch_shared_3.py", 9, 45, "isolated"),
+        ("broadcast", 15, "workflow/broadcast_epoch_1.py", 3, 45, "broadcast"),
+    ]
+    assert all(
+        arm["tool_modules"] == [] and arm["result_artifact_read_enabled"] is False
+        for arm in plan["arms"]
+    )
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize("visibility", ["isolated", "broadcast"])
 async def test_duplicate_reuse_respects_peer_visibility(peer_history, visibility):
