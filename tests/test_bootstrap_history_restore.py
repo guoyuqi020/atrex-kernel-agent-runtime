@@ -207,6 +207,22 @@ async def test_restore_bootstrap_queries_without_optimizer_history_or_authority(
         assert counts["runtime_experiments"] == 1
         assert counts["bootstrap_runs"] == (0 if legacy_schema else 1)
         assert archive.read_bytes() == before_bytes
+        assert dest.verify_bootstrap_history_artifacts(lineage.id, dest_store) > 0
+        retained_result = result.result_artifact_digest
+        assert retained_result is not None
+        report_path = (
+            tmp_path
+            / "restored-artifacts"
+            / "sha256"
+            / str(retained_result).removeprefix("sha256:")
+        )
+        hidden_report_path = report_path.with_name(report_path.name + ".missing")
+        report_path.rename(hidden_report_path)
+        try:
+            with pytest.raises(ValueError, match="unavailable Artifact"):
+                dest.verify_bootstrap_history_artifacts(lineage.id, dest_store)
+        finally:
+            hidden_report_path.rename(report_path)
         loaded = await query(
             "result_artifact_read", result_artifact_digest=result.result_artifact_digest
         )
@@ -254,6 +270,11 @@ async def test_restore_bootstrap_queries_without_optimizer_history_or_authority(
             dest.restore_bootstrap_history(lineage.id, archive, store, dest_store)
         assert dest.list_direction_events(boot_id) == source.list_direction_events(boot_id)
     assert len(adapter.requests) == 2
+    minimal = SqliteGatewayControl(
+        tmp_path / "minimal.sqlite", registry, signing_key=b"m" * 32, clock=lambda: NOW_DATETIME
+    )
+    assert minimal.verify_bootstrap_history_artifacts(lineage.id, dest_store) == 1
+    minimal.close()
     dest.close()
     source.close()
     registry.close()

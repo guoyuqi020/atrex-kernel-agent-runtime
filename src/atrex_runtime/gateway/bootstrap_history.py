@@ -26,6 +26,101 @@ _HISTORY_TABLES = (
 )
 
 
+def _bootstrap_lineage_ids(registry: Registry, lineage_id: LineageId) -> list[LineageId]:
+    """Return one Bootstrap ancestry, rejecting a corrupt cycle."""
+    lineage_ids: list[LineageId] = []
+    current: LineageId | None = lineage_id
+    while current is not None:
+        if current in lineage_ids:
+            raise ValueError("Bootstrap Lineage ancestry contains a cycle")
+        lineage_ids.append(current)
+        current = registry.get_lineage(current).bootstrap_source_lineage_id
+    return lineage_ids
+
+
+def _bootstrap_rows(
+    source: sqlite3.Connection,
+    lineage_ids: list[LineageId],
+) -> tuple[list[sqlite3.Row], dict[str, list[dict[str, object]]]]:
+    """Select only durable Bootstrap facts from one ancestry."""
+    subjects = source.execute(
+        "SELECT * FROM bootstrap_gateway_subjects WHERE lineage_id IN ("
+        + ",".join("?" for _ in lineage_ids)
+        + ")",
+        lineage_ids,
+    ).fetchall()
+    ids = [str(row["attempt_id"]) for row in subjects]
+    rows: dict[str, list[dict[str, object]]] = {table: [] for table in _HISTORY_TABLES}
+    if not ids:
+        return subjects, rows
+    placeholders = ",".join("?" for _ in ids)
+    rows = {}
+    for table in _HISTORY_TABLES:
+        condition = ""
+        if table == "gateway_operations":
+            condition = " AND result_artifact_digest IS NOT NULL"
+        elif table == "bootstrap_runs":
+            condition = " AND status IN ('completed', 'failed')"
+        rows[table] = [
+            dict(row)
+            for row in source.execute(
+                f"SELECT * FROM {table} WHERE attempt_id IN ({placeholders}){condition}", ids
+            )
+        ]
+    return subjects, rows
+
+
+def _bootstrap_artifact_roots(
+    rows: dict[str, list[dict[str, object]]],
+) -> set[ArtifactDigest]:
+    """Collect every directly referenced Artifact in restored Bootstrap facts."""
+    roots: set[ArtifactDigest] = set()
+    for values in rows.values():
+        for row in values:
+            for key, value in row.items():
+                if key.endswith("digest") and key != "request_digest" and value is not None:
+                    roots.add(parse_artifact_digest(str(value)))
+    for table, field in (
+        ("runtime_experiments", "experiment_json"),
+        ("runtime_direction_events", "event_json"),
+    ):
+        for row in rows[table]:
+
+            def digests(value: object) -> None:
+                if isinstance(value, str) and value.startswith("sha256:"):
+                    roots.add(parse_artifact_digest(value))
+                elif isinstance(value, dict):
+                    for child in value.values():
+                        digests(child)
+                elif isinstance(value, list):
+                    for child in value:
+                        digests(child)
+
+            digests(json.loads(str(row[field])))
+    return roots
+
+
+def verify_bootstrap_history_artifacts(
+    source: sqlite3.Connection,
+    registry: Registry,
+    lineage_id: LineageId,
+    artifacts: LocalArtifactStore,
+) -> int:
+    """Fail before arm creation when restored Bootstrap facts have dangling CAS roots."""
+    lineage_ids = _bootstrap_lineage_ids(registry, lineage_id)
+    _subjects, rows = _bootstrap_rows(source, lineage_ids)
+    roots = _bootstrap_artifact_roots(rows)
+    roots.add(registry.get_lineage(lineage_id).evidence_checkpoint)
+    try:
+        artifacts.expand_reference_closure(roots)
+    except (FileNotFoundError, ValueError) as error:
+        raise ValueError(
+            "Bootstrap snapshot has an unavailable Artifact; export a consistent "
+            "database and CAS snapshot before seeding an ablation arm: " + str(error)
+        ) from error
+    return len(roots)
+
+
 def restore_bootstrap_history(
     destination: sqlite3.Connection,
     registry: Registry,
@@ -41,25 +136,14 @@ def restore_bootstrap_history(
     The source is snapshotted read-only and migrated in memory, never modified.
     Conflicting facts or missing Artifacts abort the database transaction.
     """
-    lineage_ids: list[LineageId] = []
-    current: LineageId | None = lineage_id
-    while current is not None:
-        if current in lineage_ids:
-            raise ValueError("Bootstrap Lineage ancestry contains a cycle")
-        lineage_ids.append(current)
-        current = registry.get_lineage(current).bootstrap_source_lineage_id
+    lineage_ids = _bootstrap_lineage_ids(registry, lineage_id)
     source = sqlite3.connect(":memory:")
     source.row_factory = sqlite3.Row
     try:
         with sqlite3.connect(source_database.resolve().as_uri() + "?mode=ro", uri=True) as disk:
             disk.backup(source)
         migrate_gateway_schema(source)
-        subjects = source.execute(
-            "SELECT * FROM bootstrap_gateway_subjects WHERE lineage_id IN ("
-            + ",".join("?" for _ in lineage_ids)
-            + ")",
-            lineage_ids,
-        ).fetchall()
+        subjects, rows = _bootstrap_rows(source, lineage_ids)
         for subject in subjects:
             lineage = registry.get_lineage(subject["lineage_id"])
             campaign = registry.get_campaign(lineage.campaign_id)
@@ -95,46 +179,7 @@ def restore_bootstrap_history(
         counts = dict.fromkeys(_HISTORY_TABLES, 0)
         if not ids:
             return counts
-        rows: dict[str, list[dict[str, object]]] = {}
-        placeholders = ",".join("?" for _ in ids)
-        for table in _HISTORY_TABLES:
-            condition = ""
-            if table == "gateway_operations":
-                condition = " AND result_artifact_digest IS NOT NULL"
-            elif table == "bootstrap_runs":
-                condition = " AND status IN ('completed', 'failed')"
-            rows[table] = [
-                dict(row)
-                for row in source.execute(
-                    f"SELECT * FROM {table} WHERE attempt_id IN ({placeholders}){condition}", ids
-                )
-            ]
-
-        roots: set[ArtifactDigest] = set(checkpoint_roots)
-        for values in rows.values():
-            for row in values:
-                for key, value in row.items():
-                    if key.endswith("digest") and key != "request_digest" and value is not None:
-                        roots.add(parse_artifact_digest(str(value)))
-        # Journal JSON can cite additional source/result Artifacts; reports and
-        # traces are traversed by the CAS closure below as well.
-        for table, field in (
-            ("runtime_experiments", "experiment_json"),
-            ("runtime_direction_events", "event_json"),
-        ):
-            for row in rows[table]:
-
-                def digests(value: object) -> None:
-                    if isinstance(value, str) and value.startswith("sha256:"):
-                        roots.add(parse_artifact_digest(value))
-                    elif isinstance(value, dict):
-                        for child in value.values():
-                            digests(child)
-                    elif isinstance(value, list):
-                        for child in value:
-                            digests(child)
-
-                digests(json.loads(str(row[field])))
+        roots = _bootstrap_artifact_roots(rows) | checkpoint_roots
         retained: set[ArtifactDigest] = set()
         pending = list(roots)
         while pending:

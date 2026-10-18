@@ -129,17 +129,30 @@ def seed_ablation_arm(config_path: str, spec_path: str) -> None:
     client, request_builder = load_agate_sdk(connection)
     with SqliteRegistry(settings.storage.registry_database) as registry:
         artifacts = LocalArtifactStore(settings.storage.artifacts_root)
-        seeder = AblationArmSeeder(
+        control = SqliteGatewayControl(
+            settings.storage.gateway_database,
             registry,
-            build_lineage_seeder(
-                settings,
-                artifacts,
-                registry,
-                client,
-                request_builder,
+            signing_key=read_capability_signing_key(
+                os.environ,
+                settings.gateway_proxy.capability_signing_key_env,
             ),
+            suggestion_ttl_epochs=settings.gateway_proxy.suggestion_ttl_epochs,
         )
-        result = anyio.run(seeder.seed_arm, spec)
+        try:
+            control.verify_bootstrap_history_artifacts(spec.source_lineage_id, artifacts)
+            seeder = AblationArmSeeder(
+                registry,
+                build_lineage_seeder(
+                    settings,
+                    artifacts,
+                    registry,
+                    client,
+                    request_builder,
+                ),
+            )
+            result = anyio.run(seeder.seed_arm, spec)
+        finally:
+            control.close()
     print(json.dumps(ablation_arm_result_value(result), sort_keys=True))
 
 

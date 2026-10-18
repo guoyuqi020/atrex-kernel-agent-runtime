@@ -269,6 +269,19 @@ class SqliteGatewayControl(AttemptOutcomeSource):
                 connection, self._registry, lineage_id, source_database, source_artifacts, artifacts
             )
 
+    def verify_bootstrap_history_artifacts(
+        self,
+        lineage_id: LineageId,
+        artifacts: LocalArtifactStore,
+    ) -> int:
+        """Reject an ablation source whose restored Bootstrap history has dangling CAS roots."""
+        from .bootstrap_history import verify_bootstrap_history_artifacts
+
+        with self._transaction() as connection:
+            return verify_bootstrap_history_artifacts(
+                connection, self._registry, lineage_id, artifacts
+            )
+
     def check_health(self) -> None:
         """Verify that the Gateway control store can read and acquire a write transaction."""
         with self._transaction() as connection:

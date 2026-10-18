@@ -243,8 +243,28 @@ async def test_directions_only_closes_without_experiment(tmp_path: Path) -> None
 
 
 @pytest.mark.anyio
-async def test_no_modules_rejects_both_journals(tmp_path: Path) -> None:
+async def test_no_modules_rejects_both_journals(tmp_path: Path, monkeypatch) -> None:
     _, _, attempt, capability, service, _ = _service(tmp_path, tool_modules=())
+
+    def disabled_history_must_not_load(*_args, **_kwargs):
+        raise AssertionError("disabled Journal history was loaded")
+
+    monkeypatch.setattr(
+        "atrex_runtime.gateway.journals.RuntimeJournalService._direction_views",
+        disabled_history_must_not_load,
+    )
+    monkeypatch.setattr(
+        "atrex_runtime.gateway.journals.RuntimeJournalService._current_experiments",
+        disabled_history_must_not_load,
+    )
+    snapshot = await service.execute(
+        capability.token,
+        _journal_payload(attempt.id, "journal_snapshot", "no-modules-snapshot"),
+        operation_scope="journal",
+    )
+    assert snapshot.result["direction_events"] == []
+    assert snapshot.result["experiments"] == []
+    assert snapshot.result["directions"] == []
     frontier = await service.execute(
         capability.token,
         _journal_payload(attempt.id, "kernel_pareto_frontier", "no-modules-frontier"),

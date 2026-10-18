@@ -168,15 +168,23 @@ class RuntimeJournalService:
             raise ValueError("Attempt report tool modules disagree with Runtime Journal")
         if any(event.action == "suggest" for event in report.direction_events):
             raise DirectionSuggestionForbiddenError("report.direction_events.action")
-        in_progress = self._current_in_progress_direction_ids(report.attempt_id)
+        directions_enabled = "directions" in self.tool_modules
+        experiments_enabled = "experiments" in self.tool_modules
+        in_progress = (
+            self._current_in_progress_direction_ids(report.attempt_id)
+            if directions_enabled
+            else ()
+        )
         if in_progress:
             raise ValueError(
                 "Attempt report cannot leave a Runtime-owned Direction in progress: "
                 f"{in_progress}; block or defer it before submitting. An untested Direction "
                 "may close with hypothesis_status=unresolved and no supporting evidence"
             )
-        events = self._current_direction_events(report.attempt_id)
-        experiments = self._current_experiments(report.attempt_id)
+        events = self._current_direction_events(report.attempt_id) if directions_enabled else ()
+        experiments = (
+            self._current_experiments(report.attempt_id) if experiments_enabled else ()
+        )
         if "directions" in self.tool_modules and report.experiments:
             # Experiments may reuse a peer's Direction without taking ownership of it.
             # Report-only clients may also declare their own legacy Direction events.
@@ -234,13 +242,19 @@ class RuntimeJournalService:
         # Experiment module disabled. Missing evidence reduces certainty, not liveness.
         available = {
             str(item["experiment_id"]): item
-            for item in self._visible_experiments(report.attempt_id)
+            for item in (
+                self._visible_experiments(report.attempt_id) if experiments_enabled else ()
+            )
         }
         for experiment in report.experiments:
             available.setdefault(experiment.experiment_id, experiment.model_dump(mode="json"))
         hypotheses = {
             direction_id: direction.get("hypothesis")
-            for direction_id, direction in self._direction_views(report.attempt_id).items()
+            for direction_id, direction in (
+                self._direction_views(report.attempt_id).items()
+                if directions_enabled
+                else ()
+            )
         }
         hypotheses.update(
             (event.direction_id, event.hypothesis)
@@ -369,12 +383,26 @@ class RuntimeJournalService:
                 "count": len(direction_ids),
             }
         if request.operation == "journal_snapshot":
+            directions_enabled = "directions" in self.tool_modules
+            experiments_enabled = "experiments" in self.tool_modules
             return cast(
                 dict[str, JsonValue],
                 {
-                    "direction_events": list(self._current_direction_events(request.attempt_id)),
-                    "experiments": list(self._current_experiments(request.attempt_id)),
-                    "directions": list(self._direction_views(request.attempt_id).values()),
+                    "direction_events": (
+                        list(self._current_direction_events(request.attempt_id))
+                        if directions_enabled
+                        else []
+                    ),
+                    "experiments": (
+                        list(self._current_experiments(request.attempt_id))
+                        if experiments_enabled
+                        else []
+                    ),
+                    "directions": (
+                        list(self._direction_views(request.attempt_id).values())
+                        if directions_enabled
+                        else []
+                    ),
                     "citable_profile_results": self._citable_profile_results(request.attempt_id),
                 },
             )
