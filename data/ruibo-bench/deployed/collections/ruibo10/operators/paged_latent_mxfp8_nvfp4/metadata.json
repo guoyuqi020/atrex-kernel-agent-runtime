@@ -1,0 +1,201 @@
+{
+  "schema_version": "atrex.collection_operator_metadata.v3",
+  "display_name": "paged latent mxfp8 nvfp4",
+  "description": "BF16 Q + MXFP8 SWA + NVFP4 compressed KV Excludes indexer/cache writer/projection/RoPE/Mega/full model and steady-state performance D512/V512 MQA; S1/3, physical H64/128, TP1/2/4/8; SWA128 plus compressed Top512, ratio0/1/2. Decode/MTP; no long-prefill claim.\n\nProduction entry: flash_mla_cuda.sparse_decode_fwd; fixed source revision 0eee43b12f034b657133cf2afca6a72ebb6efccf.\n\nParameter domain: shape_range.json defines dynamic request ranges and correlated model/ABI constraints; shape_cases.json fixes 10 representative workloads, not the complete support domain. Dynamic batch/context, Q=1 or3; physical_heads64/128 are the real ABI dimensions. tp=1 is descriptive, not an additional head division. No measured traffic weights are claimed. Existing GPU evidence covers only the unchanged fixed sample, not every point in this dynamic domain.\n\nInput construction: Logical selection and physical placement are independently declared. Contiguous placement keeps neighboring logical tokens/pages contiguous; scattered placement permutes physical allocation. Selectors cover score-related, local, strided, shared-prefix and random sets. Score selection uses the same generated cache/query features (first eight channels; QSA averages four-token block scores), with causal visibility, budget, tail and invalid-marker rules preserved. Q/K latent-topic structure is synthetic; the indexer itself remains outside the timed core. Record actual physical selected-token count, unique pages, density and adjacent-query Jaccard on up to sixteen query rows. Context length is not equated with selected work. Page layout, scale packing, SWA/compressed aliases and output ABI remain unchanged. Native source csrc/api/sparse_decode.cpp supports physical H64/H128. Current normal inputs use all physical heads; the old artificial H/tp active-head masking is removed. tp is fixed to1 in this domain, with no implied TP speedup and no new padding. This is the native H64/H128 no-split contract, not a claim that an arbitrary smaller-head caller should pad to it.",
+  "operator_family": "attention",
+  "tags": [
+    "core",
+    "paged_latent_mxfp8_nvfp4",
+    "general",
+    "sparse_attention",
+    "sampled"
+  ],
+  "benchmark_contract": {
+    "mutates_inputs": [
+      "out"
+    ],
+    "defined_outputs": {
+      "out": {
+        "dtype": "bfloat16",
+        "mutable": true,
+        "alias": "caller output"
+      },
+      "lse": {
+        "dtype": "float32",
+        "shape": "[B,H,S]",
+        "mutable": false,
+        "alias": "fresh allocation, native strided transpose",
+        "stride": "[S*H,1,H]"
+      }
+    },
+    "scratch_inputs": [],
+    "correctness_min_cases": 1,
+    "correctness_seeds": [
+      2026101221,
+      2026101223
+    ],
+    "preserve_input_storage": true,
+    "iteration_protocol": "restore_before_each_call"
+  },
+  "validation": {
+    "status": "sampled_correctness_passed",
+    "correctness_scope": "Original library, validation_scope=sampled, SM103; fixed shape IDs 0-9, at most 2 recorded seeds per shape. 采样通过. Counts={'passed': 20}. No prior patched results inherited. Shared-GPU timings are execution checks only.",
+    "evidence": [
+      "validation_summary:docs/validation-status.md",
+      "native_solution_manifest:docs/native-solutions.json",
+      "solution_sha256:bfe78e0cb12229fa1b5715c450d91308b5a6e808dbc344e2ff3f329881325a1a"
+    ]
+  },
+  "cases": {
+    "0": {
+      "current_case_sha256": "a8aa3752db428c73f82292c7bdb58ba3c730b352342afe244ed1b8e2bb9c81a9",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "1": {
+      "current_case_sha256": "44aec5f6df1ca8a55eaa60de7ecc34f94b0a9023cb0adc9741110edb5d364b8c",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "2": {
+      "current_case_sha256": "9de1f2199f358f079e2bbdfde5716b30c1c6b49d608e1f79a0ffcbac0f4f9651",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "3": {
+      "current_case_sha256": "576de6bc9b41a7086a73c00dc9904788d2282fabf3fd8ba103e395c9c373ebcd",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "4": {
+      "current_case_sha256": "7064459afd6eca423a6d999b0020aa464cb19c404e7aa4d6187655e2699c9e3b",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "5": {
+      "current_case_sha256": "71c74c68a2ce33bd1ce93e87ec2e460b76ac400a353a3db0d07e83d6ba0d9625",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "6": {
+      "current_case_sha256": "e7bd1b74821e0fb969243be23b08c0b70484bb1b3b254ce8b5669150d3d2eb26",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "7": {
+      "current_case_sha256": "41baa820ed6ecbf62d3b08e08a7612279aad75dc2e1647fa1e210c79d89f5410",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "8": {
+      "current_case_sha256": "8da8c559b3f41d5cc5f78eb0545660d374d56d5d3d3064cc43f0ae44941b2e57",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "9": {
+      "current_case_sha256": "fac7f261fc465fc8a31331ed6d9fc15747d16b9cbd03f220e8aa9cc560c36528",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    }
+  },
+  "scoring": {
+    "schema_version": "atrex.collection_scoring.v2",
+    "status": "unscored",
+    "operator_weight": null,
+    "operator_weight_basis": "general_no_measured_traffic",
+    "normalization_scope": "selected_collection_operators",
+    "source_manifest_sha256": null,
+    "limitations": [
+      "No deployment-specific frequency or device-time weight is claimed."
+    ]
+  },
+  "real_inputs": {
+    "schema_version": "atrex.collection_real_inputs.v1",
+    "availability": "not_captured",
+    "samples": {},
+    "reason": "General source-derived shapes and stored-precision synthetic payloads; real traffic is not part of this core contract."
+  },
+  "performance_objective": "shape_speedup_geometric_mean",
+  "shapes": {
+    "0": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "1": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "2": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "3": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "4": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "5": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "6": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "7": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "8": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "9": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    }
+  }
+}

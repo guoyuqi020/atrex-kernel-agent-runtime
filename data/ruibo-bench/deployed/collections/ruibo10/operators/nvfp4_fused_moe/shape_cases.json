@@ -1,0 +1,138 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 1,
+      "hidden": 2048,
+      "intermediate": 768,
+      "local_experts": 128,
+      "topk": 8,
+      "model_geometry": "qwen3_30b",
+      "expert_tp": 1,
+      "routing": "balanced"
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 32,
+      "hidden": 2048,
+      "intermediate": 768,
+      "local_experts": 128,
+      "topk": 8,
+      "routing": "hotspot",
+      "model_geometry": "qwen3_30b",
+      "expert_tp": 1
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 128,
+      "hidden": 4096,
+      "intermediate": 768,
+      "local_experts": 128,
+      "topk": 8,
+      "activation": "situ",
+      "model_geometry": "qwen3_235b",
+      "expert_tp": 2,
+      "routing": "balanced"
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 512,
+      "hidden": 4096,
+      "intermediate": 1536,
+      "local_experts": 128,
+      "topk": 8,
+      "activation_alpha": 1.702,
+      "activation_beta": 1,
+      "activation_limit": 7,
+      "model_geometry": "qwen3_235b",
+      "expert_tp": 1,
+      "routing": "skewed"
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 1024,
+      "hidden": 7168,
+      "intermediate": 256,
+      "local_experts": 256,
+      "topk": 8,
+      "model_geometry": "deepseek_v3",
+      "expert_tp": 8,
+      "routing": "balanced"
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 2048,
+      "hidden": 2048,
+      "intermediate": 768,
+      "local_experts": 128,
+      "topk": 8,
+      "model_geometry": "qwen3_30b",
+      "expert_tp": 1,
+      "routing": "balanced"
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 8192,
+      "hidden": 2048,
+      "intermediate": 768,
+      "local_experts": 128,
+      "topk": 8,
+      "model_geometry": "qwen3_30b",
+      "expert_tp": 1,
+      "routing": "balanced"
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 1536,
+      "hidden": 2048,
+      "intermediate": 768,
+      "local_experts": 128,
+      "topk": 8,
+      "masked_routes": true,
+      "model_geometry": "qwen3_30b",
+      "expert_tp": 1,
+      "routing": "balanced"
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 256,
+      "hidden": 2048,
+      "intermediate": 768,
+      "local_experts": 128,
+      "topk": 8,
+      "routing": "empty",
+      "model_geometry": "qwen3_30b",
+      "expert_tp": 1
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "tokens": 512,
+      "hidden": 2048,
+      "intermediate": 768,
+      "local_experts": 128,
+      "topk": 8,
+      "distribution": "zero",
+      "model_geometry": "qwen3_30b",
+      "expert_tp": 1,
+      "routing": "skewed"
+    }
+  }
+}

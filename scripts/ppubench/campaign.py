@@ -34,6 +34,31 @@ def write(path, value):
     path.chmod(0o600)
 
 
+def pin_atrex_bench_version(cfg, runtime):
+    """Apply one task-owned evaluator pin to every Runtime gate policy view."""
+
+    version = runtime.get("atrex_bench_version")
+    if version is None:
+        return None
+    if not isinstance(version, str) or not version.strip():
+        raise ValueError("runtime.atrex_bench_version must be a nonempty string")
+    for gate_policy in (cfg["gate_policy"], cfg["campaign"]["gate_policy"]):
+        gate_policy["evaluator"]["agate_package_version"] = version
+    return version
+
+
+def task_evaluation_contract_payload(task, shapes):
+    """Load the complete evaluator-owned task payload for a sealed contract."""
+
+    return {
+        "reference_py": (task / "reference.py").read_text(),
+        "input_py": (task / "input.py").read_text(),
+        "shapes": shapes,
+        "metadata": read(task / "metadata.json"),
+        "roofline": read(task / "roofline.json"),
+    }
+
+
 def git(root):
     return subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
 
@@ -118,6 +143,7 @@ def prepare(args):
         bench_commit=heads["bench"],
     )
     cfg["agate"].update(runtime["agate"])
+    atrex_bench_version = pin_atrex_bench_version(cfg, runtime)
     # PPU tasks opt in by default; keep endpoint/limits from the production policy.
     wiki_overrides = runtime.get("gpu_wiki", {})
     cfg["gpu_wiki"] = (
@@ -131,12 +157,15 @@ def prepare(args):
     write(workspace / "runtime.json", cfg)
 
     contract = read(frozen / "evaluation.template.json")
-    contract.update(
-        reference_py=(task / "reference.py").read_text(),
-        input_py=(task / "input.py").read_text(),
-        shapes=shapes,
-        metadata=read(task / "metadata.json"),
-    )
+    if atrex_bench_version is not None:
+        declared_version = contract.get("atrex_bench_version")
+        if declared_version not in (None, atrex_bench_version):
+            raise ValueError(
+                "Evaluation Contract atrex_bench_version disagrees with "
+                "runtime.atrex_bench_version"
+            )
+        contract["atrex_bench_version"] = atrex_bench_version
+    contract.update(task_evaluation_contract_payload(task, shapes))
     parsed = AgateEvaluationContractV1.model_validate(contract).with_shape_holdout()
     if (
         len(parsed.validation_shape_ids) != definition["expected_valid_shapes"]
@@ -184,6 +213,7 @@ def prepare(args):
             "bootstrap_timeout_seconds": policy["workers"]["bootstrap_timeout_seconds"],
             "model": campaign["lineages"][dsl]["models"]["optimizer"],
             "production_gate": cfg["gate_policy"]["production_gate"],
+            "atrex_bench_version": atrex_bench_version,
             "lock_clocks": cfg["gate_policy"]["lock_clocks"],
             "roofline_mode": definition["roofline_mode"],
         },

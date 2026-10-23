@@ -1,0 +1,196 @@
+{
+  "schema_version": "atrex.collection_operator_metadata.v3",
+  "display_name": "bf16 mxfp4 fused moe",
+  "description": "BF16 activation and caller-prepared packed MXFP4 expert weights (group32 E8M0 scales), plus precomputed routing, produce a one-element list aliasing the caller BF16 output[T,H]. Preserve native weight/scale layout and per-expert activation parameters. Historical SM103 SwiGLU subdomain passed 54 calls across 9 shapes; SiTU shape remains native-unsupported. Current standard entry has 17/20 passing cases and 8 complete timed shapes, 2 SiTU support rejections and 1 initial JIT timeout pending recovery; see evidence/bf16_mxfp4_fused_moe/NATIVE_DOMAIN_REVIEW.json. 当前附带原生 solution 子域：固定原生实现支持本题 SwiGLU 配置；SiTU（activation_type=10）缺少对应 kernel。 题目支持域允许更宽。\n\nProduction entry: flashinfer.trtllm_fp4_block_scale_routed_moe; fixed source revision d849eca46875d3561fa48f6093936304580a1698.\n\nParameter domain: shape_range.json defines dynamic request ranges and correlated model/ABI constraints; shape_cases.json fixes 10 representative workloads, not the complete support domain. Tokens/capacity vary through 8192; routing profiles and masked/empty routes remain explicit. Qwen3-30B H2048/I768/E128, Qwen3-235B H4096/I1536/E128 and DeepSeek-V3 H7168/I2048/E256 retain their declared expert-TP/EP partitions. No measured traffic weights are claimed. Existing GPU evidence covers only the unchanged fixed sample, not every point in this dynamic domain.\n\nInput construction: FC1 [E_local,2*I_local,H], FC2 [E_local,H,I_local], with I_local=I_model/expert_tp and E_local=E_model/EP. Qwen3-30B H2048/I768/E128/top8 and Qwen3-235B H4096/I1536/E128/top8 include full-I cases. DeepSeek-V3 H7168/I2048/E256/top8 uses TP8 (I_local256) here. TP-sharded results are partial expert outputs: the caller must sum across TP outside this local callable; EP dispatch/combine, where present, is inside its declared boundary. Model geometry does not claim identical model router policy, activation or deployed precision. Per-channel activation gains .65..1.35 and weight row gains .7..1.3 precede existing payload/scale quantization; FC2 weights use full-I fan-in scaling. Router logits use shared eight-token features, token noise and expert biases; topk IDs and renormalized weights derive from the same logits. Balanced, moderate skew, concentrated hotspot, invalid/empty and multi-rank remote-biased routing remain distinct. Input quantization temporaries are bounded to one expert.\n\nObserved native support on SM103: fixed sample 2 (SiTU activation, tokens=128, hidden=4096, intermediate=768, local_experts=128, topk=8) reports No kernel found for the given options. The sample remains in the question domain; the other nine fixed samples passed the standard two-seed correctness check. This is a native configuration restriction, not a numerical pass for sample 2.",
+  "operator_family": "moe",
+  "tags": [
+    "core",
+    "F07",
+    "general",
+    "moe",
+    "sampled"
+  ],
+  "benchmark_contract": {
+    "mutates_inputs": [
+      "output"
+    ],
+    "defined_outputs": {
+      "outputs_and_state": {
+        "output": {
+          "dtype": "BF16",
+          "shape": "[T,H]",
+          "mutable": true
+        }
+      }
+    },
+    "scratch_inputs": [],
+    "correctness_min_cases": 1,
+    "correctness_seeds": [
+      2026101221,
+      2026101223
+    ],
+    "preserve_input_storage": true,
+    "iteration_protocol": "restore_before_each_call"
+  },
+  "validation": {
+    "status": "native_unsupported",
+    "correctness_scope": "Original library, validation_scope=sampled, SM103; fixed shape IDs 0-9, at most 2 recorded seeds per shape. 支持子域通过. Counts={'passed': 18, 'native_unsupported': 1}. No prior patched results inherited. Shared-GPU timings are execution checks only.",
+    "evidence": [
+      "validation_summary:docs/validation-status.md",
+      "native_solution_manifest:docs/native-solutions.json",
+      "solution_sha256:e1dbc15b7193e41902bd513ab1cc728217117419d427914dd81d13b265bff3e3"
+    ]
+  },
+  "cases": {
+    "0": {
+      "current_case_sha256": "56c180a147c8d15fbec52d6ab1b90c386f72245609cee95412a4319e7e0e1d77",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "1": {
+      "current_case_sha256": "db4a24d847ae1e69ff8885f3b2a43cbe714731ba458a5cfcd07e5a54f4b70793",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "2": {
+      "current_case_sha256": "7506b0c6e57dfd60def918a0f0d2c93765e27b72ea110491bafdf85890c0daac",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "3": {
+      "current_case_sha256": "b8cf6bfad60f1cd6e1a4dbc17067d153de2fd3428b6af1caaf400779fb8b2769",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "4": {
+      "current_case_sha256": "759a20fd2506b5aa243871cf59b60b1a70cdeb8c84995c37527b8120ac1700d4",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "5": {
+      "current_case_sha256": "8191bc188e51df2e009c05da794a13963e116824243de0e17e175850e0dd1c5c",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "6": {
+      "current_case_sha256": "7376190229dc2004c38ddd76704265253241185ff0a5d4acd9cec19bdb3430ea",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "7": {
+      "current_case_sha256": "a2cc3ed4a5a21e9b892df18f08cfcf456a9e05547737965ea8db80f434b57d07",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "8": {
+      "current_case_sha256": "37853f1ea5b94eddfc1fada4fd4f557ffe868cbcb76092762ca08506e7c15f46",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "9": {
+      "current_case_sha256": "e36c28bb0a1e99e2d49c45ed39282915f7d1b3ab8342a63584b454c8a22b742c",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    }
+  },
+  "scoring": {
+    "schema_version": "atrex.collection_scoring.v2",
+    "status": "unscored",
+    "operator_weight": null,
+    "operator_weight_basis": "general_no_measured_traffic",
+    "normalization_scope": "selected_collection_operators",
+    "source_manifest_sha256": null,
+    "limitations": [
+      "No deployment-specific frequency or device-time weight is claimed."
+    ]
+  },
+  "real_inputs": {
+    "schema_version": "atrex.collection_real_inputs.v1",
+    "availability": "not_captured",
+    "samples": {},
+    "reason": "General source-derived shapes and stored-precision synthetic payloads; real traffic is not part of this core contract."
+  },
+  "performance_objective": "shape_speedup_geometric_mean",
+  "shapes": {
+    "0": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "1": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "2": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "3": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "4": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "5": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "6": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "7": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "8": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "9": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    }
+  }
+}

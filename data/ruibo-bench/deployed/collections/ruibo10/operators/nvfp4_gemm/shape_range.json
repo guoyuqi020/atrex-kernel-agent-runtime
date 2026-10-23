@@ -1,0 +1,61 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "m": {
+        "type": "integer",
+        "min": 1,
+        "max": 8192
+      },
+      "n": {
+        "type": "integer",
+        "values": [
+          8192,
+          4096,
+          6656,
+          24576,
+          12288
+        ]
+      },
+      "k": {
+        "type": "integer",
+        "values": [
+          2560,
+          12288,
+          4096
+        ]
+      },
+      "accumulate": {
+        "type": "boolean",
+        "values": [
+          false,
+          true
+        ]
+      },
+      "distribution": {
+        "type": "string",
+        "values": [
+          "channel_outliers",
+          "zero",
+          "normal"
+        ]
+      },
+      "c_alias_d": {
+        "type": "boolean",
+        "values": [
+          false,
+          true
+        ]
+      }
+    },
+    "required": [
+      "k",
+      "m",
+      "n"
+    ]
+  },
+  "cross_field_invariants": [
+    "(n, k) in [(4096, 12288), (6656, 2560), (8192, 2560), (12288, 4096), (24576, 4096)]"
+  ]
+}

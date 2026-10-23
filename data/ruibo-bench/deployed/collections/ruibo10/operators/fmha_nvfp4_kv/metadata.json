@@ -1,0 +1,208 @@
+{
+  "schema_version": "atrex.collection_operator_metadata.v3",
+  "display_name": "FMHA NVFP4 KV",
+  "description": "E4M3 Q + E2M1 KV、group16 E4M3 scales → BF16 O. Prepared Q/KV/scales/index metadata -> QK -> softmax -> PV -> native outputs; excludes projection/RoPE/cache writer. MHA/GQA/MQA、HD64/128/256、page16/32/64/128、prefill/prefix/decode/MTP、window、sink、可选 LSE；causal/noncausal。 不是各轴任意笛卡尔积；以 shapes.full.json 所列模型几何和功能组合为准。\n\nProduction entry: flashinfer.prefill.trtllm_batch_context_with_kv_cache; fixed source revision d849eca46875d3561fa48f6093936304580a1698.\n\nParameter domain: shape_range.json defines dynamic request ranges and correlated model/ABI constraints; shape_cases.json fixes 10 representative workloads, not the complete support domain. Q and KV lengths vary per request; equal batch lengths and 0<Q_i<=KV_i are enforced. Head geometry is a correlated model/TP tuple; it is independent of request length and input stress profile. No measured traffic weights are claimed. Existing GPU evidence covers only the unchanged fixed sample, not every point in this dynamic domain.\n\nInput construction: Retain prepared production payload/scale, strides, page tables, aliases and QDQ. Q/K/V now share a synthetic latent family: four topics, eight fixed sinusoidal projection components, independent token innovations, per-head gains .65..1.35 and channel gains .7..1.3. Q and K topic affinity creates nonuniform attention, and K/V share latent topic features. In absorbed MLA, V remains the actual first 512 components of stored K; D576 keeps a separate 64-channel RoPE-amplitude component, while the distinct D512 interface stays D512. No hidden unquantized truth enters the reference. Existing tiny/peaked/zero/cancellation and scale controls are preserved after construction. These are declared synthetic projection statistics, not observed model weights or traffic.\n\nNumerical policy: primary output uses atol=0.01, rtol=0.05, at most 0.5% mismatched elements AND Relative L2 <= 1%. LSE remains strict. 0.5% is the smallest previously assessed tier covering the 0.111607% maximum non-HD256 mismatch; observed relative L2 max 0.643486%, use the same independently constrained 1% budget as other accepted attention exceptions. Common policy applies to all shapes, with no shape-specific exemption. Input quantization loss is not budgeted again.",
+  "operator_family": "attention",
+  "tags": [
+    "core",
+    "D06",
+    "general",
+    "dense_attention",
+    "sampled"
+  ],
+  "benchmark_contract": {
+    "mutates_inputs": [
+      "out",
+      "lse"
+    ],
+    "defined_outputs": {
+      "out": {
+        "region": "full_logical_tensor_when_present",
+        "alias": "caller-owned; preserve return identity and all nonwrite storage"
+      },
+      "lse": {
+        "region": "full_logical_tensor_when_present",
+        "alias": "caller-owned; preserve return identity and all nonwrite storage"
+      }
+    },
+    "scratch_inputs": [
+      "workspace_buffer"
+    ],
+    "correctness_min_cases": 1,
+    "correctness_seeds": [
+      2026101561,
+      2026101563
+    ],
+    "preserve_input_storage": true,
+    "iteration_protocol": "restore_before_each_call",
+    "correctness_tolerances": {
+      "mutated_inputs.out": {
+        "atol": 0.01,
+        "rtol": 0.05,
+        "max_mismatch_fraction": 0.005,
+        "max_rel_l2": 0.01
+      }
+    }
+  },
+  "validation": {
+    "status": "numerical_failure",
+    "correctness_scope": "Original library, validation_scope=sampled, SM103; fixed shape IDs 0-9, at most 2 recorded seeds per shape. 有限值数值失败. Counts={'passed': 16, 'numerical_failure': 4}. No prior patched results inherited. Shared-GPU timings are execution checks only.",
+    "evidence": [
+      "validation_summary:docs/validation-status.md",
+      "native_solution_manifest:docs/native-solutions.json",
+      "solution_sha256:5aa013595623f2ff714a81d781e0c9bf88d3446794983a01d3a28286c29d39b9"
+    ]
+  },
+  "cases": {
+    "0": {
+      "current_case_sha256": "21418ffb164ebc9c8aa0f9fdfdacba7c36dd2bb1c8b7b7bd599e4c1a70a9d0e1",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "1": {
+      "current_case_sha256": "880e32dea37446dcab66f2c9bc1a6285c15073be3fb1168229f5b21f220d1a07",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "2": {
+      "current_case_sha256": "eb82ba553b8d5879b91e71e4b1b721265831d9f09c5111b56b8a1bda5e41afbe",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "3": {
+      "current_case_sha256": "3a423a867fcbe2d264897495697d973a61bf922c28ac20e474415087b87e4162",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "4": {
+      "current_case_sha256": "d411467e40d53799be5467db9ffba8ff693b2ba8de82ba93f82c1aeabd08b5ee",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "5": {
+      "current_case_sha256": "930732c13d33b6e2f0a714bf40d27641db1f1eb0ed4ecd5764bfb81a3137c3a1",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "6": {
+      "current_case_sha256": "d3fcc40ee606869017fb28a2ce51285596a8184bc2e7472a655641581d51f542",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "7": {
+      "current_case_sha256": "5b4537e0be85fcbb89aa22ef29e258a4af85d584e60da9fd56894950c146087f",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "8": {
+      "current_case_sha256": "82d23895ddbba98fe7cf4bc61a86eacb4e2c1af0c7e9fe5809464627fb0252e7",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "9": {
+      "current_case_sha256": "48c25ab6c450b42fc8d4220f26e63edf80945a785ffa95fb99d53bc894528852",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    }
+  },
+  "scoring": {
+    "schema_version": "atrex.collection_scoring.v2",
+    "status": "unscored",
+    "operator_weight": null,
+    "operator_weight_basis": "general_no_measured_traffic",
+    "normalization_scope": "selected_collection_operators",
+    "source_manifest_sha256": null,
+    "limitations": [
+      "No deployment-specific frequency or device-time weight is claimed."
+    ]
+  },
+  "real_inputs": {
+    "schema_version": "atrex.collection_real_inputs.v1",
+    "availability": "not_captured",
+    "samples": {},
+    "reason": "General source-derived shapes and stored-precision synthetic payloads; real traffic is not part of this core contract."
+  },
+  "performance_objective": "shape_speedup_geometric_mean",
+  "shapes": {
+    "0": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "1": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "2": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "3": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "4": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "5": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "6": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "7": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "8": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "9": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    }
+  }
+}

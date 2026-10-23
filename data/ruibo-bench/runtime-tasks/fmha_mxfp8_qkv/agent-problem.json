@@ -1,0 +1,187 @@
+{
+  "schema_version": "atrex.agent_problem.v1",
+  "objective": "Implement a correct and fast general CUDA kernel for fmha_mxfp8_qkv on the complete public shape domain. Exact evaluator cases are private; every specialization decision must come from runtime properties or declared public parameters.",
+  "evaluation": {
+    "exact_cases": "private",
+    "correctness_requirement": "every hidden case must pass",
+    "performance_requirement": "performance is measured across hidden cases after correctness passes",
+    "development_cases_are_evaluation_cases": false
+  },
+  "operator_contract": {
+    "name": "fmha_mxfp8_qkv",
+    "family": "attention",
+    "entrypoint": "Model.forward(self, q_tensor, k_tensor, v_tensor, o_tensor, lse_tensor=None, sinks=None, seq_q_lens=None, seq_kv_lens=None, scale_softmax=None, current_stream=None, sf_q=None, sf_k=None, sf_v=None, amax_o=None, descale_q=None, descale_k=None, descale_v=None, scale_o=None, workspace=None, block_table=None, block_table_v=None, gate=None, sf_o=None)",
+    "semantics": "Decode MXFP8 Q, K and V tensors and their block scales, compute masked scaled attention with the reference probability quantization and accumulation semantics, write the BF16 output, and write FP32 LSE when requested.",
+    "authoritative_public_sources": {
+      "reference.py": "exact operator computation, mutation and return semantics",
+      "input.py": "runtime argument construction, dtypes, tensor layouts and value generation",
+      "shape_domain": "verbatim projection of the benchmark shape_range.json, including complete public parameter ranges and cross-field constraints"
+    }
+  },
+  "workload_profile": {
+    "domain_kind": "general source-derived production workload",
+    "case_identity": "private opaque evaluator IDs",
+    "dispatch_basis": "runtime tensor properties and public input parameters"
+  },
+  "distribution_profile": {
+    "frequency_evidence": "none published",
+    "policy": "Treat every point admitted by shape_domain as relevant; do not assume private case frequencies."
+  },
+  "shape_domain": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "type": "object",
+      "properties": {
+        "batch": {
+          "type": "integer",
+          "min": 1,
+          "max": 16
+        },
+        "heads": {
+          "type": "integer",
+          "values": [
+            8,
+            16,
+            32
+          ]
+        },
+        "kv_heads": {
+          "type": "integer",
+          "values": [
+            8,
+            4,
+            1,
+            2
+          ]
+        },
+        "query_len": {
+          "type": "integer",
+          "min": 1,
+          "max": 8192
+        },
+        "kv_len": {
+          "type": "integer",
+          "min": 1,
+          "max": 262144
+        },
+        "head_dim": {
+          "type": "integer",
+          "values": [
+            128,
+            256
+          ]
+        },
+        "causal": {
+          "type": "boolean",
+          "values": [
+            false,
+            true
+          ]
+        },
+        "window_left": {
+          "one_of": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "min": -1,
+              "max": 262143
+            }
+          ]
+        },
+        "distribution": {
+          "type": "string",
+          "values": [
+            "normal",
+            "tiny",
+            "peaked",
+            "zero"
+          ]
+        },
+        "return_lse": {
+          "type": "boolean",
+          "values": [
+            false,
+            true
+          ]
+        }
+      },
+      "required": [
+        "batch",
+        "causal",
+        "distribution",
+        "head_dim",
+        "heads",
+        "kv_heads",
+        "kv_len",
+        "query_len",
+        "return_lse",
+        "window_left"
+      ]
+    },
+    "cross_field_invariants": [
+      "query_len <= kv_len",
+      "batch * query_len <= 16384",
+      "batch * kv_len <= 1048576",
+      "heads % kv_heads == 0",
+      "(heads, kv_heads, head_dim) in [(8, 2, 128), (8, 2, 256), (8, 8, 128), (8, 8, 256), (16, 1, 128), (16, 1, 256), (16, 4, 128), (32, 8, 128)]"
+    ]
+  },
+  "invariants": [
+    "query_len <= kv_len",
+    "batch * query_len <= 16384",
+    "batch * kv_len <= 1048576",
+    "heads % kv_heads == 0",
+    "(heads, kv_heads, head_dim) in [(8, 2, 128), (8, 2, 256), (8, 8, 128), (8, 8, 256), (16, 1, 128), (16, 1, 256), (16, 4, 128), (32, 8, 128)]",
+    "All runtime arguments, tensor layouts, dtypes, mutations, aliases and return values must match reference.py and input.py.",
+    "Dispatch and specialization may use runtime tensor properties and declared public parameters, never evaluator case IDs or a reconstructed private case table."
+  ],
+  "coverage_regimes": [
+    {
+      "name": "batch",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "heads",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "kv_heads",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "query_len",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "kv_len",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "head_dim",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "causal",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "window_left",
+      "requirement": "Support every declared alternative."
+    },
+    {
+      "name": "distribution",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "return_lse",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "cross_field_combinations",
+      "requirement": "Support every combination admitted by the public cross-field invariants; do not form invalid Cartesian products or dispatch on evaluator case IDs."
+    }
+  ],
+  "development_cases": []
+}

@@ -1,0 +1,101 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "batch": {
+        "type": "integer",
+        "min": 1,
+        "max": 16
+      },
+      "heads": {
+        "type": "integer",
+        "values": [
+          8,
+          16,
+          32
+        ]
+      },
+      "kv_heads": {
+        "type": "integer",
+        "values": [
+          8,
+          4,
+          1,
+          2
+        ]
+      },
+      "query_len": {
+        "type": "integer",
+        "min": 1,
+        "max": 8192
+      },
+      "kv_len": {
+        "type": "integer",
+        "min": 1,
+        "max": 262144
+      },
+      "head_dim": {
+        "type": "integer",
+        "values": [
+          128,
+          256
+        ]
+      },
+      "causal": {
+        "type": "boolean",
+        "values": [
+          false,
+          true
+        ]
+      },
+      "window_left": {
+        "one_of": [
+          {
+            "type": "null"
+          },
+          {
+            "type": "integer",
+            "min": -1,
+            "max": 262143
+          }
+        ]
+      },
+      "distribution": {
+        "type": "string",
+        "values": [
+          "normal",
+          "tiny",
+          "peaked",
+          "zero"
+        ]
+      },
+      "return_lse": {
+        "type": "boolean",
+        "values": [
+          false,
+          true
+        ]
+      }
+    },
+    "required": [
+      "batch",
+      "causal",
+      "distribution",
+      "head_dim",
+      "heads",
+      "kv_heads",
+      "kv_len",
+      "query_len",
+      "return_lse",
+      "window_left"
+    ]
+  },
+  "cross_field_invariants": [
+    "query_len <= kv_len",
+    "batch * query_len <= 16384",
+    "batch * kv_len <= 1048576",
+    "heads % kv_heads == 0",
+    "(heads, kv_heads, head_dim) in [(8, 2, 128), (8, 2, 256), (8, 8, 128), (8, 8, 256), (16, 1, 128), (16, 1, 256), (16, 4, 128), (32, 8, 128)]"
+  ]
+}

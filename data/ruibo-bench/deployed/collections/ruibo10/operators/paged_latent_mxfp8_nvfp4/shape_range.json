@@ -1,0 +1,84 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "lengths": {
+        "type": "array",
+        "min_length": 1,
+        "max_length": 32,
+        "items": {
+          "type": "integer",
+          "min": 1,
+          "max": 1048576
+        }
+      },
+      "tp": 1,
+      "ratio": {
+        "type": "integer",
+        "values": [
+          1,
+          2,
+          0
+        ]
+      },
+      "query_len": {
+        "type": "integer",
+        "values": [
+          3,
+          1
+        ]
+      },
+      "physical_heads": {
+        "type": "integer",
+        "values": [
+          128,
+          64
+        ]
+      },
+      "domain": {
+        "type": "string",
+        "values": [
+          "normal",
+          "sink",
+          "tiny",
+          "peaked",
+          "zero"
+        ]
+      },
+      "mixed": true,
+      "physical_layout": {
+        "type": "string",
+        "values": [
+          "contiguous",
+          "scattered"
+        ]
+      },
+      "index_pattern": {
+        "type": "string",
+        "values": [
+          "score",
+          "local",
+          "strided",
+          "shared_prefix",
+          "random"
+        ]
+      }
+    },
+    "required": [
+      "domain",
+      "index_pattern",
+      "lengths",
+      "mixed",
+      "physical_heads",
+      "physical_layout",
+      "query_len",
+      "ratio",
+      "tp"
+    ]
+  },
+  "cross_field_invariants": [
+    "min(lengths) >= query_len",
+    "sum(lengths) <= 1048576"
+  ]
+}

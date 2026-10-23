@@ -1,0 +1,86 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 1,
+      "n": 8192,
+      "k": 2560
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 32,
+      "n": 8192,
+      "k": 2560
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 2048,
+      "n": 8192,
+      "k": 2560
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 512,
+      "n": 4096,
+      "k": 12288,
+      "accumulate": true
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 1025,
+      "n": 6656,
+      "k": 2560
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 8192,
+      "n": 4096,
+      "k": 12288,
+      "distribution": "channel_outliers"
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 16,
+      "n": 24576,
+      "k": 4096
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 8192,
+      "n": 12288,
+      "k": 4096
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 1024,
+      "n": 8192,
+      "k": 2560,
+      "distribution": "zero"
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "m": 4096,
+      "n": 4096,
+      "k": 12288,
+      "c_alias_d": true
+    }
+  }
+}

@@ -1,0 +1,127 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "query_lengths": {
+        "type": "array",
+        "min_length": 1,
+        "max_length": 32,
+        "items": {
+          "type": "integer",
+          "min": 1,
+          "max": 8192
+        }
+      },
+      "kv_lengths": {
+        "type": "array",
+        "min_length": 1,
+        "max_length": 32,
+        "items": {
+          "type": "integer",
+          "min": 1,
+          "max": 262144
+        }
+      },
+      "heads": {
+        "type": "integer",
+        "values": [
+          128,
+          96,
+          64,
+          32,
+          16,
+          12
+        ]
+      },
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": {
+        "type": "integer",
+        "values": [
+          1,
+          32,
+          128,
+          64
+        ]
+      },
+      "precision": "fp8",
+      "causal": {
+        "type": "boolean",
+        "values": [
+          false,
+          true
+        ]
+      },
+      "window_left": -1,
+      "sink": {
+        "type": "boolean",
+        "values": [
+          false,
+          true
+        ]
+      },
+      "return_lse": {
+        "type": "boolean",
+        "values": [
+          false,
+          true
+        ]
+      }
+    },
+    "required": [
+      "causal",
+      "head_dim",
+      "heads",
+      "kv_heads",
+      "kv_lengths",
+      "page_size",
+      "precision",
+      "query_lengths",
+      "return_lse",
+      "sink",
+      "value_dim",
+      "window_left"
+    ]
+  },
+  "cross_field_invariants": [
+    "len(query_lengths) == len(kv_lengths)",
+    "sum(query_lengths) <= 16384",
+    "sum(kv_lengths) <= 2097152",
+    "len(query_lengths) <= 0 or query_lengths[0] <= kv_lengths[0]",
+    "len(query_lengths) <= 1 or query_lengths[1] <= kv_lengths[1]",
+    "len(query_lengths) <= 2 or query_lengths[2] <= kv_lengths[2]",
+    "len(query_lengths) <= 3 or query_lengths[3] <= kv_lengths[3]",
+    "len(query_lengths) <= 4 or query_lengths[4] <= kv_lengths[4]",
+    "len(query_lengths) <= 5 or query_lengths[5] <= kv_lengths[5]",
+    "len(query_lengths) <= 6 or query_lengths[6] <= kv_lengths[6]",
+    "len(query_lengths) <= 7 or query_lengths[7] <= kv_lengths[7]",
+    "len(query_lengths) <= 8 or query_lengths[8] <= kv_lengths[8]",
+    "len(query_lengths) <= 9 or query_lengths[9] <= kv_lengths[9]",
+    "len(query_lengths) <= 10 or query_lengths[10] <= kv_lengths[10]",
+    "len(query_lengths) <= 11 or query_lengths[11] <= kv_lengths[11]",
+    "len(query_lengths) <= 12 or query_lengths[12] <= kv_lengths[12]",
+    "len(query_lengths) <= 13 or query_lengths[13] <= kv_lengths[13]",
+    "len(query_lengths) <= 14 or query_lengths[14] <= kv_lengths[14]",
+    "len(query_lengths) <= 15 or query_lengths[15] <= kv_lengths[15]",
+    "len(query_lengths) <= 16 or query_lengths[16] <= kv_lengths[16]",
+    "len(query_lengths) <= 17 or query_lengths[17] <= kv_lengths[17]",
+    "len(query_lengths) <= 18 or query_lengths[18] <= kv_lengths[18]",
+    "len(query_lengths) <= 19 or query_lengths[19] <= kv_lengths[19]",
+    "len(query_lengths) <= 20 or query_lengths[20] <= kv_lengths[20]",
+    "len(query_lengths) <= 21 or query_lengths[21] <= kv_lengths[21]",
+    "len(query_lengths) <= 22 or query_lengths[22] <= kv_lengths[22]",
+    "len(query_lengths) <= 23 or query_lengths[23] <= kv_lengths[23]",
+    "len(query_lengths) <= 24 or query_lengths[24] <= kv_lengths[24]",
+    "len(query_lengths) <= 25 or query_lengths[25] <= kv_lengths[25]",
+    "len(query_lengths) <= 26 or query_lengths[26] <= kv_lengths[26]",
+    "len(query_lengths) <= 27 or query_lengths[27] <= kv_lengths[27]",
+    "len(query_lengths) <= 28 or query_lengths[28] <= kv_lengths[28]",
+    "len(query_lengths) <= 29 or query_lengths[29] <= kv_lengths[29]",
+    "len(query_lengths) <= 30 or query_lengths[30] <= kv_lengths[30]",
+    "len(query_lengths) <= 31 or query_lengths[31] <= kv_lengths[31]",
+    "(heads, kv_heads, head_dim, value_dim) in [(12, 1, 576, 512), (16, 1, 576, 512), (32, 1, 576, 512), (64, 1, 576, 512), (96, 1, 576, 512), (128, 1, 576, 512)]",
+    "heads % kv_heads == 0"
+  ]
+}

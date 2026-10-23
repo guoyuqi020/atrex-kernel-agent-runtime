@@ -1,0 +1,152 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 1,
+      "heads": 8,
+      "kv_heads": 8,
+      "query_len": 2048,
+      "kv_len": 2048,
+      "head_dim": 128,
+      "causal": true,
+      "window_left": null,
+      "distribution": "normal",
+      "return_lse": true
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 2,
+      "heads": 16,
+      "kv_heads": 4,
+      "query_len": 1023,
+      "kv_len": 8191,
+      "head_dim": 128,
+      "causal": true,
+      "window_left": null,
+      "distribution": "normal",
+      "return_lse": true
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 8,
+      "heads": 16,
+      "kv_heads": 1,
+      "query_len": 1,
+      "kv_len": 16384,
+      "head_dim": 128,
+      "causal": true,
+      "window_left": null,
+      "distribution": "normal",
+      "return_lse": true
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 4,
+      "heads": 32,
+      "kv_heads": 8,
+      "query_len": 4,
+      "kv_len": 8192,
+      "head_dim": 128,
+      "causal": true,
+      "window_left": 2047,
+      "distribution": "tiny",
+      "return_lse": true
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 2,
+      "heads": 8,
+      "kv_heads": 8,
+      "query_len": 768,
+      "kv_len": 4096,
+      "head_dim": 256,
+      "causal": false,
+      "window_left": null,
+      "distribution": "normal",
+      "return_lse": false
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 1,
+      "heads": 16,
+      "kv_heads": 1,
+      "query_len": 6,
+      "kv_len": 65537,
+      "head_dim": 256,
+      "causal": true,
+      "window_left": null,
+      "distribution": "normal",
+      "return_lse": true
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 1,
+      "heads": 8,
+      "kv_heads": 2,
+      "query_len": 4096,
+      "kv_len": 4096,
+      "head_dim": 256,
+      "causal": true,
+      "window_left": 2047,
+      "distribution": "normal",
+      "return_lse": true
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 1,
+      "heads": 8,
+      "kv_heads": 8,
+      "query_len": 8192,
+      "kv_len": 8192,
+      "head_dim": 128,
+      "causal": true,
+      "window_left": null,
+      "distribution": "normal",
+      "return_lse": true
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 2,
+      "heads": 8,
+      "kv_heads": 2,
+      "query_len": 512,
+      "kv_len": 8193,
+      "head_dim": 128,
+      "causal": true,
+      "window_left": 4095,
+      "distribution": "peaked",
+      "return_lse": true
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "batch": 1,
+      "heads": 8,
+      "kv_heads": 8,
+      "query_len": 1025,
+      "kv_len": 16385,
+      "head_dim": 128,
+      "causal": false,
+      "window_left": null,
+      "distribution": "zero",
+      "return_lse": true
+    }
+  }
+}

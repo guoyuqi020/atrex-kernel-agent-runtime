@@ -1,0 +1,254 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        2048,
+        8192,
+        2048,
+        8192,
+        2048,
+        8192,
+        2048,
+        8192,
+        2048,
+        8192,
+        2048,
+        8192,
+        2048,
+        8192,
+        2048,
+        8192
+      ],
+      "tp": 1,
+      "ratio": 1,
+      "query_len": 3,
+      "physical_heads": 128,
+      "domain": "normal",
+      "mixed": true,
+      "physical_layout": "contiguous",
+      "index_pattern": "score"
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        4095,
+        16385,
+        4095,
+        16385,
+        4095,
+        16385,
+        4095,
+        16385,
+        4095,
+        16385,
+        4095,
+        16385,
+        4095,
+        16385,
+        4095,
+        16385
+      ],
+      "tp": 1,
+      "ratio": 2,
+      "query_len": 3,
+      "physical_heads": 64,
+      "domain": "normal",
+      "mixed": true,
+      "physical_layout": "scattered",
+      "index_pattern": "local"
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        65537
+      ],
+      "tp": 1,
+      "ratio": 2,
+      "query_len": 3,
+      "physical_heads": 128,
+      "domain": "normal",
+      "mixed": true,
+      "physical_layout": "contiguous",
+      "index_pattern": "strided"
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        4095,
+        4096,
+        4097,
+        4095,
+        4096,
+        4097,
+        4095,
+        4096,
+        4097,
+        4095,
+        4096,
+        4097
+      ],
+      "tp": 1,
+      "ratio": 0,
+      "query_len": 3,
+      "physical_heads": 64,
+      "domain": "normal",
+      "mixed": true,
+      "physical_layout": "scattered",
+      "index_pattern": "shared_prefix"
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        8192,
+        8192,
+        8192,
+        8192,
+        8192,
+        8192,
+        8192,
+        8192
+      ],
+      "tp": 1,
+      "ratio": 1,
+      "query_len": 1,
+      "physical_heads": 128,
+      "domain": "sink",
+      "mixed": true,
+      "physical_layout": "contiguous",
+      "index_pattern": "score"
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        8193,
+        8193,
+        8193,
+        8193
+      ],
+      "tp": 1,
+      "ratio": 2,
+      "query_len": 3,
+      "physical_heads": 128,
+      "domain": "tiny",
+      "mixed": true,
+      "physical_layout": "scattered",
+      "index_pattern": "random"
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        16385,
+        16385,
+        16385,
+        16385
+      ],
+      "tp": 1,
+      "ratio": 2,
+      "query_len": 3,
+      "physical_heads": 64,
+      "domain": "peaked",
+      "mixed": true,
+      "physical_layout": "contiguous",
+      "index_pattern": "score"
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        4096,
+        8192,
+        4096,
+        8192,
+        4096,
+        8192,
+        4096,
+        8192
+      ],
+      "tp": 1,
+      "ratio": 1,
+      "query_len": 3,
+      "physical_heads": 64,
+      "domain": "zero",
+      "mixed": true,
+      "physical_layout": "scattered",
+      "index_pattern": "local"
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        4097
+      ],
+      "tp": 1,
+      "ratio": 2,
+      "query_len": 1,
+      "physical_heads": 64,
+      "domain": "normal",
+      "mixed": true,
+      "physical_layout": "contiguous",
+      "index_pattern": "strided"
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "lengths": [
+        2048,
+        8192,
+        16384,
+        32768,
+        2048,
+        8192,
+        16384,
+        32768,
+        2048,
+        8192,
+        16384,
+        32768,
+        2048,
+        8192,
+        16384,
+        32768,
+        2048,
+        8192,
+        16384,
+        32768,
+        2048,
+        8192,
+        16384,
+        32768,
+        2048,
+        8192,
+        16384,
+        32768,
+        2048,
+        8192,
+        16384,
+        32768
+      ],
+      "tp": 1,
+      "ratio": 2,
+      "query_len": 1,
+      "physical_heads": 128,
+      "domain": "normal",
+      "mixed": true,
+      "physical_layout": "scattered",
+      "index_pattern": "shared_prefix"
+    }
+  }
+}

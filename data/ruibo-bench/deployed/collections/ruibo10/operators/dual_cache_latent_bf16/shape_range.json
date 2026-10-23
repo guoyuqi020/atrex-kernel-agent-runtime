@@ -1,0 +1,135 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "query_lens": {
+        "type": "array",
+        "min_length": 1,
+        "max_length": 32,
+        "items": {
+          "type": "integer",
+          "min": 1,
+          "max": 4096
+        }
+      },
+      "seq_lens_values": {
+        "type": "array",
+        "min_length": 1,
+        "max_length": 32,
+        "items": {
+          "type": "integer",
+          "min": 1,
+          "max": 1048576
+        }
+      },
+      "num_heads": {
+        "type": "integer",
+        "values": [
+          64,
+          32,
+          8,
+          128,
+          16
+        ]
+      },
+      "compress_ratio": {
+        "type": "integer",
+        "values": [
+          0,
+          4,
+          128,
+          1,
+          2
+        ]
+      },
+      "index_topk": {
+        "type": "integer",
+        "values": [
+          512,
+          1024
+        ]
+      },
+      "distribution": {
+        "type": "string",
+        "values": [
+          "normal",
+          "strong_sink"
+        ]
+      },
+      "page_size": {
+        "type": "integer",
+        "values": [
+          256,
+          128
+        ]
+      },
+      "physical_layout": {
+        "type": "string",
+        "values": [
+          "contiguous",
+          "scattered"
+        ]
+      },
+      "index_pattern": {
+        "type": "string",
+        "values": [
+          "score",
+          "local",
+          "strided",
+          "shared_prefix",
+          "random"
+        ]
+      }
+    },
+    "required": [
+      "compress_ratio",
+      "distribution",
+      "index_pattern",
+      "index_topk",
+      "num_heads",
+      "page_size",
+      "physical_layout",
+      "query_lens",
+      "seq_lens_values"
+    ]
+  },
+  "cross_field_invariants": [
+    "len(query_lens) == len(seq_lens_values)",
+    "sum(query_lens) <= 16384",
+    "sum(seq_lens_values) <= 1048576",
+    "len(query_lens) <= 0 or query_lens[0] <= seq_lens_values[0]",
+    "len(query_lens) <= 1 or query_lens[1] <= seq_lens_values[1]",
+    "len(query_lens) <= 2 or query_lens[2] <= seq_lens_values[2]",
+    "len(query_lens) <= 3 or query_lens[3] <= seq_lens_values[3]",
+    "len(query_lens) <= 4 or query_lens[4] <= seq_lens_values[4]",
+    "len(query_lens) <= 5 or query_lens[5] <= seq_lens_values[5]",
+    "len(query_lens) <= 6 or query_lens[6] <= seq_lens_values[6]",
+    "len(query_lens) <= 7 or query_lens[7] <= seq_lens_values[7]",
+    "len(query_lens) <= 8 or query_lens[8] <= seq_lens_values[8]",
+    "len(query_lens) <= 9 or query_lens[9] <= seq_lens_values[9]",
+    "len(query_lens) <= 10 or query_lens[10] <= seq_lens_values[10]",
+    "len(query_lens) <= 11 or query_lens[11] <= seq_lens_values[11]",
+    "len(query_lens) <= 12 or query_lens[12] <= seq_lens_values[12]",
+    "len(query_lens) <= 13 or query_lens[13] <= seq_lens_values[13]",
+    "len(query_lens) <= 14 or query_lens[14] <= seq_lens_values[14]",
+    "len(query_lens) <= 15 or query_lens[15] <= seq_lens_values[15]",
+    "len(query_lens) <= 16 or query_lens[16] <= seq_lens_values[16]",
+    "len(query_lens) <= 17 or query_lens[17] <= seq_lens_values[17]",
+    "len(query_lens) <= 18 or query_lens[18] <= seq_lens_values[18]",
+    "len(query_lens) <= 19 or query_lens[19] <= seq_lens_values[19]",
+    "len(query_lens) <= 20 or query_lens[20] <= seq_lens_values[20]",
+    "len(query_lens) <= 21 or query_lens[21] <= seq_lens_values[21]",
+    "len(query_lens) <= 22 or query_lens[22] <= seq_lens_values[22]",
+    "len(query_lens) <= 23 or query_lens[23] <= seq_lens_values[23]",
+    "len(query_lens) <= 24 or query_lens[24] <= seq_lens_values[24]",
+    "len(query_lens) <= 25 or query_lens[25] <= seq_lens_values[25]",
+    "len(query_lens) <= 26 or query_lens[26] <= seq_lens_values[26]",
+    "len(query_lens) <= 27 or query_lens[27] <= seq_lens_values[27]",
+    "len(query_lens) <= 28 or query_lens[28] <= seq_lens_values[28]",
+    "len(query_lens) <= 29 or query_lens[29] <= seq_lens_values[29]",
+    "len(query_lens) <= 30 or query_lens[30] <= seq_lens_values[30]",
+    "len(query_lens) <= 31 or query_lens[31] <= seq_lens_values[31]",
+    "page_size % max(1, compress_ratio) == 0"
+  ]
+}

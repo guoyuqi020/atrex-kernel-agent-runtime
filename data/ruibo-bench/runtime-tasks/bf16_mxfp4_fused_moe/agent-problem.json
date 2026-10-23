@@ -1,0 +1,203 @@
+{
+  "schema_version": "atrex.agent_problem.v1",
+  "objective": "Implement a correct and fast general CUDA kernel for bf16_mxfp4_fused_moe on the complete public shape domain. Exact evaluator cases are private; every specialization decision must come from runtime properties or declared public parameters.",
+  "evaluation": {
+    "exact_cases": "private",
+    "correctness_requirement": "every hidden case must pass",
+    "performance_requirement": "performance is measured across hidden cases after correctness passes",
+    "development_cases_are_evaluation_cases": false
+  },
+  "operator_contract": {
+    "name": "bf16_mxfp4_fused_moe",
+    "family": "moe",
+    "entrypoint": "Model.forward(self, topk_ids, routing_bias, hidden_states, hidden_states_scale, gemm1_weights, gemm1_weights_scale, gemm1_bias, gemm1_alpha, gemm1_beta, gemm1_clamp_limit, gemm2_weights, gemm2_weights_scale, gemm2_bias, output1_scale_scalar, output1_scale_gate_scalar, output2_scale_scalar, num_experts, top_k, n_group, topk_group, intermediate_size, local_expert_offset, local_num_experts, routed_scaling_factor, routing_method_type=0, do_finalize=True, enable_pdl=None, activation_type=3, per_token_scale=None, output=None, tune_max_num_tokens=8192, gemm1_lora_delta=None, valid_hidden_size=None, valid_intermediate_size=None, num_fused_shared_experts=None, hidden_states_scale_layout=None)",
+    "semantics": "Route BF16 token activations to top-k experts, decode MXFP4 expert weights, perform the two expert matrix multiplications with the declared gated activation, combine routes using their routing scores, and write the BF16 result to the caller-owned output buffer.",
+    "authoritative_public_sources": {
+      "reference.py": "exact operator computation, mutation and return semantics",
+      "input.py": "runtime argument construction, dtypes, tensor layouts and value generation",
+      "shape_domain": "verbatim projection of the benchmark shape_range.json, including complete public parameter ranges and cross-field constraints"
+    }
+  },
+  "workload_profile": {
+    "domain_kind": "general source-derived production workload",
+    "case_identity": "private opaque evaluator IDs",
+    "dispatch_basis": "runtime tensor properties and public input parameters"
+  },
+  "distribution_profile": {
+    "frequency_evidence": "none published",
+    "policy": "Treat every point admitted by shape_domain as relevant; do not assume private case frequencies."
+  },
+  "shape_domain": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "type": "object",
+      "properties": {
+        "tokens": {
+          "type": "integer",
+          "min": 1,
+          "max": 8192
+        },
+        "hidden": {
+          "type": "integer",
+          "values": [
+            2048,
+            4096,
+            7168
+          ]
+        },
+        "intermediate": {
+          "type": "integer",
+          "values": [
+            768,
+            1536,
+            256
+          ]
+        },
+        "local_experts": {
+          "type": "integer",
+          "values": [
+            128,
+            256
+          ]
+        },
+        "topk": 8,
+        "model_geometry": {
+          "type": "string",
+          "values": [
+            "qwen3_30b",
+            "qwen3_235b",
+            "deepseek_v3"
+          ]
+        },
+        "expert_tp": {
+          "type": "integer",
+          "values": [
+            1,
+            2,
+            8
+          ]
+        },
+        "routing": {
+          "type": "string",
+          "values": [
+            "balanced",
+            "hotspot",
+            "skewed",
+            "empty"
+          ]
+        },
+        "activation": "situ",
+        "activation_alpha": {
+          "type": "number",
+          "min": 0.5,
+          "max": 2
+        },
+        "activation_beta": {
+          "type": "number",
+          "min": 0,
+          "max": 1
+        },
+        "activation_limit": {
+          "type": "number",
+          "min": 1,
+          "max": 16
+        },
+        "masked_routes": {
+          "type": "boolean",
+          "values": [
+            false,
+            true
+          ]
+        },
+        "distribution": {
+          "type": "string",
+          "values": [
+            "zero",
+            "normal"
+          ]
+        }
+      },
+      "required": [
+        "expert_tp",
+        "hidden",
+        "intermediate",
+        "local_experts",
+        "model_geometry",
+        "routing",
+        "tokens",
+        "topk"
+      ]
+    },
+    "cross_field_invariants": [
+      "(model_geometry, hidden, intermediate, local_experts, expert_tp) in [('deepseek_v3', 7168, 256, 256, 8), ('qwen3_235b', 4096, 768, 128, 2), ('qwen3_235b', 4096, 1536, 128, 1), ('qwen3_30b', 2048, 768, 128, 1)]"
+    ]
+  },
+  "invariants": [
+    "(model_geometry, hidden, intermediate, local_experts, expert_tp) in [('deepseek_v3', 7168, 256, 256, 8), ('qwen3_235b', 4096, 768, 128, 2), ('qwen3_235b', 4096, 1536, 128, 1), ('qwen3_30b', 2048, 768, 128, 1)]",
+    "All runtime arguments, tensor layouts, dtypes, mutations, aliases and return values must match reference.py and input.py.",
+    "Dispatch and specialization may use runtime tensor properties and declared public parameters, never evaluator case IDs or a reconstructed private case table."
+  ],
+  "coverage_regimes": [
+    {
+      "name": "tokens",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "hidden",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "intermediate",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "local_experts",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "topk",
+      "requirement": "Support the fixed declared value 8."
+    },
+    {
+      "name": "model_geometry",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "expert_tp",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "routing",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "activation",
+      "requirement": "Support the fixed declared value 'situ'."
+    },
+    {
+      "name": "activation_alpha",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "activation_beta",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "activation_limit",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "masked_routes",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "distribution",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "cross_field_combinations",
+      "requirement": "Support every combination admitted by the public cross-field invariants; do not form invalid Cartesian products or dispatch on evaluator case IDs."
+    }
+  ],
+  "development_cases": []
+}

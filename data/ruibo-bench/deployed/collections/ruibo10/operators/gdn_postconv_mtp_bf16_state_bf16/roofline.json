@@ -1,0 +1,74 @@
+{
+  "shapes": {
+    "0": {
+      "semantic_W_flops": {
+        "float32": 92209152
+      },
+      "semantic_Q_read_bytes": 13490176,
+      "semantic_Q_write_bytes": 26017792
+    },
+    "1": {
+      "semantic_W_flops": {
+        "float32": 989855744
+      },
+      "semantic_Q_read_bytes": 39452672,
+      "semantic_Q_write_bytes": 275775488
+    },
+    "2": {
+      "semantic_W_flops": {
+        "float32": 494927872
+      },
+      "semantic_Q_read_bytes": 72417280,
+      "semantic_Q_write_bytes": 139460608
+    },
+    "3": {
+      "semantic_W_flops": {
+        "float32": 309329920
+      },
+      "semantic_Q_read_bytes": 36491264,
+      "semantic_Q_write_bytes": 86900736
+    },
+    "4": {
+      "semantic_W_flops": {
+        "float32": 247463936
+      },
+      "semantic_Q_read_bytes": 18644992,
+      "semantic_Q_write_bytes": 69206016
+    },
+    "5": {
+      "semantic_W_flops": {
+        "float32": 77332480
+      },
+      "semantic_Q_read_bytes": 9131008,
+      "semantic_Q_write_bytes": 21725184
+    },
+    "6": {
+      "semantic_W_flops": {
+        "float32": 154664960
+      },
+      "semantic_Q_read_bytes": 18245632,
+      "semantic_Q_write_bytes": 43450368
+    },
+    "7": {
+      "semantic_W_flops": {
+        "float32": 309329920
+      },
+      "semantic_Q_read_bytes": 36474880,
+      "semantic_Q_write_bytes": 86900736
+    },
+    "8": {
+      "semantic_W_flops": {
+        "float32": 154664960
+      },
+      "semantic_Q_read_bytes": 18245632,
+      "semantic_Q_write_bytes": 43450368
+    },
+    "9": {
+      "semantic_W_flops": {
+        "float32": 415434752
+      },
+      "semantic_Q_read_bytes": 50864128,
+      "semantic_Q_write_bytes": 117270528
+    }
+  }
+}

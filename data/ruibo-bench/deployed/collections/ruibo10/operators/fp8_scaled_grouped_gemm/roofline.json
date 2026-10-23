@@ -1,0 +1,84 @@
+{
+  "shapes": {
+    "0": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 210453397504,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 261431332,
+      "semantic_Q_write_bytes": 29360128
+    },
+    "1": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 60129542144,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 239263808,
+      "semantic_Q_write_bytes": 29360128
+    },
+    "2": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 84154515456,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 215500864,
+      "semantic_Q_write_bytes": 20545536
+    },
+    "3": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 77309411328,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 211107972,
+      "semantic_Q_write_bytes": 50331648
+    },
+    "4": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 240518168576,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 487178368,
+      "semantic_Q_write_bytes": 117440512
+    },
+    "5": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 481036337152,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 530432068,
+      "semantic_Q_write_bytes": 67108864
+    },
+    "6": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 25769803776,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 33822756,
+      "semantic_Q_write_bytes": 12582912
+    },
+    "7": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 15032385536,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 470958208,
+      "semantic_Q_write_bytes": 7340032
+    },
+    "8": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 116769423360,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 417451264,
+      "semantic_Q_write_bytes": 76021760
+    },
+    "9": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 240518168576,
+        "float32": 0
+      },
+      "semantic_Q_read_bytes": 252239940,
+      "semantic_Q_write_bytes": 117440512
+    }
+  }
+}

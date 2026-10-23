@@ -1,0 +1,103 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "tp": {
+        "type": "integer",
+        "values": [
+          1,
+          2,
+          4,
+          8
+        ]
+      },
+      "domain": {
+        "type": "string",
+        "values": [
+          "normal",
+          "cancellation",
+          "tiny",
+          "zero",
+          "qk_nearzero",
+          "gate_negative",
+          "api_null"
+        ]
+      },
+      "accepted_mode": {
+        "type": "string",
+        "values": [
+          "cycle",
+          "last"
+        ]
+      },
+      "state_dtype": "bf16",
+      "width": {
+        "type": "integer",
+        "min": 1,
+        "max": 8
+      },
+      "lengths": {
+        "type": "array",
+        "min_length": 1,
+        "max_length": 256,
+        "items": {
+          "type": "integer",
+          "min": 0,
+          "max": 8
+        }
+      },
+      "pool_size": {
+        "type": "integer",
+        "min": 2,
+        "max": 2048
+      },
+      "state_slot_padding": {
+        "type": "integer",
+        "min": 0,
+        "max": 65536
+      },
+      "slot_pattern": {
+        "type": "string",
+        "values": [
+          "scattered",
+          "high",
+          "contiguous"
+        ]
+      },
+      "state_regime": {
+        "type": "string",
+        "values": [
+          "mixed",
+          "continuation"
+        ]
+      },
+      "head_ratio": {
+        "type": "integer",
+        "values": [
+          2,
+          3,
+          8
+        ]
+      }
+    },
+    "required": [
+      "accepted_mode",
+      "domain",
+      "lengths",
+      "pool_size",
+      "slot_pattern",
+      "state_dtype",
+      "state_regime",
+      "state_slot_padding",
+      "tp",
+      "width"
+    ]
+  },
+  "cross_field_invariants": [
+    "sum(lengths) > 0",
+    "max(lengths) <= width",
+    "pool_size > len(lengths) * width",
+    "'domain' not in input_kwargs or (input_kwargs['domain'] != 'api_null' or len(lengths) >= 4)"
+  ]
+}

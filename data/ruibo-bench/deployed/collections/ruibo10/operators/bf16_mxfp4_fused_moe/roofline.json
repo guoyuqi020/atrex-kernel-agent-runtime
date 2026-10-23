@@ -1,0 +1,84 @@
+{
+  "shapes": {
+    "0": {
+      "semantic_W_flops": {
+        "mixed_precision": 75497472,
+        "float32": 81920
+      },
+      "semantic_Q_read_bytes": 320868448,
+      "semantic_Q_write_bytes": 4096
+    },
+    "1": {
+      "semantic_W_flops": {
+        "mixed_precision": 2415919104,
+        "float32": 2621440
+      },
+      "semantic_Q_read_bytes": 320998400,
+      "semantic_Q_write_bytes": 131072
+    },
+    "2": {
+      "semantic_W_flops": {
+        "mixed_precision": 19327352832,
+        "float32": 14680064
+      },
+      "semantic_Q_read_bytes": 642789376,
+      "semantic_Q_write_bytes": 1048576
+    },
+    "3": {
+      "semantic_W_flops": {
+        "mixed_precision": 154618822656,
+        "float32": 83886080
+      },
+      "semantic_Q_read_bytes": 1287700480,
+      "semantic_Q_write_bytes": 4194304
+    },
+    "4": {
+      "semantic_W_flops": {
+        "mixed_precision": 90194313216,
+        "float32": 134217728
+      },
+      "semantic_Q_read_bytes": 763461632,
+      "semantic_Q_write_bytes": 14680064
+    },
+    "5": {
+      "semantic_W_flops": {
+        "mixed_precision": 154618822656,
+        "float32": 167772160
+      },
+      "semantic_Q_read_bytes": 329449472,
+      "semantic_Q_write_bytes": 8388608
+    },
+    "6": {
+      "semantic_W_flops": {
+        "mixed_precision": 618475290624,
+        "float32": 671088640
+      },
+      "semantic_Q_read_bytes": 355205120,
+      "semantic_Q_write_bytes": 33554432
+    },
+    "7": {
+      "semantic_W_flops": {
+        "mixed_precision": 115964116992,
+        "float32": 125829120
+      },
+      "semantic_Q_read_bytes": 327303168,
+      "semantic_Q_write_bytes": 6291456
+    },
+    "8": {
+      "semantic_W_flops": {
+        "mixed_precision": 19327352832,
+        "float32": 20971520
+      },
+      "semantic_Q_read_bytes": 321937408,
+      "semantic_Q_write_bytes": 1048576
+    },
+    "9": {
+      "semantic_W_flops": {
+        "mixed_precision": 38654705664,
+        "float32": 41943040
+      },
+      "semantic_Q_read_bytes": 323010560,
+      "semantic_Q_write_bytes": 2097152
+    }
+  }
+}

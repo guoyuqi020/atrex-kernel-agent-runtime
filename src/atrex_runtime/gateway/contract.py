@@ -59,12 +59,23 @@ class AgateEvaluationOptionsV1(BaseModel):
 
 
 class AgentOutputToleranceV1(BaseModel):
-    """One evaluator-owned elementwise tolerance safe to disclose to the Agent."""
+    """One evaluator-owned correctness tolerance safe to disclose to the Agent."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     atol: float = Field(ge=0)
     rtol: float = Field(ge=0)
+    max_mismatch_fraction: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        exclude_if=lambda value: value is None,
+    )
+    max_rel_l2: float | None = Field(
+        default=None,
+        ge=0,
+        exclude_if=lambda value: value is None,
+    )
 
 
 class AgentCorrectnessPolicyV1(BaseModel):

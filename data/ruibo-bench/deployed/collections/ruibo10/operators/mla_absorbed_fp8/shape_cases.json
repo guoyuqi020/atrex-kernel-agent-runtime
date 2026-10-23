@@ -1,0 +1,352 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "kv_lengths": [
+        2048,
+        4096,
+        8192,
+        16384,
+        2048,
+        4096,
+        8192,
+        16384,
+        2048,
+        4096,
+        8192,
+        16384,
+        2048,
+        4096,
+        8192,
+        16384
+      ],
+      "heads": 128,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 1,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": true
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ],
+      "kv_lengths": [
+        4095,
+        4097,
+        8191,
+        8193,
+        4095,
+        4097,
+        8191,
+        8193
+      ],
+      "heads": 128,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 32,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": true
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        512
+      ],
+      "kv_lengths": [
+        4096
+      ],
+      "heads": 96,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 128,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": false
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        1023,
+        2049
+      ],
+      "kv_lengths": [
+        8191,
+        16385
+      ],
+      "heads": 96,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 1,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": true
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        1
+      ],
+      "kv_lengths": [
+        65537
+      ],
+      "heads": 64,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 64,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": true
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "kv_lengths": [
+        1024,
+        2048,
+        4096,
+        8192,
+        16384,
+        32768,
+        49152,
+        65536,
+        1024,
+        2048,
+        4096,
+        8192,
+        16384,
+        32768,
+        49152,
+        65536,
+        1024,
+        2048,
+        4096,
+        8192,
+        16384,
+        32768,
+        49152,
+        65536,
+        1024,
+        2048,
+        4096,
+        8192,
+        16384,
+        32768,
+        49152,
+        65536
+      ],
+      "heads": 32,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 128,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": true
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4,
+        4
+      ],
+      "kv_lengths": [
+        4096,
+        8192,
+        16384,
+        32768,
+        4096,
+        8192,
+        16384,
+        32768,
+        4096,
+        8192,
+        16384,
+        32768,
+        4096,
+        8192,
+        16384,
+        32768
+      ],
+      "heads": 32,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 1,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": true
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        4096
+      ],
+      "kv_lengths": [
+        4096
+      ],
+      "heads": 16,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 64,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": false
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        1024,
+        2048
+      ],
+      "kv_lengths": [
+        16384,
+        32768
+      ],
+      "heads": 16,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 128,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": true
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lengths": [
+        1
+      ],
+      "kv_lengths": [
+        65537
+      ],
+      "heads": 12,
+      "kv_heads": 1,
+      "head_dim": 576,
+      "value_dim": 512,
+      "page_size": 32,
+      "precision": "fp8",
+      "causal": true,
+      "window_left": -1,
+      "sink": false,
+      "return_lse": true
+    }
+  }
+}

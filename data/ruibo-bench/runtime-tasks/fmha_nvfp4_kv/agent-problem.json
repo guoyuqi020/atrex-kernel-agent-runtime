@@ -1,0 +1,279 @@
+{
+  "schema_version": "atrex.agent_problem.v1",
+  "objective": "Implement a correct and fast general CUDA kernel for fmha_nvfp4_kv on the complete public shape domain. Exact evaluator cases are private; every specialization decision must come from runtime properties or declared public parameters.",
+  "evaluation": {
+    "exact_cases": "private",
+    "correctness_requirement": "every hidden case must pass",
+    "performance_requirement": "performance is measured across hidden cases after correctness passes",
+    "development_cases_are_evaluation_cases": false
+  },
+  "operator_contract": {
+    "name": "fmha_nvfp4_kv",
+    "family": "attention",
+    "entrypoint": "Model.forward(self, query, kv_cache, workspace_buffer, block_tables, seq_lens, max_q_len, max_kv_len, bmm1_scale, bmm2_scale, batch_size, cum_seq_lens_q, cum_seq_lens_kv, window_left=-1, out=None, out_dtype=None, o_sf_scale=None, o_sf_vec_size=None, kv_layout='HND', enable_pdl=None, sinks=None, kv_cache_sf=None, skip_softmax_threshold_scale_factor=None, uses_shared_paged_kv_idx=True, causal=True, lse=None, return_lse=False, multi_ctas_kv_counter_buffer=None, use_fp16_softmax=None, uses_spcompress=None, backend='trtllm-gen')",
+    "semantics": "Compute paged variable-length attention from the declared query representation and an NVFP4 KV cache, including scale decoding, causal or window masking, optional sink logits, BF16 output mutation and optional LSE output.",
+    "authoritative_public_sources": {
+      "reference.py": "exact operator computation, mutation and return semantics",
+      "input.py": "runtime argument construction, dtypes, tensor layouts and value generation",
+      "shape_domain": "verbatim projection of the benchmark shape_range.json, including complete public parameter ranges and cross-field constraints"
+    }
+  },
+  "workload_profile": {
+    "domain_kind": "general source-derived production workload",
+    "case_identity": "private opaque evaluator IDs",
+    "dispatch_basis": "runtime tensor properties and public input parameters"
+  },
+  "distribution_profile": {
+    "frequency_evidence": "none published",
+    "policy": "Treat every point admitted by shape_domain as relevant; do not assume private case frequencies."
+  },
+  "shape_domain": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "type": "object",
+      "properties": {
+        "query_lengths": {
+          "type": "array",
+          "min_length": 1,
+          "max_length": 32,
+          "items": {
+            "type": "integer",
+            "min": 1,
+            "max": 8192
+          }
+        },
+        "kv_lengths": {
+          "type": "array",
+          "min_length": 1,
+          "max_length": 32,
+          "items": {
+            "type": "integer",
+            "min": 1,
+            "max": 262144
+          }
+        },
+        "heads": {
+          "type": "integer",
+          "values": [
+            12,
+            32,
+            16,
+            8
+          ]
+        },
+        "kv_heads": {
+          "type": "integer",
+          "values": [
+            12,
+            8,
+            1,
+            4,
+            2
+          ]
+        },
+        "head_dim": {
+          "type": "integer",
+          "values": [
+            64,
+            128,
+            256
+          ]
+        },
+        "page_size": {
+          "type": "integer",
+          "values": [
+            16,
+            32,
+            64,
+            128
+          ]
+        },
+        "causal": {
+          "type": "boolean",
+          "values": [
+            false,
+            true
+          ]
+        },
+        "window_left": {
+          "type": "integer",
+          "min": -1,
+          "max": 262143
+        },
+        "sink": {
+          "type": "boolean",
+          "values": [
+            false,
+            true
+          ]
+        },
+        "return_lse": {
+          "type": "boolean",
+          "values": [
+            false,
+            true
+          ]
+        },
+        "distribution": {
+          "type": "string",
+          "values": [
+            "normal",
+            "tiny",
+            "peaked",
+            "zero"
+          ]
+        },
+        "precision": "nvfp4"
+      },
+      "required": [
+        "causal",
+        "distribution",
+        "head_dim",
+        "heads",
+        "kv_heads",
+        "kv_lengths",
+        "page_size",
+        "precision",
+        "query_lengths",
+        "return_lse",
+        "sink",
+        "window_left"
+      ]
+    },
+    "cross_field_invariants": [
+      "len(query_lengths) == len(kv_lengths)",
+      "sum(query_lengths) <= 16384",
+      "sum(kv_lengths) <= 1048576",
+      "len(query_lengths) <= 0 or query_lengths[0] <= kv_lengths[0]",
+      "len(query_lengths) <= 1 or query_lengths[1] <= kv_lengths[1]",
+      "len(query_lengths) <= 2 or query_lengths[2] <= kv_lengths[2]",
+      "len(query_lengths) <= 3 or query_lengths[3] <= kv_lengths[3]",
+      "len(query_lengths) <= 4 or query_lengths[4] <= kv_lengths[4]",
+      "len(query_lengths) <= 5 or query_lengths[5] <= kv_lengths[5]",
+      "len(query_lengths) <= 6 or query_lengths[6] <= kv_lengths[6]",
+      "len(query_lengths) <= 7 or query_lengths[7] <= kv_lengths[7]",
+      "len(query_lengths) <= 8 or query_lengths[8] <= kv_lengths[8]",
+      "len(query_lengths) <= 9 or query_lengths[9] <= kv_lengths[9]",
+      "len(query_lengths) <= 10 or query_lengths[10] <= kv_lengths[10]",
+      "len(query_lengths) <= 11 or query_lengths[11] <= kv_lengths[11]",
+      "len(query_lengths) <= 12 or query_lengths[12] <= kv_lengths[12]",
+      "len(query_lengths) <= 13 or query_lengths[13] <= kv_lengths[13]",
+      "len(query_lengths) <= 14 or query_lengths[14] <= kv_lengths[14]",
+      "len(query_lengths) <= 15 or query_lengths[15] <= kv_lengths[15]",
+      "len(query_lengths) <= 16 or query_lengths[16] <= kv_lengths[16]",
+      "len(query_lengths) <= 17 or query_lengths[17] <= kv_lengths[17]",
+      "len(query_lengths) <= 18 or query_lengths[18] <= kv_lengths[18]",
+      "len(query_lengths) <= 19 or query_lengths[19] <= kv_lengths[19]",
+      "len(query_lengths) <= 20 or query_lengths[20] <= kv_lengths[20]",
+      "len(query_lengths) <= 21 or query_lengths[21] <= kv_lengths[21]",
+      "len(query_lengths) <= 22 or query_lengths[22] <= kv_lengths[22]",
+      "len(query_lengths) <= 23 or query_lengths[23] <= kv_lengths[23]",
+      "len(query_lengths) <= 24 or query_lengths[24] <= kv_lengths[24]",
+      "len(query_lengths) <= 25 or query_lengths[25] <= kv_lengths[25]",
+      "len(query_lengths) <= 26 or query_lengths[26] <= kv_lengths[26]",
+      "len(query_lengths) <= 27 or query_lengths[27] <= kv_lengths[27]",
+      "len(query_lengths) <= 28 or query_lengths[28] <= kv_lengths[28]",
+      "len(query_lengths) <= 29 or query_lengths[29] <= kv_lengths[29]",
+      "len(query_lengths) <= 30 or query_lengths[30] <= kv_lengths[30]",
+      "len(query_lengths) <= 31 or query_lengths[31] <= kv_lengths[31]",
+      "(heads, kv_heads, head_dim) in [(8, 2, 64), (8, 8, 128), (12, 12, 64), (16, 1, 128), (16, 1, 256), (16, 4, 128), (32, 8, 128)]",
+      "heads % kv_heads == 0"
+    ]
+  },
+  "invariants": [
+    "len(query_lengths) == len(kv_lengths)",
+    "sum(query_lengths) <= 16384",
+    "sum(kv_lengths) <= 1048576",
+    "len(query_lengths) <= 0 or query_lengths[0] <= kv_lengths[0]",
+    "len(query_lengths) <= 1 or query_lengths[1] <= kv_lengths[1]",
+    "len(query_lengths) <= 2 or query_lengths[2] <= kv_lengths[2]",
+    "len(query_lengths) <= 3 or query_lengths[3] <= kv_lengths[3]",
+    "len(query_lengths) <= 4 or query_lengths[4] <= kv_lengths[4]",
+    "len(query_lengths) <= 5 or query_lengths[5] <= kv_lengths[5]",
+    "len(query_lengths) <= 6 or query_lengths[6] <= kv_lengths[6]",
+    "len(query_lengths) <= 7 or query_lengths[7] <= kv_lengths[7]",
+    "len(query_lengths) <= 8 or query_lengths[8] <= kv_lengths[8]",
+    "len(query_lengths) <= 9 or query_lengths[9] <= kv_lengths[9]",
+    "len(query_lengths) <= 10 or query_lengths[10] <= kv_lengths[10]",
+    "len(query_lengths) <= 11 or query_lengths[11] <= kv_lengths[11]",
+    "len(query_lengths) <= 12 or query_lengths[12] <= kv_lengths[12]",
+    "len(query_lengths) <= 13 or query_lengths[13] <= kv_lengths[13]",
+    "len(query_lengths) <= 14 or query_lengths[14] <= kv_lengths[14]",
+    "len(query_lengths) <= 15 or query_lengths[15] <= kv_lengths[15]",
+    "len(query_lengths) <= 16 or query_lengths[16] <= kv_lengths[16]",
+    "len(query_lengths) <= 17 or query_lengths[17] <= kv_lengths[17]",
+    "len(query_lengths) <= 18 or query_lengths[18] <= kv_lengths[18]",
+    "len(query_lengths) <= 19 or query_lengths[19] <= kv_lengths[19]",
+    "len(query_lengths) <= 20 or query_lengths[20] <= kv_lengths[20]",
+    "len(query_lengths) <= 21 or query_lengths[21] <= kv_lengths[21]",
+    "len(query_lengths) <= 22 or query_lengths[22] <= kv_lengths[22]",
+    "len(query_lengths) <= 23 or query_lengths[23] <= kv_lengths[23]",
+    "len(query_lengths) <= 24 or query_lengths[24] <= kv_lengths[24]",
+    "len(query_lengths) <= 25 or query_lengths[25] <= kv_lengths[25]",
+    "len(query_lengths) <= 26 or query_lengths[26] <= kv_lengths[26]",
+    "len(query_lengths) <= 27 or query_lengths[27] <= kv_lengths[27]",
+    "len(query_lengths) <= 28 or query_lengths[28] <= kv_lengths[28]",
+    "len(query_lengths) <= 29 or query_lengths[29] <= kv_lengths[29]",
+    "len(query_lengths) <= 30 or query_lengths[30] <= kv_lengths[30]",
+    "len(query_lengths) <= 31 or query_lengths[31] <= kv_lengths[31]",
+    "(heads, kv_heads, head_dim) in [(8, 2, 64), (8, 8, 128), (12, 12, 64), (16, 1, 128), (16, 1, 256), (16, 4, 128), (32, 8, 128)]",
+    "heads % kv_heads == 0",
+    "All runtime arguments, tensor layouts, dtypes, mutations, aliases and return values must match reference.py and input.py.",
+    "Dispatch and specialization may use runtime tensor properties and declared public parameters, never evaluator case IDs or a reconstructed private case table."
+  ],
+  "coverage_regimes": [
+    {
+      "name": "query_lengths",
+      "requirement": "Support all declared array lengths and element values, including uneven and boundary-valued sequences."
+    },
+    {
+      "name": "kv_lengths",
+      "requirement": "Support all declared array lengths and element values, including uneven and boundary-valued sequences."
+    },
+    {
+      "name": "heads",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "kv_heads",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "head_dim",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "page_size",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "causal",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "window_left",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "sink",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "return_lse",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "distribution",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "precision",
+      "requirement": "Support the fixed declared value 'nvfp4'."
+    },
+    {
+      "name": "cross_field_combinations",
+      "requirement": "Support every combination admitted by the public cross-field invariants; do not form invalid Cartesian products or dispatch on evaluator case IDs."
+    }
+  ],
+  "development_cases": []
+}

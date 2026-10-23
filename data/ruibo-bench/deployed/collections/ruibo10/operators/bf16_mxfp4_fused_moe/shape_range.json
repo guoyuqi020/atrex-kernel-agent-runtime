@@ -1,0 +1,105 @@
+{
+  "init_kwargs": {},
+  "input_kwargs": {
+    "type": "object",
+    "properties": {
+      "tokens": {
+        "type": "integer",
+        "min": 1,
+        "max": 8192
+      },
+      "hidden": {
+        "type": "integer",
+        "values": [
+          2048,
+          4096,
+          7168
+        ]
+      },
+      "intermediate": {
+        "type": "integer",
+        "values": [
+          768,
+          1536,
+          256
+        ]
+      },
+      "local_experts": {
+        "type": "integer",
+        "values": [
+          128,
+          256
+        ]
+      },
+      "topk": 8,
+      "model_geometry": {
+        "type": "string",
+        "values": [
+          "qwen3_30b",
+          "qwen3_235b",
+          "deepseek_v3"
+        ]
+      },
+      "expert_tp": {
+        "type": "integer",
+        "values": [
+          1,
+          2,
+          8
+        ]
+      },
+      "routing": {
+        "type": "string",
+        "values": [
+          "balanced",
+          "hotspot",
+          "skewed",
+          "empty"
+        ]
+      },
+      "activation": "situ",
+      "activation_alpha": {
+        "type": "number",
+        "min": 0.5,
+        "max": 2
+      },
+      "activation_beta": {
+        "type": "number",
+        "min": 0,
+        "max": 1
+      },
+      "activation_limit": {
+        "type": "number",
+        "min": 1,
+        "max": 16
+      },
+      "masked_routes": {
+        "type": "boolean",
+        "values": [
+          false,
+          true
+        ]
+      },
+      "distribution": {
+        "type": "string",
+        "values": [
+          "zero",
+          "normal"
+        ]
+      }
+    },
+    "required": [
+      "expert_tp",
+      "hidden",
+      "intermediate",
+      "local_experts",
+      "model_geometry",
+      "routing",
+      "tokens",
+      "topk"
+    ]
+  },
+  "cross_field_invariants": [
+    "(model_geometry, hidden, intermediate, local_experts, expert_tp) in [('deepseek_v3', 7168, 256, 256, 8), ('qwen3_235b', 4096, 768, 128, 2), ('qwen3_235b', 4096, 1536, 128, 1), ('qwen3_30b', 2048, 768, 128, 1)]"
+  ]
+}

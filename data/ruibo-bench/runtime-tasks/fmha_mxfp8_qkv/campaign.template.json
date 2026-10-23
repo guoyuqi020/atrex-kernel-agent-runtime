@@ -1,0 +1,20 @@
+{
+  "schema_version": 3,
+  "operator": "fmha_mxfp8_qkv",
+  "hardware_target": "L20D",
+  "evaluation_contract": "evaluation-contract.json",
+  "agent_problem": "agent-problem.json",
+  "workflow_command": "workflow/broadcast_3.py",
+  "max_challengers": 0,
+  "optimizer_attempt_budget": 9,
+  "lineages": {
+    "cuda": {
+      "models": {
+        "optimizer": "qwen3.8-max",
+        "evolver": "qwen3.8-max"
+      },
+      "baseline_kernel": "inputs/empty-kernel",
+      "initial_evidence": "inputs/initial-evidence"
+    }
+  }
+}

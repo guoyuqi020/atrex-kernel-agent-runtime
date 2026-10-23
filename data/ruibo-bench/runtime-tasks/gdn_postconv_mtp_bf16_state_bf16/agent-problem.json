@@ -1,0 +1,192 @@
+{
+  "schema_version": "atrex.agent_problem.v1",
+  "objective": "Implement a correct and fast general CUDA kernel for gdn_postconv_mtp_bf16_state_bf16 on the complete public shape domain. Exact evaluator cases are private; every specialization decision must come from runtime properties or declared public parameters.",
+  "evaluation": {
+    "exact_cases": "private",
+    "correctness_requirement": "every hidden case must pass",
+    "performance_requirement": "performance is measured across hidden cases after correctness passes",
+    "development_cases_are_evaluation_cases": false
+  },
+  "operator_contract": {
+    "name": "gdn_postconv_mtp_bf16_state_bf16",
+    "family": "attention",
+    "entrypoint": "Model.forward(self, mixed_qkv, a, b, A_log, dt_bias, state_indices, cu_seqlens, num_accepted_tokens, state, output_gate, norm_weight, out=None, scale=128 ** (-0.5), norm_eps=1e-05, output_gate_activation='silu')",
+    "semantics": "Apply the post-convolution gated-delta recurrence to variable-length MTP token sequences, read and update the indexed BF16 state pool in the declared order, apply gated RMSNorm, and write the BF16 token outputs.",
+    "authoritative_public_sources": {
+      "reference.py": "exact operator computation, mutation and return semantics",
+      "input.py": "runtime argument construction, dtypes, tensor layouts and value generation",
+      "shape_domain": "verbatim projection of the benchmark shape_range.json, including complete public parameter ranges and cross-field constraints"
+    }
+  },
+  "workload_profile": {
+    "domain_kind": "general source-derived production workload",
+    "case_identity": "private opaque evaluator IDs",
+    "dispatch_basis": "runtime tensor properties and public input parameters"
+  },
+  "distribution_profile": {
+    "frequency_evidence": "none published",
+    "policy": "Treat every point admitted by shape_domain as relevant; do not assume private case frequencies."
+  },
+  "shape_domain": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "type": "object",
+      "properties": {
+        "tp": {
+          "type": "integer",
+          "values": [
+            1,
+            2,
+            4,
+            8
+          ]
+        },
+        "domain": {
+          "type": "string",
+          "values": [
+            "normal",
+            "cancellation",
+            "tiny",
+            "zero",
+            "qk_nearzero",
+            "gate_negative",
+            "api_null"
+          ]
+        },
+        "accepted_mode": {
+          "type": "string",
+          "values": [
+            "cycle",
+            "last"
+          ]
+        },
+        "state_dtype": "bf16",
+        "width": {
+          "type": "integer",
+          "min": 1,
+          "max": 8
+        },
+        "lengths": {
+          "type": "array",
+          "min_length": 1,
+          "max_length": 256,
+          "items": {
+            "type": "integer",
+            "min": 0,
+            "max": 8
+          }
+        },
+        "pool_size": {
+          "type": "integer",
+          "min": 2,
+          "max": 2048
+        },
+        "state_slot_padding": {
+          "type": "integer",
+          "min": 0,
+          "max": 65536
+        },
+        "slot_pattern": {
+          "type": "string",
+          "values": [
+            "scattered",
+            "high",
+            "contiguous"
+          ]
+        },
+        "state_regime": {
+          "type": "string",
+          "values": [
+            "mixed",
+            "continuation"
+          ]
+        },
+        "head_ratio": {
+          "type": "integer",
+          "values": [
+            2,
+            3,
+            8
+          ]
+        }
+      },
+      "required": [
+        "accepted_mode",
+        "domain",
+        "lengths",
+        "pool_size",
+        "slot_pattern",
+        "state_dtype",
+        "state_regime",
+        "state_slot_padding",
+        "tp",
+        "width"
+      ]
+    },
+    "cross_field_invariants": [
+      "sum(lengths) > 0",
+      "max(lengths) <= width",
+      "pool_size > len(lengths) * width",
+      "'domain' not in input_kwargs or (input_kwargs['domain'] != 'api_null' or len(lengths) >= 4)"
+    ]
+  },
+  "invariants": [
+    "sum(lengths) > 0",
+    "max(lengths) <= width",
+    "pool_size > len(lengths) * width",
+    "'domain' not in input_kwargs or (input_kwargs['domain'] != 'api_null' or len(lengths) >= 4)",
+    "All runtime arguments, tensor layouts, dtypes, mutations, aliases and return values must match reference.py and input.py.",
+    "Dispatch and specialization may use runtime tensor properties and declared public parameters, never evaluator case IDs or a reconstructed private case table."
+  ],
+  "coverage_regimes": [
+    {
+      "name": "tp",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "domain",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "accepted_mode",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "state_dtype",
+      "requirement": "Support the fixed declared value 'bf16'."
+    },
+    {
+      "name": "width",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "lengths",
+      "requirement": "Support all declared array lengths and element values, including uneven and boundary-valued sequences."
+    },
+    {
+      "name": "pool_size",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "state_slot_padding",
+      "requirement": "Support the complete declared range, including both boundaries, interior values and values that leave partial implementation tiles."
+    },
+    {
+      "name": "slot_pattern",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "state_regime",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "head_ratio",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "cross_field_combinations",
+      "requirement": "Support every combination admitted by the public cross-field invariants; do not form invalid Cartesian products or dispatch on evaluator case IDs."
+    }
+  ],
+  "development_cases": []
+}

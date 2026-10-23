@@ -1,0 +1,197 @@
+{
+  "schema_version": "atrex.collection_operator_metadata.v3",
+  "display_name": "dual cache latent bf16",
+  "description": "BF16 Q/KV/O. Prepared single/dual latent KV caches and indices -> one joint softmax attention. D512; H8/16/32/64/128; page128/256, SWA128, compressed top512/1024 or all-C128 up to8192; prefill/decode/MTP, ratio0/1/2/4/128 legal model-derived combinations.\n\nProduction entry: flashinfer.mla.trtllm_batch_decode_sparse_mla_dsv4; fixed source revision source-package-sha256:e1eef026b8ffa334f77f414cb904e93878ab182100e9b82ef79011bc13cbfc79.\n\nParameter domain: shape_range.json defines dynamic request ranges and correlated model/ABI constraints; shape_cases.json fixes 10 representative workloads, not the complete support domain. Dynamic ragged Q/context; context through1M, SWA128 plus compressed sparse cache, page divisibility and declared compression ratios preserved. No measured traffic weights are claimed. Existing GPU evidence covers only the unchanged fixed sample, not every point in this dynamic domain.\n\nInput construction: Logical selection and physical placement are independently declared. Contiguous placement keeps neighboring logical tokens/pages contiguous; scattered placement permutes physical allocation. Selectors cover score-related, local, strided, shared-prefix and random sets. Score selection uses the same generated cache/query features (first eight channels; QSA averages four-token block scores), with causal visibility, budget, tail and invalid-marker rules preserved. Q/K latent-topic structure is synthetic; the indexer itself remains outside the timed core. Record actual physical selected-token count, unique pages, density and adjacent-query Jaccard on up to sixteen query rows. Context length is not equated with selected work. Page layout, scale packing, SWA/compressed aliases and output ABI remain unchanged.\n\nNative runtime profile: dependencies/requirements-dsv4.txt (apache-tvm-ffi 0.1.12, NumPy 2.2.6). Other operators use separately pinned profiles.",
+  "operator_family": "attention",
+  "tags": [
+    "core",
+    "dual_cache_latent_bf16",
+    "general",
+    "sparse_attention",
+    "sampled"
+  ],
+  "benchmark_contract": {
+    "mutates_inputs": [
+      "out"
+    ],
+    "defined_outputs": {
+      "out": {
+        "dtype": "bfloat16",
+        "shape": "[T,H,512]",
+        "mutable": true,
+        "alias": "return identical input out object"
+      }
+    },
+    "scratch_inputs": [
+      "workspace_buffer"
+    ],
+    "correctness_min_cases": 1,
+    "correctness_seeds": [
+      2026101221,
+      2026101223
+    ],
+    "preserve_input_storage": true,
+    "iteration_protocol": "restore_before_each_call"
+  },
+  "validation": {
+    "status": "sampled_correctness_passed",
+    "correctness_scope": "Original library, validation_scope=sampled, SM103; fixed shape IDs 0-9, at most 2 recorded seeds per shape. 采样通过. Counts={'passed': 20}. No prior patched results inherited. Shared-GPU timings are execution checks only.",
+    "evidence": [
+      "validation_summary:docs/validation-status.md",
+      "native_solution_manifest:docs/native-solutions.json",
+      "solution_sha256:11a5177060567c7d9041b55a80a120402929703c26f0e73c9df4201ab588d97b"
+    ]
+  },
+  "cases": {
+    "0": {
+      "current_case_sha256": "69e5bfe76732c9c29299e7cf25e3f313769c9f2bec70f3133df4e07678a43f2b",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "1": {
+      "current_case_sha256": "01371a2ea6d9b991d73cce1acef6454d6cdd66abee99eafecd6890e6a4e709dd",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "2": {
+      "current_case_sha256": "f8dc500218b36050e676fb503d4d6ed79e31ca7fc6c930311724711b668e8c37",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "3": {
+      "current_case_sha256": "24b368a56dc59e6eaed6b2f8a042beca1a21669a9d8d87cc019f80d657c95e3a",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "4": {
+      "current_case_sha256": "c584d2d0b7c196c498756760124a2b035a60a498a29e8ad2e4e22ae30981537e",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "5": {
+      "current_case_sha256": "1c1fdfc3a084c0fce17529004ba85c7a1ffafeb0020785e29cc0801b5ed5bfa3",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "6": {
+      "current_case_sha256": "72d2fee3ff190d9ad1e314928e1e71042b6d92e8d6cf100d112ab806a3d6f665",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "7": {
+      "current_case_sha256": "10ca073f15a9af42f9d4e697c0639c16847b890f1be78698f75ab23d3ee6bb8e",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "8": {
+      "current_case_sha256": "951533ff4c65049a1aa4ec8b2105daebbbddaa30fdda99d0b53a6552f5f9530d",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    },
+    "9": {
+      "current_case_sha256": "d3a73dd0cfac0df2be2bc2d0570720cbf84f518064602ef88dbe1a067400c420",
+      "frequency_weight": null,
+      "frequency_weight_basis": "general_no_measured_traffic",
+      "real_input_sample_ids": []
+    }
+  },
+  "scoring": {
+    "schema_version": "atrex.collection_scoring.v2",
+    "status": "unscored",
+    "operator_weight": null,
+    "operator_weight_basis": "general_no_measured_traffic",
+    "normalization_scope": "selected_collection_operators",
+    "source_manifest_sha256": null,
+    "limitations": [
+      "No deployment-specific frequency or device-time weight is claimed."
+    ]
+  },
+  "real_inputs": {
+    "schema_version": "atrex.collection_real_inputs.v1",
+    "availability": "not_captured",
+    "samples": {},
+    "reason": "General source-derived shapes and stored-precision synthetic payloads; real traffic is not part of this core contract."
+  },
+  "performance_objective": "shape_speedup_geometric_mean",
+  "shapes": {
+    "0": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "1": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "2": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "3": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "4": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "5": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "6": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "7": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "8": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    },
+    "9": {
+      "production_performance": {
+        "performance_us": 100.0,
+        "basis": "fixed_scoring_normalization",
+        "measured": false
+      }
+    }
+  }
+}

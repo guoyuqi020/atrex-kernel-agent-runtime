@@ -1,0 +1,23 @@
+{
+  "schema_version": 14,
+  "enabled": true,
+  "main_evolve_enabled": false,
+  "optimizer_attempt_budget_per_trajectory": 15,
+  "arms": [
+    {
+      "kind": "broadcast",
+      "label": "broadcast-realtime-all-3",
+      "target_epoch_number": 5,
+      "workflow_command": "workflow/broadcast_3.py",
+      "max_challengers": 0,
+      "optimizer_attempt_budget": 9,
+      "optimizer_attempt_budget_total": 45,
+      "evolution_count": 0,
+      "trajectory_visibility": "broadcast",
+      "tool_modules": [
+        "directions",
+        "experiments"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "shapes": {
+    "0": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 8594128896,
+        "float32": 83927040
+      },
+      "semantic_Q_read_bytes": 6496276,
+      "semantic_Q_write_bytes": 4259840
+    },
+    "1": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 128723189760,
+        "float32": 1257062400
+      },
+      "semantic_Q_read_bytes": 21686104,
+      "semantic_Q_write_bytes": 8511360
+    },
+    "2": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 1073741824,
+        "float32": 10485760
+      },
+      "semantic_Q_read_bytes": 35144296,
+      "semantic_Q_write_bytes": 33280
+    },
+    "3": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 536870912,
+        "float32": 5242880
+      },
+      "semantic_Q_read_bytes": 69404728,
+      "semantic_Q_write_bytes": 133120
+    },
+    "4": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 51539607552,
+        "float32": 251658240
+      },
+      "semantic_Q_read_bytes": 37879840,
+      "semantic_Q_write_bytes": 6291456
+    },
+    "5": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 6442303488,
+        "float32": 31456560
+      },
+      "semantic_Q_read_bytes": 34891048,
+      "semantic_Q_write_bytes": 49536
+    },
+    "6": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 51547996160,
+        "float32": 251699200
+      },
+      "semantic_Q_read_bytes": 12992532,
+      "semantic_Q_write_bytes": 16908288
+    },
+    "7": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 137455730688,
+        "float32": 1342341120
+      },
+      "semantic_Q_read_bytes": 25985044,
+      "semantic_Q_write_bytes": 17039360
+    },
+    "8": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 17179869184,
+        "float32": 167772160
+      },
+      "semantic_Q_read_bytes": 9798728,
+      "semantic_Q_write_bytes": 2129920
+    },
+    "9": {
+      "semantic_W_flops": {
+        "float8_e4m3fn": 68790784000,
+        "float32": 671785000
+      },
+      "semantic_Q_read_bytes": 35753080,
+      "semantic_Q_write_bytes": 2132000
+    }
+  }
+}

@@ -1,0 +1,163 @@
+{
+  "schema_version": "atrex.agent_problem.v1",
+  "objective": "Implement a correct and fast general CUDA kernel for paged_latent_mxfp8_nvfp4 on the complete public shape domain. Exact evaluator cases are private; every specialization decision must come from runtime properties or declared public parameters.",
+  "evaluation": {
+    "exact_cases": "private",
+    "correctness_requirement": "every hidden case must pass",
+    "performance_requirement": "performance is measured across hidden cases after correctness passes",
+    "development_cases_are_evaluation_cases": false
+  },
+  "operator_contract": {
+    "name": "paged_latent_mxfp8_nvfp4",
+    "family": "attention",
+    "entrypoint": "Model.forward(self, q, k_cache, indices, extra_k_cache, extra_indices, sm_scale, attn_sink, out)",
+    "semantics": "Compute paged latent attention over a primary quantized cache and an optional extra cache, where cache storage may be MXFP8 or NVFP4. Honor sparse indices, attention scaling and sink logits, overwrite the BF16 output and return the declared LSE view.",
+    "authoritative_public_sources": {
+      "reference.py": "exact operator computation, mutation and return semantics",
+      "input.py": "runtime argument construction, dtypes, tensor layouts and value generation",
+      "shape_domain": "verbatim projection of the benchmark shape_range.json, including complete public parameter ranges and cross-field constraints"
+    }
+  },
+  "workload_profile": {
+    "domain_kind": "general source-derived production workload",
+    "case_identity": "private opaque evaluator IDs",
+    "dispatch_basis": "runtime tensor properties and public input parameters"
+  },
+  "distribution_profile": {
+    "frequency_evidence": "none published",
+    "policy": "Treat every point admitted by shape_domain as relevant; do not assume private case frequencies."
+  },
+  "shape_domain": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "type": "object",
+      "properties": {
+        "lengths": {
+          "type": "array",
+          "min_length": 1,
+          "max_length": 32,
+          "items": {
+            "type": "integer",
+            "min": 1,
+            "max": 1048576
+          }
+        },
+        "tp": 1,
+        "ratio": {
+          "type": "integer",
+          "values": [
+            1,
+            2,
+            0
+          ]
+        },
+        "query_len": {
+          "type": "integer",
+          "values": [
+            3,
+            1
+          ]
+        },
+        "physical_heads": {
+          "type": "integer",
+          "values": [
+            128,
+            64
+          ]
+        },
+        "domain": {
+          "type": "string",
+          "values": [
+            "normal",
+            "sink",
+            "tiny",
+            "peaked",
+            "zero"
+          ]
+        },
+        "mixed": true,
+        "physical_layout": {
+          "type": "string",
+          "values": [
+            "contiguous",
+            "scattered"
+          ]
+        },
+        "index_pattern": {
+          "type": "string",
+          "values": [
+            "score",
+            "local",
+            "strided",
+            "shared_prefix",
+            "random"
+          ]
+        }
+      },
+      "required": [
+        "domain",
+        "index_pattern",
+        "lengths",
+        "mixed",
+        "physical_heads",
+        "physical_layout",
+        "query_len",
+        "ratio",
+        "tp"
+      ]
+    },
+    "cross_field_invariants": [
+      "min(lengths) >= query_len",
+      "sum(lengths) <= 1048576"
+    ]
+  },
+  "invariants": [
+    "min(lengths) >= query_len",
+    "sum(lengths) <= 1048576",
+    "All runtime arguments, tensor layouts, dtypes, mutations, aliases and return values must match reference.py and input.py.",
+    "Dispatch and specialization may use runtime tensor properties and declared public parameters, never evaluator case IDs or a reconstructed private case table."
+  ],
+  "coverage_regimes": [
+    {
+      "name": "lengths",
+      "requirement": "Support all declared array lengths and element values, including uneven and boundary-valued sequences."
+    },
+    {
+      "name": "tp",
+      "requirement": "Support the fixed declared value 1."
+    },
+    {
+      "name": "ratio",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "query_len",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "physical_heads",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "domain",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "mixed",
+      "requirement": "Support the fixed declared value True."
+    },
+    {
+      "name": "physical_layout",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "index_pattern",
+      "requirement": "Support every value declared by the public domain."
+    },
+    {
+      "name": "cross_field_combinations",
+      "requirement": "Support every combination admitted by the public cross-field invariants; do not form invalid Cartesian products or dispatch on evaluator case IDs."
+    }
+  ],
+  "development_cases": []
+}

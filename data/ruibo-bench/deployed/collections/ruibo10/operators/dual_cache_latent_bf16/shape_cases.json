@@ -1,0 +1,278 @@
+{
+  "0": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "seq_lens_values": [
+        2048,
+        4096,
+        8192,
+        16384,
+        2048,
+        4096,
+        8192,
+        16384,
+        2048,
+        4096,
+        8192,
+        16384,
+        2048,
+        4096,
+        8192,
+        16384
+      ],
+      "num_heads": 64,
+      "compress_ratio": 0,
+      "index_topk": 512,
+      "distribution": "normal",
+      "page_size": 256,
+      "physical_layout": "contiguous",
+      "index_pattern": "score"
+    }
+  },
+  "1": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        512,
+        1024
+      ],
+      "seq_lens_values": [
+        8191,
+        65537
+      ],
+      "num_heads": 32,
+      "compress_ratio": 4,
+      "index_topk": 512,
+      "distribution": "normal",
+      "page_size": 256,
+      "physical_layout": "scattered",
+      "index_pattern": "local"
+    }
+  },
+  "2": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1
+      ],
+      "seq_lens_values": [
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192
+      ],
+      "num_heads": 8,
+      "compress_ratio": 128,
+      "index_topk": 512,
+      "distribution": "strong_sink",
+      "page_size": 256,
+      "physical_layout": "contiguous",
+      "index_pattern": "strided"
+    }
+  },
+  "3": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        1
+      ],
+      "seq_lens_values": [
+        1048576
+      ],
+      "num_heads": 128,
+      "compress_ratio": 4,
+      "index_topk": 1024,
+      "distribution": "normal",
+      "page_size": 256,
+      "physical_layout": "scattered",
+      "index_pattern": "shared_prefix"
+    }
+  },
+  "4": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        1
+      ],
+      "seq_lens_values": [
+        1048576
+      ],
+      "num_heads": 128,
+      "compress_ratio": 128,
+      "index_topk": 1024,
+      "distribution": "normal",
+      "page_size": 256,
+      "physical_layout": "contiguous",
+      "index_pattern": "score"
+    }
+  },
+  "5": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        1
+      ],
+      "seq_lens_values": [
+        1048576
+      ],
+      "num_heads": 8,
+      "compress_ratio": 1,
+      "distribution": "normal",
+      "page_size": 128,
+      "index_topk": 512,
+      "physical_layout": "scattered",
+      "index_pattern": "random"
+    }
+  },
+  "6": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1,
+        2,
+        1
+      ],
+      "seq_lens_values": [
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192,
+        4097,
+        8192
+      ],
+      "num_heads": 8,
+      "compress_ratio": 1,
+      "distribution": "strong_sink",
+      "page_size": 128,
+      "index_topk": 512,
+      "physical_layout": "contiguous",
+      "index_pattern": "score"
+    }
+  },
+  "7": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        2048
+      ],
+      "seq_lens_values": [
+        2048
+      ],
+      "num_heads": 64,
+      "compress_ratio": 2,
+      "distribution": "normal",
+      "page_size": 128,
+      "index_topk": 512,
+      "index_pattern": "local",
+      "physical_layout": "scattered"
+    }
+  },
+  "8": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        1024,
+        2048
+      ],
+      "seq_lens_values": [
+        8191,
+        65537
+      ],
+      "num_heads": 32,
+      "compress_ratio": 2,
+      "distribution": "normal",
+      "page_size": 128,
+      "index_topk": 512,
+      "index_pattern": "strided",
+      "physical_layout": "contiguous"
+    }
+  },
+  "9": {
+    "init_kwargs": {},
+    "input_kwargs": {
+      "query_lens": [
+        512,
+        1024
+      ],
+      "seq_lens_values": [
+        8191,
+        32769
+      ],
+      "num_heads": 16,
+      "compress_ratio": 2,
+      "distribution": "normal",
+      "page_size": 128,
+      "index_topk": 512,
+      "index_pattern": "shared_prefix",
+      "physical_layout": "scattered"
+    }
+  }
+}
