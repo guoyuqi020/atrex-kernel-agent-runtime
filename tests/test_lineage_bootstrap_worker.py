@@ -175,6 +175,17 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
             "reference_py": "def reference(): pass\n",
             "input_py": "def _make_inputs(): return {}\n",
             "shapes": {"0": {"input_kwargs": {}}},
+            "metadata": {
+                "description": "public vector-add contract",
+                "cases": [{"private": True}],
+                "shapes": {"private-case": {"m": 1}},
+                "scoring": {"weights": [1.0]},
+                "benchmark_contract": {
+                    "defined_outputs": ["output"],
+                    "mutates_inputs": ["output"],
+                    "correctness_seeds": [1, 2],
+                },
+            },
             "options": {
                 "num_correctness_cases": 1,
                 "bench_iters": 1,
@@ -186,7 +197,16 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
         ArtifactKind.EVALUATION_CONTRACT,
     )
     problem_digest = artifacts.put_json(
-        {"schema_version": "atrex.agent_problem.v1", "objective": "vector add"},
+        {
+            "schema_version": "atrex.agent_problem.v1",
+            "objective": "vector add",
+            "operator_contract": {
+                "authoritative_public_sources": {
+                    "reference.py": "semantics",
+                    "input.py": "public input construction",
+                }
+            },
+        },
         ArtifactKind.AGENT_PROBLEM,
     )
     evidence = tmp_path / "bootstrap-evidence"
@@ -216,6 +236,21 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     )
     prepared = assembler.prepare(manifest, initial_evidence_digest=evidence_digest)
     assert (prepared.root / "input/kernel/kernel.py").is_file()
+    public_problem = prepared.root / "input/problem"
+    assert (public_problem / "reference.py").read_text() == "def reference(): pass\n"
+    assert (public_problem / "input.py").read_text() == "def _make_inputs(): return {}\n"
+    public_metadata = json.loads((public_problem / "metadata.json").read_text())
+    assert public_metadata == {
+        "benchmark_contract": {
+            "defined_outputs": ["output"],
+            "mutates_inputs": ["output"],
+        },
+        "description": "public vector-add contract",
+    }
+    assert not (public_problem / "shapes.json").exists()
+    assert public_problem.stat().st_mode & 0o222 == 0
+    assert all(path.stat().st_mode & 0o222 == 0 for path in public_problem.iterdir())
+    assert "Do not use Dev jobs" in (public_problem / "README.md").read_text()
     assert (prepared.root / ".runtime/agent-problem.json").is_file()
     assert prepared.manifest_path == prepared.root / ".runtime/lineage-bootstrap.json"
     assert not (prepared.root / "input/agent-problem").exists()
@@ -224,9 +259,7 @@ def test_lineage_bootstrap_workspace_and_driver(tmp_path: Path) -> None:
     assert (prepared.root / "input/evidence/README.md").read_text() == (
         "Use a native FP8 matrix-multiply path.\n"
     )
-    assert "native FP8" in (
-        prepared.root / ".runtime/initial-evidence-instructions.md"
-    ).read_text()
+    assert "native FP8" in (prepared.root / ".runtime/initial-evidence-instructions.md").read_text()
     assert (prepared.root / "reference").is_dir()
     assert not list((prepared.root / "reference").iterdir())
     (prepared.root / "tools/probe.py").write_text("print('probe')\n")

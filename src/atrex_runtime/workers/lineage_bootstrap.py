@@ -33,6 +33,7 @@ from .attempt_report import AttemptReportV12
 from .core import CoreOptimizerProcessConfig
 from .core_phase import CorePhaseRunner, PreparedCorePhase
 from .launcher import WorkerLauncher, validate_worker_environment
+from .public_problem import PUBLIC_PROBLEM_RELATIVE_PATH, materialize_public_problem_sources
 from .session_contract import (
     RUNTIME_CONTRACT_ENVIRONMENT_KEY,
     RUNTIME_CONTRACT_RELATIVE_PATH,
@@ -203,6 +204,12 @@ class LineageBootstrapWorkspaceAssembler:
             manifest.agent_problem_digest,
             "value.json",
             root / paths.agent_problem,
+        )
+        materialize_public_problem_sources(
+            root / PUBLIC_PROBLEM_RELATIVE_PATH,
+            self._artifacts,
+            evaluation_contract_digest=manifest.evaluation_contract_digest,
+            agent_problem_digest=manifest.agent_problem_digest,
         )
         self._artifacts.materialize(manifest.optimizer_digest, root / paths.optimizer)
         shutil.copytree(root / paths.input_kernel, root / paths.working_kernel)

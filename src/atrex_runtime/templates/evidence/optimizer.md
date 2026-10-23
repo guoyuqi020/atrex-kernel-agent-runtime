@@ -18,6 +18,7 @@ own authoritative measurement.
 workspace/
 ├── input/
 │   ├── kernel/                 # read-only incumbent Kernel
+│   ├── problem/                # optional read-only task-declared public sources
 │   └── evidence/               # read-only authorized history described below
 ├── agent/optimizer/            # read-only implementation/config; initial State copies omitted
 ├── work/kernel/                # writable candidate copied from the incumbent
@@ -47,6 +48,10 @@ Claude Home. Use those Skills when applicable; never edit the generated Claude H
 settings. Each Tool's index entry needs invocation, inputs, outputs, side effects, dependencies, an
 example, and limitations. Keep entries concise and non-duplicative.
 Never store credentials. Temporary requests, probes, and outputs belong in `scratch/`.
+
+When `input/problem/` exists, read its `README.md` and use the public source files there for the
+operator ABI and semantics. Runtime omits exact evaluator Shapes and private results. Do not spend
+a Dev job searching evaluator temporary directories for alternate copies of these files.
 
 ## Evidence view
 

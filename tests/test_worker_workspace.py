@@ -315,6 +315,14 @@ def test_workspace_materializes_complete_optimizer_repository(
             "reference_py": "def reference(): pass\n",
             "input_py": "def _make_inputs(): return {}\n",
             "shapes": {"0": {"input_kwargs": {}}},
+            "metadata": {
+                "description": "public vector-add contract",
+                "cases": [{"private": True}],
+                "benchmark_contract": {
+                    "defined_outputs": ["output"],
+                    "correctness_seeds": [1, 2],
+                },
+            },
             "options": {
                 "num_correctness_cases": 1,
                 "bench_iters": 1,
@@ -326,7 +334,16 @@ def test_workspace_materializes_complete_optimizer_repository(
         ArtifactKind.EVALUATION_CONTRACT,
     )
     problem = store.put_json(
-        {"schema_version": "atrex.agent_problem.v1", "objective": "vector add"},
+        {
+            "schema_version": "atrex.agent_problem.v1",
+            "objective": "vector add",
+            "operator_contract": {
+                "authoritative_public_sources": {
+                    "reference.py": "semantics",
+                    "input.py": "public input construction",
+                }
+            },
+        },
         ArtifactKind.AGENT_PROBLEM,
     )
 
@@ -525,6 +542,15 @@ def test_workspace_materializes_complete_optimizer_repository(
     assert first.manifest_path.is_file()
     assert not (first.root / "attempt.json").exists()
     assert (first.root / ".runtime/agent-problem.json").is_file()
+    public_problem = first.root / "input/problem"
+    assert (public_problem / "reference.py").read_text() == "def reference(): pass\n"
+    assert (public_problem / "input.py").read_text() == "def _make_inputs(): return {}\n"
+    assert json.loads((public_problem / "metadata.json").read_text()) == {
+        "benchmark_contract": {"defined_outputs": ["output"]},
+        "description": "public vector-add contract",
+    }
+    assert not (public_problem / "shapes.json").exists()
+    assert public_problem.stat().st_mode & 0o222 == 0
     assert not (first.root / "input/agent-problem").exists()
     assert (first.root / "agent/optimizer/optimizer.txt").read_text() == "optimizer"
     evidence_view = first.root / "input/evidence"

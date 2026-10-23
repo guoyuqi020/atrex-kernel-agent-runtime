@@ -36,6 +36,7 @@ from .manifest import (
     AttemptInputManifestV9,
     AttemptTaskContextV5,
 )
+from .public_problem import PUBLIC_PROBLEM_RELATIVE_PATH, materialize_public_problem_sources
 from .state_selection import RuntimeStateAttempt, select_winning_trajectory_terminal_state
 
 REUSABLE_AGENT_DIRECTORIES = ("prompts", "skills", "tools")
@@ -522,6 +523,12 @@ class LocalAttemptWorkspaceAssembler:
             visible_digest,
             "value.json",
             root / paths.agent_problem,
+        )
+        materialize_public_problem_sources(
+            root / PUBLIC_PROBLEM_RELATIVE_PATH,
+            self._artifacts,
+            evaluation_contract_digest=campaign.evaluation_contract_digest,
+            agent_problem_digest=campaign.agent_problem_digest,
         )
         self._artifacts.materialize(revision.optimizer_digest, root / paths.optimizer)
         remove_optimizer_state_seeds(root / paths.optimizer)

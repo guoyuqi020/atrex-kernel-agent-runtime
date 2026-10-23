@@ -9,6 +9,8 @@ Start from read-only `input/kernel/`; edit the candidate under `work/kernel/`. `
 `prompts/`, `skills/`, and `input/` are read-only. Reusable executable helpers belong in `tools/`;
 keep its README index current. Temporary scripts, requests and output belong in `scratch/`,
 which is not carried into later sessions. Do not write credentials or modify session capture.
+When `input/problem/` exists, read its task-declared public sources locally. Do not use Dev or
+evaluator temporary directories to recover alternate copies of those files.
 
 Authorized history still exists under `input/evidence/`: Bootstrap and earlier Attempts expose
 `report.json` and `conversation.jsonl`; completed Epochs have `summary.json` indexes. This is
